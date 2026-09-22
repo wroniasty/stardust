@@ -19,12 +19,16 @@ const TEST_SEED: int = 20260922
 const BURN_TICKS: int = 60
 const FALL_TICKS: int = 60
 const ORBIT_TICKS: int = 900
+const LANDING_TICKS: int = 420
+
+## How far above the local ground the landing test drops the ship.
+const DROP_HEIGHT: float = 60.0
 
 ## FIELD comes first and only inspects a planet. It has to run on the physics
 ## loop like everything else: nodes added from _initialize() are not in the
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
-enum Phase { FIELD, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT, DONE }
+enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT, LANDING, DONE }
 
 var _phase: int = Phase.FIELD
 var _ticks: int = 0
@@ -34,6 +38,8 @@ var _planet: Planet = null
 var _orbit_radius: float = 0.0
 var _orbit_min: float = INF
 var _orbit_max: float = 0.0
+var _ground_radius: float = 0.0
+var _landing_deepest: float = 0.0
 var _failures: int = 0
 
 
@@ -53,6 +59,8 @@ func _physics_process(delta: float) -> bool:
 		var radius: float = _ship.global_position.distance_to(_planet.global_position)
 		_orbit_min = minf(_orbit_min, radius)
 		_orbit_max = maxf(_orbit_max, radius)
+	elif _phase == Phase.LANDING:
+		_landing_deepest = maxf(_landing_deepest, _deepest_hull_penetration())
 
 	if _ticks < _phase_ticks():
 		return false
@@ -116,12 +124,80 @@ func _check_atmosphere_shells(planet: Planet) -> void:
 		previous_priority = shell.priority
 
 
+func _check_terrain(planet: Planet) -> void:
+	var terrain: PlanetTerrain = planet.terrain
+	_expect(terrain.angular_samples > 0 and terrain.radial_samples > 0, "terrain grid is %d x %d" % [
+		terrain.angular_samples, terrain.radial_samples,
+	])
+	_expect(
+		terrain.inner_radius < planet.surface_radius and terrain.outer_radius > planet.surface_radius,
+		"the stored crust straddles the nominal surface (%.0f .. %.0f, surface %.0f)" % [
+			terrain.inner_radius, terrain.outer_radius, planet.surface_radius,
+		],
+	)
+
+	var centre: Vector2 = planet.global_position
+	var angle: float = -PI * 0.5
+	var direction: Vector2 = Vector2.from_angle(angle)
+	_expect(planet.is_solid_at(centre), "the core is solid")
+	_expect(
+		not planet.is_solid_at(centre + direction * terrain.outer_radius * 1.01),
+		"there is no rock above the terrain ceiling",
+	)
+
+	var ground: float = _find_ground(planet, angle)
+	_expect(ground > terrain.inner_radius, "a ground surface exists at the test angle (%.0f px)" % ground)
+
+	# Just below the surface must be rock, just above must be sky.
+	_expect(planet.is_solid_at(centre + direction * (ground - 4.0)), "rock sits below the surface")
+	_expect(not planet.is_solid_at(centre + direction * (ground + 4.0)), "sky sits above the surface")
+
+	# The normal on open ground should point away from the planet.
+	var probe: Vector2 = centre + direction * (ground - 2.0)
+	var normal: Vector2 = planet.surface_normal_at(probe)
+	_expect(normal.dot(direction) > 0.5, "the surface normal points outwards (dot %.2f)" % normal.dot(direction))
+
+	# Carving must remove rock, and must report honestly when it hits nothing.
+	var target: Vector2 = centre + direction * (ground - 6.0)
+	_expect(planet.carve(target, 20.0), "carving solid ground reports a change")
+	_expect(not planet.is_solid_at(target), "carved rock is gone")
+	_expect(
+		not planet.carve(centre + direction * terrain.outer_radius * 1.5, 20.0),
+		"carving empty sky reports no change",
+	)
+
+
+## Marches down from the ceiling to find the first rock at an angle.
+func _find_ground(planet: Planet, angle: float) -> float:
+	var direction: Vector2 = Vector2.from_angle(angle)
+	var radius: float = planet.terrain_ceiling()
+	while radius > planet.terrain.inner_radius:
+		if planet.is_solid_at(planet.global_position + direction * radius):
+			return radius
+		radius -= 1.0
+	return planet.terrain.inner_radius
+
+
+## Worst penetration across the hull right now, for the sinking check.
+func _deepest_hull_penetration() -> float:
+	var deepest: float = 0.0
+	for hull_point: Vector2 in Ship.HULL_POINTS:
+		var world_point: Vector2 = _ship.global_transform * hull_point
+		if not _planet.is_solid_at(world_point):
+			continue
+		var normal: Vector2 = _planet.surface_normal_at(world_point)
+		deepest = maxf(deepest, _planet.penetration_at(world_point, normal))
+	return deepest
+
+
 # --- Flight phases ---
 
 func _phase_ticks() -> int:
 	match _phase:
-		Phase.FIELD:
+		Phase.FIELD, Phase.TERRAIN:
 			return 1
+		Phase.LANDING:
+			return LANDING_TICKS
 		Phase.FREE_FALL:
 			return FALL_TICKS
 		Phase.ORBIT:
@@ -134,9 +210,9 @@ func _begin_phase() -> void:
 	_ticks = 0
 	_elapsed = 0.0
 
-	if _phase == Phase.FIELD or _phase == Phase.FREE_FALL or _phase == Phase.ORBIT:
+	if _phase != Phase.MAIN_ENGINE and _phase != Phase.TURN_RIGHT and _phase != Phase.TURN_LEFT:
 		_planet = _spawn_planet()
-	if _phase != Phase.FIELD:
+	if _phase != Phase.FIELD and _phase != Phase.TERRAIN:
 		_ship = _spawn_ship()
 
 	match _phase:
@@ -158,6 +234,11 @@ func _begin_phase() -> void:
 			# square field with g measured at the surface.
 			var speed: float = sqrt(_planet.surface_gravity * pow(_planet.surface_radius, 2.0) / _orbit_radius)
 			_ship.linear_velocity = Vector2.RIGHT * speed
+		Phase.LANDING:
+			_ground_radius = _find_ground(_planet, -PI * 0.5)
+			_ship.global_position = _planet.global_position + Vector2.UP * (_ground_radius + DROP_HEIGHT)
+			_ship.linear_velocity = Vector2.ZERO
+			_landing_deepest = 0.0
 
 
 func _evaluate_phase() -> void:
@@ -165,6 +246,8 @@ func _evaluate_phase() -> void:
 		Phase.FIELD:
 			_check_gravity_field(_planet)
 			_check_atmosphere_shells(_planet)
+		Phase.TERRAIN:
+			_check_terrain(_planet)
 		Phase.MAIN_ENGINE:
 			# The nose points up, so thrust must show up as negative Y velocity.
 			var expected: float = (800.0 / _ship.mass) * _elapsed
@@ -196,6 +279,31 @@ func _evaluate_phase() -> void:
 				"circular orbit holds its radius over %.0f s (drift %.2f%%, %.0f..%.0f px)" % [
 					_elapsed, drift * 100.0, _orbit_min, _orbit_max,
 				],
+			)
+		Phase.LANDING:
+			var resting: float = _ship.global_position.distance_to(_planet.global_position)
+			_expect(
+				resting > _planet.terrain.inner_radius,
+				"a dropped ship does not fall through the crust (rests at %.0f px, core at %.0f)" % [
+					resting, _planet.terrain.inner_radius,
+				],
+			)
+			_expect(
+				absf(resting - _ground_radius) < 40.0,
+				"a dropped ship settles on the ground it fell towards (%.0f px vs ground %.0f)" % [
+					resting, _ground_radius,
+				],
+			)
+			_expect(
+				_ship.linear_velocity.length() < 20.0,
+				"a landed ship comes to rest (%.1f px/s)" % _ship.linear_velocity.length(),
+			)
+			# Sampled once per frame, which is after _integrate_forces has
+			# already pushed the hull out: this shows the ship is never left
+			# buried between frames, not how deep it dips during an impact.
+			_expect(
+				_landing_deepest < 1.0,
+				"the hull is clear of rock on every frame after resolution (worst %.1f px)" % _landing_deepest,
 			)
 
 

@@ -45,6 +45,8 @@ func _process(_delta: float) -> void:
 			_ship.linear_velocity.dot(up), _ship.linear_velocity.dot(up.orthogonal()),
 		])
 
+	lines.append("contacts %d   damage %.3f" % [_ship.get_terrain_contacts(), _ship.accumulated_damage])
+
 	lines.append("engines")
 	for engine: ShipEngine in _ship.engines:
 		lines.append("  %-16s thr %.2f  eff %.2f  rel %.2f" % [

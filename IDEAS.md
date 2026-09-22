@@ -158,6 +158,53 @@ Kolizję planety tworzysz przy wejściu w promień wpływu, poza nim planeta to 
 
 Teren generowany z seedu planety (szum), przechowywana tylko delta zmian.
 
+### Realizacja (M1.3)
+
+Rozstrzygnięcie otwartego pytania: **bitmapa w układzie biegunowym**, nie kwadrat
+z wyciętym kołem. Powody: zawija się bez szwu, nie marnuje narożników, a kolumna
+tekseli to dosłownie "grunt pod tym kątem", czyli dokładnie to, czego potrzebują
+próbkowanie nóg podwozia (M1.6) i pojazd naziemny (M6). Zgadza się też z
+konwencją z CLAUDE.md, że cała matematyka powierzchni jest biegunowa.
+
+Przechowywana jest tylko skorupa: pas od 0.90 R do 1.12 R. Niżej jest lity
+rdzeń, wyżej niebo, więc żadne z nich nie potrzebuje tekseli.
+
+Rozdzielczość: 1.5 px na teksel przy powierzchni, liczba próbek wyliczana z
+promienia, więc gęstość pikseli jest ta sama na małej i dużej planecie.
+Zajętość trzymana w `PackedByteArray` (zapytania kolizyjne są zbyt częste na
+`Image.get_pixel()`) i lustrzana w `Image` dla GPU.
+
+Normalna nie jest liczona z zapisanej wysokości, tylko odczytywana z bitmapy:
+osiem prób na okręgu o promieniu 4 px, normalna to średnia kierunków, w których
+jest pusto. Dzięki temu ściana świeżego krateru daje normalną tej samej jakości
+co nietknięty grunt, bez żadnego dodatkowego stanu.
+
+Shader terenu czyta tę samą bitmapę tym samym mapowaniem co kolizja, więc to,
+co widać, jest dokładnie tym, w co się uderza. Warstwy skalne (skorupa, skała,
+rdzeń) są odczytywane z bitmapy przez zapytanie "czy wyżej jest jeszcze skała",
+więc nowy krater sam z siebie dostaje obrys skorupy.
+
+**Zmierzone** (AMD RX 7900 XT, GDScript, planety R 470..850):
+
+| | R 470 | R 850 |
+|---|---|---|
+| siatka | 1967 x 69 (133 KB) | 3561 x 125 (435 KB) |
+| generacja | 3.3 ms | 4.4 ms |
+| krater r=28 + upload tekstury | 0.29 ms | 0.26 ms |
+| samplowanie kadłuba (6 punktów, wszystkie w skale) | 0.028 ms/tick | 0.071 ms/tick |
+
+Wniosek: **samplowanie bitmapy wystarcza, chunki z marching squares nie są
+potrzebne**. Budżet klatki przy 60 Hz to 16.6 ms; najgorszy przypadek kolizji
+zjada 0.4% z tego, a krater 1.7% jednorazowo. Upload całej tekstury przy każdym
+kraterze jest na tyle tani, że częściowa aktualizacja nie ma uzasadnienia.
+Marching squares zostaje na wypadek, gdyby fizyka silnika musiała widzieć teren
+(wraki, odłamki).
+
+Odpowiedź kolizji jest na razie zgrubna: jedna zagregowana normalna na tick,
+wypchnięcie kadłuba i odbicie, zamiast porządnego impulsu na punkt. To
+świadomy kompromis zręcznościowy; prawdziwa logika lądowania z nogami podwozia
+jest w M1.6.
+
 ## 7. Lądowanie
 
 Lądowanie jest mechaniką skillową. Trudność wynika z parametrów (G, stan silników, atmosfera, teren), nie ze skryptów.
@@ -361,7 +408,7 @@ Sceny:
 ## 14. Otwarte pytania
 
 - Jednostki: ile jednostek ma promień typowej planety i typowego systemu? Decyduje o potrzebie floating origin.
-- Czy teren planety zawija się (powierzchnia koła) czy jest to bitmapa w układzie biegunowym? Wpływa na generację i samplowanie.
+- ~~Czy teren planety zawija się czy jest to bitmapa w układzie biegunowym?~~ Rozstrzygnięte w M1.3: bitmapa biegunowa, 1.5 px na teksel, tylko pas skorupy. Szczegóły i pomiary w sekcji 6.
 - Ile chunków terenu jednocześnie w scenie przy podejściu do planety?
 - Ekonomia paliwa: czy paliwo to zasób z planet, ze stacji, czy jedno i drugie?
 - Śmierć: co gracz traci, co zostaje (statek, loot, odkryte systemy)?

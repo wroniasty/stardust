@@ -1,10 +1,21 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/planet.gd" id="1_planet"]
-[ext_resource type="Shader" path="res://shaders/atmosphere.gdshader" id="2_atmosphere"]
+[ext_resource type="Shader" path="res://shaders/terrain.gdshader" id="2_terrain"]
+[ext_resource type="Shader" path="res://shaders/atmosphere.gdshader" id="3_atmosphere"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_terrain"]
+shader = ExtResource("2_terrain")
+shader_parameter/inner_radius = 400.0
+shader_parameter/outer_radius = 500.0
+shader_parameter/crust_color = Color(0.45, 0.55, 0.35, 1)
+shader_parameter/rock_color = Color(0.32, 0.3, 0.28, 1)
+shader_parameter/core_color = Color(0.18, 0.16, 0.17, 1)
+shader_parameter/crust_depth = 7.0
+shader_parameter/rock_depth = 30.0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_atmosphere"]
-shader = ExtResource("2_atmosphere")
+shader = ExtResource("3_atmosphere")
 shader_parameter/surface_ratio = 0.85
 shader_parameter/atmosphere_color = Color(0.45, 0.62, 0.95, 1)
 shader_parameter/density = 1.0
@@ -15,6 +26,11 @@ shader_parameter/rim_strength = 0.85
 
 [node name="Planet" type="Node2D"]
 script = ExtResource("1_planet")
+
+[node name="Terrain" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_terrain")
+offset_right = 40.0
+offset_bottom = 40.0
 
 [node name="Atmosphere" type="ColorRect" parent="."]
 material = SubResource("ShaderMaterial_atmosphere")

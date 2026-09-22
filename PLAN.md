@@ -44,11 +44,11 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.3 Teren z pikseli
 
-- [ ] Generacja bitmapy terenu z seedu (szum na powierzchni koła, góry i równiny).
-- [ ] Render terenu jako tekstura z paletą.
-- [ ] Kolizja statku z terenem przez samplowanie bitmapy w punktach kadłuba. Normalna z gradientu pikseli, odbicie, obrażenia zależne od prędkości uderzenia.
-- [ ] Modyfikacja terenu: usuwanie pikseli w promieniu (eksplozja) z aktualizacją tekstury.
-- [ ] Pomiar: czas aktualizacji tekstury przy modyfikacji, czas samplowania na klatkę.
+- [x] Generacja bitmapy terenu z seedu (szum na powierzchni koła, góry i równiny).
+- [x] Render terenu jako tekstura z paletą.
+- [x] Kolizja statku z terenem przez samplowanie bitmapy w punktach kadłuba. Normalna z gradientu pikseli, odbicie, obrażenia zależne od prędkości uderzenia.
+- [x] Modyfikacja terenu: usuwanie pikseli w promieniu (eksplozja) z aktualizacją tekstury.
+- [x] Pomiar: czas aktualizacji tekstury przy modyfikacji, czas samplowania na klatkę.
 
 ### 1.4 Jedna broń
 
@@ -81,9 +81,9 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 Gotowe, gdy: da się wystartować z powierzchni, wejść na orbitę i na niej zaparkować, zejść deorbitem na wybrane miejsce, wylądować na zboczu i zobaczyć, że to zależy od nachylenia i prędkości, rozwalić kawałek góry, rozbić się i od razu lecieć dalej. Ocena subiektywna: czy sterowanie daje radość. Jeśli nie, tu się kręci fizyką, nie idzie dalej.
 
 Pytania do rozstrzygnięcia na koniec M1 (zapisać odpowiedzi w IDEAS.md):
-- jednostki: promień planety, promień wpływu, prędkości,
-- czy samplowanie bitmapy wystarcza, czy potrzebne są chunki z marching squares,
-- rozdzielczość bitmapy terenu na planetę,
+- jednostki: promień planety, promień wpływu, prędkości (wartości robocze w IDEAS po M1.2, potwierdzić),
+- ~~czy samplowanie bitmapy wystarcza, czy potrzebne są chunki z marching squares~~ — wystarcza, zmierzone w M1.3,
+- ~~rozdzielczość bitmapy terenu na planetę~~ — 1.5 px na teksel, siatka biegunowa, zmierzone w M1.3,
 - progi lądowania (prędkości, kąt, nachylenie) dla statku bazowego,
 - czy planety się obracają,
 - tolerancje orbit lock i długość przewidywanej trajektorii.

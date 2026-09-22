@@ -13,9 +13,37 @@ extends RigidBody2D
 ## Nose direction in the ship's local frame.
 const FORWARD: Vector2 = Vector2.UP
 
+## Points of the hull tested against the terrain bitmap. The engine's own
+## collision shape never meets the terrain, because the terrain is not a
+## physics body (see IDEAS.md section 6): it is pixels, and these are the
+## pixels we ask about. Nose and the two rear corners carry the hull outline,
+## the rest stop a long edge from sinking in between corners.
+const HULL_POINTS: Array[Vector2] = [
+	Vector2(0, -12),
+	Vector2(-8, 10),
+	Vector2(8, 10),
+	Vector2(-4, -1),
+	Vector2(4, -1),
+	Vector2(0, 10),
+]
+
+## Fired on every terrain impact hard enough to hurt. M1.7 turns this into hull
+## HP and death; for now it only accumulates.
+signal hull_impact(impact_speed: float, damage: float)
+
 ## If true the ship steers itself from the player's input actions. AI ships and
 ## tests turn this off and write the command fields directly.
 @export var use_player_input: bool = true
+
+## How much of the impact speed a bounce gives back. Arcade, not elastic.
+@export_range(0.0, 1.0) var terrain_bounce: float = 0.25
+
+## How much sideways speed is scrubbed off per contact, 0..1.
+@export_range(0.0, 1.0) var terrain_friction: float = 0.4
+
+## Impacts slower than this are free. Above it, damage grows with the excess.
+@export var damage_speed_threshold: float = 60.0
+@export var damage_per_speed: float = 0.004
 
 var engines: Array[ShipEngine] = []
 
@@ -24,9 +52,13 @@ var engines: Array[ShipEngine] = []
 var thrust_command: float = 0.0
 var turn_command: float = 0.0
 
+## Total damage taken from terrain impacts so far. Becomes HP loss in M1.7.
+var accumulated_damage: float = 0.0
+
 var _applied_force: Vector2 = Vector2.ZERO
 var _applied_torque: float = 0.0
 var _gravity: Vector2 = Vector2.ZERO
+var _terrain_contacts: int = 0
 
 
 func _ready() -> void:
@@ -60,6 +92,84 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		state.apply_force(force, offset)
 		_applied_force += force
 		_applied_torque += offset.cross(force)
+
+	_resolve_terrain(state)
+
+
+## Pushes the ship out of any rock its hull is inside, and bounces it.
+##
+## This runs after the forces because it has the last word: it edits the
+## velocity and the transform directly. One aggregated response per tick rather
+## than a proper per-point impulse solve, which is the arcade trade named in
+## IDEAS.md section 6 — the real landing logic arrives in M1.6.
+func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
+	_terrain_contacts = 0
+
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+
+	var body_transform: Transform2D = state.transform
+	var normal: Vector2 = Vector2.ZERO
+	var deepest: float = 0.0
+
+	for hull_point: Vector2 in HULL_POINTS:
+		var world_point: Vector2 = body_transform * hull_point
+		if not planet.is_solid_at(world_point):
+			continue
+		_terrain_contacts += 1
+		var point_normal: Vector2 = planet.surface_normal_at(world_point)
+		normal += point_normal
+		deepest = maxf(deepest, planet.penetration_at(world_point, point_normal))
+
+	if _terrain_contacts == 0:
+		return
+
+	normal = normal.normalized()
+	if normal.is_zero_approx():
+		return
+
+	# Lift the hull clear before touching the velocity, or the next tick starts
+	# buried again and the ship sinks one step per frame.
+	body_transform.origin += normal * (deepest + 0.5)
+	state.transform = body_transform
+
+	var velocity: Vector2 = state.linear_velocity
+	var closing: float = velocity.dot(normal)
+	if closing >= 0.0:
+		return
+
+	var impact_speed: float = -closing
+	velocity -= (1.0 + terrain_bounce) * closing * normal
+	var along_surface: Vector2 = velocity - velocity.dot(normal) * normal
+	velocity -= along_surface * terrain_friction
+	state.linear_velocity = velocity
+	state.angular_velocity *= 0.5
+
+	if impact_speed > damage_speed_threshold:
+		var damage: float = (impact_speed - damage_speed_threshold) * damage_per_speed
+		accumulated_damage += damage
+		hull_impact.emit(impact_speed, damage)
+
+
+## How many hull points were inside rock last tick.
+func get_terrain_contacts() -> int:
+	return _terrain_contacts
+
+
+## Closest planet, or null if there is none in the scene.
+func nearest_planet() -> Planet:
+	var best: Planet = null
+	var best_distance: float = INF
+	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
+		var planet: Planet = source as Planet
+		if planet == null:
+			continue
+		var distance: float = planet.global_position.distance_squared_to(global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = planet
+	return best
 
 
 ## Gravitational acceleration the ship felt last tick. Not get_gravity(),
