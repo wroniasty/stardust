@@ -292,7 +292,14 @@ Save = seed galaktyki plus słownik delt.
 - Powierzchnia: bitmapa terenu jako tekstura z paletą.
 - Pixel-art: bazowa rozdzielczość 640x360, skalowanie przez tryb rozciągania `canvas_items` z aspektem `expand` (ustawienia projektu), filtr tekstur Nearest. SubViewport nie jest potrzebny: `canvas_items` renderuje w niskiej rozdzielczości i skaluje całość, a `expand` pozwala na szersze ekrany bez czarnych pasów. SubViewport dopiero wtedy, gdy HUD będzie musiał być w pełnej rozdzielczości.
 - Silniki: GPUParticles2D, intensywność od ciągu, zmiana przy warpie i awariach.
-- Tło: paralaksa gwiazd w shaderze, smugi przy skoku.
+- Tło: paralaksa gwiazd w shaderze, smugi przy skoku. Zrealizowane w M1.1:
+  jeden pełnoekranowy quad na CanvasLayer -100 z `follow_viewport_enabled =
+  false`. Quad nigdy się nie rusza, cały ruch robi uniform `world_offset`
+  karmiony pozycją kamery, więc pole gwiazd jest nieskończone i nie ma czego
+  streamować. Gwiazdy są hashowane z siatki, czyli odtwarzalne z samej pozycji:
+  odlot i powrót pokazuje te same gwiazdy. Trzy warstwy (paralaksa 0.10 / 0.30 /
+  0.65) dają czytelne poczucie głębi. Offset mnożony przez zoom kamery, inaczej
+  gwiazdy dryfują w złym tempie przy oddaleniu.
 - Oświetlenie 2D od gwiazdy, cień strony nocnej planety.
 
 ## 12. AI i zawartość planet
