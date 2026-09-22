@@ -14,6 +14,8 @@ script = ExtResource("1_world")
 
 [node name="Systems" type="Node2D" parent="."]
 
+[node name="Projectiles" type="Node2D" parent="." groups=["projectile_container"]]
+
 [node name="Player" type="Node2D" parent="."]
 script = ExtResource("2_player")
 

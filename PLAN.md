@@ -52,9 +52,9 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.4 Jedna broń
 
-- [ ] Klasa bazowa pocisku, jeden typ: projectile.
-- [ ] Hardpoint na statku, strzelanie, pocisk niszczy teren przy trafieniu.
-- [ ] Pocisk koliduje z terenem przez samplowanie.
+- [x] Klasa bazowa pocisku, jeden typ: projectile.
+- [x] Hardpoint na statku, strzelanie, pocisk niszczy teren przy trafieniu.
+- [x] Pocisk koliduje z terenem przez samplowanie.
 
 ### 1.5 Orbitowanie
 

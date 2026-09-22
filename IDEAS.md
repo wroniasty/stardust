@@ -87,6 +87,34 @@ Definicja broni jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, prę
 
 To samo podejście dla silników, skanerów, napędów skokowych i baków: każdy moduł statku jest lootem z parametrami.
 
+### Realizacja (M1.4)
+
+`Hardpoint` działa tak samo jak `ShipEngine`: transformacja node'a jest
+montażem. Obrót node'a w edytorze obraca lufę, bez zmiany kodu. Hardpoint
+posiada kadencję, ale nie spust — decyzję o strzale podejmuje statek, więc AI
+i autopilot (M5) pójdą dokładnie tą samą ścieżką co gracz.
+
+Pocisk to `Area2D`, nie `Node2D`: statki i stacje *są* ciałami fizycznymi, więc
+trafianie w kadłub (M1.7) dostaniemy za darmo. Monitorowanie jest wyłączone do
+tego czasu.
+
+Kolizja pocisku z terenem jest samplowana wzdłuż odcinka przelotu, a nie w
+punkcie końcowym klatki. Przy 600 px/s tick to 10 px, a teksel terenu ma 1.5 px
+— pojedynczy test na końcu klatki przestrzeliwałby cienkie ściany na wylot.
+Krok próbkowania 1 px musi zostać poniżej rozmiaru teksela.
+
+Pociski są rodzicowane do węzła z grupy `projectile_container`, nigdy do
+statku: pocisk po opuszczeniu lufy nie może dziedziczyć ruchu wystrzeliwującego.
+Prędkość statku jest natomiast doliczana raz, przy wystrzale.
+
+Strzelanie jest w `_physics_process`, nie w `_integrate_forces`: ten drugi
+callback działa w trakcie flushowania zapytań serwera fizyki i dodawanie tam
+węzłów do drzewa jest niedozwolone.
+
+Pociski na razie lecą prosto. Grawitacja na pociskach jest zaplanowana na M3
+(razem z procą grawitacyjną) i sprowadza się do jednej linijki, bo
+`Ship.gravity_acceleration_at()` już istnieje.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.

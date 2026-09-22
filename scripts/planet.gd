@@ -70,6 +70,25 @@ func _ready() -> void:
 	generate(planet_seed)
 
 
+## Planet whose centre is closest to `point`, or null if there is none.
+##
+## Ships, projectiles and the debug HUD all need this; keeping one copy means
+## the day planets stop being a flat group (M3 streaming) there is one place to
+## change.
+static func nearest(tree: SceneTree, point: Vector2) -> Planet:
+	var best: Planet = null
+	var best_distance: float = INF
+	for source: Node in tree.get_nodes_in_group(GRAVITY_GROUP):
+		var planet: Planet = source as Planet
+		if planet == null:
+			continue
+		var distance: float = planet.global_position.distance_squared_to(point)
+		if distance < best_distance:
+			best_distance = distance
+			best = planet
+	return best
+
+
 ## Radius at the top of the atmosphere. Equals surface_radius when airless.
 func atmosphere_radius() -> float:
 	return surface_radius + atmosphere_height

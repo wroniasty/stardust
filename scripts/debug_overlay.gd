@@ -35,7 +35,7 @@ func _process(_delta: float) -> void:
 	var gravity: Vector2 = _ship.get_applied_gravity()
 	lines.append("gravity  %6.1f px/s2" % gravity.length())
 
-	var planet: Planet = _nearest_planet()
+	var planet: Planet = _ship.nearest_planet()
 	if planet != null:
 		lines.append("altitude %6.0f   (surface r %.0f)" % [
 			planet.altitude_at(_ship.global_position), planet.surface_radius,
@@ -54,18 +54,3 @@ func _process(_delta: float) -> void:
 		])
 
 	_label.text = "\n".join(lines)
-
-
-## Planet whose surface is closest, so the readout follows the ship.
-func _nearest_planet() -> Planet:
-	var best: Planet = null
-	var best_distance: float = INF
-	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
-		var planet: Planet = source as Planet
-		if planet == null:
-			continue
-		var distance: float = planet.global_position.distance_to(_ship.global_position)
-		if distance < best_distance:
-			best_distance = distance
-			best = planet
-	return best

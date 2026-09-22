@@ -1,7 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/ship_engine.tscn" id="2_engine"]
+[ext_resource type="Script" path="res://scripts/hardpoint.gd" id="3_hardpoint"]
+[ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="4_projectile"]
 
 [sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_hull"]
 points = PackedVector2Array(0, -12, -8, 10, 8, 10)
@@ -35,3 +37,8 @@ position = Vector2(8, -6)
 rotation = 1.5707964
 engine_type = 1
 max_thrust = 60.0
+
+[node name="NoseHardpoint" type="Node2D" parent="."]
+position = Vector2(0, -14)
+script = ExtResource("3_hardpoint")
+projectile_scene = ExtResource("4_projectile")

@@ -27,6 +27,10 @@ const HULL_POINTS: Array[Vector2] = [
 	Vector2(0, 10),
 ]
 
+## Projectiles are parented to the node in this group, so they stay put in the
+## world instead of riding along with the ship that fired them.
+const PROJECTILE_GROUP: StringName = &"projectile_container"
+
 ## Fired on every terrain impact hard enough to hurt. M1.7 turns this into hull
 ## HP and death; for now it only accumulates.
 signal hull_impact(impact_speed: float, damage: float)
@@ -46,11 +50,15 @@ signal hull_impact(impact_speed: float, damage: float)
 @export var damage_per_speed: float = 0.004
 
 var engines: Array[ShipEngine] = []
+var hardpoints: Array[Hardpoint] = []
 
 ## Steering commands, refreshed every physics tick. Thrust is 0..1, turn is
 ## -1..1 with positive turning the nose clockwise on screen.
 var thrust_command: float = 0.0
 var turn_command: float = 0.0
+
+## Held-down trigger. Read by the weapons every physics tick.
+var fire_command: bool = false
 
 ## Total damage taken from terrain impacts so far. Becomes HP loss in M1.7.
 var accumulated_damage: float = 0.0
@@ -65,6 +73,31 @@ func _ready() -> void:
 	for child: Node in get_children():
 		if child is ShipEngine:
 			engines.append(child as ShipEngine)
+		elif child is Hardpoint:
+			hardpoints.append(child as Hardpoint)
+
+
+## Weapons fire here and not in _integrate_forces: that callback runs while the
+## physics server is flushing queries, and adding nodes to the tree from inside
+## it is not allowed.
+func _physics_process(delta: float) -> void:
+	if use_player_input:
+		fire_command = Input.is_action_pressed("ship_fire")
+
+	var container: Node = projectile_container()
+	for hardpoint: Hardpoint in hardpoints:
+		hardpoint.tick(delta)
+		if fire_command:
+			hardpoint.fire(linear_velocity, container)
+
+
+## Where fired rounds are parented. Falls back to the ship's own parent so a
+## ship dropped into a bare scene (a test, a preview) still shoots.
+func projectile_container() -> Node:
+	var container: Node = get_tree().get_first_node_in_group(PROJECTILE_GROUP)
+	if container != null:
+		return container
+	return get_parent()
 
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
@@ -159,17 +192,7 @@ func get_terrain_contacts() -> int:
 
 ## Closest planet, or null if there is none in the scene.
 func nearest_planet() -> Planet:
-	var best: Planet = null
-	var best_distance: float = INF
-	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
-		var planet: Planet = source as Planet
-		if planet == null:
-			continue
-		var distance: float = planet.global_position.distance_squared_to(global_position)
-		if distance < best_distance:
-			best_distance = distance
-			best = planet
-	return best
+	return Planet.nearest(get_tree(), global_position)
 
 
 ## Gravitational acceleration the ship felt last tick. Not get_gravity(),

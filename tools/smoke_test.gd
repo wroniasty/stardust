@@ -24,11 +24,14 @@ const LANDING_TICKS: int = 420
 ## How far above the local ground the landing test drops the ship.
 const DROP_HEIGHT: float = 60.0
 
+## Long enough for a round to cross the gap below and dig in.
+const WEAPON_TICKS: int = 60
+
 ## FIELD comes first and only inspects a planet. It has to run on the physics
 ## loop like everything else: nodes added from _initialize() are not in the
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
-enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT, LANDING, DONE }
+enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT, LANDING, WEAPON, DONE }
 
 var _phase: int = Phase.FIELD
 var _ticks: int = 0
@@ -40,6 +43,11 @@ var _orbit_min: float = INF
 var _orbit_max: float = 0.0
 var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
+var _muzzle_point: Vector2 = Vector2.ZERO
+var _target_point: Vector2 = Vector2.ZERO
+var _rounds_fired: int = 0
+var _target_was_solid: bool = false
+var _round_container: Node = null
 var _failures: int = 0
 
 
@@ -198,6 +206,8 @@ func _phase_ticks() -> int:
 			return 1
 		Phase.LANDING:
 			return LANDING_TICKS
+		Phase.WEAPON:
+			return WEAPON_TICKS
 		Phase.FREE_FALL:
 			return FALL_TICKS
 		Phase.ORBIT:
@@ -234,11 +244,34 @@ func _begin_phase() -> void:
 			# square field with g measured at the surface.
 			var speed: float = sqrt(_planet.surface_gravity * pow(_planet.surface_radius, 2.0) / _orbit_radius)
 			_ship.linear_velocity = Vector2.RIGHT * speed
+		Phase.WEAPON:
+			_ground_radius = _find_ground(_planet, -PI * 0.5)
+			# Parked well above the ground, nose pointing straight down at it.
+			_ship.global_position = _planet.global_position + Vector2.UP * (_ground_radius + 200.0)
+			_ship.global_rotation = PI
+			_ship.freeze = true
+			_target_point = _planet.global_position + Vector2.UP * (_ground_radius - 4.0)
+			var hardpoint: Hardpoint = _ship.hardpoints[0]
+			# No spread and no inherited motion: the round must land where the
+			# test says it will, not somewhere in a cone.
+			hardpoint.spread_degrees = 0.0
+			hardpoint.inherit_velocity = false
+			_muzzle_point = hardpoint.global_position
+			_target_was_solid = _planet.is_solid_at(_target_point)
+			_rounds_fired = 0
+			_round_container = _ship.projectile_container()
+			_round_container.child_entered_tree.connect(_on_round_spawned)
+			_ship.fire_command = true
 		Phase.LANDING:
 			_ground_radius = _find_ground(_planet, -PI * 0.5)
 			_ship.global_position = _planet.global_position + Vector2.UP * (_ground_radius + DROP_HEIGHT)
 			_ship.linear_velocity = Vector2.ZERO
 			_landing_deepest = 0.0
+
+
+func _on_round_spawned(node: Node) -> void:
+	if node is Projectile:
+		_rounds_fired += 1
 
 
 func _evaluate_phase() -> void:
@@ -304,6 +337,19 @@ func _evaluate_phase() -> void:
 			_expect(
 				_landing_deepest < 1.0,
 				"the hull is clear of rock on every frame after resolution (worst %.1f px)" % _landing_deepest,
+			)
+		Phase.WEAPON:
+			_round_container.child_entered_tree.disconnect(_on_round_spawned)
+			_expect(_target_was_solid, "the ground under the muzzle was solid before firing")
+			_expect(_rounds_fired > 0, "holding the trigger spawns rounds (%d in %.1f s)" % [_rounds_fired, _elapsed])
+			var expected: float = _ship.hardpoints[0].rounds_per_second * _elapsed
+			_expect(
+				absf(float(_rounds_fired) - expected) <= 2.0,
+				"rate of fire is respected (%d rounds, expected about %.0f)" % [_rounds_fired, expected],
+			)
+			_expect(
+				not _planet.is_solid_at(_target_point),
+				"a round punched a hole through the ground it hit",
 			)
 
 
