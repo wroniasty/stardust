@@ -1,0 +1,9 @@
+{
+  "name": "stardust-tooling",
+  "private": true,
+  "description": "Dev tooling only (MCP servers). The game itself is Godot/GDScript and does not use npm.",
+  "devDependencies": {
+    "@nuskey8/godot-docs-mcp": "1.0.2",
+    "tsx": "^4.19.2"
+  }
+}
