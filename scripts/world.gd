@@ -13,8 +13,10 @@ const PLANET_SCENE: String = "res://scenes/planet.tscn"
 ## Seed every world object is derived from.
 @export var world_seed: int = 20260922
 
-## Where the ship starts, as a fraction of the planet radius above the surface.
-@export var spawn_altitude_ratio: float = 0.5
+## Where the ship starts, as a fraction of the planet radius above the terrain
+## ceiling. Tuned to drop the ship near the top of the atmosphere rather than
+## far out in empty space.
+@export var spawn_altitude_ratio: float = 0.3
 
 ## Container the StreamingManager instantiates the active system into.
 @onready var systems: Node2D = $Systems

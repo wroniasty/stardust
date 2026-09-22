@@ -20,7 +20,7 @@ extends RefCounted
 const TARGET_TEXEL_PX: float = 1.5
 
 const MIN_ANGULAR_SAMPLES: int = 512
-const MAX_ANGULAR_SAMPLES: int = 4096
+const MAX_ANGULAR_SAMPLES: int = 8192
 const MIN_RADIAL_SAMPLES: int = 64
 const MAX_RADIAL_SAMPLES: int = 512
 

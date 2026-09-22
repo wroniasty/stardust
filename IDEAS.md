@@ -156,13 +156,24 @@ wokół, więc w danej wysokości obowiązuje dokładnie jedna gęstość. Profi
 z M1.5).
 
 Wartości robocze (do potwierdzenia na koniec M1, patrz "Otwarte pytania"):
-promień planety 400..900 px, g przy powierzchni 25..60 px/s^2, promień wpływu
-3.5..6 R, atmosfera 10..22% R, 20% planet bez atmosfery. G jest trzymane
+promień planety 900..1800 px, g przy powierzchni 25..60 px/s^2, promień wpływu
+3.5..6 R, atmosfera 25..45% R, 20% planet bez atmosfery. G jest trzymane
 wyraźnie poniżej 80 px/s^2 ciągu silnika głównego, żeby stockowy statek zawsze
 mógł wystartować. Prędkość orbitalna przy powierzchni to sqrt(g*R), czyli około
-120..230 px/s.
+150..330 px/s.
 
-Zmierzone: orbita kołowa na 1.5 R trzyma promień z dryfem 0.12% przez 15 s przy
+Skala została podniesiona po pierwszej ocenie wzrokowej: przy promieniu rzędu
+500 px horyzont był zbyt zakrzywiony, a atmosfera zbyt cienka, żeby cokolwiek
+z niej zobaczyć. Większy promień spłaszcza lokalny horyzont, co jest potrzebne
+przy lądowaniu, a gruba atmosfera daje widoczne wejście w powietrze.
+
+Konsekwencja, o której łatwo zapomnieć: przy atmosferze sięgającej 1.45 R
+orbita na 1.5 R już w niej siedzi. Testy orbitalne przeniesione na 2.0 R.
+Progi rim lightu w shaderze atmosfery są ułamkami wysokości atmosfery, więc
+też musiały się zacieśnić (0.08/0.7 -> 0.03/0.30): przy 400 px powietrza stara
+wartość dawała 270 px poświaty na ekranie wysokim na 360 px.
+
+Zmierzone: orbita kołowa na 2.0 R trzyma promień z dryfem 0.05% przez 30 s przy
 semi-implicit Euler w 60 Hz. Wystarczy dla zręcznościówki, pełny test na kilka
 minut jest w M1.5.
 
@@ -212,14 +223,19 @@ co widać, jest dokładnie tym, w co się uderza. Warstwy skalne (skorupa, skał
 rdzeń) są odczytywane z bitmapy przez zapytanie "czy wyżej jest jeszcze skała",
 więc nowy krater sam z siebie dostaje obrys skorupy.
 
-**Zmierzone** (AMD RX 7900 XT, GDScript, planety R 470..850):
+**Zmierzone** (AMD RX 7900 XT, GDScript, planety R 1025..1710):
 
-| | R 470 | R 850 |
+| | R 1025 | R 1710 |
 |---|---|---|
-| siatka | 1967 x 69 (133 KB) | 3561 x 125 (435 KB) |
-| generacja | 3.3 ms | 4.4 ms |
-| krater r=28 + upload tekstury | 0.29 ms | 0.26 ms |
-| samplowanie kadłuba (6 punktów, wszystkie w skale) | 0.028 ms/tick | 0.071 ms/tick |
+| siatka | 4295 x 150 (629 KB) | 7163 x 251 (1756 KB) |
+| generacja | 7.8 ms | 14.4 ms |
+| krater r=28 + upload tekstury | 0.25 ms | 0.51 ms |
+| samplowanie kadłuba (6 punktów, wszystkie w skale) | 0.078 ms/tick | 0.085 ms/tick |
+
+Górny limit próbek kątowych musiał wzrosnąć z 4096 do 8192, inaczej największe
+planety schodziły poniżej obiecanych 1.5 px na teksel. Pamięć na planetę
+dochodzi do 1.7 MB; przy systemie z ośmioma planetami w M3 to rzędu 14 MB, co
+jest do przyjęcia, ale warto pamiętać przy streamingu.
 
 Wniosek: **samplowanie bitmapy wystarcza, chunki z marching squares nie są
 potrzebne**. Budżet klatki przy 60 Hz to 16.6 ms; najgorszy przypadek kolizji

@@ -70,8 +70,11 @@ void fragment() {
 	float alpha = over_disc * (haze_strength + clouds * 0.45);
 	alpha += (1.0 - over_disc) * air * air * haze_strength * 1.6;
 
-	// Rim light: a bright band just above the ground, fading outwards.
-	float rim = smoothstep(0.0, 0.08, altitude) * (1.0 - smoothstep(0.08, 0.7, altitude));
+	// Rim light: a bright band just above the ground, fading outwards. The
+	// thresholds are fractions of the atmosphere height, so they had to tighten
+	// when the air got deep: at 0.08/0.7 a 400 px atmosphere put a 270 px glow
+	// on a 360 px screen.
+	float rim = smoothstep(0.0, 0.03, altitude) * (1.0 - smoothstep(0.03, 0.30, altitude));
 	alpha += rim * rim_strength;
 
 	vec3 color = mix(atmosphere_color, vec3(1.0), clouds * over_disc * 0.5 + rim * 0.35);

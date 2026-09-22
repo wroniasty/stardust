@@ -149,7 +149,7 @@ func generate(new_seed: int) -> void:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = planet_seed
 
-	surface_radius = rng.randf_range(400.0, 900.0)
+	surface_radius = rng.randf_range(900.0, 1800.0)
 	# Kept well under the ship's 80 px/s^2 of main thrust so a stock ship can
 	# always lift off. Heavy worlds that fight the engines are an M2 problem.
 	surface_gravity = rng.randf_range(25.0, 60.0)
@@ -159,7 +159,7 @@ func generate(new_seed: int) -> void:
 		atmosphere_height = 0.0
 		atmosphere_density = 0.0
 	else:
-		atmosphere_height = surface_radius * rng.randf_range(0.10, 0.22)
+		atmosphere_height = surface_radius * rng.randf_range(0.25, 0.45)
 		atmosphere_density = rng.randf_range(0.4, 1.0)
 
 	surface_color = Color.from_hsv(rng.randf(), rng.randf_range(0.15, 0.45), rng.randf_range(0.30, 0.55))

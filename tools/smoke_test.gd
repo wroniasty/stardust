@@ -18,7 +18,7 @@ const TEST_SEED: int = 20260922
 
 const BURN_TICKS: int = 60
 const FALL_TICKS: int = 60
-const ORBIT_TICKS: int = 900
+const ORBIT_TICKS: int = 1800
 const LANDING_TICKS: int = 420
 
 ## How far above the local ground the landing test drops the ship.
@@ -236,7 +236,9 @@ func _begin_phase() -> void:
 			_ship.global_position = _planet.global_position + Vector2.UP * _planet.surface_radius * 2.0
 		Phase.ORBIT:
 			# Well clear of the atmosphere, so drag cannot be blamed for drift.
-			_orbit_radius = _planet.surface_radius * 1.5
+			# Air now reaches 1.45 R at its thickest, so 1.5 R is no longer
+			# outside it on every seed.
+			_orbit_radius = _planet.surface_radius * 2.0
 			_orbit_min = INF
 			_orbit_max = 0.0
 			_ship.global_position = _planet.global_position + Vector2.UP * _orbit_radius
