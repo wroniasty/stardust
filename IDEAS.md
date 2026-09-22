@@ -46,6 +46,37 @@ Minimum dla grywalnego statku: silnik główny plus silniki obrotowe. Reszta to 
 
 Awarie silników pochodzą ze zderzeń, zużycia i ataków. Awaria to modyfikacja parametrów sprawności i niezawodności, nic specjalnego w silniku fizycznym.
 
+### Realizacja (M1.1)
+
+Klasa nazywa się `ShipEngine`, nie `Engine`, bo `Engine` to singleton Godota.
+
+Montaż silnika bierze się z transformacji node'a: `position` to offset od środka
+statku, a kierunek ciągu to `thrust_direction` (domyślnie lokalne "do góry")
+przepuszczone przez obrót node'a. Dzięki temu obrócenie silnika w edytorze
+obraca jednocześnie siłę i wydech cząsteczkowy.
+
+Wybór silników obrotowych jest liczony, nie okablowany: `torque_sign()` zwraca
+znak `position.cross(kierunek_ciągu)`, a statek odpala tylko te silniki, których
+znak zgadza się z żądanym kierunkiem skrętu. Przeniesienie silnika w inne
+miejsce kadłuba automatycznie zmienia to, w którą stronę kręci, co będzie
+potrzebne, gdy silniki staną się lootem (M2).
+
+Statek trzyma komendy sterowania (`thrust_command`, `turn_command`) osobno od
+źródła inputu. `use_player_input = false` odcina klawiaturę, dzięki czemu tym
+samym `Ship` będą sterować wrogowie w M5 i testy headless.
+
+`can_sleep = false` na statku: uśpione ciało nie dostaje `_integrate_forces`,
+więc statek stojący w bezruchu przestałby reagować na ciąg.
+
+Statek bazowy do testów (wartości do przestrojenia, gdy będzie planeta i G):
+masa 10, kadłub ~24 px, silnik główny 800 (czyli 80 px/s^2), dwa silniki
+obrotowe po 60 zamontowane przy dziobie.
+
+Do rozstrzygnięcia przy strojeniu feelingu: pojedynczy silnik obrotowy daje
+oprócz momentu także siłę boczną (znosi statek w bok przy skręcaniu). Fizycznie
+poprawne, ale może być nieprzyjemne. Alternatywa to para silników działających
+jako czysty moment, kosztem złamania zasady "dwa silniki obrotowe".
+
 ## 4. Broń i loot
 
 Broń montowana w hardpointach statku (pozycja, kąt, dopuszczalne typy).

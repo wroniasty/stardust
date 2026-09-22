@@ -1,7 +1,10 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
+[ext_resource type="PackedScene" path="res://scenes/ship.tscn" id="3_ship"]
+[ext_resource type="Script" path="res://scripts/ship_camera.gd" id="4_camera"]
+[ext_resource type="PackedScene" path="res://scenes/debug_overlay.tscn" id="5_overlay"]
 
 [node name="World" type="Node2D"]
 script = ExtResource("1_world")
@@ -10,3 +13,12 @@ script = ExtResource("1_world")
 
 [node name="Player" type="Node2D" parent="."]
 script = ExtResource("2_player")
+
+[node name="Ship" parent="Player" instance=ExtResource("3_ship")]
+
+[node name="Camera" type="Camera2D" parent="."]
+script = ExtResource("4_camera")
+target_path = NodePath("../Player/Ship")
+
+[node name="DebugOverlay" parent="." instance=ExtResource("5_overlay")]
+ship_path = NodePath("../Player/Ship")

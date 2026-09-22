@@ -1,0 +1,23 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ship_engine.gd" id="1_engine"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_exhaust"]
+direction = Vector3(0, 1, 0)
+spread = 8.0
+initial_velocity_min = 70.0
+initial_velocity_max = 110.0
+gravity = Vector3(0, 0, 0)
+scale_min = 0.5
+scale_max = 1.5
+color = Color(1, 0.72, 0.33, 1)
+
+[node name="ShipEngine" type="Node2D"]
+script = ExtResource("1_engine")
+
+[node name="Exhaust" type="GPUParticles2D" parent="."]
+emitting = false
+amount = 24
+process_material = SubResource("ParticleProcessMaterial_exhaust")
+lifetime = 0.35
+local_coords = false

@@ -27,12 +27,12 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.1 Statek
 
-- [ ] `Ship` jako RigidBody2D z `_integrate_forces`.
-- [ ] Komponent `Engine`: pozycja, wektor ciągu, typ, sprawność, niezawodność.
-- [ ] Statek testowy: silnik główny plus dwa obrotowe. Sterowanie: klawisze ciągu i obrotu.
-- [ ] Kamera podążająca za statkiem, lekki zoom zależny od prędkości.
-- [ ] GPUParticles2D na silnikach, intensywność od ciągu.
-- [ ] Debug overlay: prędkość, siły, stan silników.
+- [x] `Ship` jako RigidBody2D z `_integrate_forces`.
+- [x] Komponent `Engine`: pozycja, wektor ciągu, typ, sprawność, niezawodność.
+- [x] Statek testowy: silnik główny plus dwa obrotowe. Sterowanie: klawisze ciągu i obrotu.
+- [x] Kamera podążająca za statkiem, lekki zoom zależny od prędkości.
+- [x] GPUParticles2D na silnikach, intensywność od ciągu.
+- [x] Debug overlay: prędkość, siły, stan silników.
 
 ### 1.2 Planeta
 
