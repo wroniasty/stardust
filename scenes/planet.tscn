@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/planet.gd" id="1_planet"]
+[ext_resource type="Shader" path="res://shaders/atmosphere.gdshader" id="2_atmosphere"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_atmosphere"]
+shader = ExtResource("2_atmosphere")
+shader_parameter/surface_ratio = 0.85
+shader_parameter/atmosphere_color = Color(0.45, 0.62, 0.95, 1)
+shader_parameter/density = 1.0
+shader_parameter/cloud_scale = 3.5
+shader_parameter/cloud_speed = 0.03
+shader_parameter/haze_strength = 0.28
+shader_parameter/rim_strength = 0.85
+
+[node name="Planet" type="Node2D"]
+script = ExtResource("1_planet")
+
+[node name="Atmosphere" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_atmosphere")
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="AtmosphereShells" type="Node2D" parent="."]

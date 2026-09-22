@@ -36,11 +36,11 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.2 Planeta
 
-- [ ] `Planet` jako koło z parametrami: promień, G, promień wpływu, promień atmosfery.
-- [ ] Grawitacja własną funkcją w statku: odwrotność kwadratu nad powierzchnią, płynne wygaszenie na granicy wpływu.
-- [ ] `linear_damp` i `angular_damp` projektu na 0.
-- [ ] Atmosfera jako Area2D z `linear_damp`, kilka koncentrycznych obszarów z gradientem, górna warstwa z minimalnym dragiem.
-- [ ] Prosty shader atmosfery: kolor, rim light, przewijany szum na chmury.
+- [x] `Planet` jako koło z parametrami: promień, G, promień wpływu, promień atmosfery.
+- [x] Grawitacja własną funkcją w statku: odwrotność kwadratu nad powierzchnią, płynne wygaszenie na granicy wpływu.
+- [x] `linear_damp` i `angular_damp` projektu na 0.
+- [x] Atmosfera jako Area2D z `linear_damp`, kilka koncentrycznych obszarów z gradientem, górna warstwa z minimalnym dragiem.
+- [x] Prosty shader atmosfery: kolor, rim light, przewijany szum na chmury.
 
 ### 1.3 Teren z pikseli
 

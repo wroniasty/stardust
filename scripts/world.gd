@@ -4,6 +4,17 @@ extends Node2D
 ##
 ## The player never becomes a child of a system: systems are instantiated and
 ## freed underneath a player that stays put (see IDEAS.md section 9).
+##
+## For M1 the "system" is one seeded planet at the origin and the ship parked
+## above it. Nothing is hand-placed: change the seed and you get another world.
+
+const PLANET_SCENE: String = "res://scenes/planet.tscn"
+
+## Seed every world object is derived from.
+@export var world_seed: int = 20260922
+
+## Where the ship starts, as a fraction of the planet radius above the surface.
+@export var spawn_altitude_ratio: float = 0.5
 
 ## Container the StreamingManager instantiates the active system into.
 @onready var systems: Node2D = $Systems
@@ -11,6 +22,25 @@ extends Node2D
 ## The player, kept as a direct child of the world for the whole game.
 @onready var player: Node2D = $Player
 
+var planet: Planet = null
+
 
 func _ready() -> void:
-	pass
+	_spawn_planet()
+	_place_ship()
+
+
+func _spawn_planet() -> void:
+	var scene: PackedScene = load(PLANET_SCENE) as PackedScene
+	planet = scene.instantiate() as Planet
+	planet.planet_seed = world_seed
+	systems.add_child(planet)
+
+
+func _place_ship() -> void:
+	var ship: Ship = (player as Player).ship
+	if ship == null or planet == null:
+		return
+	var altitude: float = planet.surface_radius * spawn_altitude_ratio
+	ship.global_position = planet.global_position + Vector2.UP * (planet.surface_radius + altitude)
+	ship.linear_velocity = Vector2.ZERO

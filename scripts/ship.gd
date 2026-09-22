@@ -26,6 +26,7 @@ var turn_command: float = 0.0
 
 var _applied_force: Vector2 = Vector2.ZERO
 var _applied_torque: float = 0.0
+var _gravity: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -42,6 +43,11 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_applied_force = Vector2.ZERO
 	_applied_torque = 0.0
 
+	# Gravity is summed from the bodies in range rather than left to the
+	# physics server, so the falloff can be ours (see IDEAS.md section 5).
+	_gravity = gravity_acceleration_at(state.transform.origin)
+	state.apply_central_force(_gravity * mass)
+
 	var body_rotation: float = state.transform.get_rotation()
 	for engine: ShipEngine in engines:
 		var local_force: Vector2 = engine.get_thrust_force()
@@ -54,6 +60,22 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		state.apply_force(force, offset)
 		_applied_force += force
 		_applied_torque += offset.cross(force)
+
+
+## Gravitational acceleration the ship felt last tick. Not get_gravity(),
+## which is already taken by PhysicsBody2D.
+func get_applied_gravity() -> Vector2:
+	return _gravity
+
+
+## Sums the pull of every gravity source that reaches `point`.
+func gravity_acceleration_at(point: Vector2) -> Vector2:
+	var total: Vector2 = Vector2.ZERO
+	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
+		var planet: Planet = source as Planet
+		if planet != null:
+			total += planet.gravity_at(point)
+	return total
 
 
 ## Total force applied by the engines last tick, in global coordinates.

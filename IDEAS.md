@@ -109,6 +109,40 @@ Drag przez Area2D z `linear_damp` (tryb replace lub combine). Kilka koncentryczn
 
 Księżyce i orbitujące stacje liczone analitycznie: pozycja = f(globalny czas). Kinematyczne, nie fizyczne. Dzięki temu poruszają się także wtedy, kiedy nie istnieją w scenie.
 
+### Realizacja (M1.2)
+
+`Planet` to Node2D, nie Area2D z `gravity_point`: wbudowany falloff jest sztywny
+i nie da się go wygasić na skraju studni. Planety rejestrują się w grupie
+`gravity_sources`, a statek sam sumuje `gravity_at()` każdego ciała w zasięgu.
+
+Wygaszenie na granicy: pełna odwrotność kwadratu do 0.9 promienia wpływu, potem
+`smoothstep` do zera. Bez tego statek dostawałby kopniaka przy przekraczaniu
+granicy. Pod powierzchnią g jest przytrzymane na wartości powierzchniowej,
+inaczej odwrotność kwadratu eksploduje w stronę środka.
+
+Atmosfera to trzy koncentryczne Area2D z `linear_damp_space_override =
+COMBINE_REPLACE` i rosnącym `priority` do środka. Wyższy priorytet jest
+liczony pierwszy, a COMBINE_REPLACE każe zignorować wszystkie rzadsze powłoki
+wokół, więc w danej wysokości obowiązuje dokładnie jedna gęstość. Profil to
+3% / 25% / 100% pełnego dragu, czyli górna warstwa ledwo muska (pod aerobraking
+z M1.5).
+
+Wartości robocze (do potwierdzenia na koniec M1, patrz "Otwarte pytania"):
+promień planety 400..900 px, g przy powierzchni 25..60 px/s^2, promień wpływu
+3.5..6 R, atmosfera 10..22% R, 20% planet bez atmosfery. G jest trzymane
+wyraźnie poniżej 80 px/s^2 ciągu silnika głównego, żeby stockowy statek zawsze
+mógł wystartować. Prędkość orbitalna przy powierzchni to sqrt(g*R), czyli około
+120..230 px/s.
+
+Zmierzone: orbita kołowa na 1.5 R trzyma promień z dryfem 0.12% przez 15 s przy
+semi-implicit Euler w 60 Hz. Wystarczy dla zręcznościówki, pełny test na kilka
+minut jest w M1.5.
+
+Shader atmosfery dostaje tylko `surface_ratio` (promień powierzchni podzielony
+przez promień atmosfery), kolor i gęstość; cała geometria to UV kwadratu.
+Chmury są próbkowane na okręgu, a nie na rozwiniętym kącie, więc obracają się
+bez szwu.
+
 ## 6. Planety z pikseli i kolizje
 
 Teren planety to bitmapa, modyfikowalna (eksplozje, kopanie, zniszczenia). Nie zabija to kolizji, o ile piksele nie są ciałami fizycznymi.
