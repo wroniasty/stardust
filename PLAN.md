@@ -10,12 +10,12 @@ Kontekst i decyzje projektowe: IDEAS.md.
 
 Cel: pusty, ale poprawnie ustawiony projekt Godot 4.x z repo.
 
-- [ ] Projekt Godot 4.x (2D, standardowy build, GDScript), repo git, `.gitignore` dla Godota (`.godot/`, `*.import` opcjonalnie).
-- [ ] Struktura katalogów: `scenes/`, `scripts/`, `resources/`, `shaders/`, `addons/`.
-- [ ] Autoloady jako puste szkielety: `Galaxy`, `StreamingManager`, `LootGenerator`.
-- [ ] Scena `World` z pustym `Player` i miejscem na `System`.
-- [ ] Ustawienia renderowania: SubViewport w niskiej rozdzielczości i upscale (decyzja o docelowej rozdzielczości pikselowej, np. 640x360).
-- [ ] Skrypt uruchamiający projekt headless do sprawdzania błędów (`godot --headless --path . --quit`).
+- [x] Projekt Godot 4.x (2D, standardowy build, GDScript), repo git, `.gitignore` dla Godota (`.godot/`, `*.import` opcjonalnie).
+- [x] Struktura katalogów: `scenes/`, `scripts/`, `resources/`, `shaders/`, `addons/`.
+- [x] Autoloady jako puste szkielety: `Galaxy`, `StreamingManager`, `LootGenerator`.
+- [x] Scena `World` z pustym `Player` i miejscem na `System`.
+- [x] Ustawienia renderowania: SubViewport w niskiej rozdzielczości i upscale (decyzja o docelowej rozdzielczości pikselowej, np. 640x360).
+- [x] Skrypt uruchamiający projekt headless do sprawdzania błędów (`godot --headless --path . --quit`).
 
 Gotowe, gdy: projekt się uruchamia, pusty ekran, brak błędów w konsoli.
 

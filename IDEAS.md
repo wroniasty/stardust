@@ -259,7 +259,7 @@ Save = seed galaktyki plus słownik delt.
 
 - Atmosfera: shader na kole nieco większym od planety. Szum FBM przewijany w czasie na chmury, rim light na krawędzi, kolor i gęstość z parametrów planety. Różne typy atmosfer (kolor, gęstość, prędkość chmur, wzór).
 - Powierzchnia: bitmapa terenu jako tekstura z paletą.
-- Pixel-art: render w niskiej rozdzielczości w SubViewport i upscale.
+- Pixel-art: bazowa rozdzielczość 640x360, skalowanie przez tryb rozciągania `canvas_items` z aspektem `expand` (ustawienia projektu), filtr tekstur Nearest. SubViewport nie jest potrzebny: `canvas_items` renderuje w niskiej rozdzielczości i skaluje całość, a `expand` pozwala na szersze ekrany bez czarnych pasów. SubViewport dopiero wtedy, gdy HUD będzie musiał być w pełnej rozdzielczości.
 - Silniki: GPUParticles2D, intensywność od ciągu, zmiana przy warpie i awariach.
 - Tło: paralaksa gwiazd w shaderze, smugi przy skoku.
 - Oświetlenie 2D od gwiazdy, cień strony nocnej planety.
