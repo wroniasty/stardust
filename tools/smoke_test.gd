@@ -19,10 +19,13 @@ const TEST_SEED: int = 20260922
 const BURN_TICKS: int = 60
 const FALL_TICKS: int = 60
 const ORBIT_TICKS: int = 1800
-const LANDING_TICKS: int = 420
+const LANDING_TICKS: int = 600
 
 ## How far above the local ground the landing test drops the ship.
 const DROP_HEIGHT: float = 60.0
+
+## Tilt of the dropped ship, so touchdown happens on one corner.
+const LANDING_TILT: float = 0.45
 
 ## Long enough for a round to cross the gap below and dig in.
 const WEAPON_TICKS: int = 60
@@ -43,6 +46,10 @@ var _orbit_min: float = INF
 var _orbit_max: float = 0.0
 var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
+var _peak_rebound: float = 0.0
+var _peak_spin: float = 0.0
+var _touched_down: bool = false
+var _impact_speed: float = 0.0
 var _muzzle_point: Vector2 = Vector2.ZERO
 var _target_point: Vector2 = Vector2.ZERO
 var _rounds_fired: int = 0
@@ -69,6 +76,17 @@ func _physics_process(delta: float) -> bool:
 		_orbit_max = maxf(_orbit_max, radius)
 	elif _phase == Phase.LANDING:
 		_landing_deepest = maxf(_landing_deepest, _deepest_hull_penetration())
+		var up: Vector2 = (_ship.global_position - _planet.global_position).normalized()
+		if not _touched_down:
+			if _ship.get_terrain_contacts() > 0:
+				_touched_down = true
+			else:
+				# Sampled before contact: by the frame contact is reported,
+				# _integrate_forces has already cancelled the closing speed.
+				_impact_speed = -_ship.linear_velocity.dot(up)
+		else:
+			_peak_rebound = maxf(_peak_rebound, _ship.linear_velocity.dot(up))
+			_peak_spin = maxf(_peak_spin, absf(_ship.angular_velocity))
 
 	if _ticks < _phase_ticks():
 		return false
@@ -268,7 +286,15 @@ func _begin_phase() -> void:
 			_ground_radius = _find_ground(_planet, -PI * 0.5)
 			_ship.global_position = _planet.global_position + Vector2.UP * (_ground_radius + DROP_HEIGHT)
 			_ship.linear_velocity = Vector2.ZERO
+			# Tilted on purpose: a level drop hits every hull point at once and
+			# would pass even with a purely linear response. One corner first is
+			# what proves the ship pivots.
+			_ship.global_rotation = LANDING_TILT
 			_landing_deepest = 0.0
+			_peak_rebound = 0.0
+			_peak_spin = 0.0
+			_touched_down = false
+			_impact_speed = 0.0
 
 
 func _on_round_spawned(node: Node) -> void:
@@ -333,12 +359,41 @@ func _evaluate_phase() -> void:
 				_ship.linear_velocity.length() < 20.0,
 				"a landed ship comes to rest (%.1f px/s)" % _ship.linear_velocity.length(),
 			)
-			# Sampled once per frame, which is after _integrate_forces has
-			# already pushed the hull out: this shows the ship is never left
-			# buried between frames, not how deep it dips during an impact.
+			# The bug this replaced: an aggregated central impulse produced no
+			# torque at all, so a ship landing on one corner never tipped.
 			_expect(
-				_landing_deepest < 1.0,
-				"the hull is clear of rock on every frame after resolution (worst %.1f px)" % _landing_deepest,
+				_peak_spin > 0.05,
+				"touching down on one corner pivots the ship (peak spin %.3f rad/s)" % _peak_spin,
+			)
+			_expect(
+				absf(_ship.angular_velocity) < 0.2,
+				"the pivot settles rather than spinning on (%.3f rad/s)" % _ship.angular_velocity,
+			)
+			# The other half of the bug: over-correcting the overlap every tick
+			# handed back more height than gravity took, so the ship hopped.
+			_expect(
+				_peak_rebound < maxf(_impact_speed * 0.4, 5.0),
+				"the hull does not hop off the ground (rebound %.1f px/s from a %.1f px/s impact)" % [
+					_peak_rebound, _impact_speed,
+				],
+			)
+			# Which face it ends on is not the test's business: a triangle
+			# dropped tilted can legitimately settle on a side, and tipping over
+			# is a designed outcome (IDEAS.md section 7). It only has to stop.
+			_expect(
+				_ship.get_terrain_contacts() > 0,
+				"the ship is still in contact with the ground at the end",
+			)
+			# Sampled once per frame, after _integrate_forces has corrected the
+			# overlap. The solver leaves PENETRATION_SLOP on purpose and the
+			# depth march resolves to one pixel, so a sliver is expected; what
+			# would be a bug is the hull sinking further every tick.
+			var allowed: float = Ship.PENETRATION_SLOP + 0.25
+			_expect(
+				_landing_deepest <= allowed,
+				"the hull never sinks past the correction slop (worst %.1f px, allowed %.1f)" % [
+					_landing_deepest, allowed,
+				],
 			)
 		Phase.WEAPON:
 			_round_container.child_entered_tree.disconnect(_on_round_spawned)

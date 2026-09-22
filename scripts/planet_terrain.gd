@@ -38,7 +38,14 @@ const NORMAL_PROBE_DISTANCE: float = 4.0
 
 ## How far to march when measuring how deep a point sits inside rock.
 const MAX_PENETRATION: float = 24.0
-const PENETRATION_STEP: float = 2.0
+const PENETRATION_STEP: float = 1.0
+
+## Bisections run after the march finds the exit. The result drives positional
+## correction, and the correction only converges if the depth can be measured
+## finer than the slop it is correcting towards: a 1 px march against a 0.5 px
+## slop can never tell "0.4 deep" from "1.0 deep", so it lifts the hull every
+## tick and the ship rocks forever. Four bisections give 1/16 px.
+const PENETRATION_REFINEMENTS: int = 4
 
 var angular_samples: int = 0
 var radial_samples: int = 0
@@ -136,8 +143,19 @@ func penetration_local(point: Vector2, normal: Vector2) -> float:
 	while travelled < MAX_PENETRATION:
 		travelled += PENETRATION_STEP
 		if not is_solid_local(point + normal * travelled):
-			return travelled
+			return _refine_exit(point, normal, travelled - PENETRATION_STEP, travelled)
 	return MAX_PENETRATION
+
+
+## Bisects between a known solid distance and a known empty one.
+func _refine_exit(point: Vector2, normal: Vector2, solid: float, empty: float) -> float:
+	for i: int in range(PENETRATION_REFINEMENTS):
+		var middle: float = (solid + empty) * 0.5
+		if is_solid_local(point + normal * middle):
+			solid = middle
+		else:
+			empty = middle
+	return empty
 
 
 ## Clears a disc of rock. Returns true if anything was actually removed, so the

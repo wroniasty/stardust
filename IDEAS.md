@@ -230,7 +230,7 @@ więc nowy krater sam z siebie dostaje obrys skorupy.
 | siatka | 4295 x 150 (629 KB) | 7163 x 251 (1756 KB) |
 | generacja | 7.8 ms | 14.4 ms |
 | krater r=28 + upload tekstury | 0.25 ms | 0.51 ms |
-| samplowanie kadłuba (6 punktów, wszystkie w skale) | 0.078 ms/tick | 0.085 ms/tick |
+| samplowanie kadłuba (6 punktów, wszystkie w skale) | 0.127 ms/tick | 0.124 ms/tick |
 
 Górny limit próbek kątowych musiał wzrosnąć z 4096 do 8192, inaczej największe
 planety schodziły poniżej obiecanych 1.5 px na teksel. Pamięć na planetę
@@ -244,10 +244,45 @@ kraterze jest na tyle tani, że częściowa aktualizacja nie ma uzasadnienia.
 Marching squares zostaje na wypadek, gdyby fizyka silnika musiała widzieć teren
 (wraki, odłamki).
 
-Odpowiedź kolizji jest na razie zgrubna: jedna zagregowana normalna na tick,
-wypchnięcie kadłuba i odbicie, zamiast porządnego impulsu na punkt. To
-świadomy kompromis zręcznościowy; prawdziwa logika lądowania z nogami podwozia
-jest w M1.6.
+### Odpowiedź kolizji (poprawione po ocenie wzrokowej)
+
+Pierwsza wersja była zagregowana: jedna uśredniona normalna, odbicie prędkości
+liniowej i sztuczne tłumienie obrotu. Nie działała i nie mogła: skoro żaden
+impuls nie był przyłożony w punkcie kontaktu, moment obrotowy w ogóle nie
+powstawał, więc statek dotykający gruntu jednym narożnikiem nie przewracał się,
+tylko zsuwał płasko. Do tego podskakiwał.
+
+Obecnie każdy punkt kadłuba w skale dostaje własny impuls przyłożony we własnym
+ramieniu względem środka masy:
+
+- normalny impuls `j = -(1+e) * v_n / (1/m + (r x n)^2 / I)`,
+- tarcie Coulomba wzdłuż stycznej, ograniczone przez `mu * j`,
+- cztery przebiegi solvera, bo kontakty są sprzężone (impuls na dziobie zmienia
+  prędkość zbliżania na ogonie).
+
+Ramię liczone jest do środka masy (`transform.origin + state.center_of_mass`),
+nie do origin node'a. Na tym kadłubie różnica to ~3 px i wystarcza, żeby
+przewracanie wyglądało źle.
+
+Trzy rzeczy okazały się konieczne, żeby statek przestał drgać w spoczynku:
+
+1. **Restytucja tylko powyżej progu** (30 px/s). Sprężystość na kontakcie
+   spoczynkowym powoduje, że kadłub bez końca wymienia z gruntem drobne impulsy.
+2. **Częściowa korekcja penetracji** (slop 0.5 px, 60% reszty na tick).
+   Wypychanie kadłuba całkowicie co tick oddaje wysokość, którą grawitacja
+   zaraz zabiera, i statek skacze po gruncie w nieskończoność.
+3. **Pomiar penetracji dokładniejszy niż slop.** To była najbardziej podstępna
+   z trzech: marsz co 1 px przy slopie 0.5 px nie potrafi odróżnić zanurzenia
+   0.4 px od 1.0 px, więc korekcja podnosiła kadłub o ~0.3 px co tick i
+   kołysanie nigdy nie gasło. Cztery bisekcje po marszu dają 1/16 px i dopiero
+   wtedy prędkość obrotowa schodzi do zera.
+
+Koszt bisekcji: samplowanie kadłuba w najgorszym przypadku wzrosło z 0.08 do
+0.13 ms na tick. Nadal 0.8% budżetu klatki.
+
+Przewracanie się na bok jest teraz normalnym wynikiem i tak ma być — to
+zaplanowana forma nieudanego lądowania (sekcja 7). Nogi podwozia i progi
+lądowania przychodzą w M1.6.
 
 ## 7. Lądowanie
 

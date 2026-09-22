@@ -31,6 +31,20 @@ const HULL_POINTS: Array[Vector2] = [
 ## world instead of riding along with the ship that fired them.
 const PROJECTILE_GROUP: StringName = &"projectile_container"
 
+## Passes of the contact solver per tick. The contacts are coupled, so one
+## pass leaves the ship visibly soft on a multi-point landing.
+const CONTACT_ITERATIONS: int = 4
+
+## Below this closing speed a contact does not bounce at all, in px/s. Without
+## it a resting hull keeps trading tiny impulses with the ground.
+const RESTITUTION_CUTOFF: float = 30.0
+
+## Overlap left uncorrected, in pixels, and the fraction of the rest that is
+## corrected per tick. Both exist to keep positional correction from pumping
+## energy into a resting ship.
+const PENETRATION_SLOP: float = 0.5
+const PENETRATION_CORRECTION: float = 0.6
+
 ## Fired on every terrain impact hard enough to hurt. M1.7 turns this into hull
 ## HP and death; for now it only accumulates.
 signal hull_impact(impact_speed: float, damage: float)
@@ -39,11 +53,13 @@ signal hull_impact(impact_speed: float, damage: float)
 ## tests turn this off and write the command fields directly.
 @export var use_player_input: bool = true
 
-## How much of the impact speed a bounce gives back. Arcade, not elastic.
-@export_range(0.0, 1.0) var terrain_bounce: float = 0.25
+## Restitution: how much of the closing speed a hard hit gives back. Only
+## applied above RESTITUTION_CUTOFF, so a ship sitting on the ground stays.
+@export_range(0.0, 1.0) var terrain_bounce: float = 0.15
 
-## How much sideways speed is scrubbed off per contact, 0..1.
-@export_range(0.0, 1.0) var terrain_friction: float = 0.4
+## Coulomb friction coefficient between hull and rock. Caps the tangential
+## impulse at each contact, which is what stops a landed ship sliding downhill.
+@export_range(0.0, 2.0) var terrain_friction: float = 0.7
 
 ## Impacts slower than this are free. Above it, damage grows with the excess.
 @export var damage_speed_threshold: float = 60.0
@@ -129,12 +145,15 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_resolve_terrain(state)
 
 
-## Pushes the ship out of any rock its hull is inside, and bounces it.
+## Resolves every hull point that is inside rock.
 ##
-## This runs after the forces because it has the last word: it edits the
-## velocity and the transform directly. One aggregated response per tick rather
-## than a proper per-point impulse solve, which is the arcade trade named in
-## IDEAS.md section 6 — the real landing logic arrives in M1.6.
+## Each contact gets its own impulse applied at its own offset from the centre
+## of mass, which is what makes the ship pivot: touch down on one rear corner
+## and the impulse there spins the ship about that corner, exactly as it should.
+## An aggregated central response cannot do that no matter how it is tuned.
+##
+## Runs after the engine forces because it has the last word: it edits the
+## velocity, the spin and the transform directly.
 func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 	_terrain_contacts = 0
 
@@ -143,46 +162,112 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 		return
 
 	var body_transform: Transform2D = state.transform
-	var normal: Vector2 = Vector2.ZERO
+	var points: Array[Vector2] = []
+	var normals: Array[Vector2] = []
 	var deepest: float = 0.0
+	var deepest_normal: Vector2 = Vector2.ZERO
 
 	for hull_point: Vector2 in HULL_POINTS:
 		var world_point: Vector2 = body_transform * hull_point
 		if not planet.is_solid_at(world_point):
 			continue
-		_terrain_contacts += 1
 		var point_normal: Vector2 = planet.surface_normal_at(world_point)
-		normal += point_normal
-		deepest = maxf(deepest, planet.penetration_at(world_point, point_normal))
+		if point_normal.is_zero_approx():
+			continue
+		points.append(world_point)
+		normals.append(point_normal)
+		var depth: float = planet.penetration_at(world_point, point_normal)
+		if depth > deepest:
+			deepest = depth
+			deepest_normal = point_normal
 
+	_terrain_contacts = points.size()
 	if _terrain_contacts == 0:
 		return
 
-	normal = normal.normalized()
-	if normal.is_zero_approx():
-		return
+	# Torque comes from the lever arm to the centre of mass, not to the origin.
+	# On this hull they are ~3 px apart, which is enough to matter.
+	var centre_of_mass: Vector2 = body_transform.origin + state.center_of_mass
+	var impact_speed: float = _apply_contact_impulses(state, centre_of_mass, points, normals)
 
-	# Lift the hull clear before touching the velocity, or the next tick starts
-	# buried again and the ship sinks one step per frame.
-	body_transform.origin += normal * (deepest + 0.5)
-	state.transform = body_transform
-
-	var velocity: Vector2 = state.linear_velocity
-	var closing: float = velocity.dot(normal)
-	if closing >= 0.0:
-		return
-
-	var impact_speed: float = -closing
-	velocity -= (1.0 + terrain_bounce) * closing * normal
-	var along_surface: Vector2 = velocity - velocity.dot(normal) * normal
-	velocity -= along_surface * terrain_friction
-	state.linear_velocity = velocity
-	state.angular_velocity *= 0.5
+	# Positional correction is deliberately partial and leaves a sliver of
+	# overlap. Pushing the hull fully clear every tick adds height that gravity
+	# then gives back, and the ship hops along the ground forever.
+	if deepest > PENETRATION_SLOP:
+		body_transform.origin += deepest_normal * ((deepest - PENETRATION_SLOP) * PENETRATION_CORRECTION)
+		state.transform = body_transform
 
 	if impact_speed > damage_speed_threshold:
 		var damage: float = (impact_speed - damage_speed_threshold) * damage_per_speed
 		accumulated_damage += damage
 		hull_impact.emit(impact_speed, damage)
+
+
+## Solves the contacts with sequential impulses and returns the hardest
+## approach speed seen, for the damage model.
+##
+## Several passes because the contacts are coupled: an impulse at the nose
+## changes the closing speed at the tail. Four is plenty for six points.
+func _apply_contact_impulses(
+	state: PhysicsDirectBodyState2D,
+	centre_of_mass: Vector2,
+	points: Array[Vector2],
+	normals: Array[Vector2],
+) -> float:
+	var inverse_mass: float = state.inverse_mass
+	var inverse_inertia: float = state.inverse_inertia
+	var hardest: float = 0.0
+
+	for iteration: int in range(CONTACT_ITERATIONS):
+		for i: int in range(points.size()):
+			var arm: Vector2 = points[i] - centre_of_mass
+			var normal: Vector2 = normals[i]
+
+			var closing: float = _velocity_at(state, arm).dot(normal)
+			if closing >= 0.0:
+				continue
+			if iteration == 0:
+				hardest = maxf(hardest, -closing)
+
+			var normal_arm: float = arm.cross(normal)
+			var normal_mass: float = inverse_mass + normal_arm * normal_arm * inverse_inertia
+			if normal_mass <= 0.0:
+				continue
+
+			# Bounce only above a cutoff. Keeping restitution at a resting
+			# contact is the other half of why the ship never stopped hopping.
+			var restitution: float = terrain_bounce if -closing > RESTITUTION_CUTOFF else 0.0
+			var normal_impulse: float = -(1.0 + restitution) * closing / normal_mass
+			_apply_impulse_at(state, normal * normal_impulse, arm, inverse_mass, inverse_inertia)
+
+			# Coulomb friction along the surface, capped by the normal impulse.
+			var tangent: Vector2 = Vector2(-normal.y, normal.x)
+			var sliding: float = _velocity_at(state, arm).dot(tangent)
+			var tangent_arm: float = arm.cross(tangent)
+			var tangent_mass: float = inverse_mass + tangent_arm * tangent_arm * inverse_inertia
+			if tangent_mass <= 0.0:
+				continue
+			var limit: float = terrain_friction * normal_impulse
+			var friction_impulse: float = clampf(-sliding / tangent_mass, -limit, limit)
+			_apply_impulse_at(state, tangent * friction_impulse, arm, inverse_mass, inverse_inertia)
+
+	return hardest
+
+
+## Velocity of the hull at an offset from the centre of mass.
+func _velocity_at(state: PhysicsDirectBodyState2D, arm: Vector2) -> Vector2:
+	return state.linear_velocity + state.angular_velocity * Vector2(-arm.y, arm.x)
+
+
+func _apply_impulse_at(
+	state: PhysicsDirectBodyState2D,
+	impulse: Vector2,
+	arm: Vector2,
+	inverse_mass: float,
+	inverse_inertia: float,
+) -> void:
+	state.linear_velocity += impulse * inverse_mass
+	state.angular_velocity += arm.cross(impulse) * inverse_inertia
 
 
 ## How many hull points were inside rock last tick.
