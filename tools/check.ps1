@@ -20,7 +20,13 @@ function Invoke-Stage {
     param([string]$Label, [string[]]$Arguments)
 
     Write-Host $Label
+    # Continue, not Stop, around the native call: Godot writes warnings to
+    # stderr, and with 2>&1 PowerShell turns every stderr line into a
+    # terminating error. A harmless warning would abort the whole check.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $output = & $Godot @Arguments 2>&1 | Out-String
+    $ErrorActionPreference = $previous
     Write-Host $output
 
     $bad = $output -split "`n" | Where-Object { $_ -match $pattern }

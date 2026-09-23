@@ -940,7 +940,11 @@ func _apply_brake(state: PhysicsDirectBodyState2D) -> void:
 		state.linear_velocity = Vector2.ZERO
 		return
 
-	# Forward is -Y, so moving forward means a negative Y and needs BACK.
+	# Each pair is (what fights a negative component, what fights a positive
+	# one). Forward is -Y, so drifting forward is negative and wants BACK;
+	# drifting right is +X and wants STRAFE_LEFT. Getting the second pair the
+	# wrong way round made the brake push the ship harder in the direction it
+	# was already sliding.
 	_brake_axis(
 		local_velocity.y,
 		ShipControl.Command.BACK,
@@ -948,23 +952,26 @@ func _apply_brake(state: PhysicsDirectBodyState2D) -> void:
 	)
 	_brake_axis(
 		local_velocity.x,
-		ShipControl.Command.STRAFE_LEFT,
 		ShipControl.Command.STRAFE_RIGHT,
+		ShipControl.Command.STRAFE_LEFT,
 	)
 
 
 ## One velocity component against the group that opposes it.
 ##
-## `negative_command` is the one that fights a negative component. The throttle
+## `opposes_negative` is the command that pushes against a negative component,
+## `opposes_positive` against a positive one. Named for what they fight rather
+## than for their own direction, because the two read the same at a glance and
+## the pair for the sideways axis was written backwards. The throttle
 ## is the time the group would need to kill this component, clamped to one
 ## second, so it holds full thrust while there is real speed to shed and eases
 ## off over the last stretch instead of overshooting into a wobble.
 func _brake_axis(
-	component: float, negative_command: ShipControl.Command, positive_command: ShipControl.Command
+	component: float, opposes_negative: ShipControl.Command, opposes_positive: ShipControl.Command
 ) -> void:
 	if is_zero_approx(component):
 		return
-	var command: ShipControl.Command = negative_command if component < 0.0 else positive_command
+	var command: ShipControl.Command = opposes_negative if component < 0.0 else opposes_positive
 	var authority: float = control.authority_of(command)
 	if authority <= 0.0:
 		return

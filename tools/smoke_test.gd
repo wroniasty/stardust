@@ -26,8 +26,13 @@ const KILL_SPIN: float = 2.0
 const KILL_TICKS: int = 90
 
 ## Speed the brake has to shed, and the time it gets.
+##
+## Eight seconds rather than five because sideways braking is genuinely slower:
+## the strafe groups muster 300 N against the retro thruster's 500 N, so a
+## sideways stop takes about six seconds to the forward stop's four and a half.
+## That is the ship's design showing through, not a fault.
 const BRAKE_SPEED: float = 100.0
-const BRAKE_TICKS: int = 300
+const BRAKE_TICKS: int = 480
 const FALL_TICKS: int = 60
 const ORBIT_TICKS: int = 1800
 const LANDING_TICKS: int = 600
@@ -69,7 +74,7 @@ const WEAPON_TICKS: int = 60
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
-	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, STRAFE, FREE_FALL, ORBIT,
+	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
 	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE,
 	WEAPON, DONE }
@@ -95,6 +100,7 @@ var _clean_turn_spin: float = 0.0
 var _damaged_turn_spin: float = 0.0
 var _kill_ticks: int = -1
 var _peak_turn_during_brake: float = 0.0
+var _peak_speed: float = 0.0
 var _flat_angle: float = 0.0
 var _steep_angle: float = 0.0
 var _ride_start_world: Vector2 = Vector2.ZERO
@@ -170,6 +176,8 @@ func _physics_process(delta: float) -> bool:
 			_kill_ticks = _ticks
 	elif _phase == Phase.BRAKE:
 		_peak_turn_during_brake = maxf(_peak_turn_during_brake, absf(_ship.angular_velocity))
+	elif _phase == Phase.BRAKE_SIDEWAYS or _phase == Phase.BRAKE_DIAGONAL:
+		_peak_speed = maxf(_peak_speed, _ship.linear_velocity.length())
 	elif _phase == Phase.HULL_HEAT:
 		_peak_heat = maxf(_peak_heat, _ship.hull_heat)
 	elif _phase == Phase.LANDING:
@@ -352,7 +360,7 @@ func _phase_ticks() -> int:
 			return FORWARD_BURN_TICKS
 		Phase.KILL_ROTATION:
 			return KILL_TICKS
-		Phase.BRAKE:
+		Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL:
 			return BRAKE_TICKS
 		Phase.ORBIT_LOCK:
 			return LOCK_TICKS
@@ -384,7 +392,7 @@ func _phase_ticks() -> int:
 ## deliberately run in empty space so gravity cannot be mistaken for drift.
 func _phase_needs_planet() -> bool:
 	match _phase:
-		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.BRAKE, Phase.STRAFE:
+		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.STRAFE:
 			return false
 		_:
 			return true
@@ -423,6 +431,16 @@ func _begin_phase() -> void:
 			_ship.linear_velocity = Ship.FORWARD * BRAKE_SPEED
 			_ship.brake_command = true
 			_peak_turn_during_brake = 0.0
+		Phase.BRAKE_SIDEWAYS:
+			# The axis the forward-only test never touched, which is how a
+			# reversed pair of strafe commands went unnoticed.
+			_ship.linear_velocity = Ship.FORWARD.orthogonal() * BRAKE_SPEED
+			_ship.brake_command = true
+			_peak_speed = 0.0
+		Phase.BRAKE_DIAGONAL:
+			_ship.linear_velocity = (Ship.FORWARD + Ship.FORWARD.orthogonal()).normalized() * BRAKE_SPEED
+			_ship.brake_command = true
+			_peak_speed = 0.0
 		Phase.STRAFE:
 			_ship.commands[ShipControl.Command.STRAFE_RIGHT] = 1.0
 			_peak_drift = 0.0
@@ -586,6 +604,21 @@ func _evaluate_phase() -> void:
 			_expect(
 				absf(_ship.angular_velocity) < 0.001,
 				"the spin is fully dead afterwards (%.4f rad/s)" % _ship.angular_velocity,
+			)
+		Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL:
+			var label: String = "sideways" if _phase == Phase.BRAKE_SIDEWAYS else "diagonal"
+			_expect(
+				_ship.linear_velocity.length() < 1.0,
+				"brake stops a %s %.0f px/s run (%.2f px/s left)" % [
+					label, BRAKE_SPEED, _ship.linear_velocity.length(),
+				],
+			)
+			# The symptom of a reversed command: the brake accelerates instead.
+			_expect(
+				_peak_speed <= BRAKE_SPEED + 1.0,
+				"braking never speeds the ship up (peaked at %.1f px/s from %.0f)" % [
+					_peak_speed, BRAKE_SPEED,
+				],
 			)
 		Phase.BRAKE:
 			_expect(

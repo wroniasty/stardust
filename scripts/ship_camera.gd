@@ -26,6 +26,10 @@ func _ready() -> void:
 		_target = get_node_or_null(target_path) as Node2D
 	position_smoothing_enabled = true
 	position_smoothing_speed = 10.0
+	# The process mode is left alone: with physics interpolation on, Godot
+	# forces every Camera2D to physics processing anyway, which is what this
+	# camera wants. Setting it here as well would just be a lie about who
+	# decides.
 	zoom = Vector2(zoom_at_rest, zoom_at_rest)
 
 

@@ -36,9 +36,12 @@ func _ready() -> void:
 		_ship = get_node_or_null(ship_path) as Ship
 
 
-func _process(_delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	if _ship == null or not visible:
 		return
+	# Physics rather than idle: reading the ship's transform from a rendered
+	# frame gets the un-interpolated physics position, so the arrows would sit
+	# a fraction of a tick away from the hull they belong to.
 	global_position = _ship.global_position
 	queue_redraw()
 

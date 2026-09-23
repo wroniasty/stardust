@@ -692,6 +692,14 @@ Save = seed galaktyki plus słownik delt.
 
 - Atmosfera: shader na kole nieco większym od planety. Szum FBM przewijany w czasie na chmury, rim light na krawędzi, kolor i gęstość z parametrów planety. Różne typy atmosfer (kolor, gęstość, prędkość chmur, wzór).
 - Powierzchnia: bitmapa terenu jako tekstura z paletą.
+- Interpolacja fizyki (`physics/common/physics_interpolation`) włączona. Bez niej
+  transformacja statku zmienia się tylko w tickach fizyki (60 Hz), a kamera
+  wygładza się w każdej klatce renderowania — statek ślizga się względem kamery
+  o ułamek piksela w tę i z powrotem, co przy prędkości powyżej ~200 px/s czyta
+  się jako rozmycie. Wraz z nią Godot wymusza tryb fizyczny na każdym Camera2D
+  (stąd ostrzeżenie w konsoli, jest oczekiwane). Węzły podążające za statkiem
+  muszą się aktualizować w `_physics_process`, nie w `_process`: odczyt
+  transformacji z klatki renderowania zwraca pozycję nieinterpolowaną.
 - Pixel-art: bazowa rozdzielczość 640x360, skalowanie przez tryb rozciągania `canvas_items` z aspektem `expand` (ustawienia projektu), filtr tekstur Nearest. SubViewport nie jest potrzebny: `canvas_items` renderuje w niskiej rozdzielczości i skaluje całość, a `expand` pozwala na szersze ekrany bez czarnych pasów. SubViewport dopiero wtedy, gdy HUD będzie musiał być w pełnej rozdzielczości.
 - Silniki: GPUParticles2D, intensywność od ciągu, zmiana przy warpie i awariach.
 - Tło: paralaksa gwiazd w shaderze, smugi przy skoku. Zrealizowane w M1.1:
