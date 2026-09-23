@@ -31,6 +31,12 @@ const SHELL_PROFILE: Array[Vector2] = [
 ## Drag of the densest shell at full atmospheric density, as Area2D linear_damp.
 const MAX_ATMOSPHERE_DAMP: float = 2.0
 
+## Angular drag as a fraction of the linear drag on the same shell. Air resists
+## a spin as well as a push, but deliberately less: low over a planet is exactly
+## where the pilot needs to point the ship precisely, and the stock rotational
+## engines only make 60 units of thrust each.
+const ANGULAR_DAMP_RATIO: float = 0.5
+
 @export var planet_seed: int = 0
 
 # --- Rolled from the seed in generate(). ---
@@ -236,6 +242,11 @@ func _make_shell(index: int) -> Area2D:
 	shell.gravity_space_override = Area2D.SPACE_OVERRIDE_DISABLED
 	shell.linear_damp_space_override = Area2D.SPACE_OVERRIDE_COMBINE_REPLACE
 	shell.linear_damp = MAX_ATMOSPHERE_DAMP * atmosphere_density * profile.y
+	# Both overrides are set explicitly. Area2D.angular_damp defaults to 1.0,
+	# so leaving the override alone parks a very strong value on every shell
+	# waiting to be switched on by accident.
+	shell.angular_damp_space_override = Area2D.SPACE_OVERRIDE_COMBINE_REPLACE
+	shell.angular_damp = shell.linear_damp * ANGULAR_DAMP_RATIO
 	# Inner shells are listed last and must win: higher priority is processed
 	# first, and COMBINE_REPLACE then ignores every thinner shell around it.
 	shell.priority = index + 1

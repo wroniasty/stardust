@@ -155,6 +155,18 @@ wokół, więc w danej wysokości obowiązuje dokładnie jedna gęstość. Profi
 3% / 25% / 100% pełnego dragu, czyli górna warstwa ledwo muska (pod aerobraking
 z M1.5).
 
+Powietrze tłumi też obrót, ale słabiej: `angular_damp = linear_damp * 0.5` na
+tej samej powłoce. Powód jest rozgrywkowy, nie fizyczny — nisko nad planetą
+gracz najbardziej potrzebuje precyzyjnego celowania dziobem, a stockowe silniki
+obrotowe mają tylko po 60 jednostek ciągu. Dzięki temu lot w atmosferze różni
+się od lotu w próżni nie tylko hamowaniem, a opadanie przez gęste warstwy samo
+trochę stabilizuje statek.
+
+`angular_damp_space_override` jest ustawiane jawnie na każdej powłoce, mimo że
+to samo, co dałaby wartość domyślna z zamysłu. `Area2D.angular_damp` domyślnie
+wynosi 1.0, więc pozostawienie override'a w spokoju parkuje na każdej powłoce
+bardzo mocne tłumienie czekające na przypadkowe włączenie.
+
 Wartości robocze (do potwierdzenia na koniec M1, patrz "Otwarte pytania"):
 promień planety 900..1800 px, g przy powierzchni 25..60 px/s^2, promień wpływu
 3.5..6 R, atmosfera 25..45% R, 20% planet bez atmosfery. G jest trzymane

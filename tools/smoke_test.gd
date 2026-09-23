@@ -24,6 +24,10 @@ const LANDING_TICKS: int = 600
 ## How far above the local ground the landing test drops the ship.
 const DROP_HEIGHT: float = 60.0
 
+## Spin handed to the ship in the two damping phases, in rad/s.
+const SPIN_START: float = 2.0
+const SPIN_TICKS: int = 60
+
 ## Tilt of the dropped ship, so touchdown happens on one corner.
 const LANDING_TILT: float = 0.45
 
@@ -34,7 +38,8 @@ const WEAPON_TICKS: int = 60
 ## loop like everything else: nodes added from _initialize() are not in the
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
-enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT, LANDING, WEAPON, DONE }
+enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT,
+	SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING, WEAPON, DONE }
 
 var _phase: int = Phase.FIELD
 var _ticks: int = 0
@@ -46,6 +51,8 @@ var _orbit_min: float = INF
 var _orbit_max: float = 0.0
 var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
+var _spin_in_air: float = 0.0
+var _spin_in_vacuum: float = 0.0
 var _peak_rebound: float = 0.0
 var _peak_spin: float = 0.0
 var _touched_down: bool = false
@@ -146,6 +153,17 @@ func _check_atmosphere_shells(planet: Planet) -> void:
 			"%s drags harder than the shell above it (%.3f)" % [shell.name, shell.linear_damp],
 		)
 		_expect(shell.priority > previous_priority, "%s outranks the shell above it" % shell.name)
+		# Air must resist a spin, but always less than it resists a push.
+		_expect(
+			shell.angular_damp > 0.0 and shell.angular_damp < shell.linear_damp,
+			"%s damps spin weaker than motion (%.3f vs %.3f)" % [
+				shell.name, shell.angular_damp, shell.linear_damp,
+			],
+		)
+		_expect(
+			shell.angular_damp_space_override == Area2D.SPACE_OVERRIDE_COMBINE_REPLACE,
+			"%s overrides angular damping explicitly" % shell.name,
+		)
 		previous_damp = shell.linear_damp
 		previous_priority = shell.priority
 
@@ -222,6 +240,8 @@ func _phase_ticks() -> int:
 	match _phase:
 		Phase.FIELD, Phase.TERRAIN:
 			return 1
+		Phase.SPIN_IN_AIR, Phase.SPIN_IN_VACUUM:
+			return SPIN_TICKS
 		Phase.LANDING:
 			return LANDING_TICKS
 		Phase.WEAPON:
@@ -282,6 +302,16 @@ func _begin_phase() -> void:
 			_round_container = _ship.projectile_container()
 			_round_container.child_entered_tree.connect(_on_round_spawned)
 			_ship.fire_command = true
+		Phase.SPIN_IN_AIR:
+			# Above the tallest possible mountain but well inside the air, so
+			# the only thing that can slow the spin is drag.
+			_ship.global_position = _planet.global_position + Vector2.UP * (_planet.terrain_ceiling() + 60.0)
+			_ship.angular_velocity = SPIN_START
+		Phase.SPIN_IN_VACUUM:
+			# Outside the atmosphere but still inside the gravity well, so the
+			# two phases differ in air and nothing else.
+			_ship.global_position = _planet.global_position + Vector2.UP * (_planet.surface_radius * 2.5)
+			_ship.angular_velocity = SPIN_START
 		Phase.LANDING:
 			_ground_radius = _find_ground(_planet, -PI * 0.5)
 			_ship.global_position = _planet.global_position + Vector2.UP * (_ground_radius + DROP_HEIGHT)
@@ -340,6 +370,28 @@ func _evaluate_phase() -> void:
 				"circular orbit holds its radius over %.0f s (drift %.2f%%, %.0f..%.0f px)" % [
 					_elapsed, drift * 100.0, _orbit_min, _orbit_max,
 				],
+			)
+		Phase.SPIN_IN_AIR:
+			_spin_in_air = _ship.angular_velocity
+			_expect(
+				_planet.altitude_at(_ship.global_position) < _planet.atmosphere_height,
+				"the spinning ship is inside the atmosphere",
+			)
+			_expect(
+				_spin_in_air < SPIN_START * 0.95,
+				"air slows a spin (%.3f -> %.3f rad/s in %.1f s)" % [SPIN_START, _spin_in_air, _elapsed],
+			)
+		Phase.SPIN_IN_VACUUM:
+			_spin_in_vacuum = _ship.angular_velocity
+			_expect(
+				is_equal_approx(_spin_in_vacuum, SPIN_START),
+				"vacuum leaves a spin alone (%.3f rad/s)" % _spin_in_vacuum,
+			)
+			# The point of the whole feature: the difference is the air, and the
+			# ship must still turn more freely than it decelerates.
+			_expect(
+				_spin_in_air < _spin_in_vacuum,
+				"the same ship keeps its spin longer in vacuum than in air",
 			)
 		Phase.LANDING:
 			var resting: float = _ship.global_position.distance_to(_planet.global_position)
