@@ -575,7 +575,11 @@ Poza tym prędkość startowa musi dawać perycentrum ponad atmosferą — inacz
 mierzy się drag i zderzenie, nie integrator. Narzędzie liczy teraz przewidywane
 perycentrum (`r0 * k^2 / (2 - k^2)`) i ostrzega, jeśli wpada w powietrze.
 
-**Przewidywana trajektoria.** Symulacja do przodu tą samą funkcją grawitacji i
+**Przewidywana trajektoria** jest na warstwie debug (F7), nie na stałe. Linia
+przez środek ekranu jest zaśmieceniem, kiedy się jej akurat nie czyta; po
+schowaniu punkty są czyszczone, żeby nie została zamrożona stara ścieżka.
+
+Symulacja do przodu tą samą funkcją grawitacji i
 tym samym semi-implicit Eulerem co fizyka, więc linia nie jest przybliżeniem
 fizyki — jest fizyką puszczoną naprzód. Drag i ciąg są celowo pominięte: pytanie
 brzmi „co się stanie, jeśli teraz puszczę stery". 320 kroków po 6 ticków = około
@@ -702,6 +706,12 @@ Save = seed galaktyki plus słownik delt.
   transformacji z klatki renderowania zwraca pozycję nieinterpolowaną.
 - Pixel-art: bazowa rozdzielczość 640x360, skalowanie przez tryb rozciągania `canvas_items` z aspektem `expand` (ustawienia projektu), filtr tekstur Nearest. SubViewport nie jest potrzebny: `canvas_items` renderuje w niskiej rozdzielczości i skaluje całość, a `expand` pozwala na szersze ekrany bez czarnych pasów. SubViewport dopiero wtedy, gdy HUD będzie musiał być w pełnej rozdzielczości.
 - Silniki: GPUParticles2D, intensywność od ciągu, zmiana przy warpie i awariach.
+  `inherit_velocity_ratio = 0.85` jest tu kluczowe: cząsteczki lecą w układzie
+  świata z prędkością 70..110 px/s, więc na postoju wyglądają jak płomień, a
+  przy 300 px/s jak obłoczek, który statek natychmiast zostawia za sobą, dryfując
+  z prędkością bez widocznego związku z czymkolwiek. Przeniesienie 85% prędkości
+  emitera trzyma smugę przy dyszy, a pozostałe 15% robi ciągnięcie — wygląda tak
+  samo przy każdej prędkości.
 - Tło: paralaksa gwiazd w shaderze, smugi przy skoku. Zrealizowane w M1.1:
   jeden pełnoekranowy quad na CanvasLayer -100 z `follow_viewport_enabled =
   false`. Quad nigdy się nie rusza, cały ruch robi uniform `world_offset`

@@ -42,6 +42,14 @@ func module_mass() -> float:
 
 
 ## Points the exhaust plume at `amount` of full flow, 0..1.
+##
+## The plume itself is configured in the scene, and one setting there matters
+## more than the rest: `inherit_velocity_ratio`. Particles are emitted in world
+## space at 70..110 px/s, which at a standstill is a flame and at 300 px/s is a
+## puff the ship immediately leaves behind, drifting at a speed with no visible
+## relation to anything. Carrying 85% of the emitter's velocity keeps the plume
+## attached to the nozzle and lets the remaining 15% do the trailing, so it
+## looks the same at every speed.
 func set_exhaust(amount: float) -> void:
 	if exhaust == null:
 		return

@@ -3,6 +3,10 @@ extends CanvasLayer
 ## Flight telemetry while tuning the physics. Placeholder UI, dropped or
 ## replaced by the real HUD later.
 
+## Every world-space debug visual joins this, so one key hides the lot. Held
+## here because this is the node that owns the toggle.
+const DEBUG_GROUP: StringName = &"debug_visuals"
+
 @export var ship_path: NodePath
 
 @onready var _label: Label = $Label
@@ -27,7 +31,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## debug added later joins by calling add_to_group.
 func set_debug_visible(shown: bool) -> void:
 	visible = shown
-	for node: Node in get_tree().get_nodes_in_group(EngineDebugDraw.DEBUG_GROUP):
+	for node: Node in get_tree().get_nodes_in_group(DEBUG_GROUP):
 		var visual: CanvasItem = node as CanvasItem
 		if visual != null:
 			visual.visible = shown

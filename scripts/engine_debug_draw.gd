@@ -10,9 +10,6 @@ extends Node2D
 ##
 ## A child of the ship, so mount positions are already in the right frame.
 
-## Group every debug visual joins, so one key hides the lot.
-const DEBUG_GROUP: StringName = &"debug_visuals"
-
 const TRIANGLE_LENGTH: float = 6.0
 const TRIANGLE_HALF_WIDTH: float = 2.5
 const CROSS_ARM: float = 4.0
@@ -30,7 +27,7 @@ var _ship: Ship = null
 
 
 func _ready() -> void:
-	add_to_group(DEBUG_GROUP)
+	add_to_group(DebugOverlay.DEBUG_GROUP)
 	_ship = get_parent() as Ship
 
 

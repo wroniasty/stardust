@@ -38,12 +38,20 @@ var _impact: Vector2 = Vector2.INF
 
 
 func _ready() -> void:
+	# On the debug layer rather than always on. M1.5 built it as a HUD element,
+	# but a permanent line through the middle of the screen is clutter when you
+	# are not reading it; F7 brings it back with the rest of the instruments.
+	add_to_group(DebugOverlay.DEBUG_GROUP)
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
 
 
 func _physics_process(_delta: float) -> void:
-	if _ship == null or not visible:
+	if _ship == null:
+		return
+	if not visible:
+		if _line.get_point_count() > 0:
+			_line.clear_points()
 		return
 	_ticks += 1
 	if _ticks < recompute_interval:
