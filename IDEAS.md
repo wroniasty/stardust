@@ -490,6 +490,13 @@ które już stosuje obrót planety. Dodanie obrotu po raz drugi zamieniło
 zaparkowany statek w taki, który sunie po gruncie z podwójną prędkością
 powierzchni.
 
+Zamrożenie idzie przez `set_deferred("freeze", true)`. `freeze` to zmiana stanu
+ciała w serwerze fizyki, a `_integrate_forces` działa w trakcie flushowania
+zapytań i serwer takiej zmiany odmawia. To dokładnie ta sama pułapka co ze
+spawnowaniem pocisków (sekcja 4) — warto ją traktować jako regułę: **z
+`_integrate_forces` wolno zmieniać tylko to, co wystawia obiekt stanu**.
+`freeze_mode` jest ustawiany raz w `_ready`, bo i tak się nie zmienia.
+
 Odczyt wejścia i decyzja o starcie są w `_physics_process`, nie w
 `_integrate_forces`: zamrożone ciało nie dostaje tego drugiego w ogóle, więc
 wylądowany statek nasłuchujący tylko tam nigdy nie mógłby wystartować. Lądowanie

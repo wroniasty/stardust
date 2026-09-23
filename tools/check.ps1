@@ -1,5 +1,12 @@
-# Runs the project headless for a few seconds and fails if Godot printed
-# any script error. Usage: powershell -File tools/check.ps1 [-Frames 120]
+# Runs the project headless and then the smoke test, failing if Godot printed
+# any error in either. Usage: powershell -File tools/check.ps1 [-Frames 120]
+#
+# The smoke test is scanned for engine errors too, not just for its own verdict.
+# It used to report OK while Godot was printing "Can't change this state while
+# flushing queries" underneath it: the assertions only know what they ask about,
+# and an illegal call the engine merely complains about passes them all. The
+# test exercises far more of the game than a 120 frame idle run does, so it is
+# the better place to catch that class of bug.
 param(
     [int]$Frames = 120,
     [string]$Godot = "D:\Godot\Godot_v4.7.2-stable_win64_console.exe"
@@ -7,20 +14,32 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
+$pattern = "SCRIPT ERROR|SCRIPT-ERROR|Parse Error|ERROR:|Failed to load|Can't open|Can't change this state"
+
+function Invoke-Stage {
+    param([string]$Label, [string[]]$Arguments)
+
+    Write-Host $Label
+    $output = & $Godot @Arguments 2>&1 | Out-String
+    Write-Host $output
+
+    $bad = $output -split "`n" | Where-Object { $_ -match $pattern }
+    if ($bad) {
+        Write-Host "FAILED: errors during $Label" -ForegroundColor Red
+        Write-Host ($bad -join "`n") -ForegroundColor Red
+        exit 1
+    }
+    return $output
+}
 
 Write-Host "Importing assets..."
 & $Godot --headless --path $root --import | Out-Null
 
-Write-Host "Running $Frames frames headless..."
-$output = & $Godot --headless --path $root --quit-after $Frames 2>&1 | Out-String
-Write-Host $output
+Invoke-Stage "Running $Frames frames headless..." @("--headless", "--path", $root, "--quit-after", $Frames) | Out-Null
 
-$bad = $output -split "`n" | Where-Object {
-    $_ -match "SCRIPT ERROR|SCRIPT-ERROR|Parse Error|ERROR:|Failed to load|Can't open"
-}
-
-if ($bad) {
-    Write-Host "FAILED: errors in output" -ForegroundColor Red
+$smoke = Invoke-Stage "Running the smoke test..." @("--headless", "--path", $root, "--script", "res://tools/smoke_test.gd")
+if ($smoke -notmatch "smoke test: OK") {
+    Write-Host "FAILED: the smoke test did not report OK" -ForegroundColor Red
     exit 1
 }
 

@@ -217,6 +217,10 @@ func _ready() -> void:
 			hardpoints.append(child as Hardpoint)
 		elif child is LandingGear:
 			gear = child as LandingGear
+	# Set once here rather than at every landing: it never changes, and writing
+	# it from _integrate_forces would be another state change the server
+	# refuses mid-flush.
+	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
 	rebuild_control_groups()
 
 
@@ -786,8 +790,13 @@ func _settle_on(planet: Planet, state: PhysicsDirectBodyState2D) -> void:
 
 	state.linear_velocity = Vector2.ZERO
 	state.angular_velocity = 0.0
-	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
-	freeze = true
+	# Deferred, because this runs inside _integrate_forces and freezing is a
+	# change to the body's state in the physics server, which refuses it while
+	# it is flushing queries. The same trap as spawning a projectile from here.
+	# One tick passes before it takes hold, which costs nothing: flight_mode is
+	# already LANDED, so _integrate_forces bails out and applies no gravity, and
+	# the velocity has just been zeroed.
+	set_deferred("freeze", true)
 
 	last_landing_rejection = ""
 	flight_mode = FlightMode.LANDED
