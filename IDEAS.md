@@ -722,6 +722,39 @@ Save = seed galaktyki plus słownik delt.
   gwiazdy dryfują w złym tempie przy oddaleniu.
 - Oświetlenie 2D od gwiazdy, cień strony nocnej planety.
 
+### Śmierć i restart (M1.7)
+
+Kadłub to `hull_integrity` 0..1, ta sama skala co ciepło i kondycja silników.
+Dzięki temu istniejące liczby obrażeń działają bez przeliczania: otarcie przy
+100 px/s kosztuje 0.16, rozbicie przy 200 px/s 0.56, a cokolwiek powyżej około
+310 px/s zabija od razu.
+
+Wszystkie źródła obrażeń przechodzą przez jedno `take_damage()`. To jest cała
+sztuczka: uderzenie w teren, przeciążenie podwozia i trafienie pociskiem dzielą
+ścieżkę śmierci, zamiast każde wymyślać własną. Obrażenia po śmierci nie robią
+nic — bez tego ostrzeliwany wrak respawnowałby się raz na trafienie.
+
+**Statek nie jest zwalniany przy śmierci.** Wskazują na niego kamera, HUD,
+smugi kondensacyjne i warstwa debug; ponowne instancjonowanie oznaczałoby
+przepinanie tego wszystkiego przy każdej śmierci, w grze, której motto brzmi
+„die often". Świat składa go z powrotem w miejscu przez `respawn()`, które
+czyści też ciepło, podwozie i zaległą odmowę lądowania — inaczej nowy statek
+dziedziczy problemy starego. Po przestawieniu trzeba wołać
+`reset_physics_interpolation()`, bo inaczej interpolator rysuje smugę od miejsca
+śmierci do miejsca odrodzenia.
+
+Decyzję o tym, gdzie wraca statek, podejmuje świat, nie statek: statek jedynie
+melduje, że skończył mu się kadłub. Respawn jest na orbicie kołowej na 2.0 R,
+nad miejscem katastrofy, żeby pilot nie stracił orientacji.
+
+**Pociski uzbrajają się po 0.2 s.** Lufa siedzi wewnątrz promienia kontaktowego
+własnego kadłuba, więc bez chwili zwłoki każdy strzał zabijałby strzelca. To nie
+jest jednak trwałe zwolnienie — pocisk, który okrąży planetę i wróci, trafia
+normalnie.
+
+Wybuch sam się zwalnia po wygaśnięciu cząsteczek i żłobi krater, jeśli wrak
+uderzył blisko gruntu, więc śmierć zostawia ślad w terenie.
+
 ## 12. AI i zawartość planet
 
 - Wrogowie sterowani steering behaviours (seek, pursue, orbit, flee) plus maszyna stanów. Drzewa zachowań (LimboAI) jeśli zajdzie potrzeba.

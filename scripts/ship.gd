@@ -123,6 +123,13 @@ signal landing_rejected(reason: String)
 ## Emitted the moment the ship settles on a planet.
 signal landed(planet: Planet)
 
+## Emitted when the hull runs out, with the last position and velocity so the
+## wreck can be thrown in the right direction.
+signal destroyed(at: Vector2, velocity: Vector2)
+
+## Emitted whenever the hull changes, for the HUD.
+signal hull_changed(integrity: float)
+
 ## If true the ship steers itself from the player's input actions. AI ships and
 ## tests turn this off and write the command fields directly.
 @export var use_player_input: bool = true
@@ -174,7 +181,14 @@ var brake_command: bool = false
 ## Held-down trigger. Read by the weapons every physics tick.
 var fire_command: bool = false
 
-## Total damage taken from terrain impacts so far. Becomes HP loss in M1.7.
+## Hull condition, 1.0 intact and 0.0 destroyed.
+##
+## On the same 0..1 scale as hull_heat and engine health, which is what makes
+## the existing damage numbers work unchanged: a 100 px/s scrape costs 0.16, a
+## 200 px/s crash costs 0.56, and anything past about 310 px/s is fatal outright.
+var hull_integrity: float = 1.0
+
+## Total damage taken since the last respawn, for the readout.
 var accumulated_damage: float = 0.0
 
 ## Hull heat, 0..1. Climbs while braking against thick air at speed and bleeds
@@ -357,7 +371,7 @@ func _physics_process(delta: float) -> void:
 	for hardpoint: Hardpoint in hardpoints:
 		hardpoint.tick(delta)
 		if fire_command:
-			hardpoint.fire(linear_velocity, container)
+			hardpoint.fire(linear_velocity, container, self)
 
 
 ## Where fired rounds are parented. Falls back to the ship's own parent so a
@@ -574,10 +588,10 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 
 	if impact_speed > damage_speed_threshold:
 		var damage: float = (impact_speed - damage_speed_threshold) * damage_per_speed
-		accumulated_damage += damage
 		hull_impact.emit(impact_speed, damage)
 		# A hit is the other way out of orbit lock (IDEAS.md section 8).
 		release_orbit_lock()
+		take_damage(damage, "impact")
 
 
 ## Solves the contacts with sequential impulses and returns the hardest
@@ -701,8 +715,8 @@ func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
 		# in the air's hands, rather than the landing simply not happening.
 		var excess: float = maxf(over_descent, 0.0) + maxf(over_lateral, 0.0)
 		var damage: float = excess * GEAR_OVERLOAD_DAMAGE
-		accumulated_damage += damage
 		hull_impact.emit(descent, damage)
+		take_damage(damage, "gear")
 		return false
 
 	# Attitude is judged on the first leg to touch, not once they all have.
@@ -834,6 +848,77 @@ func take_off(state: PhysicsDirectBodyState2D = null) -> void:
 		state.linear_velocity = surface_velocity
 	else:
 		linear_velocity = surface_velocity
+	flight_mode_changed.emit(flight_mode)
+
+
+## Takes damage from any source. The single door in, so that every way of
+## hurting the ship shares the death path rather than each inventing its own.
+## `cause` is not used yet. It is here because M2 wants damage to fall on the
+## part that took it, and the call sites that know the answer are these.
+func take_damage(amount: float, cause: String = "") -> void:
+	if amount <= 0.0 or hull_integrity <= 0.0:
+		return
+	var _taken_by: String = cause
+	accumulated_damage += amount
+	hull_integrity = maxf(hull_integrity - amount, 0.0)
+	hull_changed.emit(hull_integrity)
+	if hull_integrity <= 0.0:
+		_destroy()
+
+
+func is_destroyed() -> bool:
+	return hull_integrity <= 0.0
+
+
+func _destroy() -> void:
+	# The ship is not freed. Everything points at it, the camera, the HUD, the
+	# contrails, the debug layer, and re-instantiating would mean rewiring all
+	# of it on every death in a game whose whole point is dying often. The world
+	# puts it back together in place instead.
+	release_orbit_lock()
+	if flight_mode == FlightMode.LANDED:
+		set_deferred("freeze", false)
+		flight_mode = FlightMode.PHYSICAL
+		_landed_planet = null
+	destroyed.emit(global_position, linear_velocity)
+
+
+## Puts a wrecked ship back in the air, intact and empty-handed.
+##
+## Resets everything a death should clear rather than only the obvious parts:
+## leaving the heat, the gear or a stale landing rejection behind would have the
+## new ship inherit the old one's problems.
+func respawn(at: Vector2, velocity: Vector2) -> void:
+	hull_integrity = 1.0
+	accumulated_damage = 0.0
+	hull_heat = 0.0
+	last_landing_rejection = ""
+	commands.clear()
+	active_commands.clear()
+	kill_rotation_command = false
+	brake_command = false
+	fire_command = false
+	for engine: EngineInstance in engines:
+		engine.throttle = 0.0
+		engine.target_throttle = 0.0
+		engine.mount.set_exhaust(0.0)
+	if gear != null:
+		gear.set_deployed(false)
+		gear.extension = 0.0
+
+	flight_mode = FlightMode.PHYSICAL
+	_landed_planet = null
+	_coasting_time = 0.0
+	freeze = false
+	global_position = at
+	global_rotation = velocity.angle() - PI * 0.5 if not velocity.is_zero_approx() else 0.0
+	linear_velocity = velocity
+	angular_velocity = 0.0
+	# Without this the interpolator draws a streak from where the wreck died to
+	# where the new ship appeared.
+	reset_physics_interpolation()
+
+	hull_changed.emit(hull_integrity)
 	flight_mode_changed.emit(flight_mode)
 
 

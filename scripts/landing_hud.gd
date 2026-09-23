@@ -24,6 +24,7 @@ const IDLE: Color = Color(0.7, 0.75, 0.8)
 @onready var _descent: Label = $Panel/Rows/Descent
 @onready var _slope: Label = $Panel/Rows/Slope
 @onready var _gear: Label = $Panel/Rows/Gear
+@onready var _hull: Label = $Panel/Rows/Hull
 @onready var _status: Label = $Panel/Rows/Status
 
 var _ship: Ship = null
@@ -59,6 +60,7 @@ func _process(_delta: float) -> void:
 	_descent.add_theme_color_override("font_color", _descent_color(descent))
 	_gear.text = "GEAR %s" % _gear_text()
 	_gear.add_theme_color_override("font_color", _gear_color())
+	_update_hull()
 	_status.text = _status_text()
 
 
@@ -67,7 +69,18 @@ func _show_in_deep_space() -> void:
 	_descent.text = "V/S       --"
 	_slope.text = "SLOPE     --"
 	_gear.text = "GEAR %s" % _gear_text()
+	_update_hull()
 	_status.text = ""
+
+
+func _update_hull() -> void:
+	_hull.text = "HULL %4.0f%%" % (_ship.hull_integrity * 100.0)
+	var colour: Color = GOOD
+	if _ship.hull_integrity < 0.25:
+		colour = BAD
+	elif _ship.hull_integrity < 0.6:
+		colour = CAUTION
+	_hull.add_theme_color_override("font_color", colour)
 
 
 func _gear_text() -> String:

@@ -25,14 +25,25 @@ signal impacted(point: Vector2, damage: float)
 ## Seconds before an unspent round removes itself.
 @export var lifetime: float = 4.0
 
-## Damage dealt to whatever it hits. Used from M1.7.
-@export var damage: float = 12.0
+## Damage dealt to a hull, on the same 0..1 scale as hull integrity. Twelve
+## hits to kill a healthy ship.
+@export var damage: float = 0.08
+
+## Seconds before the round will hit the ship that fired it.
+##
+## Not a blanket exemption: the muzzle sits inside the firing hull's own contact
+## radius, so without a moment's grace every shot would kill the shooter, but a
+## round that loops back around a planet later absolutely should.
+@export var arming_time: float = 0.2
 
 ## Radius of the hole punched in the crust on impact.
 @export var crater_radius: float = 14.0
 
 ## Travel in world space, set by the hardpoint that fired it.
 var velocity: Vector2 = Vector2.ZERO
+
+## Who fired it, ignored until the round is armed.
+var shooter: Node = null
 
 var _planet: Planet = null
 var _age: float = 0.0
@@ -42,6 +53,7 @@ func _ready() -> void:
 	# Resolved once: a projectile lives for a few seconds and never outlives
 	# the planet it was fired near. M3 will have to re-check as systems stream.
 	_planet = Planet.nearest(get_tree(), global_position)
+	body_entered.connect(_on_body_entered)
 
 
 func _physics_process(delta: float) -> void:
@@ -74,6 +86,16 @@ func _first_solid_along(start: Vector2, step: Vector2) -> Vector2:
 		if _planet.is_solid_at(point):
 			return point
 	return Vector2.INF
+
+
+func _on_body_entered(body: Node2D) -> void:
+	var ship: Ship = body as Ship
+	if ship == null:
+		return
+	if ship == shooter and _age < arming_time:
+		return
+	ship.take_damage(damage, "projectile")
+	_impact(global_position)
 
 
 func _impact(point: Vector2) -> void:

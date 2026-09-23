@@ -1,0 +1,28 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/explosion.gd" id="1_explosion"]
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_debris"]
+direction = Vector3(0, -1, 0)
+spread = 180.0
+initial_velocity_min = 40.0
+initial_velocity_max = 160.0
+gravity = Vector3(0, 0, 0)
+damping_min = 20.0
+damping_max = 60.0
+scale_min = 0.5
+scale_max = 2.0
+color = Color(1, 0.78, 0.35, 1)
+
+[node name="Explosion" type="Node2D"]
+z_index = 60
+script = ExtResource("1_explosion")
+
+[node name="Debris" type="GPUParticles2D" parent="."]
+emitting = false
+amount = 48
+process_material = SubResource("ParticleProcessMaterial_debris")
+lifetime = 0.9
+one_shot = true
+explosiveness = 0.95
+local_coords = false

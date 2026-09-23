@@ -9,6 +9,12 @@ extends Node2D
 ## above it. Nothing is hand-placed: change the seed and you get another world.
 
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
+const EXPLOSION_SCENE: String = "res://scenes/explosion.tscn"
+
+## Where a wrecked ship comes back, as a multiple of the planet radius. Outside
+## the atmosphere, so the pilot gets a moment to gather themselves rather than
+## respawning already on fire.
+const RESPAWN_RADIUS_RATIO: float = 2.0
 
 ## Seed every world object is derived from.
 @export var world_seed: int = 20260922
@@ -34,6 +40,42 @@ const DEBUG_CRATER_RADIUS: float = 28.0
 func _ready() -> void:
 	_spawn_planet()
 	_place_ship()
+	var ship: Ship = (player as Player).ship
+	if ship != null:
+		ship.destroyed.connect(_on_ship_destroyed)
+
+
+## Death is the world's business, not the ship's: the ship reports that it has
+## run out of hull, and the world decides where the next one starts. Respawn is
+## immediate and in place, with no menu and no reload (IDEAS.md, explore fast,
+## die often).
+func _on_ship_destroyed(at: Vector2, velocity: Vector2) -> void:
+	_spawn_explosion(at, velocity)
+
+	var ship: Ship = (player as Player).ship
+	if ship == null or planet == null:
+		return
+
+	# Straight back onto a circular orbit, which is both a safe place to be and
+	# the state the rest of the game is built around.
+	var radius: float = planet.surface_radius * RESPAWN_RADIUS_RATIO
+	var up: Vector2 = Vector2.UP
+	if not at.is_zero_approx() and at != planet.global_position:
+		# Above wherever the wreck happened, so the pilot keeps their bearings.
+		up = (at - planet.global_position).normalized()
+	ship.respawn(
+		planet.global_position + up * radius,
+		up.orthogonal() * planet.circular_orbit_speed(radius),
+	)
+
+
+func _spawn_explosion(at: Vector2, velocity: Vector2) -> void:
+	var scene: PackedScene = load(EXPLOSION_SCENE) as PackedScene
+	var explosion: Explosion = scene.instantiate() as Explosion
+	explosion.global_position = at
+	add_child(explosion)
+	explosion.set_drift(velocity)
+	explosion.scar_terrain()
 
 
 ## Health the debug key drops an engine to, low enough for the asymmetry to be

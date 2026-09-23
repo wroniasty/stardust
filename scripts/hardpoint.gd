@@ -46,7 +46,7 @@ func can_fire() -> bool:
 ##
 ## The round is parented to the world, never to the ship: a projectile must not
 ## inherit the ship's motion after it leaves the barrel.
-func fire(carrier_velocity: Vector2, container: Node) -> Projectile:
+func fire(carrier_velocity: Vector2, container: Node, shooter: Node = null) -> Projectile:
 	if not can_fire() or container == null:
 		return null
 	_cooldown = 1.0 / maxf(rounds_per_second, 0.001)
@@ -59,6 +59,7 @@ func fire(carrier_velocity: Vector2, container: Node) -> Projectile:
 	var aim: float = global_rotation + randf_range(-spread * 0.5, spread * 0.5)
 	var direction: Vector2 = MUZZLE_DIRECTION.rotated(aim)
 
+	round_instance.shooter = shooter
 	round_instance.global_position = global_position
 	round_instance.velocity = direction * muzzle_speed
 	if inherit_velocity:

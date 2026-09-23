@@ -69,7 +69,9 @@ func _process(_delta: float) -> void:
 			_ship.linear_velocity.dot(up), _ship.linear_velocity.dot(up.orthogonal()),
 		])
 
-	lines.append("contacts %d   damage %.3f" % [_ship.get_terrain_contacts(), _ship.accumulated_damage])
+	lines.append("contacts %d   hull %.2f   damage %.3f" % [
+		_ship.get_terrain_contacts(), _ship.hull_integrity, _ship.accumulated_damage,
+	])
 
 	var mode: String = "ORBIT" if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK else "free"
 	lines.append("mode     %-6s  heat %.2f" % [mode, _ship.hull_heat])

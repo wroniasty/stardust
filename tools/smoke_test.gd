@@ -69,6 +69,12 @@ const RIDE_TICKS: int = 120
 ## Long enough for a round to cross the gap below and dig in.
 const WEAPON_TICKS: int = 60
 
+## Long enough for a round fired straight down to arm and come back.
+const SELF_HIT_TICKS: int = 120
+
+## Long enough to fall from orbit and hit the ground hard.
+const DEATH_TICKS: int = 900
+
 ## FIELD comes first and only inspects a planet. It has to run on the physics
 ## loop like everything else: nodes added from _initialize() are not in the
 ## tree yet, so a planet queried there would still hold its default parameters
@@ -77,7 +83,7 @@ enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW
 	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
 	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE,
-	WEAPON, DONE }
+	WEAPON, HULL, SELF_HIT, DEATH, DONE }
 
 var _phase: int = Phase.FIELD
 var _ticks: int = 0
@@ -107,6 +113,10 @@ var _ride_start_world: Vector2 = Vector2.ZERO
 var _ride_start_polar: float = 0.0
 var _took_off: bool = false
 var _first_touchdown: String = ""
+var _death_reported: bool = false
+var _death_hull: float = -1.0
+var _respawn_radius: float = 0.0
+var _self_hit_hull: float = 1.0
 var _ride_moved: float = 0.0
 var _ride_slip: float = 0.0
 var _spin_in_air: float = 0.0
@@ -171,6 +181,16 @@ func _physics_process(delta: float) -> bool:
 			_ship.commands[ShipControl.Command.FORWARD] = 1.0
 		if _ticks > RIDE_TICKS - 20 and _ship.flight_mode == Ship.FlightMode.PHYSICAL:
 			_took_off = true
+	elif _phase == Phase.DEATH:
+		if _death_reported and _respawn_radius == 0.0:
+			# The world is not in this scene, so the test stands in for it and
+			# does what World._on_ship_destroyed would: put the ship back.
+			var radius: float = _planet.surface_radius * 2.0
+			_ship.respawn(
+				_planet.global_position + Vector2.UP * radius,
+				Vector2.RIGHT * _planet.circular_orbit_speed(radius),
+			)
+			_respawn_radius = _ship.global_position.distance_to(_planet.global_position)
 	elif _phase == Phase.KILL_ROTATION:
 		if _kill_ticks < 0 and absf(_ship.angular_velocity) < 0.001:
 			_kill_ticks = _ticks
@@ -380,6 +400,12 @@ func _phase_ticks() -> int:
 			return RIDE_TICKS
 		Phase.WEAPON:
 			return WEAPON_TICKS
+		Phase.HULL:
+			return 1
+		Phase.SELF_HIT:
+			return SELF_HIT_TICKS
+		Phase.DEATH:
+			return DEATH_TICKS
 		Phase.FREE_FALL:
 			return FALL_TICKS
 		Phase.ORBIT:
@@ -392,6 +418,8 @@ func _phase_ticks() -> int:
 ## deliberately run in empty space so gravity cannot be mistaken for drift.
 func _phase_needs_planet() -> bool:
 	match _phase:
+		Phase.HULL:
+			return false
 		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.STRAFE:
 			return false
 		_:
@@ -515,6 +543,34 @@ func _begin_phase() -> void:
 		Phase.LANDED_RIDE:
 			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), 0.0)
 			_took_off = false
+		Phase.HULL:
+			pass
+		Phase.SELF_HIT:
+			# Parked and shooting straight down at the planet. The round has to
+			# clear its own hull, which is the case the arming delay exists for.
+			_ship.global_position = _planet.global_position + Vector2.UP * (
+				_planet.terrain_ceiling() + 400.0
+			)
+			_ship.global_rotation = PI
+			_ship.freeze = true
+			_ship.orbit_lock_enabled = false
+			_ship.fire_command = true
+			_self_hit_hull = _ship.hull_integrity
+		Phase.DEATH:
+			# Driven down rather than merely dropped. A ship released from
+			# height does not die: the air brakes it to its terminal 154 px/s,
+			# which costs 0.38 of the hull and no more. That is the atmosphere
+			# working as designed, so killing it takes arriving faster than the
+			# air can prevent.
+			_ship.global_position = _planet.global_position + Vector2.UP * (
+				_planet.surface_radius * 1.4
+			)
+			_ship.linear_velocity = Vector2.DOWN * 400.0
+			_ship.orbit_lock_enabled = false
+			_death_reported = false
+			_death_hull = -1.0
+			_respawn_radius = 0.0
+			_ship.destroyed.connect(_on_ship_destroyed)
 		Phase.SPIN_IN_AIR:
 			# Above the tallest possible mountain but well inside the air, so
 			# the only thing that can slow the spin is drag.
@@ -746,6 +802,35 @@ func _evaluate_phase() -> void:
 				not _ship.freeze and _ship.flight_mode == Ship.FlightMode.PHYSICAL,
 				"lift-off hands the ship back to the solver",
 			)
+		Phase.HULL:
+			_check_hull(_ship)
+		Phase.SELF_HIT:
+			_expect(
+				_ship.hull_integrity == _self_hit_hull,
+				"a ship is not hit by its own muzzle blast (hull %.2f)" % _ship.hull_integrity,
+			)
+		Phase.DEATH:
+			_expect(_death_reported, "a fatal impact reports the ship destroyed")
+			_expect(
+				_death_hull <= 0.0,
+				"the hull was empty when it died (%.3f)" % _death_hull,
+			)
+			_expect(
+				is_equal_approx(_ship.hull_integrity, 1.0),
+				"respawn restores the hull (%.2f)" % _ship.hull_integrity,
+			)
+			_expect(
+				not _ship.freeze and _ship.flight_mode == Ship.FlightMode.PHYSICAL,
+				"respawn hands the ship back to the solver",
+			)
+			_expect(
+				_ship.hull_heat == 0.0 and _ship.accumulated_damage == 0.0,
+				"respawn clears the heat and the damage log",
+			)
+			_expect(
+				_respawn_radius > _planet.atmosphere_radius(),
+				"respawn puts the ship outside the atmosphere (%.0f px)" % _respawn_radius,
+			)
 		Phase.SPIN_IN_AIR:
 			_spin_in_air = _ship.angular_velocity
 			_expect(
@@ -923,6 +1008,11 @@ func _span_slope(planet: Planet, angle: float, back: float, forward: float) -> f
 	return atan2(ahead - behind, back + forward)
 
 
+func _on_ship_destroyed(_at: Vector2, _velocity: Vector2) -> void:
+	_death_reported = true
+	_death_hull = _ship.hull_integrity
+
+
 func _on_landing_rejected(reason: String) -> void:
 	if _first_touchdown.is_empty():
 		_first_touchdown = reason
@@ -980,6 +1070,38 @@ func _check_plateaus(planet: Planet) -> void:
 
 func _describe_touchdown() -> String:
 	return _first_touchdown if not _first_touchdown.is_empty() else "no touchdown at all"
+
+
+## The hull is one number every damage source shares, so the door is what gets
+## tested rather than each way of knocking on it.
+func _check_hull(ship: Ship) -> void:
+	_expect(is_equal_approx(ship.hull_integrity, 1.0), "a fresh hull is intact")
+	_expect(not ship.is_destroyed(), "a fresh ship is not destroyed")
+
+	ship.take_damage(0.3, "test")
+	_expect(
+		is_equal_approx(ship.hull_integrity, 0.7),
+		"damage comes off the hull (%.2f)" % ship.hull_integrity,
+	)
+	_expect(
+		is_equal_approx(ship.accumulated_damage, 0.3),
+		"damage is logged as well as subtracted",
+	)
+
+	var deaths: Array[bool] = []
+	ship.destroyed.connect(func(_at: Vector2, _v: Vector2) -> void: deaths.append(true))
+	ship.take_damage(0.5, "test")
+	_expect(not ship.is_destroyed(), "a hull with something left survives")
+	_expect(deaths.is_empty(), "surviving does not announce a death")
+
+	ship.take_damage(0.5, "test")
+	_expect(ship.is_destroyed(), "running the hull out destroys the ship")
+	_expect(deaths.size() == 1, "death is announced exactly once")
+
+	# Damage after death must not fire it again, or a wreck being shot at would
+	# respawn once per hit.
+	ship.take_damage(0.5, "test")
+	_expect(deaths.size() == 1, "a wreck cannot die twice")
 
 
 func _check_gear(ship: Ship) -> void:

@@ -79,8 +79,8 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.7 Śmierć i restart
 
-- [ ] Kadłub ma HP, zderzenia i własne pociski zadają obrażenia.
-- [ ] Śmierć: efekt, natychmiastowy respawn na orbicie. Bez menu.
+- [x] Kadłub ma HP, zderzenia i własne pociski zadają obrażenia.
+- [x] Śmierć: efekt, natychmiastowy respawn na orbicie. Bez menu.
 
 Gotowe, gdy: da się wystartować z powierzchni, wejść na orbitę i na niej zaparkować, zejść deorbitem na wybrane miejsce, wylądować na zboczu i zobaczyć, że to zależy od nachylenia i prędkości, rozwalić kawałek góry, rozbić się i od razu lecieć dalej. Ocena subiektywna: czy sterowanie daje radość. Jeśli nie, tu się kręci fizyką, nie idzie dalej.
 
