@@ -58,10 +58,10 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.5 Orbitowanie
 
-- [ ] Sprawdzenie, że orbita kołowa i eliptyczna utrzymują się przez kilka minut bez znaczącego dryfu.
-- [ ] Przewidywana trajektoria na HUD: symulacja naprzód 200 do 400 kroków, Line2D, znaczniki apoapsy i periapsy, marker punktu uderzenia w powierzchnię.
-- [ ] Orbit lock: przejście w analityczną orbitę kołową przy spełnionych warunkach, wskaźnik "ORBIT", powrót do fizyki przy ciągu.
-- [ ] Aerobraking: drag górnych warstw atmosfery hamuje statek na orbicie, prosty licznik ciepła kadłuba.
+- [x] Sprawdzenie, że orbita kołowa i eliptyczna utrzymują się przez kilka minut bez znaczącego dryfu.
+- [x] Przewidywana trajektoria na HUD: symulacja naprzód 200 do 400 kroków, Line2D, znaczniki apoapsy i periapsy, marker punktu uderzenia w powierzchnię.
+- [x] Orbit lock: przejście w analityczną orbitę kołową przy spełnionych warunkach, wskaźnik "ORBIT", powrót do fizyki przy ciągu.
+- [x] Aerobraking: drag górnych warstw atmosfery hamuje statek na orbicie, prosty licznik ciepła kadłuba.
 
 ### 1.6 Lądowanie
 
@@ -86,7 +86,7 @@ Pytania do rozstrzygnięcia na koniec M1 (zapisać odpowiedzi w IDEAS.md):
 - ~~rozdzielczość bitmapy terenu na planetę~~ — 1.5 px na teksel, siatka biegunowa, zmierzone w M1.3,
 - progi lądowania (prędkości, kąt, nachylenie) dla statku bazowego,
 - czy planety się obracają,
-- tolerancje orbit lock i długość przewidywanej trajektorii.
+- ~~tolerancje orbit lock i długość przewidywanej trajektorii~~ — ustalone w M1.5, wartości w IDEAS.
 
 ---
 

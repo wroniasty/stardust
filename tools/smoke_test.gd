@@ -24,6 +24,14 @@ const LANDING_TICKS: int = 600
 ## How far above the local ground the landing test drops the ship.
 const DROP_HEIGHT: float = 60.0
 
+## Orbit lock needs ORBIT_LOCK_DELAY of coasting plus room to prove it holds,
+## then a burst of thrust at the end to prove it lets go.
+const LOCK_TICKS: int = 300
+const LOCK_THRUST_AT_TICK: int = 240
+
+const AEROBRAKE_TICKS: int = 120
+const HEAT_TICKS: int = 120
+
 ## Spin handed to the ship in the two damping phases, in rad/s.
 const SPIN_START: float = 2.0
 const SPIN_TICKS: int = 60
@@ -39,7 +47,7 @@ const WEAPON_TICKS: int = 60
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT,
-	SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING, WEAPON, DONE }
+	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING, WEAPON, DONE }
 
 var _phase: int = Phase.FIELD
 var _ticks: int = 0
@@ -51,6 +59,12 @@ var _orbit_min: float = INF
 var _orbit_max: float = 0.0
 var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
+var _lock_engaged: bool = false
+var _lock_released: bool = false
+var _lock_radius_min: float = INF
+var _lock_radius_max: float = 0.0
+var _entry_speed: float = 0.0
+var _peak_heat: float = 0.0
 var _spin_in_air: float = 0.0
 var _spin_in_vacuum: float = 0.0
 var _peak_rebound: float = 0.0
@@ -81,6 +95,18 @@ func _physics_process(delta: float) -> bool:
 		var radius: float = _ship.global_position.distance_to(_planet.global_position)
 		_orbit_min = minf(_orbit_min, radius)
 		_orbit_max = maxf(_orbit_max, radius)
+	elif _phase == Phase.ORBIT_LOCK:
+		if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK:
+			_lock_engaged = true
+			var locked_radius: float = _ship.global_position.distance_to(_planet.global_position)
+			_lock_radius_min = minf(_lock_radius_min, locked_radius)
+			_lock_radius_max = maxf(_lock_radius_max, locked_radius)
+		elif _lock_engaged:
+			_lock_released = true
+		if _ticks == LOCK_THRUST_AT_TICK:
+			_ship.thrust_command = 1.0
+	elif _phase == Phase.HULL_HEAT:
+		_peak_heat = maxf(_peak_heat, _ship.hull_heat)
 	elif _phase == Phase.LANDING:
 		_landing_deepest = maxf(_landing_deepest, _deepest_hull_penetration())
 		var up: Vector2 = (_ship.global_position - _planet.global_position).normalized()
@@ -240,6 +266,12 @@ func _phase_ticks() -> int:
 	match _phase:
 		Phase.FIELD, Phase.TERRAIN:
 			return 1
+		Phase.ORBIT_LOCK:
+			return LOCK_TICKS
+		Phase.AEROBRAKE:
+			return AEROBRAKE_TICKS
+		Phase.HULL_HEAT:
+			return HEAT_TICKS
 		Phase.SPIN_IN_AIR, Phase.SPIN_IN_VACUUM:
 			return SPIN_TICKS
 		Phase.LANDING:
@@ -302,6 +334,29 @@ func _begin_phase() -> void:
 			_round_container = _ship.projectile_container()
 			_round_container.child_entered_tree.connect(_on_round_spawned)
 			_ship.fire_command = true
+		Phase.ORBIT_LOCK:
+			var lock_radius: float = _planet.surface_radius * 2.0
+			_ship.global_position = _planet.global_position + Vector2.UP * lock_radius
+			_ship.linear_velocity = Vector2.RIGHT * _planet.circular_orbit_speed(lock_radius)
+			_lock_engaged = false
+			_lock_released = false
+			_lock_radius_min = INF
+			_lock_radius_max = 0.0
+		Phase.AEROBRAKE:
+			# In the thin top shell at orbital speed: the manoeuvre the shells
+			# were shaped for, where drag bites slowly instead of like a wall.
+			var brake_radius: float = _planet.surface_radius + _planet.atmosphere_height * 0.85
+			_ship.global_position = _planet.global_position + Vector2.UP * brake_radius
+			_ship.linear_velocity = Vector2.RIGHT * _planet.circular_orbit_speed(brake_radius)
+			_ship.orbit_lock_enabled = false
+			_entry_speed = _ship.linear_velocity.length()
+		Phase.HULL_HEAT:
+			# Deep and fast: the suicidal entry, where the counter should move.
+			var heat_radius: float = _planet.surface_radius + _planet.atmosphere_height * 0.15
+			_ship.global_position = _planet.global_position + Vector2.UP * heat_radius
+			_ship.linear_velocity = Vector2.RIGHT * Ship.HEAT_REFERENCE_SPEED
+			_ship.orbit_lock_enabled = false
+			_peak_heat = 0.0
 		Phase.SPIN_IN_AIR:
 			# Above the tallest possible mountain but well inside the air, so
 			# the only thing that can slow the spin is drag.
@@ -370,6 +425,38 @@ func _evaluate_phase() -> void:
 				"circular orbit holds its radius over %.0f s (drift %.2f%%, %.0f..%.0f px)" % [
 					_elapsed, drift * 100.0, _orbit_min, _orbit_max,
 				],
+			)
+		Phase.ORBIT_LOCK:
+			_expect(_lock_engaged, "a coasting circular orbit engages orbit lock")
+			var held: float = _lock_radius_max - _lock_radius_min
+			_expect(
+				held < 0.5,
+				"orbit lock holds the radius exactly (%.0f .. %.0f px)" % [_lock_radius_min, _lock_radius_max],
+			)
+			_expect(_lock_released, "thrust hands control back to the solver")
+			_expect(
+				_ship.flight_mode == Ship.FlightMode.PHYSICAL,
+				"the ship ends the phase under physics again",
+			)
+		Phase.AEROBRAKE:
+			var speed_now: float = _ship.linear_velocity.length()
+			_expect(
+				speed_now < _entry_speed,
+				"the thin top shell brakes an orbiting ship (%.1f -> %.1f px/s in %.1f s)" % [
+					_entry_speed, speed_now, _elapsed,
+				],
+			)
+			_expect(
+				speed_now > _entry_speed * 0.90,
+				"the top shell brakes gently rather than like a wall (%.1f%% lost)" % [
+					(1.0 - speed_now / _entry_speed) * 100.0,
+				],
+			)
+		Phase.HULL_HEAT:
+			_expect(_peak_heat > 0.0, "a fast pass through thick air heats the hull (peak %.3f)" % _peak_heat)
+			_expect(
+				_ship.hull_heat <= 1.0,
+				"hull heat stays inside its range (%.3f)" % _ship.hull_heat,
 			)
 		Phase.SPIN_IN_AIR:
 			_spin_in_air = _ship.angular_velocity

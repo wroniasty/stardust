@@ -132,6 +132,36 @@ func carve(point: Vector2, radius: float) -> bool:
 	return terrain.carve_local(to_local(point), radius)
 
 
+## Speed of a circular orbit at `radius`, in pixels per second.
+##
+## For an inverse square field measured at the surface this is
+## sqrt(g * R^2 / r). Orbit lock, the tests and any autopilot must agree on it,
+## so it lives here rather than being rederived at each call site.
+func circular_orbit_speed(radius: float) -> float:
+	if radius <= 0.001:
+		return 0.0
+	return sqrt(surface_gravity * surface_radius * surface_radius / radius)
+
+
+## Air density at a world point, 0..1.
+##
+## Derived from the same SHELL_PROFILE the drag areas are built from, so the
+## heating model and the braking cannot disagree about how thick the air is.
+func air_density_at(point: Vector2) -> float:
+	if atmosphere_height <= 0.0 or atmosphere_density <= 0.0:
+		return 0.0
+	var altitude: float = global_position.distance_to(point) - surface_radius
+	if altitude >= atmosphere_height:
+		return 0.0
+	# The profile runs outermost first, so the last shell that still contains
+	# the point is the innermost one, which is the one the physics server picks.
+	var fraction: float = 0.0
+	for profile: Vector2 in SHELL_PROFILE:
+		if altitude <= atmosphere_height * profile.x:
+			fraction = profile.y
+	return atmosphere_density * fraction
+
+
 ## Gravitational acceleration a body feels at `point`, in pixels per second
 ## squared. Inverse square above the surface, faded smoothly to nothing at the
 ## edge of the well so a ship does not get a kick when it crosses the boundary.

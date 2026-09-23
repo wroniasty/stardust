@@ -381,6 +381,65 @@ Co klatkę symulacja naprzód 200 do 400 kroków tej samej funkcji grawitacji (b
 
 Automatyczna cyrkularyzacja, komputer deorbitu pokazujący moment odpalenia, większa tolerancja orbit lock.
 
+### Realizacja (M1.5)
+
+**Wytrzymałość orbit.** Zmierzone przez `tools/orbit_endurance.gd`, 5 minut na
+przypadek, semi-implicit Euler w 60 Hz, planeta R 1025 / g 31.4:
+
+| orbita | wynik po 5 min |
+|---|---|
+| kołowa 2.0 R | dryf promienia 0.05% |
+| eliptyczna 2.0 R (93% v_koł) | apocentrum +0.003%, perycentrum -0.001% |
+| eliptyczna 3.0 R (85% v_koł) | apocentrum -0.0002%, perycentrum +0.0001% |
+
+Czyli orbity się nie rozjeżdżają i nie trzeba nic robić z integratorem. Wniosek
+z sekcji 8 („orbity lekko precesują, ale nie uciekają") potwierdzony liczbowo.
+
+Uwaga metodologiczna zapłacona błędem: narzędzie musi odpalać przypadki z
+pętli fizyki, nie z `_initialize()`, bo węzły dodane tam nie są jeszcze w
+drzewie i planeta ma wtedy domyślne parametry, nie te z seeda. Pierwsze
+uruchomienie pokazało „50% dryfu", co w rzeczywistości było statkiem wysłanym
+na orbitę wokół planety o połowę mniejszej niż ta, która potem powstała.
+Poza tym prędkość startowa musi dawać perycentrum ponad atmosferą — inaczej
+mierzy się drag i zderzenie, nie integrator. Narzędzie liczy teraz przewidywane
+perycentrum (`r0 * k^2 / (2 - k^2)`) i ostrzega, jeśli wpada w powietrze.
+
+**Przewidywana trajektoria.** Symulacja do przodu tą samą funkcją grawitacji i
+tym samym semi-implicit Eulerem co fizyka, więc linia nie jest przybliżeniem
+fizyki — jest fizyką puszczoną naprzód. Drag i ciąg są celowo pominięte: pytanie
+brzmi „co się stanie, jeśli teraz puszczę stery". 320 kroków po 6 ticków = około
+32 s horyzontu, przeliczane co 2 ticki. Koszt 0.304 ms na przeliczenie, czyli
+0.152 ms na tick fizyki (0.9% budżetu klatki).
+
+**Orbit lock.** Warunki: 2 s bez ciągu, prędkość radialna poniżej 6 px/s,
+styczna w granicach 6% prędkości kołowej, i koniecznie **poza atmosferą** —
+zablokowanie orbity w powietrzu zamroziłoby orbitę schodzącą i po cichu
+skasowało aerobraking, czyli dokładne przeciwieństwo tego, do czego lock służy.
+Po zablokowaniu prędkość jest nadal wyliczana i wystawiana prawdziwa, żeby HUD,
+predyktor trajektorii i moment zwolnienia widziały realny ruch orbitalny.
+Zwolnienie: ciąg główny albo trafienie. Silniki obrotowe nie zwalniają locka,
+więc można się celować stojąc na orbicie.
+
+**Aerobraking i ciepło.** Zmierzone: w górnej powłoce przy prędkości orbitalnej
+statek traci 5.8% prędkości na 2 s — hamuje, ale łagodnie, zgodnie z zamysłem
+profilu powłok.
+
+Ciepło rośnie z mocą rozpraszaną przez powietrze, czyli `gęstość * v^2`, a nie z
+`v^3`. Powód jest spójnościowy: powłoki stosują tłumienie liniowe, więc moc,
+którą faktycznie odbierają statkowi, idzie jak `gęstość * v^2`. Wiązanie ciepła
+z tą samą wielkością gwarantuje, że pasek ciepła i wytracanie prędkości nie
+opowiadają dwóch różnych historii.
+
+Ustawienie stałych jest kompromisem, który warto znać: stałe chłodzenie
+(0.05/s) wyznacza próg, poniżej którego zejście nigdy nie grzeje. W efekcie
+powolne lądowanie przez gęste powietrze jest darmowe, szybkie i głębokie wejście
+zapełnia pasek w kilka sekund, ale **aerobraking w najwyższej powłoce przy
+naszych prędkościach orbitalnych nie generuje ciepła w ogóle** — 3% gęstości
+przy 156 px/s daje mniej niż chłodzenie. Jest to spójne (tam gdzie prawie nie
+hamuje, prawie nie grzeje), ale rozmija się z zamysłem z sekcji 8, gdzie
+aerobraking miał grzać. Jeśli ma grzać, trzeba albo pogrubić górną powłokę,
+albo podnieść prędkości orbitalne. Do decyzji przy strojeniu feelingu.
+
 ## 9. Seamless: streaming świata
 
 Dwie warstwy:

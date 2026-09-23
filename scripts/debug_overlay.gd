@@ -5,17 +5,37 @@ extends CanvasLayer
 
 @export var ship_path: NodePath
 
+## World-space arrows toggled together with this readout, so one key hides the
+## whole debug layer instead of leaving half of it on screen.
+@export var vectors_path: NodePath
+
 @onready var _label: Label = $Label
 
 var _ship: Ship = null
+var _vectors: DebugVectors = null
 
 
 func _ready() -> void:
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
+	if not vectors_path.is_empty():
+		_vectors = get_node_or_null(vectors_path) as DebugVectors
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("debug_toggle"):
+		set_debug_visible(not visible)
+
+
+func set_debug_visible(shown: bool) -> void:
+	visible = shown
+	if _vectors != null:
+		_vectors.visible = shown
 
 
 func _process(_delta: float) -> void:
+	if not visible:
+		return
 	if _ship == null:
 		_label.text = "no ship"
 		return
@@ -46,6 +66,9 @@ func _process(_delta: float) -> void:
 		])
 
 	lines.append("contacts %d   damage %.3f" % [_ship.get_terrain_contacts(), _ship.accumulated_damage])
+
+	var mode: String = "ORBIT" if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK else "free"
+	lines.append("mode     %-6s  heat %.2f" % [mode, _ship.hull_heat])
 
 	lines.append("engines")
 	for engine: ShipEngine in _ship.engines:
