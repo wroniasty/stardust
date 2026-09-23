@@ -1,10 +1,15 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
-[ext_resource type="PackedScene" path="res://scenes/ship_engine.tscn" id="2_engine"]
+[ext_resource type="PackedScene" path="res://scenes/engine_mount.tscn" id="2_mount"]
 [ext_resource type="Script" path="res://scripts/hardpoint.gd" id="3_hardpoint"]
 [ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="4_projectile"]
 [ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
+[ext_resource type="Script" path="res://scripts/engine_debug_draw.gd" id="6_engine_draw"]
+[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="7_main"]
+[ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="8_torque"]
+[ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="9_thruster"]
+[ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="10_retro"]
 
 [sub_resource type="Gradient" id="Gradient_contrail"]
 offsets = PackedFloat32Array(0, 1)
@@ -14,7 +19,6 @@ colors = PackedColorArray(1, 1, 1, 0, 1, 1, 1, 0.75)
 points = PackedVector2Array(0, -12, -8, 10, 8, 10)
 
 [node name="Ship" type="RigidBody2D"]
-mass = 10.0
 gravity_scale = 0.0
 can_sleep = false
 script = ExtResource("1_ship")
@@ -26,22 +30,52 @@ polygon = PackedVector2Array(0, -12, -8, 10, 8, 10)
 [node name="HullShape" type="CollisionShape2D" parent="."]
 shape = SubResource("ConvexPolygonShape2D_hull")
 
-[node name="MainEngine" parent="." instance=ExtResource("2_engine")]
+[node name="MainDrive" parent="." instance=ExtResource("2_mount")]
 position = Vector2(0, 10)
-engine_type = 0
-max_thrust = 800.0
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("7_main")
 
-[node name="RotateLeftEngine" parent="." instance=ExtResource("2_engine")]
-position = Vector2(-8, -6)
-rotation = -1.5707964
-engine_type = 1
-max_thrust = 60.0
-
-[node name="RotateRightEngine" parent="." instance=ExtResource("2_engine")]
-position = Vector2(8, -6)
+[node name="NoseLeftTorque" parent="." instance=ExtResource("2_mount")]
+position = Vector2(-8, -10)
 rotation = 1.5707964
-engine_type = 1
-max_thrust = 60.0
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("8_torque")
+
+[node name="TailRightTorque" parent="." instance=ExtResource("2_mount")]
+position = Vector2(8, 13.5)
+rotation = -1.5707964
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("8_torque")
+
+[node name="NoseRightTorque" parent="." instance=ExtResource("2_mount")]
+position = Vector2(8, -10)
+rotation = -1.5707964
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("8_torque")
+
+[node name="TailLeftTorque" parent="." instance=ExtResource("2_mount")]
+position = Vector2(-8, 13.5)
+rotation = 1.5707964
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("8_torque")
+
+[node name="StrafeLeftThruster" parent="." instance=ExtResource("2_mount")]
+position = Vector2(9, 1.75)
+rotation = -1.5707964
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("9_thruster")
+
+[node name="StrafeRightThruster" parent="." instance=ExtResource("2_mount")]
+position = Vector2(-9, 1.75)
+rotation = 1.5707964
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("9_thruster")
+
+[node name="NoseReverseThruster" parent="." instance=ExtResource("2_mount")]
+position = Vector2(0, -12)
+rotation = 3.1415927
+thrust_direction = Vector2(0, -1)
+installed = ExtResource("10_retro")
 
 [node name="NoseHardpoint" type="Node2D" parent="."]
 position = Vector2(0, -14)
@@ -61,3 +95,7 @@ width = 1.5
 gradient = SubResource("Gradient_contrail")
 script = ExtResource("5_contrail")
 anchor_offset = Vector2(8, 10)
+
+[node name="EngineDebugDraw" type="Node2D" parent="."]
+z_index = 50
+script = ExtResource("6_engine_draw")

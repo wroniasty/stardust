@@ -1,11 +1,12 @@
 class_name Ship
 extends RigidBody2D
-## A ship: a rigid body plus a bag of engines.
+## A ship: a rigid body plus a set of engine mounts.
 ##
-## Steering is not scripted. The pilot picks which engines burn, every burning
-## engine pushes at its own mount point, and the resulting motion (including
-## all rotation) comes out of the physics solver. That way a damaged or
-## asymmetric engine layout changes how the ship flies for free.
+## Steering is not scripted and engines have no assigned roles. The pilot names
+## one of six commands, ShipControl works out from the geometry which engines
+## serve it and how strongly, and the solver does the rest. Move an engine and
+## its job moves with it; break one and the ship flies crooked, with no code
+## anywhere that knows what "crooked" means (see IDEAS.md section 3).
 ##
 ## Gravity is applied by the ship itself from nearby bodies (M1.2), never by
 ## the physics server: gravity_scale stays 0.
@@ -44,6 +45,34 @@ const RESTITUTION_CUTOFF: float = 30.0
 ## energy into a resting ship.
 const PENETRATION_SLOP: float = 0.5
 const PENETRATION_CORRECTION: float = 0.6
+
+## Mass of the bare hull, before any modules. Modules add their mount size on
+## top, which is what lets fitting and losing them move the centre of mass.
+const HULL_MASS: float = 6.0
+
+## Floor for the angular speed at which kill rotation gives up pulsing and just
+## zeroes the spin. The real threshold is computed per tick from the ship's own
+## authority, because a single pulse of an impulse engine changes the spin by a
+## fixed amount: if the epsilon is smaller than one pulse, every correction
+## overshoots and flips the sign, and the assist chatters around zero forever
+## instead of finishing. Measured on the stock ship, one pulse is worth about
+## 0.04 rad/s, which is twice this floor.
+const KILL_ROTATION_EPS: float = 0.02
+
+## Safety factor on that per-pulse estimate.
+const KILL_ROTATION_PULSE_MARGIN: float = 1.5
+
+## Angular speed at or above which kill rotation asks for full counter-thrust.
+##
+## Well under one rad/s on purpose. Because the assist tapers proportionally,
+## the spin below this point decays exponentially rather than linearly, and a
+## high value spends more time crawling through the last fraction than it did
+## killing the first whole radian per second. At 1.0 the stock ship needs about
+## two seconds to stop 2 rad/s; at 0.2 it needs under one, which is the bar.
+const KILL_ROTATION_GAIN: float = 0.2
+
+## Below this speed the brake stops the ship outright rather than chasing it.
+const BRAKE_EPS: float = 2.0
 
 ## Seconds of coasting before orbit lock is even considered.
 const ORBIT_LOCK_DELAY: float = 2.0
@@ -97,13 +126,28 @@ signal flight_mode_changed(mode: FlightMode)
 @export var damage_speed_threshold: float = 60.0
 @export var damage_per_speed: float = 0.004
 
-var engines: Array[ShipEngine] = []
+var engines: Array[EngineInstance] = []
 var hardpoints: Array[Hardpoint] = []
 
-## Steering commands, refreshed every physics tick. Thrust is 0..1, turn is
-## -1..1 with positive turning the nose clockwise on screen.
-var thrust_command: float = 0.0
-var turn_command: float = 0.0
+## Geometry-derived control groups. Rebuilt on every configuration change.
+var control: ShipControl = ShipControl.new()
+
+## What the pilot is asking for, ShipControl.Command -> 0..1. Persistent: input
+## refreshes it every tick, an AI or a test writes it once and it holds.
+var commands: Dictionary = {}
+
+## What is actually flown this tick: the pilot's commands plus whatever the
+## assists add on top, rebuilt from scratch every tick.
+##
+## Kept separate from `commands` on purpose. When the assists wrote straight
+## into the pilot's set, nothing ever cleared their entries for a ship not
+## driven by input, so the brake kept pushing after the ship had stopped and
+## drove it backwards instead of settling.
+var active_commands: Dictionary = {}
+
+## Assist holds, set from input or by an AI.
+var kill_rotation_command: bool = false
+var brake_command: bool = false
 
 ## Held-down trigger. Read by the weapons every physics tick.
 var fire_command: bool = false
@@ -136,10 +180,112 @@ var _terrain_contacts: int = 0
 
 func _ready() -> void:
 	for child: Node in get_children():
-		if child is ShipEngine:
-			engines.append(child as ShipEngine)
-		elif child is Hardpoint:
+		if child is Hardpoint:
 			hardpoints.append(child as Hardpoint)
+	rebuild_control_groups()
+
+
+## Re-reads the fitted engines, recomputes mass, centre of mass and inertia,
+## and rebuilds the control groups from the new geometry.
+##
+## Must be called after anything that changes the configuration: fitting or
+## removing a module, or a change in mass. Not after damage: health is
+## deliberately left out of the group maths so a broken engine shows up as a
+## crooked ship rather than being quietly compensated for.
+func rebuild_control_groups(verbose: bool = true) -> void:
+	engines.clear()
+	for child: Node in get_children():
+		var mount: EngineMount = child as EngineMount
+		if mount != null and mount.installed != null:
+			engines.append(EngineInstance.new(mount.installed, mount))
+
+	_recompute_mass_properties()
+	control.rebuild(engines, center_of_mass, mass, inertia)
+
+	if verbose:
+		print("%s: mass %.1f, com (%.2f, %.2f), inertia %.0f" % [
+			name, mass, center_of_mass.x, center_of_mass.y, inertia,
+		])
+		for line: String in control.describe():
+			print("  " + line)
+
+
+## Mass, centre of mass and inertia from the hull plus the fitted modules.
+##
+## The hull is treated as a uniform lamina over its collision polygon, so the
+## numbers follow the shape instead of being guessed; modules are point masses
+## at their mounts. The body is switched to a custom centre of mass because the
+## default one ignores the modules entirely, and every torque in the control
+## maths is measured from it.
+func _recompute_mass_properties() -> void:
+	var polygon: PackedVector2Array = _hull_polygon()
+	var hull_centroid: Vector2 = _polygon_centroid(polygon)
+	var hull_inertia: float = _polygon_inertia(polygon, HULL_MASS, hull_centroid)
+
+	var total_mass: float = HULL_MASS
+	var weighted: Vector2 = hull_centroid * HULL_MASS
+	for engine: EngineInstance in engines:
+		var module: float = engine.mount.module_mass()
+		total_mass += module
+		weighted += engine.mount.position * module
+
+	var centre: Vector2 = weighted / maxf(total_mass, 0.0001)
+
+	# Parallel axis theorem: the hull's own inertia about its centroid, shifted
+	# to the combined centre, plus each module as a point mass.
+	var total_inertia: float = hull_inertia + HULL_MASS * hull_centroid.distance_squared_to(centre)
+	for engine: EngineInstance in engines:
+		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
+
+	mass = total_mass
+	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = centre
+	inertia = maxf(total_inertia, 0.0001)
+
+
+func _hull_polygon() -> PackedVector2Array:
+	var shape_node: CollisionShape2D = get_node_or_null("HullShape") as CollisionShape2D
+	if shape_node != null:
+		var convex: ConvexPolygonShape2D = shape_node.shape as ConvexPolygonShape2D
+		if convex != null and convex.points.size() >= 3:
+			return convex.points
+	# Falling back on the contact points keeps a ship without a shape usable
+	# rather than dividing by a zero area.
+	return PackedVector2Array(HULL_POINTS)
+
+
+func _polygon_centroid(polygon: PackedVector2Array) -> Vector2:
+	var area: float = 0.0
+	var centroid: Vector2 = Vector2.ZERO
+	for i: int in range(polygon.size()):
+		var a: Vector2 = polygon[i]
+		var b: Vector2 = polygon[(i + 1) % polygon.size()]
+		var cross: float = a.cross(b)
+		area += cross
+		centroid += (a + b) * cross
+	if absf(area) < 0.0001:
+		return Vector2.ZERO
+	return centroid / (3.0 * area)
+
+
+## Mass moment of inertia of a uniform polygon about its own centroid.
+func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid: Vector2) -> float:
+	var area: float = 0.0
+	var moment: float = 0.0
+	for i: int in range(polygon.size()):
+		var a: Vector2 = polygon[i]
+		var b: Vector2 = polygon[(i + 1) % polygon.size()]
+		var cross: float = a.cross(b)
+		area += cross
+		moment += cross * (a.dot(a) + a.dot(b) + b.dot(b))
+	area *= 0.5
+	if absf(area) < 0.0001:
+		return polygon_mass
+	# moment/12 is the polar second moment of AREA about the origin; multiplying
+	# by the areal density turns it into a mass moment, then the parallel axis
+	# theorem shifts it to the centroid.
+	var about_origin: float = (moment / 12.0) * (polygon_mass / area)
+	return maxf(about_origin - polygon_mass * centroid.length_squared(), 0.0001)
 
 
 ## Weapons fire here and not in _integrate_forces: that callback runs while the
@@ -168,7 +314,12 @@ func projectile_container() -> Node:
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if use_player_input:
 		read_player_input()
-	_apply_commands_to_engines()
+
+	_resolve_commands(state)
+	control.apply_commands(engines, active_commands)
+	for engine: EngineInstance in engines:
+		engine.advance(state.step)
+		engine.mount.set_exhaust(engine.effective_output())
 
 	_applied_force = Vector2.ZERO
 	_applied_torque = 0.0
@@ -183,17 +334,20 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	state.apply_central_force(_gravity * mass)
 
 	var body_rotation: float = state.transform.get_rotation()
-	for engine: ShipEngine in engines:
-		var local_force: Vector2 = engine.get_thrust_force()
+	for engine: EngineInstance in engines:
+		var local_force: Vector2 = engine.current_force()
 		if local_force.is_zero_approx():
 			continue
-		# apply_force() takes the offset from the body origin in global
-		# coordinates: rotated with the body, but not translated.
+		# Confirmed against the 4.7 docs: apply_force()'s position is "the
+		# offset from the body origin in global coordinates". From the ORIGIN,
+		# not the centre of mass, so the mount position is only rotated, never
+		# shifted. The server takes the torque about the centre of mass itself,
+		# which is why center_of_mass has to be right for any of this to work.
 		var force: Vector2 = local_force.rotated(body_rotation)
-		var offset: Vector2 = engine.position.rotated(body_rotation)
+		var offset: Vector2 = engine.mount.position.rotated(body_rotation)
 		state.apply_force(force, offset)
 		_applied_force += force
-		_applied_torque += offset.cross(force)
+		_applied_torque += (engine.mount.position - center_of_mass).rotated(body_rotation).cross(force)
 
 	_resolve_terrain(state)
 	_update_heat(state.step)
@@ -215,7 +369,7 @@ func _update_heat(step: float) -> void:
 func _consider_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 	if not orbit_lock_enabled:
 		return
-	if _applied_force.length() > 0.001 or _terrain_contacts > 0:
+	if not active_commands.is_empty() or _applied_force.length() > 0.001 or _terrain_contacts > 0:
 		_coasting_time = 0.0
 		return
 	_coasting_time += state.step
@@ -264,9 +418,9 @@ func _run_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 	if _lock_planet == null or not is_instance_valid(_lock_planet):
 		release_orbit_lock()
 		return
-	# Any thrust hands control back. Rotational engines are left alone so the
-	# pilot can still aim while parked.
-	if thrust_command > 0.001:
+	# Anything that would move the ship hands control back. Rotation commands
+	# are left alone so the pilot can still aim while parked.
+	if _wants_translation():
 		release_orbit_lock()
 		return
 
@@ -282,6 +436,14 @@ func _run_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 	_gravity = _lock_planet.gravity_at(body_transform.origin)
 
 	_update_heat(state.step)
+
+
+## True if any command this tick would translate the ship rather than turn it.
+func _wants_translation() -> bool:
+	for command: ShipControl.Command in ShipControl.LINEAR_COMMANDS:
+		if float(active_commands.get(command, 0.0)) > 0.001:
+			return true
+	return brake_command
 
 
 ## Hands control back to the solver. Safe to call when not locked.
@@ -462,28 +624,95 @@ func get_forward_speed() -> float:
 	return linear_velocity.dot(FORWARD.rotated(global_rotation))
 
 
-## Fills the command fields from the input actions.
+## Fills the command set from the input actions. Only action names here, never
+## keycodes.
 func read_player_input() -> void:
-	thrust_command = Input.get_action_strength("ship_thrust")
-	turn_command = Input.get_axis("ship_rotate_left", "ship_rotate_right")
+	commands.clear()
+	_set_command(ShipControl.Command.FORWARD, Input.get_action_strength("thrust_forward"))
+	_set_command(ShipControl.Command.BACK, Input.get_action_strength("thrust_reverse"))
+	_set_command(ShipControl.Command.CCW, Input.get_action_strength("rotate_left"))
+	_set_command(ShipControl.Command.CW, Input.get_action_strength("rotate_right"))
+	_set_command(ShipControl.Command.STRAFE_LEFT, Input.get_action_strength("strafe_left"))
+	_set_command(ShipControl.Command.STRAFE_RIGHT, Input.get_action_strength("strafe_right"))
+	kill_rotation_command = Input.is_action_pressed("kill_rotation")
+	brake_command = Input.is_action_pressed("brake")
 
 
-func _apply_commands_to_engines() -> void:
-	var thrust: float = clampf(thrust_command, 0.0, 1.0)
-	var turn: float = clampf(turn_command, -1.0, 1.0)
-	var wanted_turn_sign: float = signf(turn)
+func _set_command(command: ShipControl.Command, amount: float) -> void:
+	if amount > 0.0:
+		commands[command] = amount
 
-	for engine: ShipEngine in engines:
-		match engine.engine_type:
-			ShipEngine.Type.MAIN:
-				engine.throttle = thrust
-			ShipEngine.Type.ROTATIONAL:
-				# An engine burns only if its torque turns the ship the way the
-				# pilot asked. Which engine that is comes from its mount point,
-				# so a relocated engine steers correctly without any wiring.
-				if wanted_turn_sign != 0.0 and is_equal_approx(engine.torque_sign(), wanted_turn_sign):
-					engine.throttle = absf(turn)
-				else:
-					engine.throttle = 0.0
-			_:
-				engine.throttle = 0.0
+
+## Adds whatever the two assists are asking for on top of the pilot's commands.
+func _resolve_commands(state: PhysicsDirectBodyState2D) -> void:
+	active_commands = commands.duplicate()
+	if kill_rotation_command:
+		_apply_kill_rotation(state)
+	if brake_command:
+		_apply_brake(state)
+
+
+## Cancels spin by asking for the opposite rotation, proportionally.
+##
+## Below the epsilon the spin is zeroed outright: impulse engines are all or
+## nothing, so chasing the last hundredth of a radian with them oscillates
+## forever instead of converging.
+func _apply_kill_rotation(state: PhysicsDirectBodyState2D) -> void:
+	var spin: float = state.angular_velocity
+	var opposing: ShipControl.Command = (
+		ShipControl.Command.CCW if spin > 0.0 else ShipControl.Command.CW
+	)
+
+	# Derived rather than fixed, so retuning the torque jets cannot silently
+	# reintroduce the chatter this guards against.
+	var per_pulse: float = control.authority_of(opposing) / maxf(inertia, 0.0001) * state.step
+	var epsilon: float = maxf(KILL_ROTATION_EPS, per_pulse * KILL_ROTATION_PULSE_MARGIN)
+	if absf(spin) <= epsilon:
+		state.angular_velocity = 0.0
+		return
+	var amount: float = clampf(absf(spin) / KILL_ROTATION_GAIN, 0.0, 1.0)
+	active_commands[opposing] = maxf(float(active_commands.get(opposing, 0.0)), amount)
+
+
+## Kills linear velocity by pushing against it, one axis at a time.
+##
+## Rotation is left alone entirely: brake is for stopping, aiming stays the
+## pilot's job. A direction with no engines behind it simply is not braked, so
+## a ship with no reverse thruster cannot stop itself going forward. That is
+## the intended consequence of building the groups from geometry, not a gap.
+func _apply_brake(state: PhysicsDirectBodyState2D) -> void:
+	var local_velocity: Vector2 = state.linear_velocity.rotated(-state.transform.get_rotation())
+	if local_velocity.length() < BRAKE_EPS:
+		state.linear_velocity = Vector2.ZERO
+		return
+
+	# Forward is -Y, so moving forward means a negative Y and needs BACK.
+	_brake_axis(
+		local_velocity.y,
+		ShipControl.Command.BACK,
+		ShipControl.Command.FORWARD,
+	)
+	_brake_axis(
+		local_velocity.x,
+		ShipControl.Command.STRAFE_LEFT,
+		ShipControl.Command.STRAFE_RIGHT,
+	)
+
+
+## One velocity component against the group that opposes it.
+##
+## `negative_command` is the one that fights a negative component. The throttle
+## is the time the group would need to kill this component, clamped to one
+## second, so it holds full thrust while there is real speed to shed and eases
+## off over the last stretch instead of overshooting into a wobble.
+func _brake_axis(
+	component: float, negative_command: ShipControl.Command, positive_command: ShipControl.Command
+) -> void:
+	if is_zero_approx(component):
+		return
+	var command: ShipControl.Command = negative_command if component < 0.0 else positive_command
+	var authority: float = control.authority_of(command)
+	if authority <= 0.0:
+		return
+	var amount: float = clampf(absf(component) * mass / authority, 0.0, 1.0)
+	active_commands[command] = maxf(float(active_commands.get(command, 0.0)), amount)

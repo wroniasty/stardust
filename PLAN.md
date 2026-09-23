@@ -29,7 +29,11 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 - [x] `Ship` jako RigidBody2D z `_integrate_forces`.
 - [x] Komponent `Engine`: pozycja, wektor ciągu, typ, sprawność, niezawodność.
-- [x] Statek testowy: silnik główny plus dwa obrotowe. Sterowanie: klawisze ciągu i obrotu.
+- [x] Grupy sterowania z geometrii: `EngineMount` plus `EngineData`, sześć komend liczonych z wkładu c_i, wagi z kary bocznej, autorytet na grupę, ostrzeżenia o pustych grupach.
+- [x] Statek testowy: silnik główny, dwie pary obrotowe, dwa silniki strafe, silnik hamujący. Sterowanie: WSAD + QE.
+- [x] Kill rotation (X) z progiem wygaszenia liczonym z autorytetu statku.
+- [x] Brake (Z): rozkład prędkości na komendy, bez ruszania obrotu.
+- [x] Debug draw silników: trójkąt z przepustnicą i typem, krzyżyk w środku masy, wspólny przełącznik F7.
 - [x] Kamera podążająca za statkiem, lekki zoom zależny od prędkości.
 - [x] GPUParticles2D na silnikach, intensywność od ciągu.
 - [x] Debug overlay: prędkość, siły, stan silników.
@@ -94,6 +98,9 @@ Pytania do rozstrzygnięcia na koniec M1 (zapisać odpowiedzi w IDEAS.md):
 
 Cel: statek jako zestaw modułów, które są lootem.
 
+- [ ] Komputer lotu: alokacja NNLS z rzeczywistymi ciągami i stanem silników, czysty obrót i czysty strafe mimo asymetrii i uszkodzeń. Zastępuje heurystykę wag z M1.1 tam, gdzie gracz znajdzie moduł.
+- [ ] Gimbal na silniku MAIN: sterowany wektor ciągu zamiast stałego kierunku montażu.
+- [ ] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par, puste grupy, ostrzeżenie o module, który psuje sterowanie.
 - [ ] Awarie silników: spadek sprawności od zderzeń, niezawodność jako dropout i oscylacja ciągu.
 - [ ] Lądowanie z uszkodzonymi silnikami: asymetria, oscylacje, sprawdzenie, że jest trudno, ale możliwe.
 - [ ] Podwozie jako moduł (tolerancja nachylenia, próg prędkości) i moduły asystujące (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu).

@@ -5,21 +5,14 @@ extends CanvasLayer
 
 @export var ship_path: NodePath
 
-## World-space arrows toggled together with this readout, so one key hides the
-## whole debug layer instead of leaving half of it on screen.
-@export var vectors_path: NodePath
-
 @onready var _label: Label = $Label
 
 var _ship: Ship = null
-var _vectors: DebugVectors = null
 
 
 func _ready() -> void:
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
-	if not vectors_path.is_empty():
-		_vectors = get_node_or_null(vectors_path) as DebugVectors
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -27,10 +20,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		set_debug_visible(not visible)
 
 
+## Shows or hides this readout and every world-space debug visual with it.
+##
+## Found through a group rather than exported paths: the engine overlay lives
+## inside the ship scene, so the world has no stable path to it, and anything
+## debug added later joins by calling add_to_group.
 func set_debug_visible(shown: bool) -> void:
 	visible = shown
-	if _vectors != null:
-		_vectors.visible = shown
+	for node: Node in get_tree().get_nodes_in_group(EngineDebugDraw.DEBUG_GROUP):
+		var visual: CanvasItem = node as CanvasItem
+		if visual != null:
+			visual.visible = shown
 
 
 func _process(_delta: float) -> void:
@@ -70,10 +70,23 @@ func _process(_delta: float) -> void:
 	var mode: String = "ORBIT" if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK else "free"
 	lines.append("mode     %-6s  heat %.2f" % [mode, _ship.hull_heat])
 
+	lines.append("commands %s" % _command_summary())
 	lines.append("engines")
-	for engine: ShipEngine in _ship.engines:
-		lines.append("  %-16s thr %.2f  eff %.2f  rel %.2f" % [
-			engine.name, engine.throttle, engine.efficiency, engine.reliability,
+	for engine: EngineInstance in _ship.engines:
+		lines.append("  %-20s %-8s thr %.2f  hp %.2f" % [
+			engine.mount.name, engine.type_name(), engine.throttle, engine.health,
 		])
 
 	_label.text = "\n".join(lines)
+
+
+## Only the commands actually asked for this tick, so the line stays short.
+func _command_summary() -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	for command: ShipControl.Command in _ship.active_commands:
+		parts.append("%s %.2f" % [_ship.control.command_name(command), _ship.active_commands[command]])
+	if _ship.kill_rotation_command:
+		parts.append("KILLROT")
+	if _ship.brake_command:
+		parts.append("BRAKE")
+	return " ".join(parts) if not parts.is_empty() else "-"

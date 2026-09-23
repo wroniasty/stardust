@@ -17,6 +17,17 @@ const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const TEST_SEED: int = 20260922
 
 const BURN_TICKS: int = 60
+
+## Long enough for the main drive to finish spooling and then some.
+const FORWARD_BURN_TICKS: int = 120
+
+## Spin handed to the kill-rotation phase, and the second it is allowed.
+const KILL_SPIN: float = 2.0
+const KILL_TICKS: int = 90
+
+## Speed the brake has to shed, and the time it gets.
+const BRAKE_SPEED: float = 100.0
+const BRAKE_TICKS: int = 300
 const FALL_TICKS: int = 60
 const ORBIT_TICKS: int = 1800
 const LANDING_TICKS: int = 600
@@ -46,7 +57,8 @@ const WEAPON_TICKS: int = 60
 ## loop like everything else: nodes added from _initialize() are not in the
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
-enum Phase { FIELD, TERRAIN, MAIN_ENGINE, TURN_RIGHT, TURN_LEFT, FREE_FALL, ORBIT,
+enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
+	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, STRAFE, FREE_FALL, ORBIT,
 	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING, WEAPON, DONE }
 
 var _phase: int = Phase.FIELD
@@ -65,6 +77,11 @@ var _lock_radius_min: float = INF
 var _lock_radius_max: float = 0.0
 var _entry_speed: float = 0.0
 var _peak_heat: float = 0.0
+var _peak_drift: float = 0.0
+var _clean_turn_spin: float = 0.0
+var _damaged_turn_spin: float = 0.0
+var _kill_ticks: int = -1
+var _peak_turn_during_brake: float = 0.0
 var _spin_in_air: float = 0.0
 var _spin_in_vacuum: float = 0.0
 var _peak_rebound: float = 0.0
@@ -80,7 +97,8 @@ var _failures: int = 0
 
 
 func _initialize() -> void:
-	for action: String in ["ship_thrust", "ship_rotate_left", "ship_rotate_right"]:
+	for action: String in ["thrust_forward", "thrust_reverse", "rotate_left",
+			"rotate_right", "strafe_left", "strafe_right", "kill_rotation", "brake"]:
 		_expect(InputMap.has_action(action), "input action %s is defined" % action)
 	_begin_phase()
 
@@ -104,7 +122,14 @@ func _physics_process(delta: float) -> bool:
 		elif _lock_engaged:
 			_lock_released = true
 		if _ticks == LOCK_THRUST_AT_TICK:
-			_ship.thrust_command = 1.0
+			_ship.commands[ShipControl.Command.FORWARD] = 1.0
+	elif _phase == Phase.ROTATE_CW or _phase == Phase.ROTATE_CCW or _phase == Phase.ROTATE_DAMAGED:
+		_peak_drift = maxf(_peak_drift, _ship.linear_velocity.length())
+	elif _phase == Phase.KILL_ROTATION:
+		if _kill_ticks < 0 and absf(_ship.angular_velocity) < 0.001:
+			_kill_ticks = _ticks
+	elif _phase == Phase.BRAKE:
+		_peak_turn_during_brake = maxf(_peak_turn_during_brake, absf(_ship.angular_velocity))
 	elif _phase == Phase.HULL_HEAT:
 		_peak_heat = maxf(_peak_heat, _ship.hull_heat)
 	elif _phase == Phase.LANDING:
@@ -281,8 +306,14 @@ func _deepest_hull_penetration() -> float:
 
 func _phase_ticks() -> int:
 	match _phase:
-		Phase.FIELD, Phase.TERRAIN:
+		Phase.FIELD, Phase.TERRAIN, Phase.CONTROL_GROUPS:
 			return 1
+		Phase.FORWARD_BURN:
+			return FORWARD_BURN_TICKS
+		Phase.KILL_ROTATION:
+			return KILL_TICKS
+		Phase.BRAKE:
+			return BRAKE_TICKS
 		Phase.ORBIT_LOCK:
 			return LOCK_TICKS
 		Phase.AEROBRAKE:
@@ -303,22 +334,52 @@ func _phase_ticks() -> int:
 			return BURN_TICKS
 
 
+## Only the phases that actually fly near a world get one. The control phases
+## deliberately run in empty space so gravity cannot be mistaken for drift.
+func _phase_needs_planet() -> bool:
+	match _phase:
+		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.BRAKE, Phase.STRAFE:
+			return false
+		_:
+			return true
+
+
 func _begin_phase() -> void:
 	_ticks = 0
 	_elapsed = 0.0
 
-	if _phase != Phase.MAIN_ENGINE and _phase != Phase.TURN_RIGHT and _phase != Phase.TURN_LEFT:
+	if _phase_needs_planet():
 		_planet = _spawn_planet()
 	if _phase != Phase.FIELD and _phase != Phase.TERRAIN:
 		_ship = _spawn_ship()
 
 	match _phase:
-		Phase.MAIN_ENGINE:
-			_ship.thrust_command = 1.0
-		Phase.TURN_RIGHT:
-			_ship.turn_command = 1.0
-		Phase.TURN_LEFT:
-			_ship.turn_command = -1.0
+		Phase.FORWARD_BURN:
+			_ship.commands[ShipControl.Command.FORWARD] = 1.0
+		Phase.ROTATE_CW:
+			_ship.commands[ShipControl.Command.CW] = 1.0
+			_peak_drift = 0.0
+		Phase.ROTATE_CCW:
+			_ship.commands[ShipControl.Command.CCW] = 1.0
+			_peak_drift = 0.0
+		Phase.ROTATE_DAMAGED:
+			# Health, not geometry: the groups are deliberately rebuilt from
+			# nominal thrust, so nothing here re-balances and the asymmetry has
+			# to show up in flight on its own.
+			_damage_mount("NoseLeftTorque", 0.3)
+			_ship.commands[ShipControl.Command.CW] = 1.0
+			_peak_drift = 0.0
+		Phase.KILL_ROTATION:
+			_ship.angular_velocity = KILL_SPIN
+			_ship.kill_rotation_command = true
+			_kill_ticks = -1
+		Phase.BRAKE:
+			_ship.linear_velocity = Ship.FORWARD * BRAKE_SPEED
+			_ship.brake_command = true
+			_peak_turn_during_brake = 0.0
+		Phase.STRAFE:
+			_ship.commands[ShipControl.Command.STRAFE_RIGHT] = 1.0
+			_peak_drift = 0.0
 		Phase.FREE_FALL:
 			_ship.global_position = _planet.global_position + Vector2.UP * _planet.surface_radius * 2.0
 		Phase.ORBIT:
@@ -411,19 +472,77 @@ func _evaluate_phase() -> void:
 			_check_atmosphere_shells(_planet)
 		Phase.TERRAIN:
 			_check_terrain(_planet)
-		Phase.MAIN_ENGINE:
-			# The nose points up, so thrust must show up as negative Y velocity.
-			var expected: float = (800.0 / _ship.mass) * _elapsed
+		Phase.CONTROL_GROUPS:
+			_check_control_groups()
+		Phase.FORWARD_BURN:
+			# The nose points up, so thrust shows as negative Y velocity. The
+			# main drive spools, so the ramp costs half the spool time.
+			var thrust: float = _mount_thrust("MainDrive")
+			var spool: float = _mount_spool("MainDrive")
+			var expected: float = (thrust / _ship.mass) * (_elapsed - spool * 0.5)
 			_expect(
 				absf(-_ship.linear_velocity.y - expected) < expected * 0.05,
-				"main engine reaches %.1f px/s along the nose (got %.1f)" % [expected, -_ship.linear_velocity.y],
+				"the main drive reaches %.1f px/s along the nose after %.1f s (got %.1f)" % [
+					expected, _elapsed, -_ship.linear_velocity.y,
+				],
 			)
-			_expect(absf(_ship.linear_velocity.x) < 0.01, "main engine does not push sideways")
-			_expect(absf(_ship.angular_velocity) < 0.001, "main engine does not spin the ship")
-		Phase.TURN_RIGHT:
-			_check_turn(1.0, "RotateRightEngine", "clockwise")
-		Phase.TURN_LEFT:
-			_check_turn(-1.0, "RotateLeftEngine", "counter-clockwise")
+			_expect(absf(_ship.linear_velocity.x) < 0.01, "forward thrust does not push sideways")
+			_expect(absf(_ship.angular_velocity) < 0.001, "forward thrust does not spin the ship")
+		Phase.ROTATE_CW:
+			_clean_turn_spin = _ship.angular_velocity
+			_expect(_clean_turn_spin > 0.0, "CW spins clockwise (%.3f rad/s)" % _clean_turn_spin)
+			# The acceptance criterion: an intact rotation couple is two equal
+			# and opposite forces, so it must add no linear speed whatsoever.
+			_expect(
+				_peak_drift < 0.01,
+				"an intact CW couple adds no linear drift (peak %.4f px/s)" % _peak_drift,
+			)
+		Phase.ROTATE_CCW:
+			_expect(_ship.angular_velocity < 0.0, "CCW spins counter-clockwise (%.3f rad/s)" % _ship.angular_velocity)
+			_expect(
+				_peak_drift < 0.01,
+				"an intact CCW couple adds no linear drift (peak %.4f px/s)" % _peak_drift,
+			)
+		Phase.ROTATE_DAMAGED:
+			_damaged_turn_spin = _ship.angular_velocity
+			_expect(
+				_damaged_turn_spin > 0.0 and _damaged_turn_spin < _clean_turn_spin * 0.95,
+				"a damaged couple turns weaker (%.3f vs %.3f rad/s)" % [
+					_damaged_turn_spin, _clean_turn_spin,
+				],
+			)
+			_expect(
+				_peak_drift > 1.0,
+				"a damaged couple no longer cancels, so the ship slides (%.2f px/s)" % _peak_drift,
+			)
+		Phase.KILL_ROTATION:
+			var seconds: float = float(_kill_ticks) / float(Engine.physics_ticks_per_second)
+			_expect(
+				_kill_ticks >= 0 and seconds < 1.0,
+				"kill rotation stops %.1f rad/s in %.2f s" % [KILL_SPIN, seconds],
+			)
+			_expect(
+				absf(_ship.angular_velocity) < 0.001,
+				"the spin is fully dead afterwards (%.4f rad/s)" % _ship.angular_velocity,
+			)
+		Phase.BRAKE:
+			_expect(
+				_ship.linear_velocity.length() < 1.0,
+				"brake stops a %.0f px/s run (%.2f px/s left after %.1f s)" % [
+					BRAKE_SPEED, _ship.linear_velocity.length(), _elapsed,
+				],
+			)
+			_expect(
+				_peak_turn_during_brake < 0.05,
+				"brake does not touch rotation (peak %.4f rad/s)" % _peak_turn_during_brake,
+			)
+		Phase.STRAFE:
+			var sideways: float = _ship.linear_velocity.rotated(-_ship.global_rotation).x
+			_expect(sideways > 1.0, "strafe right moves the ship right (%.1f px/s)" % sideways)
+			_expect(
+				absf(_ship.angular_velocity) < 0.01,
+				"strafe barely rotates the ship (%.4f rad/s)" % _ship.angular_velocity,
+			)
 		Phase.FREE_FALL:
 			var expected_g: float = _planet.surface_gravity * 0.25
 			var fall_speed: float = _ship.linear_velocity.y
@@ -573,19 +692,51 @@ func _evaluate_phase() -> void:
 			)
 
 
-func _check_turn(turn: float, expected_engine: String, description: String) -> void:
-	_expect(
-		signf(_ship.angular_velocity) == signf(turn),
-		"turn %+.0f spins the ship %s (angular velocity %.3f)" % [turn, description, _ship.angular_velocity],
-	)
-	for engine: ShipEngine in _ship.engines:
-		if engine.engine_type != ShipEngine.Type.ROTATIONAL:
-			continue
-		var should_burn: bool = engine.name == expected_engine
+## Every command must have engines behind it, and the two rotation groups have
+## to be balanced couples or turning will shove the ship sideways.
+func _check_control_groups() -> void:
+	for command: ShipControl.Command in ShipControl.COMMAND_AXES:
 		_expect(
-			(engine.throttle > 0.0) == should_burn,
-			"turn %+.0f leaves %s throttle at %.2f" % [turn, engine.name, engine.throttle],
+			_ship.control.has_authority(command),
+			"%s has authority (%.0f)" % [
+				_ship.control.command_name(command), _ship.control.authority_of(command),
+			],
 		)
+
+	for command: ShipControl.Command in [ShipControl.Command.CW, ShipControl.Command.CCW]:
+		var members: Array = _ship.control.groups.get(command, [])
+		_expect(members.size() >= 2, "%s is a couple, not a single engine" % _ship.control.command_name(command))
+		var residual: Vector2 = Vector2.ZERO
+		for member: Dictionary in members:
+			var engine: EngineInstance = member["engine"]
+			residual += engine.nominal_force() * float(member["weight"])
+		_expect(
+			residual.length() < 0.01,
+			"%s leaves no net side force (%.4f N)" % [
+				_ship.control.command_name(command), residual.length(),
+			],
+		)
+
+
+func _mount_thrust(mount_name: String) -> float:
+	for engine: EngineInstance in _ship.engines:
+		if engine.mount.name == mount_name:
+			return engine.data.max_thrust
+	return 0.0
+
+
+func _mount_spool(mount_name: String) -> float:
+	for engine: EngineInstance in _ship.engines:
+		if engine.mount.name == mount_name:
+			return engine.data.spool_time
+	return 0.0
+
+
+func _damage_mount(mount_name: String, health: float) -> void:
+	for engine: EngineInstance in _ship.engines:
+		if engine.mount.name == mount_name:
+			engine.health = health
+			return
 
 
 # --- Plumbing ---
@@ -595,6 +746,9 @@ func _spawn_ship() -> Ship:
 	var ship: Ship = scene.instantiate() as Ship
 	ship.use_player_input = false
 	root.add_child(ship)
+	# Quiet rebuild: the group dump is worth printing once at startup, not
+	# twenty times inside a test run.
+	ship.rebuild_control_groups(false)
 	return ship
 
 

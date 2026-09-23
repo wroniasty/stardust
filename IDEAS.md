@@ -31,51 +31,125 @@ Opcjonalne addony: godot-rapier (Rapier 2D) jeśli domyślna fizyka będzie nies
 
 ## 3. Statek i silniki
 
-Statek to RigidBody2D z własnym `_integrate_forces`.
+Statek to RigidBody2D z własnym `_integrate_forces` i `center_of_mass_mode =
+CUSTOM`: masa, środek masy i moment bezwładności są liczone z kadłuba i
+zamontowanych modułów, a nie brane z kształtu kolizji.
 
-Silnik jako komponent (node dziecko statku):
-- pozycja względem środka masy,
-- wektor ciągu (kierunek i maksymalna siła),
-- typ: główny, obrotowy, manewrowy, hamujący, inny,
-- stan: sprawność 0..1 (mnoży ciąg),
-- niezawodność 0..1: szansa na dropout na tick, przerwy, oscylacja siły.
+### Silnik nie ma roli, ma geometrię
 
-Każdy działający silnik robi `apply_force(thrust, offset)`. Moment obrotowy wychodzi sam z offsetu, więc silniki obrotowe to po prostu silniki z niezerowym offsetem prostopadłym.
+Wcześniejszy model przypisywał silnikom sztywne role (główny, obrotowy). Został
+zastąpiony: silnik ma tylko pozycję i kierunek, a do czego się nadaje **wynika z
+obliczeń przy montażu**. Przesunięcie silnika zmienia jego zadanie bez dotykania
+jakiegokolwiek kodu.
 
-Minimum dla grywalnego statku: silnik główny plus silniki obrotowe. Reszta to loot i konfiguracja.
+Trzy elementy:
 
-Awarie silników pochodzą ze zderzeń, zużycia i ataków. Awaria to modyfikacja parametrów sprawności i niezawodności, nic specjalnego w silniku fizycznym.
+- `EngineMount` (node dziecko statku): `position`, `thrust_direction`
+  (jednostkowy wektor **siły na statek**; wylot spalin jest przeciwny),
+  `allowed_types`, `size`. Rozmiar slotu jest zarazem masą, jaką zamontowany
+  moduł dokłada do statku, czyli tym, co przesuwa środek masy.
+- `EngineData` (Resource w `resources/engines/`): `type`, `max_thrust`,
+  `spool_time`, `reliability`, `fuel_cost`. To jest przyszły loot z M2.
+- `EngineInstance`: para (dane, mount) plus `health`, `throttle`,
+  `target_throttle`.
 
-### Realizacja (M1.1)
+Typ opisuje charakter przepustnicy, nie przeznaczenie:
 
-Klasa nazywa się `ShipEngine`, nie `Engine`, bo `Engine` to singleton Godota.
+- **MAIN** rozpędza się liniowo, 1/`spool_time` na sekundę, w obie strony.
+- **TORQUE** jest impulsowy: chwilowa przepustnica to zawsze 0 albo 1.
+- **THRUSTER** odpowiada natychmiast i proporcjonalnie.
 
-Montaż silnika bierze się z transformacji node'a: `position` to offset od środka
-statku, a kierunek ciągu to `thrust_direction` (domyślnie lokalne "do góry")
-przepuszczone przez obrót node'a. Dzięki temu obrócenie silnika w edytorze
-obraca jednocześnie siłę i wydech cząsteczkowy.
+### Grupy sterowania liczone z geometrii
 
-Wybór silników obrotowych jest liczony, nie okablowany: `torque_sign()` zwraca
-znak `position.cross(kierunek_ciągu)`, a statek odpala tylko te silniki, których
-znak zgadza się z żądanym kierunkiem skrętu. Przeniesienie silnika w inne
-miejsce kadłuba automatycznie zmienia to, w którą stronę kręci, co będzie
-potrzebne, gdy silniki staną się lootem (M2).
+`Ship.rebuild_control_groups()` po każdej zmianie konfiguracji liczy dla
+każdego silnika wkład
 
-Statek trzyma komendy sterowania (`thrust_command`, `turn_command`) osobno od
-źródła inputu. `use_player_input = false` odcina klawiaturę, dzięki czemu tym
-samym `Ship` będą sterować wrogowie w M5 i testy headless.
+    F_i = kierunek_montażu * max_thrust
+    r_i = pozycja_montażu - środek_masy
+    c_i = (F_i.x / masa, F_i.y / masa, (r_i x F_i) / bezwładność * promień_bezwładności)
 
-`can_sleep = false` na statku: uśpione ciało nie dostaje `_integrate_forces`,
-więc statek stojący w bezruchu przestałby reagować na ciąg.
+Sześć komend (FORWARD, BACK, STRAFE_LEFT, STRAFE_RIGHT, CCW, CW) to kierunki w
+tej samej przestrzeni. Waga silnika w komendzie to `wzdłuż - SIDE_PENALTY *
+w_bok`, normalizowana tak, żeby najsilniejszy w grupie miał 1.0; poniżej progu
+0.05 silnik do grupy nie wchodzi. Jeden silnik może należeć do kilku grup.
 
-Statek bazowy do testów (wartości do przestrojenia, gdy będzie planeta i G):
-masa 10, kadłub ~24 px, silnik główny 800 (czyli 80 px/s^2), dwa silniki
-obrotowe po 60 zamontowane przy dziobie.
+**Trzeci składnik musi być przeskalowany promieniem bezwładności
+`sqrt(bezwładność/masa)`.** Bez tego wektor miesza px/s^2 z rad/s^2 i te dwie
+wielkości nie są porównywalne: własny efekt boczny silnika obrotowego (kilka
+px/s^2) przytłacza jego wkład kątowy (ułamek rad/s^2), kara boczna go odrzuca i
+**żaden silnik nigdy nie trafia do grupy obrotu**. Pomnożenie przez promień
+bezwładności wyraża wszystkie trzy składowe jako przyspieszenie widziane na tym
+promieniu, czyli robi porównanie, które heurystyka i tak próbuje zrobić.
 
-Do rozstrzygnięcia przy strojeniu feelingu: pojedynczy silnik obrotowy daje
-oprócz momentu także siłę boczną (znosi statek w bok przy skręcaniu). Fizycznie
-poprawne, ale może być nieprzyjemne. Alternatywa to para silników działających
-jako czysty moment, kosztem złamania zasady "dwa silniki obrotowe".
+Przy przebudowie zapisywany jest też `max_authority` każdej grupy w jednostkach
+natywnych (siła dla komend liniowych, moment dla obrotowych), bo hamowanie przez
+niego dzieli. Skład grup jest wypisywany do konsoli przy starcie, z ostrzeżeniem
+dla każdej pustej — statek, który nie potrafi skręcić w jedną stronę, to błąd
+konfiguracji i ma być widoczny od razu.
+
+**Grupy liczone są z ciągu nominalnego, bez `health`.** To celowe: gdyby
+uszkodzenie przeliczało wagi, zepsuty silnik byłby po cichu kompensowany, a cały
+sens modelu uszkodzeń polega na tym, że pół-martwy silnik sprawia, że statek
+leci krzywo. Kompensujący komputer lotu to moduł do znalezienia w M2.
+
+### Para obrotowa musi być symetryczna
+
+Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne
+strony, **nie tworzą pary obrotowej** — ich momenty też się znoszą. Para
+wymaga rozsunięcia wzdłuż osi statku: dziób-lewo z ogon-prawo daje siły, które
+znoszą się dokładnie, i momenty, które się dodają. Do obrotu w obie strony
+potrzebne są więc dwie pary, czyli cztery silniki.
+
+Ramiona obu silników pary muszą być **równe co do długości**, inaczej
+normalizacja nada im różne wagi (np. 1.00 i 0.40), siły przestaną się znosić i
+obrót będzie dryfował w bok. Na statku testowym wymusza to rozstaw: dysze
+dziobowe na y = -10, ogonowe na y = 13.5, przy środku masy na y = 1.75.
+
+### Modulacja impulsowa silników TORQUE
+
+Odczytanie „0 albo 1" jako „odpal, kiedy cokolwiek od ciebie żądane" jest
+pułapką: dysza obrotowa należąca do grupy strafe z wagą 0.16 odpalała pełną
+mocą, dawała czterokrotnie większą siłę boczną niż zamierzona, a hamulec gonił
+dryf, który sam tworzył, i się rozbiegał.
+
+Ułamek jest więc **wypełnieniem, nie amplitudą**: modulator delta-sigma
+pierwszego rzędu akumuluje żądanie i odpala silnik na cały tick za każdym razem,
+gdy akumulator przekroczy 1. Średni ciąg równa się dokładnie żądaniu, każdy
+pojedynczy tick jest nadal twardo włączony albo wyłączony, a mały udział oznacza
+sporadyczny puff zamiast pełnego wypału.
+
+### Asysty
+
+- **Kill rotation**: dokłada komendę przeciwną do znaku prędkości kątowej o
+  wartości `|omega| / KILL_GAIN`. Próg wygaszenia jest **liczony z autorytetu
+  statku**, nie stały: jeden impuls zmienia prędkość kątową o ustaloną wartość,
+  więc jeśli epsilon jest mniejszy niż jeden impuls, każda korekta przestrzeliwuje
+  i zmienia znak, a asysta klekocze wokół zera zamiast skończyć. `KILL_GAIN` jest
+  wyraźnie poniżej 1 rad/s, bo poniżej progu spadek jest wykładniczy i przy 1.0
+  ostatni ułamek trwa dłużej niż całe wyhamowanie pierwszego radiana.
+- **Brake**: rozkłada `-v` w układzie statku na oś przód/tył i bok, i dla każdej
+  składowej dobiera komendę z wartością `|składowa| * masa / autorytet`, czyli
+  czasem potrzebnym na wyhamowanie, przyciętym do sekundy. Obrotu nie rusza.
+  Kierunek bez silników po prostu nie jest hamowany — statek bez silnika
+  wstecznego nie wyhamuje ruchu do przodu. To konsekwencja liczenia grup z
+  geometrii, nie luka.
+
+Komendy pilota i zestaw efektywny są **rozdzielone**. Asysty dopisują do kopii
+na dany tick, nie do intencji pilota; kiedy pisały wprost do niej, wpisy nigdy
+nie były czyszczone dla statku nie sterowanego wejściem i hamulec pchał dalej po
+zatrzymaniu, rozpędzając statek do tyłu.
+
+### Sterowanie
+
+    W  ciąg do przodu        S  ciąg wstecz
+    A  obrót w lewo (CCW)    D  obrót w prawo (CW)
+    Q  strafe w lewo         E  strafe w prawo
+    X  kill rotation         Z  hamowanie
+    spacja / ctrl  ogień
+    F7 warstwa debug   F5 uszkodź dyszę (debug)   C  krater (debug)
+
+Awarie silników pochodzą ze zderzeń, zużycia i ataków. Awaria to zmiana `health`,
+nic specjalnego w silniku fizycznym.
 
 ## 4. Broń i loot
 

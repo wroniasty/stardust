@@ -35,4 +35,3 @@ ship_path = NodePath("../Player/Ship")
 
 [node name="DebugOverlay" parent="." instance=ExtResource("5_overlay")]
 ship_path = NodePath("../Player/Ship")
-vectors_path = NodePath("../DebugVectors")

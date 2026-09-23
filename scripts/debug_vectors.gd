@@ -31,6 +31,7 @@ var _ship: Ship = null
 
 
 func _ready() -> void:
+	add_to_group(EngineDebugDraw.DEBUG_GROUP)
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
 

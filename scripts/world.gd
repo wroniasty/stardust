@@ -36,14 +36,32 @@ func _ready() -> void:
 	_place_ship()
 
 
+## Health the debug key drops an engine to, low enough for the asymmetry to be
+## obvious in flight.
+const DEBUG_ENGINE_HEALTH: float = 0.3
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	var ship: Ship = (player as Player).ship
+
 	# Sandbox shortcut so terrain destruction can be judged before there is a
 	# weapon to do it properly (M1.4).
-	if not event.is_action_pressed("debug_carve"):
-		return
-	var ship: Ship = (player as Player).ship
-	if ship != null and planet != null:
+	if event.is_action_pressed("debug_carve") and ship != null and planet != null:
 		planet.carve(ship.global_position, DEBUG_CRATER_RADIUS)
+
+	# Cripples one side of the rotation pair, so the asymmetric handling the
+	# control groups produce can be felt without waiting for combat damage.
+	if event.is_action_pressed("debug_damage_engine") and ship != null:
+		_damage_engine(ship, "NoseLeftTorque")
+
+
+func _damage_engine(ship: Ship, mount_name: String) -> void:
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == mount_name:
+			engine.health = DEBUG_ENGINE_HEALTH
+			print("debug: %s health set to %.2f" % [mount_name, engine.health])
+			return
+	print("debug: no mount called %s" % mount_name)
 
 
 func _spawn_planet() -> void:

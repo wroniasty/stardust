@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/ship_engine.gd" id="1_engine"]
+[ext_resource type="Script" path="res://scripts/engine_mount.gd" id="1_mount"]
 
 [sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_exhaust"]
 direction = Vector3(0, 1, 0)
@@ -12,8 +12,8 @@ scale_min = 0.5
 scale_max = 1.5
 color = Color(1, 0.72, 0.33, 1)
 
-[node name="ShipEngine" type="Node2D"]
-script = ExtResource("1_engine")
+[node name="EngineMount" type="Node2D"]
+script = ExtResource("1_mount")
 
 [node name="Exhaust" type="GPUParticles2D" parent="."]
 emitting = false
