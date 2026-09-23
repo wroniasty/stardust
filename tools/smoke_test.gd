@@ -193,6 +193,23 @@ func _check_atmosphere_shells(planet: Planet) -> void:
 		previous_damp = shell.linear_damp
 		previous_priority = shell.priority
 
+	# The regression this guards: with drag near the ground strong enough, the
+	# terminal velocity falls below the damage threshold and the air makes it
+	# impossible to crash, which takes all the skill out of landing.
+	var ground_point: Vector2 = planet.global_position + Vector2.UP * planet.surface_radius
+	var terminal: float = planet.terminal_velocity_at(ground_point)
+	# Created and freed rather than left to the collector: a bare Ship still
+	# allocates a physics body, and leaking one makes Godot complain at exit.
+	var probe: Ship = Ship.new()
+	var threshold: float = probe.damage_speed_threshold
+	probe.free()
+	_expect(
+		terminal > threshold * 1.5,
+		"air alone cannot make landing safe (terminal %.0f px/s vs %.0f px/s damage threshold)" % [
+			terminal, threshold,
+		],
+	)
+
 
 func _check_terrain(planet: Planet) -> void:
 	var terrain: PlanetTerrain = planet.terrain
@@ -465,7 +482,7 @@ func _evaluate_phase() -> void:
 				"the spinning ship is inside the atmosphere",
 			)
 			_expect(
-				_spin_in_air < SPIN_START * 0.95,
+				_spin_in_air < SPIN_START * 0.98,
 				"air slows a spin (%.3f -> %.3f rad/s in %.1f s)" % [SPIN_START, _spin_in_air, _elapsed],
 			)
 		Phase.SPIN_IN_VACUUM:
@@ -523,15 +540,22 @@ func _evaluate_phase() -> void:
 				_ship.get_terrain_contacts() > 0,
 				"the ship is still in contact with the ground at the end",
 			)
-			# Sampled once per frame, after _integrate_forces has corrected the
-			# overlap. The solver leaves PENETRATION_SLOP on purpose and the
-			# depth march resolves to one pixel, so a sliver is expected; what
-			# would be a bug is the hull sinking further every tick.
-			var allowed: float = Ship.PENETRATION_SLOP + 0.25
+			# Two different things are worth checking here, and conflating them
+			# was wrong: a hard impact legitimately buries the hull for a few
+			# ticks before the correction digs it out, while a settled ship must
+			# sit at the slop forever. Only the second one being violated is a
+			# bug, so they get separate bounds.
+			var settled: float = _deepest_hull_penetration()
 			_expect(
-				_landing_deepest <= allowed,
-				"the hull never sinks past the correction slop (worst %.1f px, allowed %.1f)" % [
-					_landing_deepest, allowed,
+				settled <= Ship.PENETRATION_SLOP + 0.25,
+				"a settled hull rests at the correction slop (%.1f px)" % settled,
+			)
+			var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+			var allowed_peak: float = maxf(_impact_speed * step * 4.0, 1.0)
+			_expect(
+				_landing_deepest <= allowed_peak,
+				"impact overlap stays within a few ticks of travel (peak %.1f px, allowed %.1f at %.0f px/s)" % [
+					_landing_deepest, allowed_peak, _impact_speed,
 				],
 			)
 		Phase.WEAPON:

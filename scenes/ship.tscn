@@ -1,9 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/ship_engine.tscn" id="2_engine"]
 [ext_resource type="Script" path="res://scripts/hardpoint.gd" id="3_hardpoint"]
 [ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="4_projectile"]
+[ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
+
+[sub_resource type="Gradient" id="Gradient_contrail"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(1, 1, 1, 0, 1, 1, 1, 0.75)
 
 [sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_hull"]
 points = PackedVector2Array(0, -12, -8, 10, 8, 10)
@@ -42,3 +47,17 @@ max_thrust = 60.0
 position = Vector2(0, -14)
 script = ExtResource("3_hardpoint")
 projectile_scene = ExtResource("4_projectile")
+
+[node name="LeftContrail" type="Line2D" parent="."]
+top_level = true
+width = 1.5
+gradient = SubResource("Gradient_contrail")
+script = ExtResource("5_contrail")
+anchor_offset = Vector2(-8, 10)
+
+[node name="RightContrail" type="Line2D" parent="."]
+top_level = true
+width = 1.5
+gradient = SubResource("Gradient_contrail")
+script = ExtResource("5_contrail")
+anchor_offset = Vector2(8, 10)

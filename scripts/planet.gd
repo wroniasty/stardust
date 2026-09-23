@@ -23,13 +23,35 @@ const GRAVITY_GROUP: StringName = &"gravity_sources"
 ## shell barely bites, which is what makes aerobraking a slow burn rather than
 ## a wall (M1.5).
 const SHELL_PROFILE: Array[Vector2] = [
-	Vector2(1.00, 0.03),
-	Vector2(0.66, 0.25),
+	Vector2(1.00, 0.15),
+	Vector2(0.66, 0.50),
 	Vector2(0.33, 1.00),
 ]
 
 ## Drag of the densest shell at full atmospheric density, as Area2D linear_damp.
-const MAX_ATMOSPHERE_DAMP: float = 2.0
+##
+## This number is not a feel knob, it is a speed limit. Linear damping gives a
+## terminal velocity of g / damp, so the drag near the ground decides whether a
+## ship can still crash. At the original 2.0 the limit came out at 31 px/s
+## against a 60 px/s damage threshold: the air made it physically impossible to
+## hit hard enough to take damage, and landing stopped being a skill. At 0.4 the
+## same planet allows 154 px/s, so the pilot has to do the braking.
+##
+## The profile was steepened to match, from 3/25/100 to 15/50/100, which leaves
+## the top shell at exactly the drag it had before. Aerobraking is unchanged;
+## only the lower air let go.
+const MAX_ATMOSPHERE_DAMP: float = 0.4
+
+
+## Terminal velocity a falling ship approaches at `point`, or INF in vacuum.
+##
+## Exposed because it is the number that decides whether landing is a skill,
+## and a test guards it (see MAX_ATMOSPHERE_DAMP).
+func terminal_velocity_at(point: Vector2) -> float:
+	var density: float = air_density_at(point)
+	if density <= 0.0:
+		return INF
+	return surface_gravity / (MAX_ATMOSPHERE_DAMP * density)
 
 ## Angular drag as a fraction of the linear drag on the same shell. Air resists
 ## a spin as well as a push, but deliberately less: low over a planet is exactly

@@ -115,6 +115,11 @@ var accumulated_damage: float = 0.0
 ## off in vacuum. M2 turns a full bar into engine damage.
 var hull_heat: float = 0.0
 
+## Air density at the hull, 0..1, refreshed every physics tick. Cached here
+## because the heat model, the contrails and the HUD all want it and none of
+## them should be repeating the planet lookup.
+var air_density: float = 0.0
+
 var flight_mode: FlightMode = FlightMode.PHYSICAL
 
 var _coasting_time: float = 0.0
@@ -198,13 +203,11 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 ## Hull heating from braking against the air.
 func _update_heat(step: float) -> void:
 	var planet: Planet = nearest_planet()
-	var density: float = 0.0
-	if planet != null:
-		density = planet.air_density_at(global_position)
+	air_density = planet.air_density_at(global_position) if planet != null else 0.0
 
-	if density > 0.0:
+	if air_density > 0.0:
 		var speed_ratio: float = linear_velocity.length() / HEAT_REFERENCE_SPEED
-		hull_heat += density * speed_ratio * speed_ratio * HEAT_RATE * step
+		hull_heat += air_density * speed_ratio * speed_ratio * HEAT_RATE * step
 	hull_heat = clampf(hull_heat - HEAT_COOLING * step, 0.0, 1.0)
 
 

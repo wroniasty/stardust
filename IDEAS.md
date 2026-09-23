@@ -155,6 +155,32 @@ wokół, więc w danej wysokości obowiązuje dokładnie jedna gęstość. Profi
 3% / 25% / 100% pełnego dragu, czyli górna warstwa ledwo muska (pod aerobraking
 z M1.5).
 
+**Siła dragu to nie pokrętło od feelingu, tylko limit prędkości.** Tłumienie
+liniowe daje prędkość graniczną `g / damp`, więc drag przy ziemi decyduje o tym,
+czy statek w ogóle może się rozbić. Pierwsze ustawienie (MAX_ATMOSPHERE_DAMP
+2.0) dawało przy ziemi 31 px/s przy progu obrażeń 60 px/s — powietrze czyniło
+uderzenie z prędkością zdolną cokolwiek uszkodzić fizycznie niemożliwym i
+lądowanie przestawało być umiejętnością. Obniżone do 0.4, co na tej samej
+planecie daje 154 px/s: hamowanie należy do pilota.
+
+Profil powłok zaostrzony z 3/25/100 na 15/50/100, tak dobrany, żeby górna
+powłoka miała **dokładnie ten sam** drag co wcześniej. Aerobraking jest
+nietknięty, puściło tylko dolne powietrze.
+
+Rozpiętość po zmianie (prędkość graniczna przy ziemi): od 62 px/s na planecie o
+najgęstszej atmosferze i najsłabszej grawitacji, do 375 px/s na rzadkiej
+atmosferze przy silnym G. Ten dolny skraj jest nadal wyrozumiały i tak ma być —
+sekcja 7 chce, żeby gęsta atmosfera hamowała mocno. Pilnuje tego test:
+prędkość graniczna musi przekraczać próg obrażeń z zapasem.
+
+**Smugi kondensacyjne** jako informacja zwrotna o atmosferze. Dwie linie
+schodzące z tylnych narożników kadłuba, długość i krycie liczone z
+`gęstość * prędkość` — czyli z tej samej wielkości, która daje drag i
+nagrzewanie. Dzięki temu to, co widać, jest tym, co hamuje: nic w próżni, cienka
+nitka wysoko, gruby warkocz nisko i szybko. Linie mają `top_level`, więc
+zostawione punkty zostają tam, gdzie je upuszczono, zamiast być ciągnięte przez
+statek.
+
 Powietrze tłumi też obrót, ale słabiej: `angular_damp = linear_damp * 0.5` na
 tej samej powłoce. Powód jest rozgrywkowy, nie fizyczny — nisko nad planetą
 gracz najbardziej potrzebuje precyzyjnego celowania dziobem, a stockowe silniki
