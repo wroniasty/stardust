@@ -443,6 +443,70 @@ Generator gwarantuje miejsca do lądowania: po szumie przebieg wyrównujący wyb
 - stan podwozia,
 - moduły asystujące jako loot: auto-poziomowanie, hold wysokości, autolądowanie na lądowiskach.
 
+### Realizacja (M1.6)
+
+`LandingGear` trzyma nogi i wszystkie progi, `Ship` je sprawdza, nic innego nie
+decyduje. Wysuwanie klawiszem G zajmuje `deploy_time`; do pełnego wysunięcia
+nogi nie liczą się ani jako punkty kontaktu, ani jako podwozie — inaczej timer
+byłby dekoracją. Drag wysuniętego podwozia jest mnożony przez gęstość powietrza,
+więc w próżni nie kosztuje nic.
+
+**Kiedy oceniać lądowanie.** Pierwsza wersja czekała, aż obie nogi będą w skale.
+To było za późno: solver kontaktów zdążył przechylić statek na nodze, która
+dotknęła pierwsza, i lądowanie było oceniane po kącie, który samo wywołało —
+poziome przyziemienie na płaskim gruncie wychodziło 32 stopnie od pionu. Teraz
+próba lądowania idzie **przed** impulsami, a noga liczy się jako stojąca, jeśli
+grunt jest w zasięgu `LEG_CONTACT_REACH` (5 px, czyli skok zawieszenia), nie gdy
+jest już zagrzebana.
+
+**Kąt jest sprawdzany na pierwszej nodze, nie na wszystkich.** Przy rozstawie
+18 px i 5 px skoku dwie nogi mogą być jednocześnie na gruncie tylko przy
+przechyle poniżej ~16 stopni, więc czekanie na obie czyniło tolerancję 15 stopni
+nieosiągalną i kontrolę kąta martwym kodem. Wczesna odmowa daje też pilotowi
+powód zamiast niewyjaśnionego przewrotu.
+
+**Nachylenie liczone pod nogami, nie przez środek statku.** Dwupunktowy pomiar
+przez kadłub potrafi pokazać idealnie równy teren, gdy statek stoi okrakiem na
+grzbiecie: obie próbki lądują na zboczach i żadna nie widzi wierzchołka między
+nimi. Szukanie „najpłaszczejszego" miejsca miarą, którą da się oszukać, znajduje
+dokładnie te miejsca, które ją oszukują — grunt pod nogami różnił się wtedy o
+10 px przy raportowanym nachyleniu 0 stopni. Pytanie każdej nogi o jej własny
+kawałek gruntu jest odporne i jest tym, co sekcja 7 i tak nakazuje.
+
+**Normalna terenu do kontroli kąta jest liczona z pola wysokości**
+(`up.rotated(-nachylenie)`), a nie próbkowana z bitmapy. Pierścień prób
+potrzebuje powierzchni do objęcia; noga oparta kilka pikseli w skale ma
+większość pierścienia w środku i zwraca śmieć — równa półka wychodziła ścianą
+55 stopni. Przy okazji normalna i nachylenie nie mogą się teraz nie zgadzać.
+
+**Stan wylądowany.** Statek jest zamrażany (`freeze`, tryb kinematyczny) i
+zapamiętywany jako (kąt, promień, kurs) w układzie biegunowym planety, a nie
+jako transformacja świata — dzięki temu obracająca się planeta go wiezie.
+Statek **nie** jest przepinany pod planetę: sekcja 9 wymaga, żeby gracz pozostał
+bezpośrednim dzieckiem świata, bo systemy są strumieniowane pod nim.
+
+Pułapka warta zapamiętania: `polar_to_world` przepuszcza kąt przez `to_global`,
+które już stosuje obrót planety. Dodanie obrotu po raz drugi zamieniło
+zaparkowany statek w taki, który sunie po gruncie z podwójną prędkością
+powierzchni.
+
+Odczyt wejścia i decyzja o starcie są w `_physics_process`, nie w
+`_integrate_forces`: zamrożone ciało nie dostaje tego drugiego w ogóle, więc
+wylądowany statek nasłuchujący tylko tam nigdy nie mógłby wystartować. Lądowanie
+jest też blokowane w trakcie komendy ruchu — bez tego statek zaraz po starcie
+nadal stoi na nogach przy zerowym opadaniu, spełnia wszystkie warunki i ląduje
+z powrotem w tym samym ticku.
+
+**Plateau.** Generator wyrównuje `count` łuków do stałego promienia, z miękką
+rampą na końcach, jeden mniej więcej na 900 px obwodu. Poziom brany z wysokości
+już istniejącej w środku łuku, żeby półka była częścią krajobrazu, a nie wisiała
+na wymyślonej wysokości.
+
+**Obrót planety** do 0.02 rad/s, na tyle wolno, że prędkość powierzchni zostaje
+poniżej bocznej tolerancji podwozia. Uwaga praktyczna: przy opadaniu z 30 px
+planeta zdąży obrócić się o tyle, że płaska półka ucieka spod statku — to realne
+utrudnienie lądowania, nie błąd.
+
 ### Pojazd naziemny (później)
 
 Po wylądowaniu można wyjechać pojazdem; statek zostaje jako baza. Koła próbkują teren jak nogi podwozia, "góra" to kierunek od środka planety. Wszystkie obliczenia powierzchniowe od początku w układzie biegunowym planety, żeby pojazd nie wymagał przeróbek.

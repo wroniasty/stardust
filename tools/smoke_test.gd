@@ -50,6 +50,17 @@ const SPIN_TICKS: int = 60
 ## Tilt of the dropped ship, so touchdown happens on one corner.
 const LANDING_TILT: float = 0.45
 
+## Landing phases: drop height, and long enough to fall it and settle.
+const TOUCHDOWN_HEIGHT: float = 30.0
+const TOUCHDOWN_TICKS: int = 180
+
+## Descent forced on the overspeed test, well past what the legs absorb.
+const HARD_DESCENT: float = 120.0
+
+## Spin forced on the planet for the carry test, and how long to watch.
+const TEST_SPIN: float = 0.02
+const RIDE_TICKS: int = 120
+
 ## Long enough for a round to cross the gap below and dig in.
 const WEAPON_TICKS: int = 60
 
@@ -59,7 +70,9 @@ const WEAPON_TICKS: int = 60
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
 	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, STRAFE, FREE_FALL, ORBIT,
-	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING, WEAPON, DONE }
+	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
+	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE,
+	WEAPON, DONE }
 
 var _phase: int = Phase.FIELD
 var _ticks: int = 0
@@ -82,6 +95,14 @@ var _clean_turn_spin: float = 0.0
 var _damaged_turn_spin: float = 0.0
 var _kill_ticks: int = -1
 var _peak_turn_during_brake: float = 0.0
+var _flat_angle: float = 0.0
+var _steep_angle: float = 0.0
+var _ride_start_world: Vector2 = Vector2.ZERO
+var _ride_start_polar: float = 0.0
+var _took_off: bool = false
+var _first_touchdown: String = ""
+var _ride_moved: float = 0.0
+var _ride_slip: float = 0.0
 var _spin_in_air: float = 0.0
 var _spin_in_vacuum: float = 0.0
 var _peak_rebound: float = 0.0
@@ -125,6 +146,25 @@ func _physics_process(delta: float) -> bool:
 			_ship.commands[ShipControl.Command.FORWARD] = 1.0
 	elif _phase == Phase.ROTATE_CW or _phase == Phase.ROTATE_CCW or _phase == Phase.ROTATE_DAMAGED:
 		_peak_drift = maxf(_peak_drift, _ship.linear_velocity.length())
+	elif _phase == Phase.LANDED_RIDE:
+		if _ship.flight_mode == Ship.FlightMode.LANDED and _ride_start_world == Vector2.ZERO:
+			# Forced rather than taken from the seed, and only once the ship is
+			# down, so the check means the same thing on every planet.
+			_planet.spin_rate = TEST_SPIN
+			_ride_start_world = _ship.global_position
+			_ride_start_polar = (
+				_ship.global_position - _planet.global_position
+			).angle() - _planet.global_rotation
+		if _ticks == RIDE_TICKS - 20:
+			_ride_moved = _ship.global_position.distance_to(_ride_start_world)
+			_ride_slip = absf(angle_difference(
+				(_ship.global_position - _planet.global_position).angle()
+					- _planet.global_rotation,
+				_ride_start_polar,
+			))
+			_ship.commands[ShipControl.Command.FORWARD] = 1.0
+		if _ticks > RIDE_TICKS - 20 and _ship.flight_mode == Ship.FlightMode.PHYSICAL:
+			_took_off = true
 	elif _phase == Phase.KILL_ROTATION:
 		if _kill_ticks < 0 and absf(_ship.angular_velocity) < 0.001:
 			_kill_ticks = _ticks
@@ -324,6 +364,12 @@ func _phase_ticks() -> int:
 			return SPIN_TICKS
 		Phase.LANDING:
 			return LANDING_TICKS
+		Phase.PLATEAU, Phase.GEAR:
+			return 1
+		Phase.LANDING_GOOD, Phase.LANDING_FAST, Phase.LANDING_STEEP:
+			return TOUCHDOWN_TICKS
+		Phase.LANDED_RIDE:
+			return RIDE_TICKS
 		Phase.WEAPON:
 			return WEAPON_TICKS
 		Phase.FREE_FALL:
@@ -435,6 +481,22 @@ func _begin_phase() -> void:
 			_ship.linear_velocity = Vector2.RIGHT * Ship.HEAT_REFERENCE_SPEED
 			_ship.orbit_lock_enabled = false
 			_peak_heat = 0.0
+		Phase.PLATEAU, Phase.GEAR:
+			pass
+		Phase.LANDING_GOOD:
+			_flat_angle = _find_angle(_planet, true, _ship.gear.track_width())
+			_place_for_touchdown(_flat_angle, 0.0)
+		Phase.LANDING_FAST:
+			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), HARD_DESCENT)
+		Phase.LANDING_STEEP:
+			# Tilt rather than hunting for a cliff: whether a given seed grows
+			# ground steeper than the gear tolerates is luck, but arriving at a
+			# bad attitude is always available and exercises the same refusal.
+			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), 0.0)
+			_ship.global_rotation += _ship.gear.max_tilt * 2.5
+		Phase.LANDED_RIDE:
+			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), 0.0)
+			_took_off = false
 		Phase.SPIN_IN_AIR:
 			# Above the tallest possible mountain but well inside the air, so
 			# the only thing that can slow the spin is drag.
@@ -594,6 +656,63 @@ func _evaluate_phase() -> void:
 				_ship.hull_heat <= 1.0,
 				"hull heat stays inside its range (%.3f)" % _ship.hull_heat,
 			)
+		Phase.PLATEAU:
+			_check_plateaus(_planet)
+		Phase.GEAR:
+			_check_gear(_ship)
+		Phase.LANDING_GOOD:
+			_expect(_first_touchdown == "landed", "a gentle touchdown on a shelf with the legs out is a landing")
+			_expect(_ship.freeze, "a landed ship is frozen rather than still being solved")
+			# Height rather than speed: a frozen body reports no velocity at
+			# all, so the meaningful question is where it came to rest.
+			var ground: float = _planet.surface_radius_at(_ship.global_position)
+			var resting: float = _ship.global_position.distance_to(_planet.global_position)
+			_expect(
+				resting > ground and resting < ground + 20.0,
+				"the ship rests on the surface, neither sunk nor hovering (%.1f px above ground)" % [
+					resting - ground,
+				],
+			)
+		Phase.LANDING_FAST:
+			# Judged on the first touchdown, not the final state: a ship waved
+			# off at speed bounces, sheds it, and may land properly later.
+			_expect(
+				_first_touchdown == "speed",
+				"arriving at %.0f px/s is refused for speed (got %s)" % [
+					HARD_DESCENT, _describe_touchdown(),
+				],
+			)
+			_expect(
+				_ship.accumulated_damage > 0.0,
+				"overspeed costs damage rather than simply failing (%.3f)" % _ship.accumulated_damage,
+			)
+		Phase.LANDING_STEEP:
+			# Either refusal is correct and which one trips first is geometry:
+			# a ship leaning 37 degrees puts its legs on ground at two very
+			# different heights, so the footing can fail before the attitude
+			# does. Pinning the test to one of them would be testing the
+			# accident rather than the rule.
+			_expect(
+				_first_touchdown == "tilt" or _first_touchdown == "slope",
+				"arriving at %.0f deg off level is refused (got %s)" % [
+					rad_to_deg(_ship.gear.max_tilt * 2.5), _describe_touchdown(),
+				],
+			)
+			_expect(
+				_ship.flight_mode != Ship.FlightMode.LANDED,
+				"a badly tilted arrival is left to the contact solver to tip over",
+			)
+		Phase.LANDED_RIDE:
+			_expect(_ride_moved > 1.0, "a spinning planet carries the landed ship with it (%.1f px)" % _ride_moved)
+			_expect(
+				_ride_slip < 0.001,
+				"the ship stays on the same patch of ground (%.5f rad of slip)" % _ride_slip,
+			)
+			_expect(_took_off, "thrust lifts the ship off again")
+			_expect(
+				not _ship.freeze and _ship.flight_mode == Ship.FlightMode.PHYSICAL,
+				"lift-off hands the ship back to the solver",
+			)
 		Phase.SPIN_IN_AIR:
 			_spin_in_air = _ship.angular_velocity
 			_expect(
@@ -738,6 +857,126 @@ func _damage_mount(mount_name: String, health: float) -> void:
 			engine.health = health
 			return
 
+
+## Angle of the flattest or the steepest ground on the planet.
+##
+## Scanned rather than read from the generator, so the check measures the
+## terrain that actually exists after the plateau pass rather than what the
+## pass intended.
+func _find_angle(planet: Planet, flattest: bool, span: float = 24.0) -> float:
+	var best_angle: float = 0.0
+	var best_slope: float = INF if flattest else -INF
+	var samples: int = 1440
+	for i: int in range(samples):
+		var angle: float = TAU * float(i) / float(samples)
+		# Three samples across the track, not two: a two point measure reads
+		# level astride a ridge, and searching for the minimum of a measure
+		# that can be fooled finds precisely the places that fool it.
+		var slope: float = maxf(
+			absf(_span_slope(planet, angle, span * 0.5, 0.0)),
+			absf(_span_slope(planet, angle, 0.0, span * 0.5)),
+		)
+		if flattest == (slope < best_slope):
+			best_slope = slope
+			best_angle = angle
+	return best_angle
+
+
+## Slope between two offsets along the surface, in radians.
+func _span_slope(planet: Planet, angle: float, back: float, forward: float) -> float:
+	var radius: float = planet.surface_radius
+	var behind: float = planet.terrain.surface_radius_at(angle - planet.global_rotation - back / radius)
+	var ahead: float = planet.terrain.surface_radius_at(angle - planet.global_rotation + forward / radius)
+	return atan2(ahead - behind, back + forward)
+
+
+func _on_landing_rejected(reason: String) -> void:
+	if _first_touchdown.is_empty():
+		_first_touchdown = reason
+
+
+func _on_landed(_planet_landed_on: Planet) -> void:
+	if _first_touchdown.is_empty():
+		_first_touchdown = "landed"
+
+
+## Drops the ship just above the ground at an angle, upright, legs already out.
+func _place_for_touchdown(angle: float, descent: float) -> void:
+	var direction: Vector2 = Vector2.from_angle(angle)
+	var ground: float = _planet.terrain.surface_radius_at(angle - _planet.global_rotation)
+	_ship.global_position = _planet.global_position + direction * (ground + TOUCHDOWN_HEIGHT)
+	# Upright means the ship's nose points away from the planet.
+	_ship.global_rotation = direction.angle() + PI * 0.5
+	_ship.linear_velocity = -direction * descent
+	_ship.angular_velocity = 0.0
+	_ship.orbit_lock_enabled = false
+	_planet.spin_rate = 0.0
+	if _ship.gear != null:
+		# Skipping the deploy timer: how long the legs take is the gear check's
+		# business, not the landing check's.
+		_ship.gear.set_deployed(true)
+		_ship.gear.extension = 1.0
+	_first_touchdown = ""
+	_ship.landing_rejected.connect(_on_landing_rejected)
+	_ship.landed.connect(_on_landed)
+
+
+## Plateaus have to be real ground a stock ship can stand on, not just a number
+## in the generator.
+func _check_plateaus(planet: Planet) -> void:
+	_expect(planet.plateau_count > 0, "the planet levels %d landing shelves" % planet.plateau_count)
+
+	var probe: Ship = _spawn_ship()
+	var tolerance: float = probe.gear.max_slope
+	var flat_enough: int = 0
+	var samples: int = 720
+	for i: int in range(samples):
+		var angle: float = TAU * float(i) / float(samples)
+		var point: Vector2 = planet.global_position + Vector2.from_angle(angle) * planet.surface_radius
+		if absf(planet.slope_at(point, 24.0)) < tolerance:
+			flat_enough += 1
+	probe.free()
+
+	_expect(
+		flat_enough > 0,
+		"somewhere on the planet is landable: %d of %d sampled angles are under %.0f deg" % [
+			flat_enough, samples, rad_to_deg(tolerance),
+		],
+	)
+
+
+func _describe_touchdown() -> String:
+	return _first_touchdown if not _first_touchdown.is_empty() else "no touchdown at all"
+
+
+func _check_gear(ship: Ship) -> void:
+	var landing_gear: LandingGear = ship.gear
+	_expect(landing_gear != null, "the stock hull carries landing gear")
+	if landing_gear == null:
+		return
+
+	_expect(landing_gear.legs.size() >= 2, "the gear has %d legs" % landing_gear.legs.size())
+	_expect(landing_gear.is_stowed(), "the legs start stowed")
+	_expect(
+		ship.contact_points().size() == Ship.HULL_POINTS.size(),
+		"stowed legs are not contact points",
+	)
+
+	# Half-open gear must not count, or the deploy timer would be decorative.
+	landing_gear.set_deployed(true)
+	landing_gear.advance(landing_gear.deploy_time * 0.5)
+	_expect(not landing_gear.is_deployed(), "half-extended gear does not count as down")
+	_expect(
+		ship.contact_points().size() == Ship.HULL_POINTS.size(),
+		"half-extended legs are not contact points either",
+	)
+
+	landing_gear.advance(landing_gear.deploy_time)
+	_expect(landing_gear.is_deployed(), "the legs reach full extension")
+	_expect(
+		ship.contact_points().size() == Ship.HULL_POINTS.size() + landing_gear.legs.size(),
+		"deployed legs join the contact set",
+	)
 
 # --- Plumbing ---
 

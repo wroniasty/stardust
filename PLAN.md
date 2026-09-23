@@ -69,13 +69,13 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 
 ### 1.6 Lądowanie
 
-- [ ] Podwozie: 2 do 3 punktów kontaktu, wysuwanie klawiszem, drag przy wysuniętym.
-- [ ] Sprawdzenie warunków przy dotknięciu: prędkość pionowa, boczna, kąt, nachylenie terenu pod nogami (próbkowanie w układzie biegunowym).
-- [ ] Udane lądowanie: zamrożenie statku i przypięcie do planety, start z prędkością styczną.
-- [ ] Nieudane: obrażenia od nadwyżki prędkości, przewrócenie przez fizykę punktów kontaktu przy złym nachyleniu.
-- [ ] Generator terenu gwarantuje plateau do lądowania (parametr częstości).
-- [ ] HUD: wysokościomierz, prędkość pionowa, wskaźnik nachylenia pod statkiem, stan podwozia.
-- [ ] Opcjonalna rotacja planety (dzień i noc) i sprawdzenie, że wylądowany statek jedzie razem z nią.
+- [x] Podwozie: 2 do 3 punktów kontaktu, wysuwanie klawiszem, drag przy wysuniętym.
+- [x] Sprawdzenie warunków przy dotknięciu: prędkość pionowa, boczna, kąt, nachylenie terenu pod nogami (próbkowanie w układzie biegunowym).
+- [x] Udane lądowanie: zamrożenie statku i przypięcie do planety, start z prędkością styczną.
+- [x] Nieudane: obrażenia od nadwyżki prędkości, przewrócenie przez fizykę punktów kontaktu przy złym nachyleniu.
+- [x] Generator terenu gwarantuje plateau do lądowania (parametr częstości).
+- [x] HUD: wysokościomierz, prędkość pionowa, wskaźnik nachylenia pod statkiem, stan podwozia.
+- [x] Opcjonalna rotacja planety (dzień i noc) i sprawdzenie, że wylądowany statek jedzie razem z nią.
 
 ### 1.7 Śmierć i restart
 

@@ -71,6 +71,21 @@ const KILL_ROTATION_PULSE_MARGIN: float = 1.5
 ## two seconds to stop 2 rad/s; at 0.2 it needs under one, which is the bar.
 const KILL_ROTATION_GAIN: float = 0.2
 
+## Legs that must be on the ground before a landing is even considered.
+const MIN_LEGS_DOWN: int = 2
+
+## How far below a leg the ground may be and still count as touched, in pixels.
+##
+## Standing for the suspension travel real gear would have, and not optional:
+## requiring the legs to be actually buried meant waiting until one of them had
+## already been in the rock long enough for the contact solver to tip the ship
+## onto it. The landing was then judged on an attitude the landing itself had
+## caused, and a level touchdown on flat ground came out 32 degrees off.
+const LEG_CONTACT_REACH: float = 5.0
+
+## Damage per px/s of touchdown speed above what the gear can absorb.
+const GEAR_OVERLOAD_DAMAGE: float = 0.01
+
 ## Below this speed the brake stops the ship outright rather than chasing it.
 const BRAKE_EPS: float = 2.0
 
@@ -96,10 +111,17 @@ signal hull_impact(impact_speed: float, damage: float)
 ## Flight modes. ORBIT_LOCK is a rest state like being landed: the ship stops
 ## being integrated and follows an analytic circle instead, because holding a
 ## perfect orbit by hand is busywork (see IDEAS.md section 8).
-enum FlightMode { PHYSICAL, ORBIT_LOCK }
+enum FlightMode { PHYSICAL, ORBIT_LOCK, LANDED }
 
-## Emitted when the ship enters or leaves orbit lock.
+## Emitted when the ship enters or leaves orbit lock or the ground.
 signal flight_mode_changed(mode: FlightMode)
+
+## Emitted on a touchdown the gear could not absorb. `reason` is one of
+## "speed", "tilt" or "slope", which is what the HUD wants to show.
+signal landing_rejected(reason: String)
+
+## Emitted the moment the ship settles on a planet.
+signal landed(planet: Planet)
 
 ## If true the ship steers itself from the player's input actions. AI ships and
 ## tests turn this off and write the command fields directly.
@@ -166,6 +188,17 @@ var air_density: float = 0.0
 
 var flight_mode: FlightMode = FlightMode.PHYSICAL
 
+## The landing gear, if this hull has any.
+var gear: LandingGear = null
+
+## Why the last touchdown was refused, for the HUD. Empty once landed.
+var last_landing_rejection: String = ""
+
+var _landed_planet: Planet = null
+var _landed_angle: float = 0.0
+var _landed_radius: float = 0.0
+var _landed_heading: float = 0.0
+
 var _coasting_time: float = 0.0
 var _lock_planet: Planet = null
 var _lock_radius: float = 0.0
@@ -182,6 +215,8 @@ func _ready() -> void:
 	for child: Node in get_children():
 		if child is Hardpoint:
 			hardpoints.append(child as Hardpoint)
+		elif child is LandingGear:
+			gear = child as LandingGear
 	rebuild_control_groups()
 
 
@@ -291,9 +326,28 @@ func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid
 ## Weapons fire here and not in _integrate_forces: that callback runs while the
 ## physics server is flushing queries, and adding nodes to the tree from inside
 ## it is not allowed.
+## Input is polled here rather than in _integrate_forces, and so is the decision
+## to leave the ground. A frozen body gets no _integrate_forces at all, so a
+## landed ship that only listened there could never be told to take off again.
 func _physics_process(delta: float) -> void:
 	if use_player_input:
+		read_player_input()
 		fire_command = Input.is_action_pressed("ship_fire")
+		if Input.is_action_just_pressed("toggle_gear") and gear != null:
+			gear.set_deployed(not gear.is_deployed() and not gear.is_moving())
+
+	if gear != null:
+		gear.advance(delta)
+		# Deployed legs only bite in air. Scaling by density rather than
+		# switching on a boolean keeps the speed brake worthless in vacuum,
+		# where a drag penalty would be nonsense.
+		linear_damp = gear.deployed_drag * gear.extension * air_density
+
+	if flight_mode == FlightMode.LANDED:
+		if _wants_translation(commands) or brake_command:
+			take_off()
+		else:
+			_hold_landed_pose()
 
 	var container: Node = projectile_container()
 	for hardpoint: Hardpoint in hardpoints:
@@ -312,8 +366,8 @@ func projectile_container() -> Node:
 
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
-	if use_player_input:
-		read_player_input()
+	if flight_mode == FlightMode.LANDED:
+		return
 
 	_resolve_commands(state)
 	control.apply_commands(engines, active_commands)
@@ -420,7 +474,7 @@ func _run_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 		return
 	# Anything that would move the ship hands control back. Rotation commands
 	# are left alone so the pilot can still aim while parked.
-	if _wants_translation():
+	if _wants_translation(active_commands) or brake_command:
 		release_orbit_lock()
 		return
 
@@ -438,12 +492,12 @@ func _run_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 	_update_heat(state.step)
 
 
-## True if any command this tick would translate the ship rather than turn it.
-func _wants_translation() -> bool:
+## True if any command in `set` would translate the ship rather than turn it.
+func _wants_translation(command_set: Dictionary) -> bool:
 	for command: ShipControl.Command in ShipControl.LINEAR_COMMANDS:
-		if float(active_commands.get(command, 0.0)) > 0.001:
+		if float(command_set.get(command, 0.0)) > 0.001:
 			return true
-	return brake_command
+	return false
 
 
 ## Hands control back to the solver. Safe to call when not locked.
@@ -478,8 +532,14 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 	var deepest: float = 0.0
 	var deepest_normal: Vector2 = Vector2.ZERO
 
-	for hull_point: Vector2 in HULL_POINTS:
-		var world_point: Vector2 = body_transform * hull_point
+	# Before the impulses, while the approach speed and attitude are still the
+	# ones the pilot flew rather than ones the first bounce produced.
+	if _try_land(state, planet):
+		return
+
+	var local_points: Array[Vector2] = contact_points()
+	for i: int in range(local_points.size()):
+		var world_point: Vector2 = body_transform * local_points[i]
 		if not planet.is_solid_at(world_point):
 			continue
 		var point_normal: Vector2 = planet.surface_normal_at(world_point)
@@ -583,6 +643,191 @@ func _apply_impulse_at(
 	state.angular_velocity += arm.cross(impulse) * inverse_inertia
 
 
+## Points tested against the terrain: the hull always, the legs once they are
+## fully out. The legs are appended last so the contact loop can tell which
+## contacts were made on them.
+func contact_points() -> Array[Vector2]:
+	var points: Array[Vector2] = HULL_POINTS.duplicate()
+	if gear != null:
+		points.append_array(gear.contact_points())
+	return points
+
+
+## Decides whether a touchdown is a landing, and does it.
+##
+## Nothing here is scripted difficulty: every threshold is a gear stat, and the
+## ship either meets them or does not. Returns true when the ship has landed,
+## in which case the caller must not also apply contact impulses.
+func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
+	if gear == null or not gear.is_deployed():
+		return false
+	# Not while burning. Without this a ship that has just lifted off is still
+	# sitting on its legs at zero descent, meets every condition, and lands
+	# again on the same tick, so it can never leave.
+	if _wants_translation(active_commands) or brake_command:
+		return false
+
+	var legs_down: int = 0
+	for clearance: float in ground_under_legs(planet, state.transform):
+		if clearance <= LEG_CONTACT_REACH:
+			legs_down += 1
+	# Nothing is touching yet, so there is nothing to judge.
+	if legs_down == 0:
+		return false
+
+	var up: Vector2 = (state.transform.origin - planet.global_position).normalized()
+	var slope: float = slope_under_legs(planet, state.transform)
+	# Derived from the height field rather than probed out of the bitmap. The
+	# probe ring needs to straddle a surface, and a leg resting a few pixels
+	# into the rock has most of its ring inside: it reported a level shelf as a
+	# 55 degree wall and refused every landing. Taking the normal from the same
+	# slope the check already measures cannot disagree with it either.
+	var normal: Vector2 = up.rotated(-slope)
+	# Measured against the ground, which is moving on a spinning planet: what
+	# matters is the speed relative to the rock, not to the planet's centre.
+	var relative: Vector2 = state.linear_velocity - planet.surface_velocity_at(state.transform.origin)
+	var descent: float = -relative.dot(up)
+	var lateral: float = absf(relative.dot(up.orthogonal()))
+
+	var over_descent: float = descent - gear.max_vertical_speed
+	var over_lateral: float = lateral - gear.max_lateral_speed
+	if over_descent > 0.0 or over_lateral > 0.0:
+		_reject_landing("speed")
+		# Not binary: the legs take the overshoot as damage and the ship stays
+		# in the air's hands, rather than the landing simply not happening.
+		var excess: float = maxf(over_descent, 0.0) + maxf(over_lateral, 0.0)
+		var damage: float = excess * GEAR_OVERLOAD_DAMAGE
+		accumulated_damage += damage
+		hull_impact.emit(descent, damage)
+		return false
+
+	# Attitude is judged on the first leg to touch, not once they all have.
+	# They never all would: at an 18 px track and 3 px of travel, two legs can
+	# only be down together if the ship is within about ten degrees of level,
+	# so waiting for both made a fifteen degree tolerance unreachable and the
+	# check dead code. Refusing early also gives the pilot a reason instead of
+	# an unexplained tumble.
+	var ship_up: Vector2 = FORWARD.rotated(state.transform.get_rotation())
+	if absf(ship_up.angle_to(normal)) > gear.max_tilt:
+		_reject_landing("tilt")
+		return false
+
+	# Standing on one leg is not standing.
+	if legs_down < MIN_LEGS_DOWN:
+		return false
+
+	# Measured across the legs, which is the ground they actually have to stand
+	# on. A shorter span is no good here: over 12 px on a 1.5 px texel grid a
+	# single step between texels reads as a cliff.
+	if absf(slope) > gear.max_slope:
+		_reject_landing("slope")
+		return false
+
+	_settle_on(planet, state)
+	return true
+
+
+## Clearance between each leg and the ground directly beneath it, in pixels.
+## Negative means the leg is already in the rock.
+##
+## Sampled per leg rather than through the ship's centre. A two point slope
+## taken across the hull can read as perfectly level while the ship sits astride
+## a ridge, because both samples land on the flanks and neither sees the crest
+## between them. Asking each leg about its own patch cannot be fooled that way,
+## and it is what IDEAS.md section 7 specifies anyway.
+func ground_under_legs(planet: Planet, from: Transform2D) -> Array[float]:
+	var clearances: Array[float] = []
+	if gear == null:
+		return clearances
+	for leg: Vector2 in gear.legs:
+		var leg_point: Vector2 = from * leg
+		clearances.append(
+			leg_point.distance_to(planet.global_position) - planet.surface_radius_at(leg_point)
+		)
+	return clearances
+
+
+## Ground slope across the outermost legs, in radians, signed along the line
+## from the first leg to the last.
+func slope_under_legs(planet: Planet, from: Transform2D) -> float:
+	if gear == null or gear.legs.size() < 2:
+		return 0.0
+	var first_leg: Vector2 = gear.legs[0]
+	var last_leg: Vector2 = gear.legs[gear.legs.size() - 1]
+	var first: Vector2 = from * first_leg
+	var last: Vector2 = from * last_leg
+	var run: float = first.distance_to(last)
+	if run < 0.001:
+		return 0.0
+	var rise: float = planet.surface_radius_at(last) - planet.surface_radius_at(first)
+	return atan2(rise, run) * signf(last_leg.x - first_leg.x)
+
+
+func _reject_landing(reason: String) -> void:
+	if last_landing_rejection == reason:
+		return
+	last_landing_rejection = reason
+	landing_rejected.emit(reason)
+
+
+## Pins the ship to the ground in the planet's polar frame.
+##
+## Stored as (angle, radius, heading relative to the planet) rather than as a
+## world transform, so a turning planet carries the ship with it. The ship is
+## deliberately NOT reparented to the planet: IDEAS.md section 9 requires the
+## player to stay a direct child of the world, because systems are streamed in
+## and out underneath it.
+func _settle_on(planet: Planet, state: PhysicsDirectBodyState2D) -> void:
+	var offset: Vector2 = state.transform.origin - planet.global_position
+	_landed_planet = planet
+	_landed_angle = offset.angle() - planet.global_rotation
+	_landed_radius = offset.length()
+	_landed_heading = state.transform.get_rotation() - planet.global_rotation
+
+	state.linear_velocity = Vector2.ZERO
+	state.angular_velocity = 0.0
+	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
+	freeze = true
+
+	last_landing_rejection = ""
+	flight_mode = FlightMode.LANDED
+	flight_mode_changed.emit(flight_mode)
+	landed.emit(planet)
+
+
+## Keeps a landed ship glued to its patch of ground as the planet turns.
+func _hold_landed_pose() -> void:
+	if _landed_planet == null or not is_instance_valid(_landed_planet):
+		flight_mode = FlightMode.PHYSICAL
+		freeze = false
+		return
+	# The angle stays in the planet's own frame: polar_to_world runs it through
+	# to_global(), which already applies the planet's rotation. Adding the
+	# rotation here as well turned a parked ship into one sliding across the
+	# ground at twice the surface speed.
+	global_position = _landed_planet.polar_to_world(_landed_angle, _landed_radius)
+	global_rotation = _landed_heading + _landed_planet.global_rotation
+
+
+## Releases the ship from the ground, carrying the surface velocity with it so
+## lift-off from a spinning planet does not start with a jolt.
+func take_off(state: PhysicsDirectBodyState2D = null) -> void:
+	if flight_mode != FlightMode.LANDED:
+		return
+	var surface_velocity: Vector2 = Vector2.ZERO
+	if _landed_planet != null and is_instance_valid(_landed_planet):
+		surface_velocity = _landed_planet.surface_velocity_at(global_position)
+
+	freeze = false
+	flight_mode = FlightMode.PHYSICAL
+	_landed_planet = null
+	if state != null:
+		state.linear_velocity = surface_velocity
+	else:
+		linear_velocity = surface_velocity
+	flight_mode_changed.emit(flight_mode)
+
+
 ## How many hull points were inside rock last tick.
 func get_terrain_contacts() -> int:
 	return _terrain_contacts
@@ -625,7 +870,7 @@ func get_forward_speed() -> float:
 
 
 ## Fills the command set from the input actions. Only action names here, never
-## keycodes.
+## keycodes. Called from _physics_process, see the note there.
 func read_player_input() -> void:
 	commands.clear()
 	_set_command(ShipControl.Command.FORWARD, Input.get_action_strength("thrust_forward"))

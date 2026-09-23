@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/engine_mount.tscn" id="2_mount"]
@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="4_projectile"]
 [ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
 [ext_resource type="Script" path="res://scripts/engine_debug_draw.gd" id="6_engine_draw"]
+[ext_resource type="Script" path="res://scripts/landing_gear.gd" id="11_gear"]
 [ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="7_main"]
 [ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="8_torque"]
 [ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="9_thruster"]
@@ -99,3 +100,7 @@ anchor_offset = Vector2(8, 10)
 [node name="EngineDebugDraw" type="Node2D" parent="."]
 z_index = 50
 script = ExtResource("6_engine_draw")
+
+[node name="LandingGear" type="Node2D" parent="."]
+script = ExtResource("11_gear")
+legs = Array[Vector2]([Vector2(-9, 13), Vector2(9, 13)])

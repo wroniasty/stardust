@@ -28,6 +28,14 @@ const SHELL_PROFILE: Array[Vector2] = [
 	Vector2(0.33, 1.00),
 ]
 
+## Fastest a planet may turn, in radians per second.
+const MAX_SPIN_RATE: float = 0.02
+
+## Roughly one landing shelf per this many pixels of circumference, never fewer
+## than MIN_PLATEAUS.
+const PLATEAU_SPACING: float = 900.0
+const MIN_PLATEAUS: int = 4
+
 ## Drag of the densest shell at full atmospheric density, as Area2D linear_damp.
 ##
 ## This number is not a feel knob, it is a speed limit. Linear damping gives a
@@ -79,6 +87,13 @@ var atmosphere_height: float = 90.0
 
 ## 0..1, scales the drag of every shell.
 var atmosphere_density: float = 1.0
+
+## Radians per second the planet turns. Day and night, and something a landed
+## ship has to be carried along by.
+var spin_rate: float = 0.0
+
+## Flat landing shelves levelled into the relief.
+var plateau_count: int = 0
 
 var surface_color: Color = Color(0.45, 0.38, 0.32)
 var atmosphere_color: Color = Color(0.45, 0.62, 0.95)
@@ -165,6 +180,47 @@ func circular_orbit_speed(radius: float) -> float:
 	return sqrt(surface_gravity * surface_radius * surface_radius / radius)
 
 
+func _physics_process(delta: float) -> void:
+	if not is_zero_approx(spin_rate):
+		rotation = wrapf(rotation + spin_rate * delta, -PI, PI)
+
+
+## Radius of the ground below a world point, in the planet's local frame.
+func surface_radius_at(point: Vector2) -> float:
+	return terrain.surface_radius_at(to_local(point).angle())
+
+
+## Slope of the ground under a world point, in radians.
+##
+## Measured in the polar frame the terrain is stored in: two height samples an
+## arc apart, and the rise over the run between them. Zero is level ground,
+## positive means the surface climbs anticlockwise. This is what the landing
+## legs are checked against (IDEAS.md section 7).
+func slope_at(point: Vector2, span: float = 12.0) -> float:
+	var local: Vector2 = to_local(point)
+	var radius: float = maxf(local.length(), 1.0)
+	var angle: float = local.angle()
+	# A fixed arc length rather than a fixed angle, so the measurement covers
+	# the same patch of ground on a moon and on a gas giant.
+	var half_angle: float = (span * 0.5) / radius
+
+	var behind: float = terrain.surface_radius_at(angle - half_angle)
+	var ahead: float = terrain.surface_radius_at(angle + half_angle)
+	return atan2(ahead - behind, span)
+
+
+## World position of a point given in the planet's polar frame. Used to keep a
+## landed ship glued to the ground while the planet turns underneath it.
+func polar_to_world(angle: float, radius: float) -> Vector2:
+	return to_global(Vector2.from_angle(angle) * radius)
+
+
+## Surface speed at a world point, from the planet's own rotation.
+func surface_velocity_at(point: Vector2) -> Vector2:
+	var arm: Vector2 = point - global_position
+	return Vector2(-arm.y, arm.x) * spin_rate
+
+
 ## Air density at a world point, 0..1.
 ##
 ## Derived from the same SHELL_PROFILE the drag areas are built from, so the
@@ -223,7 +279,18 @@ func generate(new_seed: int) -> void:
 	surface_color = Color.from_hsv(rng.randf(), rng.randf_range(0.15, 0.45), rng.randf_range(0.30, 0.55))
 	atmosphere_color = Color.from_hsv(rng.randf(), rng.randf_range(0.30, 0.70), rng.randf_range(0.60, 0.95))
 
-	terrain.generate(planet_seed, surface_radius)
+	# Slow enough that the surface speed stays well under the landing gear's
+	# lateral tolerance: the ground has to move visibly without shearing a
+	# parked ship off its legs.
+	spin_rate = rng.randf_range(-MAX_SPIN_RATE, MAX_SPIN_RATE)
+
+	# Scaled with circumference so a big world is not proportionally harder to
+	# find a shelf on than a small one.
+	plateau_count = maxi(
+		MIN_PLATEAUS, int(TAU * surface_radius / PLATEAU_SPACING)
+	)
+
+	terrain.generate(planet_seed, surface_radius, plateau_count)
 
 	_build_terrain_quad()
 	_build_atmosphere()

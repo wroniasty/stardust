@@ -40,6 +40,12 @@ const NORMAL_PROBE_DISTANCE: float = 4.0
 const MAX_PENETRATION: float = 24.0
 const PENETRATION_STEP: float = 1.0
 
+## Arc width of a landing shelf as a fraction of the full circle, and how much
+## of its half-width is spent ramping back into the surrounding relief.
+const PLATEAU_MIN_ARC: float = 0.006
+const PLATEAU_MAX_ARC: float = 0.018
+const PLATEAU_RAMP_FRACTION: float = 0.6
+
 ## Bisections run after the march finds the exit. The result drives positional
 ## correction, and the correction only converges if the depth can be measured
 ## finer than the slop it is correcting towards: a 1 px march against a 0.5 px
@@ -56,13 +62,20 @@ var outer_radius: float = 0.0
 
 var texture: ImageTexture = null
 
+## Radius of the highest rock in each column. Kept in step with carving.
+var _surface_radius: PackedFloat32Array = PackedFloat32Array()
+
 var _solid: PackedByteArray = PackedByteArray()
 var _image: Image = null
 var _band: float = 1.0
 
 
 ## Builds the crust for a planet of `surface_radius` from `terrain_seed`.
-func generate(terrain_seed: int, surface_radius: float) -> void:
+##
+## `plateau_count` flat landing shelves are levelled into the relief afterwards.
+## Without them a rough planet can be unlandable everywhere, which is a
+## generation bug rather than a difficulty setting (IDEAS.md section 7).
+func generate(terrain_seed: int, surface_radius: float, plateau_count: int = 0) -> void:
 	inner_radius = surface_radius * (1.0 - DEPTH_FRACTION)
 	outer_radius = surface_radius * (1.0 + MOUNTAIN_FRACTION)
 	_band = outer_radius - inner_radius
@@ -94,21 +107,78 @@ func generate(terrain_seed: int, surface_radius: float) -> void:
 	_solid.fill(EMPTY)
 
 	var mountain_height: float = surface_radius * MOUNTAIN_FRACTION
+	var heights: PackedFloat32Array = PackedFloat32Array()
+	heights.resize(angular_samples)
 	for column: int in range(angular_samples):
-		var angle: float = TAU * (float(column) + 0.5) / float(angular_samples)
 		# Sampling the noise on the unit circle instead of on a flat angle is
 		# what makes the terrain wrap with no seam at angle zero.
-		var on_circle: Vector2 = Vector2.from_angle(angle)
+		var on_circle: Vector2 = Vector2.from_angle(_angle_of(column))
 		var roughness: float = remap(terrain_type.get_noise_2dv(on_circle * 10.0), -1.0, 1.0, 0.05, 1.0)
 		var shape: float = relief.get_noise_2dv(on_circle * 10.0)
-		var height: float = surface_radius + shape * roughness * mountain_height
+		heights[column] = surface_radius + shape * roughness * mountain_height
 
-		var top_row: int = clampi(_row_of(height), -1, radial_samples - 1)
+	_level_plateaus(heights, terrain_seed, plateau_count)
+
+	for column: int in range(angular_samples):
+		var top_row: int = clampi(_row_of(heights[column]), -1, radial_samples - 1)
 		for row: int in range(top_row + 1):
 			_solid[row * angular_samples + column] = SOLID
 
+	_rebuild_surface_cache()
 	_image = Image.create_from_data(angular_samples, radial_samples, false, Image.FORMAT_R8, _solid)
 	texture = ImageTexture.create_from_image(_image)
+
+
+## Flattens `count` arcs to a constant radius, with a soft ramp at each end so a
+## shelf does not sit on the plain behind a cliff.
+func _level_plateaus(heights: PackedFloat32Array, terrain_seed: int, count: int) -> void:
+	if count <= 0:
+		return
+
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = terrain_seed + 104729
+
+	for i: int in range(count):
+		var centre: int = rng.randi_range(0, angular_samples - 1)
+		var half_width: int = maxi(
+			2, int(float(angular_samples) * rng.randf_range(PLATEAU_MIN_ARC, PLATEAU_MAX_ARC) * 0.5)
+		)
+		var ramp: int = maxi(1, int(float(half_width) * PLATEAU_RAMP_FRACTION))
+
+		# Level to the height already at the middle, so the shelf stays part of
+		# the landscape instead of hovering at some invented altitude.
+		var level: float = heights[wrapi(centre, 0, angular_samples)]
+		for offset: int in range(-half_width - ramp, half_width + ramp + 1):
+			var column: int = wrapi(centre + offset, 0, angular_samples)
+			var distance: int = absi(offset)
+			var blend: float = 1.0
+			if distance > half_width:
+				blend = 1.0 - float(distance - half_width) / float(ramp)
+			heights[column] = lerpf(heights[column], level, clampf(blend, 0.0, 1.0))
+
+
+## Surface radius per column, so slope queries under the landing legs are a
+## lookup rather than a march down from the ceiling every tick.
+func _rebuild_surface_cache() -> void:
+	_surface_radius.resize(angular_samples)
+	for column: int in range(angular_samples):
+		_surface_radius[column] = _scan_surface(column)
+
+
+## Highest solid radius in a column, or the inner radius when it has been dug
+## out entirely.
+func _scan_surface(column: int) -> float:
+	for row: int in range(radial_samples - 1, -1, -1):
+		if _solid[row * angular_samples + column] != EMPTY:
+			return _radius_of(row)
+	return inner_radius
+
+
+## Radius of the ground at an angle, in the planet's local frame.
+func surface_radius_at(angle: float) -> float:
+	if _surface_radius.is_empty():
+		return inner_radius
+	return _surface_radius[_column_of(angle)]
 
 
 ## True if the point, in the planet's local frame, is inside rock.
@@ -196,6 +266,8 @@ func carve_local(centre: Vector2, radius: float) -> bool:
 				changed = true
 
 	if changed:
+		for column: int in columns:
+			_surface_radius[column] = _scan_surface(column)
 		_upload()
 	return changed
 
