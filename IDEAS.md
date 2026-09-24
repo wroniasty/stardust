@@ -674,6 +674,38 @@ przejęciem ze znakiem faktycznego przyrostu kąta w locku, i osobno sprawdza, �
 raportowana prędkość zgadza się z kierunkiem, w którym lock naprawdę przesuwa
 statek.
 
+### Elementy orbity na HUD (M1.5+)
+
+Trajektoria rysowana pod F7 pokazuje kształt orbity, ale kształt to nie liczba:
+pilot potrzebuje wiedzieć, o ile ma podnieść perycentrum, a nie „mniej więcej
+tak". HUD ma więc dwa wiersze, PERI i APO.
+
+Decyzje, które warto zapisać, bo nie są oczywiste:
+
+- **Analitycznie, nie z symulacji naprzód.** Pole grawitacyjne nad powierzchnią
+  jest dokładnie odwrotnością kwadratu, więc `mu = g * R^2` daje stożki
+  dokładne, nie dopasowane: `Planet.orbit_extremes()` liczy energię właściwą i
+  moment pędu i zwraca (perycentrum, apocentrum). Predyktor trajektorii
+  całkuje naprzód i jest do rysowania linii; HUD nie musi czekać na horyzont
+  symulacji, żeby podać liczbę.
+- **Wysokości nad nominalnym promieniem, nie nad gruntem pod statkiem.** Apsyda
+  wypada gdzie indziej na planecie, gdzie grunt ma inną wysokość, więc jedynym
+  uczciwym wspólnym odniesieniem jest promień, którym planeta jest opisana.
+- **Kolor perycentrum niesie treść:** zielone — orbita mija teren, bursztynowe —
+  wchodzi w atmosferę i będzie się degradować, czerwone — kończy się w gruncie.
+  To ostatnie jest zarówno ostrzeżeniem, jak i celownikiem: deorbit burn polega
+  właśnie na sprowadzeniu perycentrum pod powierzchnię w wybranym miejscu.
+- **Apocentrum poza `influence_radius` to ucieczka, nie liczba.** Grawitacja
+  jest wygaszana na zewnętrznej dziesiątej części studni, więc stożek przestaje
+  tam obowiązywać; HUD pisze ESCAPE zamiast podawać wartość, która byłaby
+  nieprawdziwa.
+
+Pilnuje tego test lecący tam, gdzie predykcja obiecała: statek wyrzucony
+stycznie z 1.12 prędkości kołowej ma punkt startu dokładnie w perycentrum, a po
+2772 tickach (pół okresu przy a = 1926 px) osiąga apocentrum — zmierzone 2415 px
+wobec przewidzianych 2415. Błąd znaku albo złe `mu` przechodzą każdy test
+wewnętrznej spójności i wywracają się na tym jednym.
+
 ### Przewidywana trajektoria na HUD
 
 Co klatkę symulacja naprzód 200 do 400 kroków tej samej funkcji grawitacji (bez dragu i ciągu), rysowana jako Line2D. Gracz widzi od razu: elipsa, ucieczka, uderzenie. Znaczniki apoapsy i periapsy. Jeśli trajektoria przecina powierzchnię: marker punktu uderzenia. Marker spina orbitę z lądowaniem: deorbit burn dobrany tak, żeby punkt uderzenia wypadł na plateau, to czysty skill.
@@ -689,6 +721,26 @@ Co klatkę symulacja naprzód 200 do 400 kroków tej samej funkcji grawitacji (b
 ### Moduły asystujące (loot)
 
 Automatyczna cyrkularyzacja, komputer deorbitu pokazujący moment odpalenia, większa tolerancja orbit lock.
+
+**Auto-orbit jako opcjonalna funkcja komputera pokładowego (M2).** Nie każdy
+komputer ją ma — to jest cały sens. Tani kadłub startowy wymaga wejścia na
+orbitę ręcznie; znaleziony lub kupiony lepszy komputer robi to sam, i to jest
+odczuwalna zmiana w tym, jak się lata, a nie kolejny +5% do statystyki.
+
+Warunki załączenia: statek jest w polu grawitacyjnym planety lub księżyca
+(wewnątrz `influence_radius`) i **poza atmosferą** — w powietrzu manewr byłby
+walką z dragiem, a nie mechaniką orbitalną, i to jest ta sama granica, której
+pilnuje już orbit lock. Po załączeniu komputer sam dobiera i wykonuje odpalenia
+tak, żeby wejść na orbitę wokół tego ciała.
+
+Otwarte pytania: czy celem jest orbita kołowa na aktualnej wysokości, czy
+najtańsza paliwowo orbita zamknięta (podniesienie samego perycentrum ponad
+atmosferę); czy funkcja zużywa paliwo widoczne dla gracza; jak się zachowuje,
+gdy trajektoria jest hiperboliczna i wyhamowanie przekracza możliwości silników
+— powinna wtedy odmówić z podaniem powodu, a nie palić paliwo bez skutku.
+Uszkodzone silniki są tu ciekawym przypadkiem: auto-orbit korzysta z tych
+samych grup sterowania, więc statek z połową dysz wykona manewr wolniej i mniej
+dokładnie, zamiast mieć osobną ścieżkę „to się nie uda".
 
 ### Realizacja (M1.5)
 

@@ -249,6 +249,50 @@ func circular_orbit_speed(radius: float) -> float:
 	return sqrt(surface_gravity * surface_radius * surface_radius / radius)
 
 
+## Standard gravitational parameter, mu = g * R^2.
+##
+## The one number that turns this planet's arcade gravity into textbook orbital
+## mechanics: above the surface the field is exactly inverse square, so the
+## conic sections are exact rather than fitted.
+func gravitational_parameter() -> float:
+	return surface_gravity * surface_radius * surface_radius
+
+
+## Periapsis and apoapsis radii of the coasting orbit through `point` at
+## `velocity`, as (periapsis, apoapsis). Apoapsis is INF when the ship leaves.
+##
+## Exact only where the field is: below the surface gravity is capped, and over
+## the outer tenth of the well it is faded out so a ship does not get a kick
+## crossing the boundary (see gravity_at). An apoapsis past the influence
+## radius therefore never happens -- the ship coasts out of the well instead --
+## so it is reported as an escape rather than as a number that would be wrong.
+func orbit_extremes(point: Vector2, velocity: Vector2) -> Vector2:
+	var arm: Vector2 = point - global_position
+	var radius: float = arm.length()
+	var mu: float = gravitational_parameter()
+	if radius < 0.001 or mu <= 0.0:
+		return Vector2(0.0, INF)
+
+	var energy: float = velocity.length_squared() * 0.5 - mu / radius
+	# Angular momentum: in 2D the cross product is the scalar h.
+	var momentum: float = arm.cross(velocity)
+	var eccentricity: float = sqrt(maxf(
+		0.0, 1.0 + 2.0 * energy * momentum * momentum / (mu * mu)
+	))
+
+	if energy >= 0.0:
+		# Unbound: there is still a periapsis, from the conic's semi-latus
+		# rectum, but no far side to come back to.
+		var latus: float = momentum * momentum / mu
+		return Vector2(latus / maxf(1.0 + eccentricity, 0.001), INF)
+
+	var semi_major: float = -mu / (2.0 * energy)
+	var apoapsis: float = semi_major * (1.0 + eccentricity)
+	if apoapsis >= influence_radius:
+		return Vector2(semi_major * (1.0 - eccentricity), INF)
+	return Vector2(semi_major * (1.0 - eccentricity), apoapsis)
+
+
 func _physics_process(delta: float) -> void:
 	if not is_zero_approx(spin_rate):
 		rotation = wrapf(rotation + spin_rate * delta, -PI, PI)

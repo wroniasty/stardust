@@ -1,7 +1,8 @@
 class_name LandingHud
 extends CanvasLayer
-## The four numbers a pilot needs on approach: how high, how fast down, how
-## steep the ground is, and whether the legs are out.
+## What the pilot needs to fly by: how high, how fast down, how steep the
+## ground is, whether the legs are out -- and, once there is a planet to go
+## round, what shape the orbit is.
 ##
 ## Separate from the debug overlay on purpose. The overlay is instrumentation
 ## that goes away; this is the game telling the player what it is about to
@@ -20,6 +21,8 @@ const IDLE: Color = Color(0.7, 0.75, 0.8)
 
 @export var ship_path: NodePath
 
+@onready var _periapsis: Label = $Panel/Rows/Periapsis
+@onready var _apoapsis: Label = $Panel/Rows/Apoapsis
 @onready var _altitude: Label = $Panel/Rows/Altitude
 @onready var _descent: Label = $Panel/Rows/Descent
 @onready var _slope: Label = $Panel/Rows/Slope
@@ -53,6 +56,7 @@ func _process(_delta: float) -> void:
 	var descent: float = -relative.dot(up)
 	var slope: float = planet.slope_at(_ship.global_position)
 
+	_update_orbit(planet)
 	_altitude.text = "ALT  %6.0f" % altitude
 	_descent.text = "V/S  %+6.1f" % -descent
 	_slope.text = "SLOPE %5.1f deg" % rad_to_deg(slope)
@@ -65,12 +69,60 @@ func _process(_delta: float) -> void:
 
 
 func _show_in_deep_space() -> void:
+	_periapsis.text = "PERI      --"
+	_apoapsis.text = "APO       --"
+	_periapsis.add_theme_color_override("font_color", IDLE)
+	_apoapsis.add_theme_color_override("font_color", IDLE)
 	_altitude.text = "ALT       --"
 	_descent.text = "V/S       --"
 	_slope.text = "SLOPE     --"
 	_gear.text = "GEAR %s" % _gear_text()
 	_update_hull()
 	_status.text = ""
+
+
+## The shape of the coasting orbit, as altitudes above the nominal surface.
+##
+## Altitudes rather than radii, and above the NOMINAL surface rather than the
+## ground below the ship: an apsis happens somewhere else on the planet, where
+## the ground is a different height, so the only honest common reference is the
+## radius the planet is named by.
+##
+## Colour is the whole point of showing periapsis at all. Green is an orbit
+## that clears the terrain, amber one that dips into the air and will decay,
+## red one that ends in the ground -- which is what a deorbit burn is aiming
+## for, and what a botched one produces by accident.
+func _update_orbit(planet: Planet) -> void:
+	if _ship.flight_mode == Ship.FlightMode.LANDED:
+		_periapsis.text = "PERI      --"
+		_apoapsis.text = "APO       --"
+		_periapsis.add_theme_color_override("font_color", IDLE)
+		_apoapsis.add_theme_color_override("font_color", IDLE)
+		return
+
+	var extremes: Vector2 = planet.orbit_extremes(
+		_ship.global_position, _ship.linear_velocity
+	)
+	var periapsis: float = extremes.x
+	_periapsis.text = "PERI %6.0f" % (periapsis - planet.surface_radius)
+	_periapsis.add_theme_color_override("font_color", _periapsis_color(planet, periapsis))
+
+	if is_inf(extremes.y):
+		# Not a failure: leaving is a legitimate thing to be doing, and the
+		# pilot still needs to know the difference between that and an orbit.
+		_apoapsis.text = "APO   ESCAPE"
+		_apoapsis.add_theme_color_override("font_color", IDLE)
+		return
+	_apoapsis.text = "APO  %6.0f" % (extremes.y - planet.surface_radius)
+	_apoapsis.add_theme_color_override("font_color", GOOD)
+
+
+func _periapsis_color(planet: Planet, periapsis: float) -> Color:
+	if periapsis <= planet.terrain_ceiling():
+		return BAD
+	if periapsis <= planet.atmosphere_radius():
+		return CAUTION
+	return GOOD
 
 
 func _update_hull() -> void:

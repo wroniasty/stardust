@@ -77,6 +77,12 @@ const WEAPON_TICKS: int = 60
 ## Long enough for a round fired straight down to arm and come back.
 const SELF_HIT_TICKS: int = 120
 
+## Half an orbital period at the elliptical phase's radius, plus margin, so the
+## ship actually reaches its apoapsis instead of being trusted to be on the way.
+## Measured rather than estimated: the semi-major axis comes out at 1926 px,
+## giving T = 2*PI*sqrt(a^3/mu) = 92 s, so the climb takes 2772 ticks.
+const ELLIPSE_TICKS: int = 2950
+
 ## Long enough to fall from orbit and hit the ground hard.
 const DEATH_TICKS: int = 900
 
@@ -86,7 +92,7 @@ const DEATH_TICKS: int = 900
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
 	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
-	ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
+	ELLIPSE, ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
 
@@ -98,6 +104,10 @@ var _planet: Planet = null
 var _orbit_radius: float = 0.0
 var _orbit_min: float = INF
 var _orbit_max: float = 0.0
+
+## What the elements predicted at launch, to be compared with where the ship
+## actually went once the integrator has had half an orbit to disagree.
+var _predicted_extremes: Vector2 = Vector2.ZERO
 var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
 var _lock_engaged: bool = false
@@ -166,7 +176,7 @@ func _physics_process(delta: float) -> bool:
 
 	_ticks += 1
 	_elapsed += delta
-	if _phase == Phase.ORBIT:
+	if _phase == Phase.ORBIT or _phase == Phase.ELLIPSE:
 		var radius: float = _ship.global_position.distance_to(_planet.global_position)
 		_orbit_min = minf(_orbit_min, radius)
 		_orbit_max = maxf(_orbit_max, radius)
@@ -455,6 +465,8 @@ func _phase_ticks() -> int:
 			return FALL_TICKS
 		Phase.ORBIT:
 			return ORBIT_TICKS
+		Phase.ELLIPSE:
+			return ELLIPSE_TICKS
 		_:
 			return BURN_TICKS
 
@@ -549,6 +561,20 @@ func _begin_phase() -> void:
 			_round_container = _ship.projectile_container()
 			_round_container.child_entered_tree.connect(_on_round_spawned)
 			_ship.fire_command = true
+		Phase.ELLIPSE:
+			# Just above the air, thrown tangentially harder than a circle
+			# needs: the launch point is then exactly the periapsis, which is
+			# what makes the prediction checkable without a second measurement.
+			_orbit_radius = _planet.surface_radius * 1.4
+			_orbit_min = INF
+			_orbit_max = 0.0
+			_ship.global_position = _planet.global_position + Vector2.UP * _orbit_radius
+			_ship.linear_velocity = (
+				Vector2.RIGHT * _planet.circular_orbit_speed(_orbit_radius) * 1.12
+			)
+			_predicted_extremes = _planet.orbit_extremes(
+				_ship.global_position, _ship.linear_velocity
+			)
 		Phase.ORBIT_LOCK:
 			var lock_radius: float = _planet.surface_radius * 2.0
 			_ship.global_position = _planet.global_position + Vector2.UP * lock_radius
@@ -765,6 +791,28 @@ func _evaluate_phase() -> void:
 					_elapsed, drift * 100.0, _orbit_min, _orbit_max,
 				],
 			)
+		Phase.ELLIPSE:
+			# The whole point of the elements is that they predict where the
+			# ship WILL be, so the test flies there and looks. A sign error or
+			# a wrong mu passes every self-consistent check and fails this one.
+			_expect(
+				absf(_orbit_min - _predicted_extremes.x) < _orbit_radius * 0.01,
+				"the launch point is the predicted periapsis (%.0f vs %.0f px)" % [
+					_orbit_min, _predicted_extremes.x,
+				],
+			)
+			_expect(
+				absf(_orbit_max - _predicted_extremes.y) < _orbit_radius * 0.01,
+				"the ship coasts to the predicted apoapsis (%.0f vs %.0f px)" % [
+					_orbit_max, _predicted_extremes.y,
+				],
+			)
+			_expect(
+				_predicted_extremes.y > _orbit_radius * 1.1,
+				"the test orbit is actually eccentric (%.0f .. %.0f px)" % [
+					_predicted_extremes.x, _predicted_extremes.y,
+				],
+			)
 		Phase.ORBIT_LOCK:
 			_expect(_lock_engaged, "a coasting circular orbit engages orbit lock")
 			var held: float = _lock_radius_max - _lock_radius_min
@@ -820,6 +868,7 @@ func _evaluate_phase() -> void:
 			)
 		Phase.PLATEAU:
 			_check_plateaus(_planet)
+			_check_elements(_planet)
 			_check_weather(_planet)
 		Phase.GEAR:
 			_check_gear(_ship)
@@ -1176,6 +1225,36 @@ func _check_weather(planet: Planet) -> void:
 		)
 
 	probe.generate(planet.planet_seed)
+
+
+## Plateaus have to be real ground a stock ship can stand on, not just a number
+## in the generator.
+## Elements have to agree with the two cases that can be written down without
+## integrating anything: a circle, and a throw fast enough to leave.
+func _check_elements(planet: Planet) -> void:
+	var radius: float = planet.surface_radius * 2.0
+	var point: Vector2 = planet.global_position + Vector2.UP * radius
+	var circular: float = planet.circular_orbit_speed(radius)
+
+	var circle: Vector2 = planet.orbit_extremes(point, Vector2.RIGHT * circular)
+	_expect(
+		absf(circle.x - radius) < 1.0 and absf(circle.y - radius) < 1.0,
+		"a circular orbit has both apsides at its own radius (%.0f, %.0f vs %.0f)" % [
+			circle.x, circle.y, radius,
+		],
+	)
+
+	# sqrt(2) times circular is escape velocity exactly; a shade over it must
+	# not come back, whatever the planet.
+	var escape: Vector2 = planet.orbit_extremes(point, Vector2.RIGHT * circular * 1.45)
+	_expect(is_inf(escape.y), "escape velocity has no apoapsis")
+
+	# Radial drop: no angular momentum at all, so the periapsis is the centre.
+	var falling: Vector2 = planet.orbit_extremes(point, Vector2.DOWN * 10.0)
+	_expect(
+		falling.x < 1.0 and falling.y < radius * 1.02,
+		"a straight drop has its periapsis at the centre (%.1f)" % falling.x,
+	)
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

@@ -104,6 +104,7 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [ ] Awarie silników: spadek sprawności od zderzeń, niezawodność jako dropout i oscylacja ciągu.
 - [ ] Lądowanie z uszkodzonymi silnikami: asymetria, oscylacje, sprawdzenie, że jest trudno, ale możliwe.
 - [ ] Podwozie jako moduł (tolerancja nachylenia, próg prędkości) i moduły asystujące (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu).
+- [ ] Auto-orbit jako opcjonalna funkcja komputera lotu: część komputerów ją ma, część nie. Załącza się w polu grawitacyjnym i poza atmosferą, sam wchodzi na orbitę (IDEAS.md sekcja 8).
 - [ ] Zużycie w czasie, naprawa (na razie klawisz debug).
 - [ ] Silniki manewrowe i hamujące, statek z pełnym zestawem vs statek minimalny.
 - [ ] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, afiksy.
