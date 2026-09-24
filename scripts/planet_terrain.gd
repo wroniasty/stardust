@@ -62,8 +62,15 @@ var outer_radius: float = 0.0
 
 var texture: ImageTexture = null
 
+## One texel per angular column holding the surface radius in pixels, so a
+## shader can ask where the ground is without searching the occupancy bitmap.
+## The atmosphere needs it: without it the haze can only start at the nominal
+## radius, which floats above every lowland.
+var height_texture: ImageTexture = null
+
 ## Radius of the highest rock in each column. Kept in step with carving.
 var _surface_radius: PackedFloat32Array = PackedFloat32Array()
+var _height_image: Image = null
 
 var _solid: PackedByteArray = PackedByteArray()
 var _image: Image = null
@@ -163,6 +170,20 @@ func _rebuild_surface_cache() -> void:
 	_surface_radius.resize(angular_samples)
 	for column: int in range(angular_samples):
 		_surface_radius[column] = _scan_surface(column)
+	_upload_heights()
+
+
+## Pushes the height column to the GPU. A single row of floats, so a crater
+## costs about 17 KB of upload on a big planet.
+func _upload_heights() -> void:
+	var data: PackedByteArray = _surface_radius.to_byte_array()
+	var resized: bool = _height_image == null or _height_image.get_width() != angular_samples
+	if resized:
+		_height_image = Image.create_from_data(angular_samples, 1, false, Image.FORMAT_RF, data)
+		height_texture = ImageTexture.create_from_image(_height_image)
+		return
+	_height_image.set_data(angular_samples, 1, false, Image.FORMAT_RF, data)
+	height_texture.update(_height_image)
 
 
 ## Highest solid radius in a column, or the inner radius when it has been dug
@@ -268,6 +289,7 @@ func carve_local(centre: Vector2, radius: float) -> bool:
 	if changed:
 		for column: int in columns:
 			_surface_radius[column] = _scan_surface(column)
+		_upload_heights()
 		_upload()
 	return changed
 

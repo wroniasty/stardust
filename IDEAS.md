@@ -327,6 +327,24 @@ Zmierzone krycie przy gęstości 0.51:
 Efekt zamierzony: gwiazdy tła są zasłonięte przez większość wznoszenia i
 wychodzą dopiero blisko krańca atmosfery.
 
+**Powłoka zaczyna się przy rzeczywistym gruncie, nie przy nominalnym promieniu.**
+To zostało z pierwszej poprawki jako osobna wada widoczna na zrzucie: relief
+jest wyśrodkowany na R, więc połowa planety leży poniżej niego, a nad każdą
+niziną ciągnął się pas rzadkiej mgiełki od gruntu aż do R, z wyraźną krawędzią
+jasnej powłoki zawieszoną wysoko nad terenem.
+
+Shader dostaje więc `ground_heights` — teksturę o wysokości jednego piksela, po
+teksel na kolumnę kątową, z promieniem powierzchni w pikselach. `PlanetTerrain`
+i tak trzymał te liczby w `_surface_radius` dla zapytań o nachylenie pod nogami,
+więc to tylko wysłanie ich na GPU; przy kraterze dochodzi ~17 KB uploadu.
+
+Rozróżnienie, które jest tu sednem: **profil grubości** mierzony jest od
+nominalnego promienia (żeby szczyt faktycznie wystawał w rzadsze powietrze niż
+dno doliny), ale **początek powietrza** to rzeczywisty grunt. Nad skałą krycie
+spada do `disc_haze`, z jednym tekselem zmiękczenia na złączu, żeby nie rysować
+drugiej krawędzi obok tej, którą teren już ma. Rim light też trzyma się
+rzeczywistego gruntu, a nie okręgu o promieniu R.
+
 ## 6. Planety z pikseli i kolizje
 
 Teren planety to bitmapa, modyfikowalna (eksplozje, kopanie, zniszczenia). Nie zabija to kolizji, o ile piksele nie są ciałami fizycznymi.

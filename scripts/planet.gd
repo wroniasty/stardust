@@ -340,6 +340,8 @@ func _build_atmosphere() -> void:
 		_atmosphere_material = (_atmosphere.material as ShaderMaterial).duplicate() as ShaderMaterial
 		_atmosphere.material = _atmosphere_material
 	_atmosphere_material.set_shader_parameter("surface_ratio", surface_radius / radius)
+	_atmosphere_material.set_shader_parameter("ground_heights", terrain.height_texture)
+	_atmosphere_material.set_shader_parameter("atmosphere_radius", radius)
 	_atmosphere_material.set_shader_parameter("atmosphere_color", atmosphere_color)
 	_atmosphere_material.set_shader_parameter("density", atmosphere_density)
 
