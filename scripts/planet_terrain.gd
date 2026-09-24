@@ -62,14 +62,24 @@ var outer_radius: float = 0.0
 
 var texture: ImageTexture = null
 
-## One texel per angular column holding the surface radius in pixels, so a
-## shader can ask where the ground is without searching the occupancy bitmap.
-## The atmosphere needs it: without it the haze can only start at the nominal
-## radius, which floats above every lowland.
+## Arc length the haze floor is averaged over, in pixels.
+##
+## The atmosphere must not pour into narrow holes. A shot digs a shaft barely
+## wider than itself, and feeding the exact column height to the shader filled
+## each one with full-brightness haze from the crust floor up, so a burst of
+## fire left hard-edged bright stripes standing in the sky between the rock
+## pillars. Averaging over an arc several craters wide lets the haze follow the
+## broad shape of the ground and ignore the punctures.
+const HAZE_SMOOTHING_PX: float = 80.0
+
+## One texel per angular column holding the radius the atmosphere should treat
+## as ground: the smoothed envelope, but never below the real surface, so a
+## mountain peak still pushes the haze up while a shaft does not pull it down.
 var height_texture: ImageTexture = null
 
 ## Radius of the highest rock in each column. Kept in step with carving.
 var _surface_radius: PackedFloat32Array = PackedFloat32Array()
+var _haze_floor: PackedFloat32Array = PackedFloat32Array()
 var _height_image: Image = null
 
 var _solid: PackedByteArray = PackedByteArray()
@@ -170,13 +180,62 @@ func _rebuild_surface_cache() -> void:
 	_surface_radius.resize(angular_samples)
 	for column: int in range(angular_samples):
 		_surface_radius[column] = _scan_surface(column)
+	_haze_floor.resize(angular_samples)
+	_refresh_haze_floor(0, angular_samples - 1)
 	_upload_heights()
+
+
+## Recomputes the haze floor for a span of columns, wrapping at the seam.
+##
+## Only a span, because the average at one column depends on the exact heights
+## within half a window of it: carving touches a wedge, so only that wedge plus
+## a window either side can change, and redoing the whole ring on every shot
+## would cost more than the carve itself.
+func _refresh_haze_floor(first: int, last: int) -> void:
+	var half: int = _haze_window()
+
+	# A morphological closing: dilate, then erode, both over the same window.
+	#
+	# Plainer filters were each wrong in their own way. A mean is dragged down
+	# by the hole it is supposed to ignore, so a shaft kept a third of its
+	# bright column. Taking the mean of the upper half fixed that but sat some
+	# ten pixels above untouched ground everywhere, which would draw a thin
+	# dark rim along the whole horizon. Closing fills anything narrower than the
+	# window and leaves everything else exactly where it was, which is the
+	# property actually wanted.
+	# Written the obvious way, which is O(columns * window) per pass. Over a
+	# carve that is nothing, but building a planet closes the whole ring and
+	# generation went from 14 ms to 57 ms on the largest worlds because of it.
+	# Left as is: M3 already plans to move terrain generation onto a worker
+	# thread, and a sliding-window min/max would be a lot of machinery to save
+	# something that is about to stop being on the critical path.
+	var dilated: PackedFloat32Array = PackedFloat32Array()
+	dilated.resize(last - first + 1 + half * 2)
+	for i: int in range(dilated.size()):
+		var centre: int = first - half + i
+		var peak: float = -INF
+		for offset: int in range(-half, half + 1):
+			peak = maxf(peak, _surface_radius[wrapi(centre + offset, 0, angular_samples)])
+		dilated[i] = peak
+
+	for index: int in range(first, last + 1):
+		var column: int = wrapi(index, 0, angular_samples)
+		var valley: float = INF
+		for offset: int in range(-half, half + 1):
+			valley = minf(valley, dilated[index - first + half + offset])
+		# Closing is extensive, so this can only ever confirm the floor is at or
+		# above the real ground; kept as a guard rather than as arithmetic.
+		_haze_floor[column] = maxf(valley, _surface_radius[column])
+
+
+func _haze_window() -> int:
+	return maxi(1, int(HAZE_SMOOTHING_PX / TARGET_TEXEL_PX * 0.5))
 
 
 ## Pushes the height column to the GPU. A single row of floats, so a crater
 ## costs about 17 KB of upload on a big planet.
 func _upload_heights() -> void:
-	var data: PackedByteArray = _surface_radius.to_byte_array()
+	var data: PackedByteArray = _haze_floor.to_byte_array()
 	var resized: bool = _height_image == null or _height_image.get_width() != angular_samples
 	if resized:
 		_height_image = Image.create_from_data(angular_samples, 1, false, Image.FORMAT_RF, data)
@@ -193,6 +252,14 @@ func _scan_surface(column: int) -> float:
 		if _solid[row * angular_samples + column] != EMPTY:
 			return _radius_of(row)
 	return inner_radius
+
+
+## Radius the atmosphere treats as ground at an angle. Exposed for tests and
+## tools; the shader reads the same numbers from height_texture.
+func haze_floor_at(angle: float) -> float:
+	if _haze_floor.is_empty():
+		return inner_radius
+	return _haze_floor[_column_of(angle)]
 
 
 ## Radius of the ground at an angle, in the planet's local frame.
@@ -262,6 +329,11 @@ func carve_local(centre: Vector2, radius: float) -> bool:
 	# Angular span the disc can possibly reach, so we walk a wedge and not the
 	# whole ring. A disc covering the centre has no meaningful span.
 	var columns: PackedInt32Array = PackedInt32Array()
+	# Tracked unwrapped as well. A wedge that straddles the seam comes out of
+	# the array with its last column numerically before its first, and a span
+	# taken from those two would be empty.
+	var span_first: int = 0
+	var span_last: int = angular_samples - 1
 	if distance <= radius:
 		for column: int in range(angular_samples):
 			columns.append(column)
@@ -270,6 +342,8 @@ func carve_local(centre: Vector2, radius: float) -> bool:
 		var centre_angle: float = centre.angle()
 		var steps: int = maxi(1, ceili(half_span / TAU * float(angular_samples)))
 		var middle: int = _column_of(centre_angle)
+		span_first = middle - steps
+		span_last = middle + steps
 		for offset: int in range(-steps, steps + 1):
 			columns.append(wrapi(middle + offset, 0, angular_samples))
 
@@ -289,6 +363,8 @@ func carve_local(centre: Vector2, radius: float) -> bool:
 	if changed:
 		for column: int in columns:
 			_surface_radius[column] = _scan_surface(column)
+		var reach: int = _haze_window()
+		_refresh_haze_floor(span_first - reach, span_last + reach)
 		_upload_heights()
 		_upload()
 	return changed

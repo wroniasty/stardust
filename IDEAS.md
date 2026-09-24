@@ -346,6 +346,22 @@ drugiej krawędzi obok tej, którą teren już ma. Rim light też trzyma się
 rzeczywistego gruntu, a nie okręgu o promieniu R — dzięki temu poświata wchodzi
 w krater, co jest poprawne.
 
+**Mgła nie może wlewać się w wąskie dziury.** Strzał drąży szyb ledwie szerszy
+od siebie, a podawanie shaderowi dokładnej wysokości kolumny wypełniało każdy
+taki szyb mgłą o pełnej jasności od dna skorupy w górę: seria strzałów
+zostawiała na niebie ostre jasne pasy stojące między filarami skały. Zmierzone
+krycie sąsiednich kolumn przy r=1050 wynosiło 0.233, 0.594 i 0.777.
+
+Tekstura wysokości niesie więc nie dokładny grunt, tylko **domknięcie
+morfologiczne** (dylatacja, potem erozja) na oknie 80 px łuku. Prostsze filtry
+zawiodły każdy na swój sposób i warto wiedzieć dlaczego: średnia jest ciągnięta
+w dół przez tę samą dziurę, którą ma zignorować (szyb zachowywał jedną trzecią
+jasnego słupa), a średnia z górnej połowy próbek to naprawiała, ale siedziała
+osiem pikseli nad nietkniętym gruntem na całym horyzoncie, czyli rysowałaby
+wzdłuż niego cienką ciemną obwódkę. Domknięcie wypełnia wszystko węższe od okna
+i nie rusza reszty — zmierzone: szyb 110 px w całości pod podłogą mgły,
+nietknięty teren uniesiony o 0 do 4.5 px.
+
 **Czego nie wolno przypiąć do gruntu: chmur.** Pierwsza wersja wygaszała pokrywę
 chmur względem wysokości nad rzeczywistym terenem, przez co każdy wystrzelony
 krater wycinał nad sobą promienistą szczelinę w chmurach, z ostrymi krawędziami,
@@ -400,9 +416,13 @@ więc nowy krater sam z siebie dostaje obrys skorupy.
 | | R 1025 | R 1710 |
 |---|---|---|
 | siatka | 4295 x 150 (629 KB) | 7163 x 251 (1756 KB) |
-| generacja | 7.8 ms | 14.4 ms |
-| krater r=28 + upload tekstury | 0.25 ms | 0.51 ms |
+| generacja | 27.7 ms | 56.6 ms |
+| krater r=28 + upload tekstury | 0.69 ms | 1.00 ms |
 | samplowanie kadłuba (6 punktów, wszystkie w skale) | 0.127 ms/tick | 0.124 ms/tick |
+
+Generacja urosła czterokrotnie (z 7.8/14.4 ms) po dołożeniu domknięcia
+morfologicznego podłogi mgły w M1.6+, które przy tworzeniu planety przebiega
+cały pierścień. Jednorazowo na planetę i tak trafia w M3 na wątek roboczy.
 
 Górny limit próbek kątowych musiał wzrosnąć z 4096 do 8192, inaczej największe
 planety schodziły poniżej obiecanych 1.5 px na teksel. Pamięć na planetę
