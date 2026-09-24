@@ -97,6 +97,16 @@ var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
 var _lock_engaged: bool = false
 var _lock_released: bool = false
+## Which way round the ship was going before the lock took over, and which way
+## it actually went afterwards. Sign of the cross product of arm and velocity,
+## which is the sign of the angular rate whatever the screen's handedness.
+var _pre_lock_direction: float = 0.0
+var _lock_travel: float = 0.0
+var _lock_last_angle: float = INF
+
+## Whether the velocity the lock reports ever disagreed with where it moved.
+var _lock_velocity_agrees: bool = true
+
 var _lock_radius_min: float = INF
 var _lock_radius_max: float = 0.0
 var _entry_speed: float = 0.0
@@ -151,11 +161,27 @@ func _physics_process(delta: float) -> bool:
 		_orbit_min = minf(_orbit_min, radius)
 		_orbit_max = maxf(_orbit_max, radius)
 	elif _phase == Phase.ORBIT_LOCK:
+		var arm: Vector2 = _ship.global_position - _planet.global_position
 		if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK:
 			_lock_engaged = true
-			var locked_radius: float = _ship.global_position.distance_to(_planet.global_position)
+			var locked_radius: float = arm.length()
 			_lock_radius_min = minf(_lock_radius_min, locked_radius)
 			_lock_radius_max = maxf(_lock_radius_max, locked_radius)
+			# Where it actually went this tick, and whether the velocity it
+			# reports points that way. Both matter: the lock drives the
+			# position itself and only writes the velocity for the HUD, so the
+			# two can disagree without anything else noticing.
+			var angle_now: float = arm.angle()
+			if _lock_last_angle < INF:
+				var step: float = angle_difference(_lock_last_angle, angle_now)
+				_lock_travel += step
+				if not is_zero_approx(step):
+					var reported: float = arm.cross(_ship.linear_velocity)
+					if signf(reported) != signf(step):
+						_lock_velocity_agrees = false
+			_lock_last_angle = angle_now
+		elif not _lock_engaged:
+			_pre_lock_direction = signf(arm.cross(_ship.linear_velocity))
 		elif _lock_engaged:
 			_lock_released = true
 		if _ticks == LOCK_THRUST_AT_TICK:
@@ -512,6 +538,10 @@ func _begin_phase() -> void:
 			_lock_released = false
 			_lock_radius_min = INF
 			_lock_radius_max = 0.0
+			_pre_lock_direction = 0.0
+			_lock_travel = 0.0
+			_lock_last_angle = INF
+			_lock_velocity_agrees = true
 		Phase.AEROBRAKE:
 			# In the thin top shell at orbital speed: the manoeuvre the shells
 			# were shaped for, where drag bites slowly instead of like a wall.
@@ -719,6 +749,18 @@ func _evaluate_phase() -> void:
 			_expect(
 				held < 0.5,
 				"orbit lock holds the radius exactly (%.0f .. %.0f px)" % [_lock_radius_min, _lock_radius_max],
+			)
+			# The lock is a hand-off, not a manoeuvre: whatever else it does, the
+			# ship has to keep going the way the pilot was already going.
+			_expect(
+				not is_zero_approx(_lock_travel) and signf(_lock_travel) == _pre_lock_direction,
+				"orbit lock carries on the way the ship was going (was %+.0f, went %+.0f)" % [
+					_pre_lock_direction, signf(_lock_travel),
+				],
+			)
+			_expect(
+				_lock_velocity_agrees,
+				"the velocity the lock reports matches the way it moves",
 			)
 			_expect(_lock_released, "thrust hands control back to the solver")
 			_expect(

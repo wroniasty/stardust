@@ -650,6 +650,21 @@ Ręczne utrzymanie idealnej orbity kołowej jest nudne. Jeśli przez ~2 s brak c
 
 Orbita zamknięta to stan spoczynku jak lądowanie: bezpieczne miejsce (jeśli nikt nie patroluje), skanowanie powierzchni, autosave, planowanie.
 
+**Styczna musi być pochodną kąta, nie `orthogonal()`.** Lock prowadzi statek
+analitycznie po okręgu (`angle += omega * dt`), a znak omegi brał się z rzutu
+prędkości na `up.orthogonal()`. `orthogonal()` obraca o 90 stopni przeciwnie do
+ruchu wskazówek, co przy osi Y w dół ma **przeciwną skrętność** niż rosnący kąt
+— więc statek po włączeniu locka zawracał i leciał po orbicie w drugą stronę.
+Do tego prędkość zapisywana dla HUD szła jeszcze starym kierunkiem, więc
+wskazania i ruch przeczyły sobie nawzajem. Styczna liczy się teraz jawnie jako
+`Vector2(-up.y, up.x)`.
+
+Test pilnujący promienia tego nie widział, bo okrąg o zadanym promieniu jest
+taki sam w obie strony. Smoke test porównuje więc znak momentu pędu przed
+przejęciem ze znakiem faktycznego przyrostu kąta w locku, i osobno sprawdza, że
+raportowana prędkość zgadza się z kierunkiem, w którym lock naprawdę przesuwa
+statek.
+
 ### Przewidywana trajektoria na HUD
 
 Co klatkę symulacja naprzód 200 do 400 kroków tej samej funkcji grawitacji (bez dragu i ciągu), rysowana jako Line2D. Gracz widzi od razu: elipsa, ucieczka, uderzenie. Znaczniki apoapsy i periapsy. Jeśli trajektoria przecina powierzchnię: marker punktu uderzenia. Marker spina orbitę z lądowaniem: deorbit burn dobrany tak, żeby punkt uderzenia wypadł na plateau, to czysty skill.

@@ -437,6 +437,18 @@ func _update_heat(step: float) -> void:
 	hull_heat = clampf(hull_heat - HEAT_COOLING * step, 0.0, 1.0)
 
 
+## Direction a body travels in when its polar angle increases, at outward
+## direction `up`.
+##
+## Deliberately NOT `up.orthogonal()`. That turns 90 degrees anticlockwise,
+## which in Godot's Y-down space is the opposite handedness to the angle the
+## lock advances with. Mixing the two made the locked ship run backwards along
+## its own orbit: the sign of the tangential speed was measured against one
+## tangent and the position was then stepped along the other.
+static func _tangent(up: Vector2) -> Vector2:
+	return Vector2(-up.y, up.x)
+
+
 ## Watches for a good enough circular orbit and takes over when it finds one.
 func _consider_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 	if not orbit_lock_enabled:
@@ -464,7 +476,7 @@ func _consider_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 		return
 
 	var up: Vector2 = offset / radius
-	var along: Vector2 = up.orthogonal()
+	var along: Vector2 = _tangent(up)
 	var radial_speed: float = state.linear_velocity.dot(up)
 	var tangential_speed: float = state.linear_velocity.dot(along)
 	var circular_speed: float = planet.circular_orbit_speed(radius)
@@ -504,7 +516,7 @@ func _run_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
 	state.transform = body_transform
 	# Velocity is kept truthful rather than zeroed, so the HUD, the trajectory
 	# preview and the moment of release all see the real orbital motion.
-	state.linear_velocity = up.orthogonal() * (_lock_angular_speed * _lock_radius)
+	state.linear_velocity = _tangent(up) * (_lock_angular_speed * _lock_radius)
 	_gravity = _lock_planet.gravity_at(body_transform.origin)
 
 	_update_heat(state.step)
