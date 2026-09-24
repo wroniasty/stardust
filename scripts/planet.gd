@@ -28,6 +28,22 @@ const SHELL_PROFILE: Array[Vector2] = [
 	Vector2(0.33, 1.00),
 ]
 
+## Cloud decks are rolled between these bounds. Weather is part of what makes
+## a planet recognisable, so none of it is a global constant.
+const CLOUD_CHANCE: float = 0.75
+const CLOUD_BASE_RANGE: Vector2 = Vector2(0.25, 0.55)
+const CLOUD_DEPTH_RANGE: Vector2 = Vector2(0.10, 0.28)
+const CLOUD_COVERAGE_RANGE: Vector2 = Vector2(0.25, 0.70)
+const CLOUD_OPACITY_RANGE: Vector2 = Vector2(0.35, 0.80)
+const CLOUD_SCALE_RANGE: Vector2 = Vector2(2.2, 6.0)
+const CLOUD_SPEED_RANGE: Vector2 = Vector2(0.008, 0.05)
+const CLOUD_SOFTNESS_RANGE: Vector2 = Vector2(0.05, 0.30)
+
+## Clearance the cloud base keeps above the highest rock the generator can
+## produce, in pixels. Mountains reach well past the nominal surface, so a deck
+## placed purely as a fraction of the atmosphere would hang inside them.
+const CLOUD_CLEARANCE: float = 20.0
+
 ## Fastest a planet may turn, in radians per second.
 const MAX_SPIN_RATE: float = 0.02
 
@@ -98,14 +114,33 @@ var plateau_count: int = 0
 var surface_color: Color = Color(0.45, 0.38, 0.32)
 var atmosphere_color: Color = Color(0.45, 0.62, 0.95)
 
+# --- Weather, rolled from the same seed. ---
+
+var has_clouds: bool = false
+var cloud_color: Color = Color(1.0, 0.97, 0.95)
+
+## Base and thickness of the deck, as fractions of the atmosphere height.
+var cloud_base: float = 0.4
+var cloud_depth: float = 0.15
+
+var cloud_coverage: float = 0.45
+var cloud_opacity: float = 0.6
+var cloud_scale: float = 3.5
+
+## Radians per second the deck turns, signed.
+var cloud_speed: float = 0.02
+var cloud_softness: float = 0.18
+
 var terrain: PlanetTerrain = PlanetTerrain.new()
 
 @onready var _terrain_quad: ColorRect = $Terrain
 @onready var _atmosphere: ColorRect = $Atmosphere
+@onready var _clouds: ColorRect = $Clouds
 @onready var _shells: Node2D = $AtmosphereShells
 
 var _terrain_material: ShaderMaterial = null
 var _atmosphere_material: ShaderMaterial = null
+var _cloud_material: ShaderMaterial = null
 
 
 func _ready() -> void:
@@ -290,10 +325,52 @@ func generate(new_seed: int) -> void:
 		MIN_PLATEAUS, int(TAU * surface_radius / PLATEAU_SPACING)
 	)
 
+	_roll_weather(rng)
+
 	terrain.generate(planet_seed, surface_radius, plateau_count)
 
 	_build_terrain_quad()
 	_build_atmosphere()
+	_build_clouds()
+
+
+## Rolls the cloud deck. Airless rocks get no weather.
+func _roll_weather(rng: RandomNumberGenerator) -> void:
+	has_clouds = atmosphere_height > 0.0 and atmosphere_density > 0.0 and rng.randf() < CLOUD_CHANCE
+	if not has_clouds:
+		return
+	cloud_base = rng.randf_range(CLOUD_BASE_RANGE.x, CLOUD_BASE_RANGE.y)
+	cloud_depth = rng.randf_range(CLOUD_DEPTH_RANGE.x, CLOUD_DEPTH_RANGE.y)
+	cloud_coverage = rng.randf_range(CLOUD_COVERAGE_RANGE.x, CLOUD_COVERAGE_RANGE.y)
+	cloud_opacity = rng.randf_range(CLOUD_OPACITY_RANGE.x, CLOUD_OPACITY_RANGE.y)
+	cloud_scale = rng.randf_range(CLOUD_SCALE_RANGE.x, CLOUD_SCALE_RANGE.y)
+	cloud_softness = rng.randf_range(CLOUD_SOFTNESS_RANGE.x, CLOUD_SOFTNESS_RANGE.y)
+	cloud_speed = rng.randf_range(CLOUD_SPEED_RANGE.x, CLOUD_SPEED_RANGE.y) * signf(rng.randf() - 0.5)
+	# Mostly white, tinted towards the air it floats in, so the weather looks
+	# like it belongs to the planet instead of being pasted on top of it.
+	cloud_color = Color.WHITE.lerp(atmosphere_color, rng.randf_range(0.05, 0.45))
+
+
+## Radius the cloud deck starts at, or the surface when there is none.
+##
+## The rolled fraction is only a wish: the deck is pushed up above the terrain
+## ceiling, and kept below the top of the air, so clouds are always weather in
+## the sky rather than a decal stuck on a mountainside.
+func cloud_base_radius() -> float:
+	if not has_clouds:
+		return surface_radius
+	var floor_radius: float = terrain.outer_radius + CLOUD_CLEARANCE
+	var thickness: float = atmosphere_height * cloud_depth
+	var ceiling_radius: float = atmosphere_radius() - thickness
+	var wanted: float = surface_radius + atmosphere_height * cloud_base
+	return clampf(wanted, floor_radius, maxf(floor_radius, ceiling_radius))
+
+
+## Radius of the top of the cloud deck, or the surface when there is none.
+func cloud_ceiling() -> float:
+	if not has_clouds:
+		return surface_radius
+	return cloud_base_radius() + atmosphere_height * cloud_depth
 
 
 ## Smoothly takes gravity to zero over the outer tenth of the well.
@@ -340,13 +417,36 @@ func _build_atmosphere() -> void:
 		_atmosphere_material = (_atmosphere.material as ShaderMaterial).duplicate() as ShaderMaterial
 		_atmosphere.material = _atmosphere_material
 	_atmosphere_material.set_shader_parameter("surface_ratio", surface_radius / radius)
-	_atmosphere_material.set_shader_parameter("ground_heights", terrain.height_texture)
-	_atmosphere_material.set_shader_parameter("atmosphere_radius", radius)
 	_atmosphere_material.set_shader_parameter("atmosphere_color", atmosphere_color)
 	_atmosphere_material.set_shader_parameter("density", atmosphere_density)
 
 	for i: int in range(SHELL_PROFILE.size()):
 		_shells.add_child(_make_shell(i))
+
+
+## The cloud deck: one quad reaching to the top of the clouds, drawn over the
+## terrain. It is told nothing about the surface, only where the deck sits.
+func _build_clouds() -> void:
+	_clouds.visible = has_clouds
+	if not has_clouds:
+		return
+
+	var top: float = cloud_ceiling()
+	_clouds.size = Vector2.ONE * top * 2.0
+	_clouds.position = -Vector2.ONE * top
+
+	if _cloud_material == null:
+		_cloud_material = (_clouds.material as ShaderMaterial).duplicate() as ShaderMaterial
+		_clouds.material = _cloud_material
+
+	_cloud_material.set_shader_parameter("base_ratio", cloud_base_radius() / top)
+	_cloud_material.set_shader_parameter("top_ratio", 1.0)
+	_cloud_material.set_shader_parameter("cloud_color", cloud_color)
+	_cloud_material.set_shader_parameter("coverage", cloud_coverage)
+	_cloud_material.set_shader_parameter("opacity", cloud_opacity)
+	_cloud_material.set_shader_parameter("feature_scale", cloud_scale)
+	_cloud_material.set_shader_parameter("scroll_speed", cloud_speed)
+	_cloud_material.set_shader_parameter("edge_softness", cloud_softness)
 
 
 func _make_shell(index: int) -> Area2D:

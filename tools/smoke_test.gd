@@ -747,6 +747,7 @@ func _evaluate_phase() -> void:
 			)
 		Phase.PLATEAU:
 			_check_plateaus(_planet)
+			_check_weather(_planet)
 		Phase.GEAR:
 			_check_gear(_ship)
 		Phase.LANDING_GOOD:
@@ -1044,6 +1045,47 @@ func _place_for_touchdown(angle: float, descent: float) -> void:
 	_ship.landed.connect(_on_landed)
 
 
+## Clouds are weather, not scenery painted on the rock: whatever the seed rolls,
+## the deck has to end up above every mountain and below the top of the air.
+##
+## Both bounds are property checks rather than numbers, because the cloud
+## parameters are rolled per planet and the terrain ceiling moves with them.
+func _check_weather(planet: Planet) -> void:
+	# Sweep seeds rather than trusting the one planet this run happens to have:
+	# a fifth of all planets are airless and would pass the bounds vacuously.
+	var probe: Planet = planet
+	var airless: int = 0
+	var cloudy: int = 0
+	for planet_seed: int in range(40):
+		probe.generate(planet_seed)
+		if probe.atmosphere_height <= 0.0:
+			airless += 1
+			_expect_quiet(not probe.has_clouds, "airless planet %d has no weather" % planet_seed)
+			continue
+		if not probe.has_clouds:
+			continue
+		cloudy += 1
+		_expect_quiet(
+			probe.cloud_base_radius() > probe.terrain.outer_radius,
+			"planet %d keeps its clouds above the rock (%.0f vs ceiling %.0f)" % [
+				planet_seed, probe.cloud_base_radius(), probe.terrain.outer_radius,
+			],
+		)
+		_expect_quiet(
+			probe.cloud_ceiling() > probe.cloud_base_radius(),
+			"planet %d has a deck with thickness" % planet_seed,
+		)
+		_expect_quiet(
+			probe.cloud_ceiling() <= probe.atmosphere_radius() + 0.001,
+			"planet %d keeps its clouds inside the air (%.0f vs top %.0f)" % [
+				planet_seed, probe.cloud_ceiling(), probe.atmosphere_radius(),
+			],
+		)
+	_expect(cloudy > 0, "seeds roll cloudy planets (%d of 40, %d airless)" % [cloudy, airless])
+	_expect(airless > 0, "seeds still roll airless rocks (%d of 40)" % airless)
+	probe.generate(planet.planet_seed)
+
+
 ## Plateaus have to be real ground a stock ship can stand on, not just a number
 ## in the generator.
 func _check_plateaus(planet: Planet) -> void:
@@ -1171,6 +1213,14 @@ func _finish() -> bool:
 		print("smoke test: %d check(s) FAILED" % _failures)
 		quit(1)
 	return true
+
+
+## Like _expect, but silent when it passes. For sweeps over many seeds, where
+## one line per seed would bury every other check in the run.
+func _expect_quiet(condition: bool, description: String) -> void:
+	if not condition:
+		print("  FAIL %s" % description)
+		_failures += 1
 
 
 func _expect(condition: bool, description: String) -> void:

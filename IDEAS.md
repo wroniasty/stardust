@@ -282,92 +282,65 @@ przy lądowaniu, a gruba atmosfera daje widoczne wejście w powietrze.
 Konsekwencja, o której łatwo zapomnieć: przy atmosferze sięgającej 1.45 R
 orbita na 1.5 R już w niej siedzi. Testy orbitalne przeniesione na 2.0 R.
 Progi rim lightu w shaderze atmosfery są ułamkami wysokości atmosfery, więc
-też musiały się zacieśnić (0.08/0.7 -> 0.03/0.30): przy 400 px powietrza stara
+też musiały się zacieśnić (0.08/0.7 -> 0.02/0.18): przy 400 px powietrza stara
 wartość dawała 270 px poświaty na ekranie wysokim na 360 px.
 
 Zmierzone: orbita kołowa na 2.0 R trzyma promień z dryfem 0.05% przez 30 s przy
 semi-implicit Euler w 60 Hz. Wystarczy dla zręcznościówki, pełny test na kilka
 minut jest w M1.5.
 
-Shader atmosfery dostaje tylko `surface_ratio` (promień powierzchni podzielony
-przez promień atmosfery), kolor i gęstość; cała geometria to UV kwadratu.
-Chmury są próbkowane na okręgu, a nie na rozwiniętym kącie, więc obracają się
-bez szwu.
+**Atmosfera to jedna warstwa rysowana POD terenem.** Kwadrat sięga promienia
+atmosfery, shader zna tylko `surface_ratio`, kolor i gęstość — nic o
+powierzchni. Powyżej nominalnego promienia krycie opada od `shell_haze` (0.80)
+do zera na szczycie z wykładnikiem `shell_falloff` 0.70, czyli po krzywej
+**wklęsłej**: wykładnik poniżej 1 utrzymuje realne krycie przez środek
+wznoszenia, zamiast upychać całą atmosferę w dolnej jednej trzeciej. Tuż nad
+gruntem jest wąski rim light (`rim_strength` 0.25). Poniżej promienia warstwa
+tylko gęstnieje — przez `opaque_depth` (6% promienia kwadratu) dochodzi do
+pełnego krycia i tak zostaje aż do środka planety.
 
-**Profil krycia (poprawiony po ocenie wzrokowej).** Pierwsza wersja spadała jak
-`air^2`, co upychało całą atmosferę w dolnej jednej trzeciej: nad szczytami gór
-zostawało 0.105 krycia i kosmos prześwitywał przez grunt, a w połowie wysokości
-0.057, czyli nic. Do tego wąski, mocny rim light tuż nad ziemią sprawiał, że
-powierzchnia świeciła.
+Gęstość planety skaluje całość przez `mix(0.55, 1.0, gęstość)` — rzadka
+atmosfera ma być słabsza, ale nigdy nieobecna, inaczej co piąta planeta
+wyglądałaby na bezpowietrzną, choć nie jest.
 
-Teraz są trzy osobne wartości zamiast jednej:
+Zmierzone krycie przy gęstości 0.51: grunt 0.234, szczyty gór 0.475, połowa
+atmosfery 0.384, 9/10 wysokości 0.124, szczyt 0. Gwiazdy tła są zasłonięte przez
+większość wznoszenia i wychodzą dopiero blisko krańca atmosfery.
 
-- `disc_haze` (0.30) nad samą planetą — celowo najniższa, bo teren musi
-  pozostać czytelny do lądowania,
-- `shell_haze` (0.80) tuż nad gruntem, opadające do zera na szczycie,
-- `shell_falloff` 0.70, czyli krzywa **wklęsła**. To jest sedno poprawki:
-  wykładnik poniżej 1 utrzymuje realne krycie przez środek wznoszenia.
+**Dlaczego pod terenem, a nie nad nim.** Bo wtedy kopanie nie odsłania niczego
+poza tym, co i tak już tam było. Poprzednie podejście — shader z polem wysokości
+gruntu (`ground_heights`, teksel na kolumnę kątową) — kosztowało cztery rundy
+poprawek i każda odsłaniała nową wadę tego samego błędu: mgiełka wlewała się w
+świeżo wystrzelone szyby (sąsiednie kolumny przy r=1050 miały 0.233, 0.594 i
+0.777 krycia, czyli jasne pasy stojące między filarami skały), krater wycinał
+promienistą szczelinę w chmurach aż po szczyt nieba, a każdy filtr wygładzający
+to pole psuł coś innego — średnia była ciągnięta w dół przez tę samą dziurę,
+którą miała zignorować, średnia z górnej połowy próbek unosiła się osiem pikseli
+nad nietkniętym gruntem na całym horyzoncie, a domknięcie morfologiczne
+działało, ale podwoiło czas generacji planety. Reguła na przyszłość: **warstwa
+atmosfery nie dostaje danych o powierzchni.** Kolejność rysowania załatwia
+wszystko, czego pole wysokości miało dowieść.
 
-Przejście między tarczą a powłoką jest rozmyte przez `limb_blend` (15% wysokości
-atmosfery), żeby czytało się jako poświata, a nie jako pierścień. Gęstość
-planety skaluje całość przez `mix(0.55, 1.0, gęstość)` — rzadka atmosfera ma być
-słabsza, ale nigdy nieobecna, inaczej połowa planet nie miałaby jej widocznej
-wcale.
+**Chmury to osobna, wysoka warstwa** (`shaders/clouds.gdshader`, węzeł Clouds
+nad Terrain). Pierścień między `base_ratio` a `top_ratio`, wygaszany na obu
+krawędziach przez `sin(band * PI)`, więc nie ma obręczy. FBM próbkowany na
+obracającym się okręgu, a nie na rozwiniętym kącie, więc pokrywa obraca się bez
+szwu; człon promieniowy jest celowo mały (`band * 0.5`), bo duży rozciąga szum w
+promienie wychodzące z planety. Próg `coverage` z `edge_softness` decyduje, czy
+to kilka kontynentów chmur, czy rozmyty overcast.
 
-Zmierzone krycie przy gęstości 0.51:
+Wszystkie parametry pokrywy są losowane z seeda planety obok koloru i gęstości
+powietrza: 75% planet z atmosferą ma chmury, baza 25..55% wysokości atmosfery,
+grubość 10..28%, pokrycie 0.25..0.70, krycie 0.35..0.80, skala detalu 2.2..6.0,
+obrót ±0.008..0.05 rad/s (znak losowy), kolor to biel zmieszana z kolorem
+atmosfery w 5..45%. Bezpowietrzne skały nie mają pogody.
 
-| wysokość | przedtem | teraz |
-|---|---|---|
-| grunt | 0.228 | 0.234 |
-| szczyty gór (0.32) | 0.105 | 0.475 |
-| połowa atmosfery | 0.057 | 0.384 |
-| 9/10 | 0.002 | 0.124 |
-| szczyt | 0 | 0 |
-
-Efekt zamierzony: gwiazdy tła są zasłonięte przez większość wznoszenia i
-wychodzą dopiero blisko krańca atmosfery.
-
-**Powłoka zaczyna się przy rzeczywistym gruncie, nie przy nominalnym promieniu.**
-To zostało z pierwszej poprawki jako osobna wada widoczna na zrzucie: relief
-jest wyśrodkowany na R, więc połowa planety leży poniżej niego, a nad każdą
-niziną ciągnął się pas rzadkiej mgiełki od gruntu aż do R, z wyraźną krawędzią
-jasnej powłoki zawieszoną wysoko nad terenem.
-
-Shader dostaje więc `ground_heights` — teksturę o wysokości jednego piksela, po
-teksel na kolumnę kątową, z promieniem powierzchni w pikselach. `PlanetTerrain`
-i tak trzymał te liczby w `_surface_radius` dla zapytań o nachylenie pod nogami,
-więc to tylko wysłanie ich na GPU; przy kraterze dochodzi ~17 KB uploadu.
-
-Rozróżnienie, które jest tu sednem: **profil grubości** mierzony jest od
-nominalnego promienia (żeby szczyt faktycznie wystawał w rzadsze powietrze niż
-dno doliny), ale **początek powietrza** to rzeczywisty grunt. Nad skałą krycie
-spada do `disc_haze`, z jednym tekselem zmiękczenia na złączu, żeby nie rysować
-drugiej krawędzi obok tej, którą teren już ma. Rim light też trzyma się
-rzeczywistego gruntu, a nie okręgu o promieniu R — dzięki temu poświata wchodzi
-w krater, co jest poprawne.
-
-**Mgła nie może wlewać się w wąskie dziury.** Strzał drąży szyb ledwie szerszy
-od siebie, a podawanie shaderowi dokładnej wysokości kolumny wypełniało każdy
-taki szyb mgłą o pełnej jasności od dna skorupy w górę: seria strzałów
-zostawiała na niebie ostre jasne pasy stojące między filarami skały. Zmierzone
-krycie sąsiednich kolumn przy r=1050 wynosiło 0.233, 0.594 i 0.777.
-
-Tekstura wysokości niesie więc nie dokładny grunt, tylko **domknięcie
-morfologiczne** (dylatacja, potem erozja) na oknie 80 px łuku. Prostsze filtry
-zawiodły każdy na swój sposób i warto wiedzieć dlaczego: średnia jest ciągnięta
-w dół przez tę samą dziurę, którą ma zignorować (szyb zachowywał jedną trzecią
-jasnego słupa), a średnia z górnej połowy próbek to naprawiała, ale siedziała
-osiem pikseli nad nietkniętym gruntem na całym horyzoncie, czyli rysowałaby
-wzdłuż niego cienką ciemną obwódkę. Domknięcie wypełnia wszystko węższe od okna
-i nie rusza reszty — zmierzone: szyb 110 px w całości pod podłogą mgły,
-nietknięty teren uniesiony o 0 do 4.5 px.
-
-**Czego nie wolno przypiąć do gruntu: chmur.** Pierwsza wersja wygaszała pokrywę
-chmur względem wysokości nad rzeczywistym terenem, przez co każdy wystrzelony
-krater wycinał nad sobą promienistą szczelinę w chmurach, z ostrymi krawędziami,
-ciągnącą się aż po szczyt nieba. Pokrywa chmur nie ma pojęcia, co jest pod nią;
-jej zanik idzie od nominalnego promienia. Reguła ogólna: z pola wysokości
-korzysta to, co dotyka gruntu (początek powietrza, rim light), a nie to, co
+Wylosowana wysokość to jednak tylko życzenie: relief sięga ~12% R ponad
+nominalny promień, a najniższa baza wypada na 6% R, więc pokrywa potrafiłaby
+wisieć w zboczu góry. `cloud_base_radius()` podnosi ją więc ponad
+`terrain.outer_radius` (z 20 px zapasu) i trzyma pod stropem powietrza. Pilnuje
+tego przemiatanie 40 seedów w smoke teście: chmury zawsze nad skałą, zawsze w
+powietrzu, zawsze niezerowej grubości.
 żyje wysoko.
 
 ## 6. Planety z pikseli i kolizje
