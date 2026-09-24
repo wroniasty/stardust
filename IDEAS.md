@@ -323,24 +323,71 @@ wszystko, czego pole wysokości miało dowieść.
 
 **Chmury to osobna, wysoka warstwa** (`shaders/clouds.gdshader`, węzeł Clouds
 nad Terrain). Pierścień między `base_ratio` a `top_ratio`, wygaszany na obu
-krawędziach przez `sin(band * PI)`, więc nie ma obręczy. FBM próbkowany na
-obracającym się okręgu, a nie na rozwiniętym kącie, więc pokrywa obraca się bez
-szwu; człon promieniowy jest celowo mały (`band * 0.5`), bo duży rozciąga szum w
-promienie wychodzące z planety. Próg `coverage` z `edge_softness` decyduje, czy
-to kilka kontynentów chmur, czy rozmyty overcast.
+krawędziach, FBM próbkowany na obracającym się okręgu, a nie na rozwiniętym
+kącie, więc pokrywa obraca się bez szwu.
 
-Wszystkie parametry pokrywy są losowane z seeda planety obok koloru i gęstości
-powietrza: 75% planet z atmosferą ma chmury, baza 25..55% wysokości atmosfery,
-grubość 10..28%, pokrycie 0.25..0.70, krycie 0.35..0.80, skala detalu 2.2..6.0,
-obrót ±0.008..0.05 rad/s (znak losowy), kolor to biel zmieszana z kolorem
-atmosfery w 5..45%. Bezpowietrzne skały nie mają pogody.
+**Komórka szumu musi być kwadratowa, i to nie jest kosmetyka.** Pierwsza wersja
+brała częstotliwość jako stałą liczbę komórek na obwód i wyglądała jak
+pierścień wokół planety, nie jak chmury. Powód jest czysto geometryczny:
+pokrywa ma ~124 px grubości i ~12000 px długości, więc przy 19 komórkach na
+obwód jedna komórka miała 660 px szerokości przy 124 px wysokości — każda chmura
+była smugą 5:1. Żadna wartość tego parametru tego nie naprawia, bo proporcja
+zależy od planety.
+
+Sedno poprawki: próbkowanie na okręgu o promieniu `scale` daje `scale` komórek
+na radian, więc łuk długi jak grubość pokrywy obejmuje `scale * grubość / mid`
+komórek. Jeśli **rozszerzać okrąg próbkowania wraz z wysokością dokładnie o
+tyle samo** (`spread = grubość / mid`), komórka jest tak samo wysoka jak szeroka
+— niezależnie od proporcji planety. Parametry są więc względne: `puff_size` to
+szerokość chmury w grubościach pokrywy (1.0 = kwadrat), a `flatten` to
+świadome odejście od kwadratu (powyżej 1 warstwy i pasma, poniżej wieże).
+
+Rozszerzanie okręgu, a nie dodawanie przesunięcia radialnego, jest celowe:
+przesunięcie ścina całe pole w jednym kierunku ekranu.
+
+Reszta parametrów shadera: `coverage` (mapowane na próg w zakresie 0.78..0.22,
+bo szum wartościowy skupia się wokół średniej i bez tego pół suwaka nic nie
+robi), `edge_softness`, `opacity`, `warp_strength` (domain warp o
+częstotliwości 0.35 częstotliwości kształtu — warp równie drobny co kształt
+strzępi krawędzie na włosy zamiast wyginać chmurę), `height_variation`
+(osobne, niskoczęstotliwościowe pole podnoszące strop pokrywy, żeby zamiast
+równej pokrywy były kłęby i przerwy), `shear` (różnica prędkości obrotu między
+dołem a górą pokrywy), `shading` + `shade_color` (spody ciemniejsze niż szczyty,
+to głównie z tego bierze się wrażenie objętości) i `octaves`.
+
+**Archetypy zamiast ośmiu niezależnych losowań.** Niezależne rolle na ośmiu
+parametrach uśredniłyby każdą planetę do tej samej średniej mgiełki, więc
+najpierw losowany jest typ nieba, a potem jitter w jego granicach:
+
+| typ | udział | wygląd | charakterystyczne |
+|---|---|---|---|
+| CUMULUS | 40% | rozbite kłęby z przerwami | puff 0.8..1.5, flatten 0.7..1.0, ostre krawędzie, 5 oktaw |
+| STRATUS | 30% | płaska pokrywa | puff 2.5..4, flatten 1.8..3, pokrycie 0.62..0.85, 3 oktawy |
+| CIRRUS | 20% | cienka szybka woalka wysoko | baza 0.55..0.80 wysokości atmosfery, warp 0.55..0.90, shear ±0.6..1.4 |
+| BANDED | 10% | ścinane pasma, gazowy olbrzym | flatten 3..5, shear ±1.0..1.8, gruba pokrywa |
+
+Pozostałe wspólne: 75% planet z atmosferą ma chmury, obrót ±0.008..0.05 rad/s
+(znak losowy), kolor to biel zmieszana z kolorem atmosfery w 5..45%, spód to ten
+kolor przyciemniony i pociągnięty w stronę atmosfery. Bezpowietrzne skały nie
+mają pogody.
 
 Wylosowana wysokość to jednak tylko życzenie: relief sięga ~12% R ponad
 nominalny promień, a najniższa baza wypada na 6% R, więc pokrywa potrafiłaby
 wisieć w zboczu góry. `cloud_base_radius()` podnosi ją więc ponad
 `terrain.outer_radius` (z 20 px zapasu) i trzyma pod stropem powietrza. Pilnuje
 tego przemiatanie 40 seedów w smoke teście: chmury zawsze nad skałą, zawsze w
-powietrzu, zawsze niezerowej grubości.
+powietrzu, zawsze niezerowej grubości; osobne przemiatanie 120 seedów pilnuje,
+że każdy archetyp faktycznie wypada (BANDED 4 na 120).
+
+**Oglądanie jest tańsze niż mierzenie.** `tools/cloud_preview.tscn` renderuje po
+dwa PNG-i na archetyp — cała tarcza i przelot pod pokrywą:
+
+    godot --path . tools/cloud_preview.tscn -- <katalog wyjściowy>
+
+Testy tej warstwy mogą pilnować tylko własności (nad skałą, w powietrzu,
+niezerowa grubość), nigdy tego, co naprawdę się liczy. Cztery rundy uwag do
+atmosfery minęły, zanim ktokolwiek zmierzył artefakt; to narzędzie jest po to,
+żeby następnym razem popatrzeć od razu.
 żyje wysoko.
 
 ## 6. Planety z pikseli i kolizje

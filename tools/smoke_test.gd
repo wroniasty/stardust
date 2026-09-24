@@ -1083,6 +1083,21 @@ func _check_weather(planet: Planet) -> void:
 		)
 	_expect(cloudy > 0, "seeds roll cloudy planets (%d of 40, %d airless)" % [cloudy, airless])
 	_expect(airless > 0, "seeds still roll airless rocks (%d of 40)" % airless)
+
+	# Every archetype has to actually turn up, or one of them is a dead branch
+	# nobody will ever see and the weighting is wrong.
+	var seen: Dictionary = {}
+	for planet_seed: int in range(120):
+		probe.generate(planet_seed)
+		if probe.has_clouds:
+			seen[probe.cloud_type] = int(seen.get(probe.cloud_type, 0)) + 1
+	for type_name: String in Planet.CloudType.keys():
+		var type_value: int = Planet.CloudType[type_name]
+		_expect(
+			seen.has(type_value),
+			"seeds roll %s skies (%d in 120)" % [type_name, int(seen.get(type_value, 0))],
+		)
+
 	probe.generate(planet.planet_seed)
 
 

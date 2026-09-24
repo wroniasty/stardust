@@ -28,16 +28,24 @@ const SHELL_PROFILE: Array[Vector2] = [
 	Vector2(0.33, 1.00),
 ]
 
-## Cloud decks are rolled between these bounds. Weather is part of what makes
-## a planet recognisable, so none of it is a global constant.
+## Kinds of sky a planet can roll.
+##
+## One shader draws all of them; what differs is where the deck sits, how
+## broken it is, how far it is warped and how hard the altitudes are sheared
+## against each other. Rolling a type first and then jittering inside it keeps
+## planets recognisable: independent rolls on eight parameters would average
+## every world into the same middling haze.
+enum CloudType {
+	STRATUS,  ## Flat overcast lid, few gaps.
+	CUMULUS,  ## Broken heaps with clear sky between them.
+	CIRRUS,  ## Thin, fast, wispy veil high up.
+	BANDED,  ## Sheared latitude bands, the gas giant look.
+}
+
+## Weather is part of what makes a planet recognisable, so none of it is a
+## global constant beyond how often a planet has any.
 const CLOUD_CHANCE: float = 0.75
-const CLOUD_BASE_RANGE: Vector2 = Vector2(0.25, 0.55)
-const CLOUD_DEPTH_RANGE: Vector2 = Vector2(0.10, 0.28)
-const CLOUD_COVERAGE_RANGE: Vector2 = Vector2(0.25, 0.70)
-const CLOUD_OPACITY_RANGE: Vector2 = Vector2(0.35, 0.80)
-const CLOUD_SCALE_RANGE: Vector2 = Vector2(2.2, 6.0)
 const CLOUD_SPEED_RANGE: Vector2 = Vector2(0.008, 0.05)
-const CLOUD_SOFTNESS_RANGE: Vector2 = Vector2(0.05, 0.30)
 
 ## Clearance the cloud base keeps above the highest rock the generator can
 ## produce, in pixels. Mountains reach well past the nominal surface, so a deck
@@ -123,13 +131,24 @@ var cloud_color: Color = Color(1.0, 0.97, 0.95)
 var cloud_base: float = 0.4
 var cloud_depth: float = 0.15
 
+var cloud_type: CloudType = CloudType.CUMULUS
 var cloud_coverage: float = 0.45
 var cloud_opacity: float = 0.6
-var cloud_scale: float = 3.5
+
+## Width of one cloud in deck thicknesses, and how much flatter than round it
+## is. Both are relative to the deck, so they mean the same thing on a moon and
+## on a gas giant.
+var cloud_puff_size: float = 1.2
+var cloud_flatten: float = 1.0
 
 ## Radians per second the deck turns, signed.
 var cloud_speed: float = 0.02
-var cloud_softness: float = 0.18
+var cloud_softness: float = 0.12
+var cloud_warp: float = 0.3
+var cloud_height_variation: float = 0.5
+var cloud_shear: float = 0.0
+var cloud_shading: float = 0.35
+var cloud_octaves: int = 4
 
 var terrain: PlanetTerrain = PlanetTerrain.new()
 
@@ -339,16 +358,86 @@ func _roll_weather(rng: RandomNumberGenerator) -> void:
 	has_clouds = atmosphere_height > 0.0 and atmosphere_density > 0.0 and rng.randf() < CLOUD_CHANCE
 	if not has_clouds:
 		return
-	cloud_base = rng.randf_range(CLOUD_BASE_RANGE.x, CLOUD_BASE_RANGE.y)
-	cloud_depth = rng.randf_range(CLOUD_DEPTH_RANGE.x, CLOUD_DEPTH_RANGE.y)
-	cloud_coverage = rng.randf_range(CLOUD_COVERAGE_RANGE.x, CLOUD_COVERAGE_RANGE.y)
-	cloud_opacity = rng.randf_range(CLOUD_OPACITY_RANGE.x, CLOUD_OPACITY_RANGE.y)
-	cloud_scale = rng.randf_range(CLOUD_SCALE_RANGE.x, CLOUD_SCALE_RANGE.y)
-	cloud_softness = rng.randf_range(CLOUD_SOFTNESS_RANGE.x, CLOUD_SOFTNESS_RANGE.y)
-	cloud_speed = rng.randf_range(CLOUD_SPEED_RANGE.x, CLOUD_SPEED_RANGE.y) * signf(rng.randf() - 0.5)
+
+	cloud_type = _roll_cloud_type(rng)
+	var direction: float = signf(rng.randf() - 0.5)
+	cloud_speed = rng.randf_range(CLOUD_SPEED_RANGE.x, CLOUD_SPEED_RANGE.y) * direction
+
+	match cloud_type:
+		CloudType.STRATUS:
+			cloud_base = rng.randf_range(0.20, 0.40)
+			cloud_depth = rng.randf_range(0.10, 0.18)
+			cloud_coverage = rng.randf_range(0.62, 0.85)
+			cloud_opacity = rng.randf_range(0.45, 0.70)
+			cloud_puff_size = rng.randf_range(2.5, 4.0)
+			cloud_flatten = rng.randf_range(1.8, 3.0)
+			cloud_softness = rng.randf_range(0.16, 0.30)
+			cloud_warp = rng.randf_range(0.10, 0.25)
+			cloud_height_variation = rng.randf_range(0.05, 0.20)
+			cloud_shear = rng.randf_range(-0.2, 0.2)
+			cloud_shading = rng.randf_range(0.15, 0.30)
+			cloud_octaves = 3
+		CloudType.CUMULUS:
+			cloud_base = rng.randf_range(0.28, 0.50)
+			cloud_depth = rng.randf_range(0.16, 0.30)
+			cloud_coverage = rng.randf_range(0.42, 0.62)
+			cloud_opacity = rng.randf_range(0.60, 0.85)
+			cloud_puff_size = rng.randf_range(0.8, 1.5)
+			cloud_flatten = rng.randf_range(0.7, 1.0)
+			cloud_softness = rng.randf_range(0.05, 0.11)
+			cloud_warp = rng.randf_range(0.25, 0.45)
+			cloud_height_variation = rng.randf_range(0.55, 0.80)
+			cloud_shear = rng.randf_range(-0.3, 0.3)
+			cloud_shading = rng.randf_range(0.35, 0.55)
+			cloud_octaves = 5
+		CloudType.CIRRUS:
+			cloud_base = rng.randf_range(0.55, 0.80)
+			cloud_depth = rng.randf_range(0.06, 0.12)
+			cloud_coverage = rng.randf_range(0.22, 0.40)
+			cloud_opacity = rng.randf_range(0.25, 0.45)
+			cloud_puff_size = rng.randf_range(3.0, 6.0)
+			cloud_flatten = rng.randf_range(2.5, 4.0)
+			cloud_softness = rng.randf_range(0.12, 0.24)
+			cloud_warp = rng.randf_range(0.55, 0.90)
+			cloud_height_variation = rng.randf_range(0.25, 0.45)
+			cloud_shear = rng.randf_range(0.6, 1.4) * direction
+			cloud_shading = rng.randf_range(0.10, 0.20)
+			cloud_octaves = 4
+		CloudType.BANDED:
+			cloud_base = rng.randf_range(0.22, 0.45)
+			cloud_depth = rng.randf_range(0.22, 0.38)
+			cloud_coverage = rng.randf_range(0.45, 0.68)
+			cloud_opacity = rng.randf_range(0.55, 0.80)
+			cloud_puff_size = rng.randf_range(2.0, 4.0)
+			cloud_flatten = rng.randf_range(3.0, 5.0)
+			cloud_softness = rng.randf_range(0.10, 0.20)
+			cloud_warp = rng.randf_range(0.15, 0.30)
+			cloud_height_variation = rng.randf_range(0.10, 0.25)
+			cloud_shear = rng.randf_range(1.0, 1.8) * direction
+			cloud_shading = rng.randf_range(0.20, 0.35)
+			cloud_octaves = 4
+
 	# Mostly white, tinted towards the air it floats in, so the weather looks
 	# like it belongs to the planet instead of being pasted on top of it.
 	cloud_color = Color.WHITE.lerp(atmosphere_color, rng.randf_range(0.05, 0.45))
+
+
+## Heaps are the common case; a banded gas giant sky should stay a surprise.
+func _roll_cloud_type(rng: RandomNumberGenerator) -> CloudType:
+	var roll: float = rng.randf()
+	if roll < 0.40:
+		return CloudType.CUMULUS
+	if roll < 0.70:
+		return CloudType.STRATUS
+	if roll < 0.90:
+		return CloudType.CIRRUS
+	return CloudType.BANDED
+
+
+## Colour of the underside of the deck. Cloud tops catch the light and bottoms
+## do not, which is most of what makes a puff read as having volume.
+func cloud_shade_color() -> Color:
+	return cloud_color.darkened(0.45).lerp(atmosphere_color, 0.35)
 
 
 ## Radius the cloud deck starts at, or the surface when there is none.
@@ -444,9 +533,16 @@ func _build_clouds() -> void:
 	_cloud_material.set_shader_parameter("cloud_color", cloud_color)
 	_cloud_material.set_shader_parameter("coverage", cloud_coverage)
 	_cloud_material.set_shader_parameter("opacity", cloud_opacity)
-	_cloud_material.set_shader_parameter("feature_scale", cloud_scale)
+	_cloud_material.set_shader_parameter("puff_size", cloud_puff_size)
+	_cloud_material.set_shader_parameter("flatten", cloud_flatten)
 	_cloud_material.set_shader_parameter("scroll_speed", cloud_speed)
 	_cloud_material.set_shader_parameter("edge_softness", cloud_softness)
+	_cloud_material.set_shader_parameter("shade_color", cloud_shade_color())
+	_cloud_material.set_shader_parameter("warp_strength", cloud_warp)
+	_cloud_material.set_shader_parameter("height_variation", cloud_height_variation)
+	_cloud_material.set_shader_parameter("shear", cloud_shear)
+	_cloud_material.set_shader_parameter("shading", cloud_shading)
+	_cloud_material.set_shader_parameter("octaves", cloud_octaves)
 
 
 func _make_shell(index: int) -> Area2D:
