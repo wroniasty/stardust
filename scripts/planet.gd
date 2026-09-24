@@ -45,6 +45,11 @@ enum CloudType {
 ## Weather is part of what makes a planet recognisable, so none of it is a
 ## global constant beyond how often a planet has any.
 const CLOUD_CHANCE: float = 0.75
+
+## Sub-layers a deck is split into. Each turns at its own rate, which is what
+## gives the sky depth when the ship flies through it; one layer reads as a
+## sheet of stickers however good the individual clouds are.
+const CLOUD_LAYERS: int = 3
 const CLOUD_SPEED_RANGE: Vector2 = Vector2(0.008, 0.05)
 
 ## Clearance the cloud base keeps above the highest rock the generator can
@@ -132,14 +137,18 @@ var cloud_base: float = 0.4
 var cloud_depth: float = 0.15
 
 var cloud_type: CloudType = CloudType.CUMULUS
-var cloud_coverage: float = 0.45
+## Fraction of the circumference standing under cloud. 1.0 means the clouds
+## laid end to end would just circle the planet; above that they overlap into a
+## continuous sheet.
+var cloud_coverage: float = 0.6
 var cloud_opacity: float = 0.6
 
-## Width of one cloud in deck thicknesses, and how much flatter than round it
-## is. Both are relative to the deck, so they mean the same thing on a moon and
-## on a gas giant.
-var cloud_puff_size: float = 1.2
-var cloud_flatten: float = 1.0
+## Size of one cloud, both measured in deck thicknesses so that they mean the
+## same thing on a moon and on a gas giant. Height is given directly rather
+## than as an aspect ratio: derived from the width it silently produced clouds
+## several times taller than the deck they live in.
+var cloud_puff_size: float = 2.0
+var cloud_puff_height: float = 0.8
 
 ## Radians per second the deck turns, signed.
 var cloud_speed: float = 0.02
@@ -150,11 +159,17 @@ var cloud_shear: float = 0.0
 var cloud_shading: float = 0.35
 var cloud_octaves: int = 4
 
+## How level the undersides are cut. Cumulus bases are famously flat, because
+## they all condense at the same altitude; cirrus has no base at all.
+var cloud_flat_base: float = 0.7
+
+const CLOUD_SHADER: Shader = preload("res://shaders/cloud.gdshader")
+
 var terrain: PlanetTerrain = PlanetTerrain.new()
 
 @onready var _terrain_quad: ColorRect = $Terrain
 @onready var _atmosphere: ColorRect = $Atmosphere
-@onready var _clouds: ColorRect = $Clouds
+@onready var _clouds: Node2D = $Clouds
 @onready var _shells: Node2D = $AtmosphereShells
 
 var _terrain_material: ShaderMaterial = null
@@ -367,55 +382,59 @@ func _roll_weather(rng: RandomNumberGenerator) -> void:
 		CloudType.STRATUS:
 			cloud_base = rng.randf_range(0.20, 0.40)
 			cloud_depth = rng.randf_range(0.10, 0.18)
-			cloud_coverage = rng.randf_range(0.62, 0.85)
+			cloud_coverage = rng.randf_range(1.2, 1.8)
 			cloud_opacity = rng.randf_range(0.45, 0.70)
-			cloud_puff_size = rng.randf_range(2.5, 4.0)
-			cloud_flatten = rng.randf_range(1.8, 3.0)
+			cloud_puff_size = rng.randf_range(3.0, 6.0)
+			cloud_puff_height = rng.randf_range(0.35, 0.55)
 			cloud_softness = rng.randf_range(0.16, 0.30)
 			cloud_warp = rng.randf_range(0.10, 0.25)
 			cloud_height_variation = rng.randf_range(0.05, 0.20)
 			cloud_shear = rng.randf_range(-0.2, 0.2)
 			cloud_shading = rng.randf_range(0.15, 0.30)
 			cloud_octaves = 3
+			cloud_flat_base = rng.randf_range(0.40, 0.65)
 		CloudType.CUMULUS:
 			cloud_base = rng.randf_range(0.28, 0.50)
 			cloud_depth = rng.randf_range(0.16, 0.30)
-			cloud_coverage = rng.randf_range(0.42, 0.62)
+			cloud_coverage = rng.randf_range(0.50, 0.80)
 			cloud_opacity = rng.randf_range(0.60, 0.85)
-			cloud_puff_size = rng.randf_range(0.8, 1.5)
-			cloud_flatten = rng.randf_range(0.7, 1.0)
+			cloud_puff_size = rng.randf_range(1.4, 2.6)
+			cloud_puff_height = rng.randf_range(0.70, 1.00)
 			cloud_softness = rng.randf_range(0.05, 0.11)
 			cloud_warp = rng.randf_range(0.25, 0.45)
 			cloud_height_variation = rng.randf_range(0.55, 0.80)
 			cloud_shear = rng.randf_range(-0.3, 0.3)
 			cloud_shading = rng.randf_range(0.35, 0.55)
 			cloud_octaves = 5
+			cloud_flat_base = rng.randf_range(0.70, 0.90)
 		CloudType.CIRRUS:
 			cloud_base = rng.randf_range(0.55, 0.80)
 			cloud_depth = rng.randf_range(0.06, 0.12)
-			cloud_coverage = rng.randf_range(0.22, 0.40)
+			cloud_coverage = rng.randf_range(0.40, 0.70)
 			cloud_opacity = rng.randf_range(0.25, 0.45)
-			cloud_puff_size = rng.randf_range(3.0, 6.0)
-			cloud_flatten = rng.randf_range(2.5, 4.0)
+			cloud_puff_size = rng.randf_range(5.0, 9.0)
+			cloud_puff_height = rng.randf_range(0.25, 0.45)
 			cloud_softness = rng.randf_range(0.12, 0.24)
 			cloud_warp = rng.randf_range(0.55, 0.90)
 			cloud_height_variation = rng.randf_range(0.25, 0.45)
 			cloud_shear = rng.randf_range(0.6, 1.4) * direction
 			cloud_shading = rng.randf_range(0.10, 0.20)
 			cloud_octaves = 4
+			cloud_flat_base = rng.randf_range(0.05, 0.20)
 		CloudType.BANDED:
 			cloud_base = rng.randf_range(0.22, 0.45)
 			cloud_depth = rng.randf_range(0.22, 0.38)
-			cloud_coverage = rng.randf_range(0.45, 0.68)
+			cloud_coverage = rng.randf_range(1.0, 1.5)
 			cloud_opacity = rng.randf_range(0.55, 0.80)
-			cloud_puff_size = rng.randf_range(2.0, 4.0)
-			cloud_flatten = rng.randf_range(3.0, 5.0)
+			cloud_puff_size = rng.randf_range(5.0, 10.0)
+			cloud_puff_height = rng.randf_range(0.50, 0.80)
 			cloud_softness = rng.randf_range(0.10, 0.20)
 			cloud_warp = rng.randf_range(0.15, 0.30)
 			cloud_height_variation = rng.randf_range(0.10, 0.25)
 			cloud_shear = rng.randf_range(1.0, 1.8) * direction
 			cloud_shading = rng.randf_range(0.20, 0.35)
 			cloud_octaves = 4
+			cloud_flat_base = rng.randf_range(0.25, 0.45)
 
 	# Mostly white, tinted towards the air it floats in, so the weather looks
 	# like it belongs to the planet instead of being pasted on top of it.
@@ -513,36 +532,82 @@ func _build_atmosphere() -> void:
 		_shells.add_child(_make_shell(i))
 
 
-## The cloud deck: one quad reaching to the top of the clouds, drawn over the
-## terrain. It is told nothing about the surface, only where the deck sits.
+## Builds the deck as individual clouds rather than as a pattern in a ring.
+##
+## The ring this replaces could not work from inside the atmosphere: the camera
+## flies through the middle of it, so every cloud was a slice of one continuous
+## field bent along the horizon and the sky read as a doughnut. Clouds need
+## edges and positions.
 func _build_clouds() -> void:
+	for child: Node in _clouds.get_children():
+		child.queue_free()
 	_clouds.visible = has_clouds
 	if not has_clouds:
 		return
 
-	var top: float = cloud_ceiling()
-	_clouds.size = Vector2.ONE * top * 2.0
-	_clouds.position = -Vector2.ONE * top
-
 	if _cloud_material == null:
-		_cloud_material = (_clouds.material as ShaderMaterial).duplicate() as ShaderMaterial
-		_clouds.material = _cloud_material
-
-	_cloud_material.set_shader_parameter("base_ratio", cloud_base_radius() / top)
-	_cloud_material.set_shader_parameter("top_ratio", 1.0)
+		_cloud_material = ShaderMaterial.new()
+		_cloud_material.shader = CLOUD_SHADER
 	_cloud_material.set_shader_parameter("cloud_color", cloud_color)
-	_cloud_material.set_shader_parameter("coverage", cloud_coverage)
-	_cloud_material.set_shader_parameter("opacity", cloud_opacity)
-	_cloud_material.set_shader_parameter("puff_size", cloud_puff_size)
-	_cloud_material.set_shader_parameter("flatten", cloud_flatten)
-	_cloud_material.set_shader_parameter("scroll_speed", cloud_speed)
-	_cloud_material.set_shader_parameter("edge_softness", cloud_softness)
 	_cloud_material.set_shader_parameter("shade_color", cloud_shade_color())
-	_cloud_material.set_shader_parameter("warp_strength", cloud_warp)
-	_cloud_material.set_shader_parameter("height_variation", cloud_height_variation)
-	_cloud_material.set_shader_parameter("shear", cloud_shear)
 	_cloud_material.set_shader_parameter("shading", cloud_shading)
-	_cloud_material.set_shader_parameter("octaves", cloud_octaves)
+	_cloud_material.set_shader_parameter("softness", cloud_softness)
+	_cloud_material.set_shader_parameter("detail", cloud_warp)
+	# How high the lobes pile up follows the same roll that decides how uneven
+	# the deck is: a sky of towering heaps and a flat lid are the same fact
+	# seen from two distances.
+	_cloud_material.set_shader_parameter("pile", 0.45 + cloud_height_variation)
+	_cloud_material.set_shader_parameter("flat_base", cloud_flat_base)
+
+	var base: float = cloud_base_radius()
+	var deck: float = maxf(cloud_ceiling() - base, 1.0)
+	var mid: float = base + deck * 0.5
+
+	# Size is relative to the deck, so a cloud means the same thing on a moon
+	# and on a gas giant.
+	var width: float = deck * cloud_puff_size
+	var size: Vector2 = Vector2(width, deck * cloud_puff_height)
+
+	# Coverage is what fraction of the circumference has cloud standing on it,
+	# which is the only definition that survives changing the planet's size.
+	var total: int = int(TAU * mid * cloud_coverage / maxf(width, 1.0))
+
+	for layer: int in range(CLOUD_LAYERS):
+		var field: CloudField = CloudField.new()
+		field.name = "Layer%d" % layer
+		field.material = _cloud_material
+		# Layers are spread across the deck and stacked from the inside out, so
+		# the highest one is thinnest and faintest, the way a real sky thins.
+		var fraction: float = float(layer) / float(CLOUD_LAYERS)
+		var fade: float = 1.0 - fraction * 0.35
+		field.build(
+			hash_seed(planet_seed, layer),
+			int(total / CLOUD_LAYERS),
+			base + deck * fraction,
+			deck / float(CLOUD_LAYERS) * (1.0 + cloud_height_variation),
+			size * fade,
+			Vector2(cloud_opacity * 0.55, cloud_opacity) * fade,
+		)
+		# Shear turns the layers against each other. On a banded planet that is
+		# the whole look; elsewhere it is just parallax.
+		field.spin = cloud_speed * (1.0 + cloud_shear * (fraction - 0.5))
+		_clouds.add_child(field)
+
+
+## Clouds in the sky, across every layer.
+func cloud_count() -> int:
+	var total: int = 0
+	for child: Node in _clouds.get_children():
+		var field: CloudField = child as CloudField
+		if field != null:
+			total += field.cloud_count()
+	return total
+
+
+## A stable second seed from a first one, so layers of the same planet differ
+## without either of them tracking the other.
+static func hash_seed(base: int, salt: int) -> int:
+	return hash(str(base, ":", salt))
 
 
 func _make_shell(index: int) -> Area2D:

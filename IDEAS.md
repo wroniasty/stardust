@@ -321,63 +321,77 @@ działało, ale podwoiło czas generacji planety. Reguła na przyszłość: **wa
 atmosfery nie dostaje danych o powierzchni.** Kolejność rysowania załatwia
 wszystko, czego pole wysokości miało dowieść.
 
-**Chmury to osobna, wysoka warstwa** (`shaders/clouds.gdshader`, węzeł Clouds
-nad Terrain). Pierścień między `base_ratio` a `top_ratio`, wygaszany na obu
-krawędziach, FBM próbkowany na obracającym się okręgu, a nie na rozwiniętym
-kącie, więc pokrywa obraca się bez szwu.
+**Chmury to osobne obiekty, nie wzór wypełniający pierścień.** Pierwsze dwie
+wersje rysowały szum w pierścieniu wokół planety (`ColorRect` na całą tarczę) i
+obie wyglądały jak obręcz, którą planeta ma na sobie. To nie był problem
+parametrów — kamera lata **w środku** tego pierścienia, więc każda chmura była
+wycinkiem jednego ciągłego pola wygiętego po horyzoncie. Nie da się tego
+naprawić ani częstotliwością, ani progiem: dopóki niebo jest polem, nie ma
+krawędzi, a chmura bez krawędzi to mgła.
 
-**Komórka szumu musi być kwadratowa, i to nie jest kosmetyka.** Pierwsza wersja
-brała częstotliwość jako stałą liczbę komórek na obwód i wyglądała jak
-pierścień wokół planety, nie jak chmury. Powód jest czysto geometryczny:
-pokrywa ma ~124 px grubości i ~12000 px długości, więc przy 19 komórkach na
-obwód jedna komórka miała 660 px szerokości przy 124 px wysokości — każda chmura
-była smugą 5:1. Żadna wartość tego parametru tego nie naprawia, bo proporcja
-zależy od planety.
+Teraz każda chmura to instancja: `CloudField` (MultiMeshInstance2D) trzyma po
+kilkadziesiąt quadów, każdy ustawiony w biegunowej ramce planety, a
+`shaders/cloud.gdshader` rysuje w tym quadzie **jedną** chmurę. Jeden batch na
+warstwę, kilkaset quadów na planetę — dla GPU to nic, a niebo składa się z
+obiektów, które można minąć.
 
-Sedno poprawki: próbkowanie na okręgu o promieniu `scale` daje `scale` komórek
-na radian, więc łuk długi jak grubość pokrywy obejmuje `scale * grubość / mid`
-komórek. Jeśli **rozszerzać okrąg próbkowania wraz z wysokością dokładnie o
-tyle samo** (`spread = grubość / mid`), komórka jest tak samo wysoka jak szeroka
-— niezależnie od proporcji planety. Parametry są więc względne: `puff_size` to
-szerokość chmury w grubościach pokrywy (1.0 = kwadrat), a `flatten` to
-świadome odejście od kwadratu (powyżej 1 warstwy i pasma, poniżej wieże).
+Pokrywa ma trzy warstwy (`CLOUD_LAYERS`), każda na innej wysokości i z inną
+prędkością obrotu. Jedna warstwa czyta się jak arkusz naklejek niezależnie od
+tego, jak dobre są pojedyncze chmury; dopiero rozjazd warstw daje głębię przy
+przelocie.
 
-Rozszerzanie okręgu, a nie dodawanie przesunięcia radialnego, jest celowe:
-przesunięcie ścina całe pole w jednym kierunku ekranu.
+**Sylwetka: łańcuch płatów na wspólnym korpusie, w przestrzeni skorygowanej o
+proporcje.** Koła liczone wprost w UV to była pierwsza próba i wychodziły z
+niej naleśniki, bo quad chmury jest 2 do 20 razy szerszy niż wyższy — koło w UV
+spłaszcza się dokładnie o ten czynnik. Wszystko liczy się więc w jednostkach
+**wysokości** chmury (`point = vec2(UV.x * aspect, UV.y)`, gdzie `aspect`
+przychodzi w `INSTANCE_CUSTOM.w`). Dzięki temu jeden shader rysuje przysadzisty
+cumulus i smugę cirrusa dwadzieścia razy dłuższą od własnej wysokości.
 
-Reszta parametrów shadera: `coverage` (mapowane na próg w zakresie 0.78..0.22,
-bo szum wartościowy skupia się wokół średniej i bez tego pół suwaka nic nie
-robi), `edge_softness`, `opacity`, `warp_strength` (domain warp o
-częstotliwości 0.35 częstotliwości kształtu — warp równie drobny co kształt
-strzępi krawędzie na włosy zamiast wyginać chmurę), `height_variation`
-(osobne, niskoczęstotliwościowe pole podnoszące strop pokrywy, żeby zamiast
-równej pokrywy były kłęby i przerwy), `shear` (różnica prędkości obrotu między
-dołem a górą pokrywy), `shading` + `shade_color` (spody ciemniejsze niż szczyty,
-to głównie z tego bierze się wrażenie objętości) i `octaves`.
+Kolejność jest istotna: najpierw ciągły korpus (kapsuła wzdłuż długości), potem
+płaty na nim. Bez korpusu długa chmura jest rzędem osobnych kółek — gąsienicą, a
+nie chmurą — bo każdy płat musi sam sięgnąć podstawy. Płaty trzymane są w
+granicach korpusu (0.12..0.88 długości), inaczej skrajne odrywają się jako
+bąbelki.
 
-**Archetypy zamiast ośmiu niezależnych losowań.** Niezależne rolle na ośmiu
-parametrach uśredniłyby każdą planetę do tej samej średniej mgiełki, więc
-najpierw losowany jest typ nieba, a potem jitter w jego granicach:
+Pozostałe parametry shadera: `softness` (ostry cumulus vs woalka bez sylwetki),
+`detail` (ile szum nadgryza kontur), `pile` (jak wysoko piętrzą się płaty),
+`flat_base` (płaskie spody cumulusów biorą się z tego, że cała pokrywa skrapla
+się na tej samej wysokości; wisior cirrusa nie ma podstawy w ogóle),
+`shading` + `shade_color` (jaśniejsze szczyty, ciemniejsze spody — stąd bierze
+się objętość). Per instancja: seed, krycie, własny udział w `pile`, aspect.
 
-| typ | udział | wygląd | charakterystyczne |
-|---|---|---|---|
-| CUMULUS | 40% | rozbite kłęby z przerwami | puff 0.8..1.5, flatten 0.7..1.0, ostre krawędzie, 5 oktaw |
-| STRATUS | 30% | płaska pokrywa | puff 2.5..4, flatten 1.8..3, pokrycie 0.62..0.85, 3 oktawy |
-| CIRRUS | 20% | cienka szybka woalka wysoko | baza 0.55..0.80 wysokości atmosfery, warp 0.55..0.90, shear ±0.6..1.4 |
-| BANDED | 10% | ścinane pasma, gazowy olbrzym | flatten 3..5, shear ±1.0..1.8, gruba pokrywa |
+Zmierzona pułapka: `QuadMesh` kładzie UV v = 0 wzdłuż swojego lokalnego +y, a w
+kanwie +y jest w dół, więc quad trzeba obrócić o `angle - PI/2`, nie `+ PI/2`.
+Pierwsza wersja rysowała wszystkie chmury do góry nogami — płaskie podstawy
+patrzyły w kosmos, płaty zwisały ku planecie.
+
+**Archetypy zamiast niezależnych losowań.** Niezależne rolle na ośmiu
+parametrach uśredniłyby każdą planetę do tej samej mgiełki, więc najpierw
+losowany jest typ nieba, a potem jitter w jego granicach. Rozmiary są podawane
+w grubościach pokrywy, więc znaczą to samo na księżycu i na gazowym olbrzymie;
+`coverage` to ułamek obwodu stojący pod chmurą (1.0 = chmury ułożone jedna za
+drugą obeszłyby planetę, powyżej — zachodzą na siebie w ciągłą pokrywę).
+
+| typ | udział | szer. x wys. | pokrycie | charakterystyczne |
+|---|---|---|---|---|
+| CUMULUS | 40% | 1.4..2.6 x 0.7..1.0 | 0.5..0.8 | ostre krawędzie, płaskie spody 0.7..0.9 |
+| STRATUS | 30% | 3..6 x 0.35..0.55 | 1.2..1.8 | zachodzą na siebie w pokrywę |
+| CIRRUS | 20% | 5..9 x 0.25..0.45 | 0.4..0.7 | wysoko (0.55..0.80 atmosfery), bez podstawy, duży shear |
+| BANDED | 10% | 5..10 x 0.5..0.8 | 1.0..1.5 | shear ±1.0..1.8, pasma gazowego olbrzyma |
 
 Pozostałe wspólne: 75% planet z atmosferą ma chmury, obrót ±0.008..0.05 rad/s
 (znak losowy), kolor to biel zmieszana z kolorem atmosfery w 5..45%, spód to ten
 kolor przyciemniony i pociągnięty w stronę atmosfery. Bezpowietrzne skały nie
 mają pogody.
 
-Wylosowana wysokość to jednak tylko życzenie: relief sięga ~12% R ponad
-nominalny promień, a najniższa baza wypada na 6% R, więc pokrywa potrafiłaby
-wisieć w zboczu góry. `cloud_base_radius()` podnosi ją więc ponad
-`terrain.outer_radius` (z 20 px zapasu) i trzyma pod stropem powietrza. Pilnuje
-tego przemiatanie 40 seedów w smoke teście: chmury zawsze nad skałą, zawsze w
-powietrzu, zawsze niezerowej grubości; osobne przemiatanie 120 seedów pilnuje,
-że każdy archetyp faktycznie wypada (BANDED 4 na 120).
+Wylosowana wysokość to tylko życzenie: relief sięga ~12% R ponad nominalny
+promień, a najniższa baza wypada na 6% R, więc pokrywa potrafiłaby wisieć w
+zboczu góry. `cloud_base_radius()` podnosi ją ponad `terrain.outer_radius` (z
+20 px zapasu) i trzyma pod stropem powietrza. Pilnuje tego przemiatanie 40
+seedów w smoke teście: chmury zawsze nad skałą, zawsze w powietrzu, zawsze
+niezerowej grubości, zawsze w niezerowej liczbie; osobne przemiatanie 120
+seedów pilnuje, że każdy archetyp faktycznie wypada (BANDED 4 na 120).
 
 **Oglądanie jest tańsze niż mierzenie.** `tools/cloud_preview.tscn` renderuje po
 dwa PNG-i na archetyp — cała tarcza i przelot pod pokrywą:

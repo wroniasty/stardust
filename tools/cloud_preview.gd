@@ -41,10 +41,10 @@ func _run() -> void:
 			print("no seed found for %s in %d tries" % [type_name, SEED_LIMIT])
 			continue
 		planet.generate(found)
-		print("%s: seed %d, R %.0f, deck %.0f..%.0f, coverage %.2f, puff %.1f, flatten %.1f, shear %.2f" % [
+		print("%s: seed %d, R %.0f, deck %.0f..%.0f, %d clouds, coverage %.2f, puff %.1f x %.1f, shear %.2f" % [
 			type_name, found, planet.surface_radius,
-			planet.cloud_base_radius(), planet.cloud_ceiling(),
-			planet.cloud_coverage, planet.cloud_puff_size, planet.cloud_flatten,
+			planet.cloud_base_radius(), planet.cloud_ceiling(), planet.cloud_count(),
+			planet.cloud_coverage, planet.cloud_puff_size, planet.cloud_puff_height,
 			planet.cloud_shear,
 		])
 		await _shoot(type_name, "disc", Vector2.ZERO, planet.atmosphere_radius() * 1.15)

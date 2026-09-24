@@ -1,9 +1,8 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/planet.gd" id="1_planet"]
 [ext_resource type="Shader" path="res://shaders/terrain.gdshader" id="2_terrain"]
 [ext_resource type="Shader" path="res://shaders/atmosphere.gdshader" id="3_atmosphere"]
-[ext_resource type="Shader" path="res://shaders/clouds.gdshader" id="4_clouds"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_terrain"]
 shader = ExtResource("2_terrain")
@@ -14,24 +13,6 @@ shader_parameter/rock_color = Color(0.32, 0.3, 0.28, 1)
 shader_parameter/core_color = Color(0.18, 0.16, 0.17, 1)
 shader_parameter/crust_depth = 7.0
 shader_parameter/rock_depth = 30.0
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_clouds"]
-shader = ExtResource("4_clouds")
-shader_parameter/cloud_color = Color(1, 0.97, 0.95, 1)
-shader_parameter/shade_color = Color(0.55, 0.55, 0.66, 1)
-shader_parameter/base_ratio = 0.8
-shader_parameter/top_ratio = 0.92
-shader_parameter/coverage = 0.45
-shader_parameter/edge_softness = 0.12
-shader_parameter/opacity = 0.6
-shader_parameter/scroll_speed = 0.02
-shader_parameter/puff_size = 1.2
-shader_parameter/flatten = 1.0
-shader_parameter/warp_strength = 0.3
-shader_parameter/height_variation = 0.5
-shader_parameter/shear = 0.0
-shader_parameter/shading = 0.35
-shader_parameter/octaves = 4
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_atmosphere"]
 shader = ExtResource("3_atmosphere")
@@ -56,9 +37,6 @@ material = SubResource("ShaderMaterial_terrain")
 offset_right = 40.0
 offset_bottom = 40.0
 
-[node name="Clouds" type="ColorRect" parent="."]
-material = SubResource("ShaderMaterial_clouds")
-offset_right = 40.0
-offset_bottom = 40.0
+[node name="Clouds" type="Node2D" parent="."]
 
 [node name="AtmosphereShells" type="Node2D" parent="."]

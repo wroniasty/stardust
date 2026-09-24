@@ -1076,6 +1076,10 @@ func _check_weather(planet: Planet) -> void:
 			"planet %d has a deck with thickness" % planet_seed,
 		)
 		_expect_quiet(
+			probe.cloud_count() > 0,
+			"planet %d with weather actually has clouds in the sky" % planet_seed,
+		)
+		_expect_quiet(
 			probe.cloud_ceiling() <= probe.atmosphere_radius() + 0.001,
 			"planet %d keeps its clouds inside the air (%.0f vs top %.0f)" % [
 				planet_seed, probe.cloud_ceiling(), probe.atmosphere_radius(),
