@@ -659,6 +659,15 @@ Do tego prędkość zapisywana dla HUD szła jeszcze starym kierunkiem, więc
 wskazania i ruch przeczyły sobie nawzajem. Styczna liczy się teraz jawnie jako
 `Vector2(-up.y, up.x)`.
 
+**Lock posiada pozycję, nie orientację.** `_integrate_forces` wychodziło w
+trybie locka przed pętlą aplikującą siły silników, więc dysze obrotowe paliły
+się i rysowały wydech, ale żaden moment nie docierał do ciała — statek zaparkowany
+na orbicie nie dawał się obrócić, czyli nie dawał się ustawić do wyjściowego
+odpalenia. Teraz w locku liczony jest sam moment (`_apply_engine_torque`), bez
+sił. To nie przybliżenie: grupy obrotowe są z definicji parami sił o zerowej
+wypadkowej, a każda komenda, która naprawdę by statek przesunęła, i tak zwalnia
+locka.
+
 Test pilnujący promienia tego nie widział, bo okrąg o zadanym promieniu jest
 taki sam w obie strony. Smoke test porównuje więc znak momentu pędu przed
 przejęciem ze znakiem faktycznego przyrostu kąta w locku, i osobno sprawdza, że

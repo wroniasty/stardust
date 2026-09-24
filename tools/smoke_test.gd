@@ -45,6 +45,11 @@ const DROP_HEIGHT: float = 60.0
 const LOCK_TICKS: int = 300
 const LOCK_THRUST_AT_TICK: int = 240
 
+## Aiming is tried well before the thrust that ends the phase, and stopped
+## again, so the two hand-offs cannot be confused for each other.
+const LOCK_AIM_FROM_TICK: int = 160
+const LOCK_AIM_TO_TICK: int = 220
+
 const AEROBRAKE_TICKS: int = 120
 const HEAT_TICKS: int = 120
 
@@ -106,6 +111,11 @@ var _lock_last_angle: float = INF
 
 ## Whether the velocity the lock reports ever disagreed with where it moved.
 var _lock_velocity_agrees: bool = true
+
+## Heading before and after aiming while locked, and whether the lock survived.
+var _lock_heading_before: float = 0.0
+var _lock_heading_after: float = 0.0
+var _lock_held_while_aiming: bool = true
 
 var _lock_radius_min: float = INF
 var _lock_radius_max: float = 0.0
@@ -184,6 +194,15 @@ func _physics_process(delta: float) -> bool:
 			_pre_lock_direction = signf(arm.cross(_ship.linear_velocity))
 		elif _lock_engaged:
 			_lock_released = true
+		if _ticks == LOCK_AIM_FROM_TICK:
+			_lock_heading_before = _ship.global_rotation
+			_ship.commands[ShipControl.Command.CW] = 1.0
+		if _ticks > LOCK_AIM_FROM_TICK and _ticks <= LOCK_AIM_TO_TICK:
+			if _ship.flight_mode != Ship.FlightMode.ORBIT_LOCK:
+				_lock_held_while_aiming = false
+		if _ticks == LOCK_AIM_TO_TICK:
+			_lock_heading_after = _ship.global_rotation
+			_ship.commands.erase(ShipControl.Command.CW)
 		if _ticks == LOCK_THRUST_AT_TICK:
 			_ship.commands[ShipControl.Command.FORWARD] = 1.0
 	elif _phase == Phase.ROTATE_CW or _phase == Phase.ROTATE_CCW or _phase == Phase.ROTATE_DAMAGED:
@@ -539,6 +558,9 @@ func _begin_phase() -> void:
 			_lock_radius_min = INF
 			_lock_radius_max = 0.0
 			_pre_lock_direction = 0.0
+			_lock_heading_before = 0.0
+			_lock_heading_after = 0.0
+			_lock_held_while_aiming = true
 			_lock_travel = 0.0
 			_lock_last_angle = INF
 			_lock_velocity_agrees = true
@@ -762,6 +784,15 @@ func _evaluate_phase() -> void:
 				_lock_velocity_agrees,
 				"the velocity the lock reports matches the way it moves",
 			)
+			# The lock owns the position, not the heading: a parked ship still has
+			# to be able to turn, or it cannot line up the burn that leaves.
+			_expect(
+				not is_equal_approx(_lock_heading_before, _lock_heading_after),
+				"the rotation thrusters still aim the ship while locked (%.1f -> %.1f deg)" % [
+					rad_to_deg(_lock_heading_before), rad_to_deg(_lock_heading_after),
+				],
+			)
+			_expect(_lock_held_while_aiming, "aiming does not drop the lock")
 			_expect(_lock_released, "thrust hands control back to the solver")
 			_expect(
 				_ship.flight_mode == Ship.FlightMode.PHYSICAL,

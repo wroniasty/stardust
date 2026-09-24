@@ -397,6 +397,11 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_applied_torque = 0.0
 
 	if flight_mode == FlightMode.ORBIT_LOCK:
+		# The lock owns where the ship is, not which way it points. Torque still
+		# reaches the body so the pilot can aim, reorient for a burn or kill a
+		# spin while parked; only the forces that would move it are dropped,
+		# and a command that would move it releases the lock anyway.
+		_apply_engine_torque(state)
 		_run_orbit_lock(state)
 		return
 
@@ -424,6 +429,24 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_resolve_terrain(state)
 	_update_heat(state.step)
 	_consider_orbit_lock(state)
+
+
+## Turns the ship without pushing it, for use while the lock owns the position.
+##
+## The rotational groups are couples with no net force by design, so taking
+## only their torque is what they were going to do anyway rather than an
+## approximation (see IDEAS.md section 3).
+func _apply_engine_torque(state: PhysicsDirectBodyState2D) -> void:
+	var body_rotation: float = state.transform.get_rotation()
+	for engine: EngineInstance in engines:
+		var local_force: Vector2 = engine.current_force()
+		if local_force.is_zero_approx():
+			continue
+		var force: Vector2 = local_force.rotated(body_rotation)
+		var arm: Vector2 = (engine.mount.position - center_of_mass).rotated(body_rotation)
+		_applied_torque += arm.cross(force)
+	if not is_zero_approx(_applied_torque):
+		state.apply_torque(_applied_torque)
 
 
 ## Hull heating from braking against the air.
