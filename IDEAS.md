@@ -294,6 +294,39 @@ przez promień atmosfery), kolor i gęstość; cała geometria to UV kwadratu.
 Chmury są próbkowane na okręgu, a nie na rozwiniętym kącie, więc obracają się
 bez szwu.
 
+**Profil krycia (poprawiony po ocenie wzrokowej).** Pierwsza wersja spadała jak
+`air^2`, co upychało całą atmosferę w dolnej jednej trzeciej: nad szczytami gór
+zostawało 0.105 krycia i kosmos prześwitywał przez grunt, a w połowie wysokości
+0.057, czyli nic. Do tego wąski, mocny rim light tuż nad ziemią sprawiał, że
+powierzchnia świeciła.
+
+Teraz są trzy osobne wartości zamiast jednej:
+
+- `disc_haze` (0.30) nad samą planetą — celowo najniższa, bo teren musi
+  pozostać czytelny do lądowania,
+- `shell_haze` (0.80) tuż nad gruntem, opadające do zera na szczycie,
+- `shell_falloff` 0.70, czyli krzywa **wklęsła**. To jest sedno poprawki:
+  wykładnik poniżej 1 utrzymuje realne krycie przez środek wznoszenia.
+
+Przejście między tarczą a powłoką jest rozmyte przez `limb_blend` (15% wysokości
+atmosfery), żeby czytało się jako poświata, a nie jako pierścień. Gęstość
+planety skaluje całość przez `mix(0.55, 1.0, gęstość)` — rzadka atmosfera ma być
+słabsza, ale nigdy nieobecna, inaczej połowa planet nie miałaby jej widocznej
+wcale.
+
+Zmierzone krycie przy gęstości 0.51:
+
+| wysokość | przedtem | teraz |
+|---|---|---|
+| grunt | 0.228 | 0.234 |
+| szczyty gór (0.32) | 0.105 | 0.475 |
+| połowa atmosfery | 0.057 | 0.384 |
+| 9/10 | 0.002 | 0.124 |
+| szczyt | 0 | 0 |
+
+Efekt zamierzony: gwiazdy tła są zasłonięte przez większość wznoszenia i
+wychodzą dopiero blisko krańca atmosfery.
+
 ## 6. Planety z pikseli i kolizje
 
 Teren planety to bitmapa, modyfikowalna (eksplozje, kopanie, zniszczenia). Nie zabija to kolizji, o ile piksele nie są ciałami fizycznymi.
