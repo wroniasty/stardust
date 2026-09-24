@@ -343,7 +343,16 @@ nominalnego promienia (żeby szczyt faktycznie wystawał w rzadsze powietrze ni�
 dno doliny), ale **początek powietrza** to rzeczywisty grunt. Nad skałą krycie
 spada do `disc_haze`, z jednym tekselem zmiękczenia na złączu, żeby nie rysować
 drugiej krawędzi obok tej, którą teren już ma. Rim light też trzyma się
-rzeczywistego gruntu, a nie okręgu o promieniu R.
+rzeczywistego gruntu, a nie okręgu o promieniu R — dzięki temu poświata wchodzi
+w krater, co jest poprawne.
+
+**Czego nie wolno przypiąć do gruntu: chmur.** Pierwsza wersja wygaszała pokrywę
+chmur względem wysokości nad rzeczywistym terenem, przez co każdy wystrzelony
+krater wycinał nad sobą promienistą szczelinę w chmurach, z ostrymi krawędziami,
+ciągnącą się aż po szczyt nieba. Pokrywa chmur nie ma pojęcia, co jest pod nią;
+jej zanik idzie od nominalnego promienia. Reguła ogólna: z pola wysokości
+korzysta to, co dotyka gruntu (początek powietrza, rim light), a nie to, co
+żyje wysoko.
 
 ## 6. Planety z pikseli i kolizje
 

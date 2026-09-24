@@ -100,7 +100,11 @@ void fragment() {
 	);
 	float clouds = fbm(turned * cloud_scale + vec2(radius * 2.0, 0.0));
 	clouds = smoothstep(0.45, 0.85, clouds);
-	clouds *= 1.0 - smoothstep(0.0, 0.35, clamp(above_ground, 0.0, 1.0));
+	// Faded against the nominal altitude, NOT against the ground below.
+	// A cloud deck has no idea what the terrain under it looks like, and tying
+	// it to the local ground meant every crater punched a hard-edged radial
+	// gap through the clouds above it, stretching to the top of the sky.
+	clouds *= 1.0 - smoothstep(0.0, 0.35, clamp(altitude, 0.0, 1.0));
 
 	// Thin air is still air: a thin atmosphere reads as less opaque, but never
 	// as absent, or half the planets would have an invisible one.
