@@ -89,9 +89,6 @@ const GEAR_OVERLOAD_DAMAGE: float = 0.01
 ## Below this speed the brake stops the ship outright rather than chasing it.
 const BRAKE_EPS: float = 2.0
 
-## Seconds of coasting before orbit lock is even considered.
-const ORBIT_LOCK_DELAY: float = 2.0
-
 ## Heating. The hull warms with the power the air is dissipating, which for
 ## the linear damping the shells apply goes as density times speed squared.
 ## Tying it to the same quantity that does the braking is what stops the heat
@@ -108,12 +105,12 @@ const HEAT_COOLING: float = 0.05
 ## HP and death; for now it only accumulates.
 signal hull_impact(impact_speed: float, damage: float)
 
-## Flight modes. ORBIT_LOCK is a rest state like being landed: the ship stops
-## being integrated and follows an analytic circle instead, because holding a
-## perfect orbit by hand is busywork (see IDEAS.md section 8).
-enum FlightMode { PHYSICAL, ORBIT_LOCK, LANDED }
+## Flight modes. Being landed is the only state that stops the solver; whether
+## the ship is in orbit is read off its trajectory rather than switched on,
+## because there is nothing for a mode to do about it (see IDEAS.md section 8).
+enum FlightMode { PHYSICAL, LANDED }
 
-## Emitted when the ship enters or leaves orbit lock or the ground.
+## Emitted when the ship touches down or leaves the ground.
 signal flight_mode_changed(mode: FlightMode)
 
 ## Emitted on a touchdown the gear could not absorb. `reason` is one of
@@ -133,15 +130,6 @@ signal hull_changed(integrity: float)
 ## If true the ship steers itself from the player's input actions. AI ships and
 ## tests turn this off and write the command fields directly.
 @export var use_player_input: bool = true
-
-## Orbit lock can be switched off entirely, which measurement tools need: a
-## locked ship holds its radius by definition and would hide integrator drift.
-@export var orbit_lock_enabled: bool = true
-
-## Orbit lock tolerances. Radial speed is absolute, tangential is a fraction of
-## the circular orbit speed at that radius. Both become module stats in M2.
-@export var orbit_lock_radial_tolerance: float = 6.0
-@export_range(0.0, 1.0) var orbit_lock_speed_tolerance: float = 0.06
 
 ## Restitution: how much of the closing speed a hard hit gives back. Only
 ## applied above RESTITUTION_CUTOFF, so a ship sitting on the ground stays.
@@ -212,12 +200,6 @@ var _landed_planet: Planet = null
 var _landed_angle: float = 0.0
 var _landed_radius: float = 0.0
 var _landed_heading: float = 0.0
-
-var _coasting_time: float = 0.0
-var _lock_planet: Planet = null
-var _lock_radius: float = 0.0
-var _lock_angle: float = 0.0
-var _lock_angular_speed: float = 0.0
 
 var _applied_force: Vector2 = Vector2.ZERO
 var _applied_torque: float = 0.0
@@ -396,15 +378,6 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_applied_force = Vector2.ZERO
 	_applied_torque = 0.0
 
-	if flight_mode == FlightMode.ORBIT_LOCK:
-		# The lock owns where the ship is, not which way it points. Torque still
-		# reaches the body so the pilot can aim, reorient for a burn or kill a
-		# spin while parked; only the forces that would move it are dropped,
-		# and a command that would move it releases the lock anyway.
-		_apply_engine_torque(state)
-		_run_orbit_lock(state)
-		return
-
 	# Gravity is summed from the bodies in range rather than left to the
 	# physics server, so the falloff can be ours (see IDEAS.md section 5).
 	_gravity = gravity_acceleration_at(state.transform.origin)
@@ -428,25 +401,6 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 
 	_resolve_terrain(state)
 	_update_heat(state.step)
-	_consider_orbit_lock(state)
-
-
-## Turns the ship without pushing it, for use while the lock owns the position.
-##
-## The rotational groups are couples with no net force by design, so taking
-## only their torque is what they were going to do anyway rather than an
-## approximation (see IDEAS.md section 3).
-func _apply_engine_torque(state: PhysicsDirectBodyState2D) -> void:
-	var body_rotation: float = state.transform.get_rotation()
-	for engine: EngineInstance in engines:
-		var local_force: Vector2 = engine.current_force()
-		if local_force.is_zero_approx():
-			continue
-		var force: Vector2 = local_force.rotated(body_rotation)
-		var arm: Vector2 = (engine.mount.position - center_of_mass).rotated(body_rotation)
-		_applied_torque += arm.cross(force)
-	if not is_zero_approx(_applied_torque):
-		state.apply_torque(_applied_torque)
 
 
 ## Hull heating from braking against the air.
@@ -460,107 +414,14 @@ func _update_heat(step: float) -> void:
 	hull_heat = clampf(hull_heat - HEAT_COOLING * step, 0.0, 1.0)
 
 
-## Direction a body travels in when its polar angle increases, at outward
-## direction `up`.
-##
-## Deliberately NOT `up.orthogonal()`. That turns 90 degrees anticlockwise,
-## which in Godot's Y-down space is the opposite handedness to the angle the
-## lock advances with. Mixing the two made the locked ship run backwards along
-## its own orbit: the sign of the tangential speed was measured against one
-## tangent and the position was then stepped along the other.
-static func _tangent(up: Vector2) -> Vector2:
-	return Vector2(-up.y, up.x)
-
-
-## Watches for a good enough circular orbit and takes over when it finds one.
-func _consider_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
-	if not orbit_lock_enabled:
-		return
-	if not active_commands.is_empty() or _applied_force.length() > 0.001 or _terrain_contacts > 0:
-		_coasting_time = 0.0
-		return
-	_coasting_time += state.step
-	if _coasting_time < ORBIT_LOCK_DELAY:
-		return
-
-	var planet: Planet = nearest_planet()
-	if planet == null:
-		return
-
-	# Locking inside the atmosphere would freeze a decaying orbit in place and
-	# quietly cancel aerobraking, which is the opposite of what it is for.
-	var position_now: Vector2 = state.transform.origin
-	if planet.air_density_at(position_now) > 0.0:
-		return
-
-	var offset: Vector2 = position_now - planet.global_position
-	var radius: float = offset.length()
-	if radius < 0.001 or radius >= planet.influence_radius:
-		return
-
-	var up: Vector2 = offset / radius
-	var along: Vector2 = _tangent(up)
-	var radial_speed: float = state.linear_velocity.dot(up)
-	var tangential_speed: float = state.linear_velocity.dot(along)
-	var circular_speed: float = planet.circular_orbit_speed(radius)
-	if circular_speed <= 0.0:
-		return
-
-	if absf(radial_speed) > orbit_lock_radial_tolerance:
-		return
-	if absf(absf(tangential_speed) - circular_speed) > circular_speed * orbit_lock_speed_tolerance:
-		return
-
-	_lock_planet = planet
-	_lock_radius = radius
-	_lock_angle = up.angle()
-	# Signed, so the lock keeps going the way the pilot was already going.
-	_lock_angular_speed = signf(tangential_speed) * circular_speed / radius
-	flight_mode = FlightMode.ORBIT_LOCK
-	flight_mode_changed.emit(flight_mode)
-
-
-## Drives the analytic circle while locked.
-func _run_orbit_lock(state: PhysicsDirectBodyState2D) -> void:
-	if _lock_planet == null or not is_instance_valid(_lock_planet):
-		release_orbit_lock()
-		return
-	# Anything that would move the ship hands control back. Rotation commands
-	# are left alone so the pilot can still aim while parked.
-	if _wants_translation(active_commands) or brake_command:
-		release_orbit_lock()
-		return
-
-	_lock_angle = wrapf(_lock_angle + _lock_angular_speed * state.step, -PI, PI)
-	var up: Vector2 = Vector2.from_angle(_lock_angle)
-
-	var body_transform: Transform2D = state.transform
-	body_transform.origin = _lock_planet.global_position + up * _lock_radius
-	state.transform = body_transform
-	# Velocity is kept truthful rather than zeroed, so the HUD, the trajectory
-	# preview and the moment of release all see the real orbital motion.
-	state.linear_velocity = _tangent(up) * (_lock_angular_speed * _lock_radius)
-	_gravity = _lock_planet.gravity_at(body_transform.origin)
-
-	_update_heat(state.step)
-
-
-## True if any command in `set` would translate the ship rather than turn it.
+## True if any command in `command_set` would translate the ship rather than
+## turn it. Lift-off asks this: a landed ship may aim freely, but the moment it
+## is told to move it has to be handed back to the solver.
 func _wants_translation(command_set: Dictionary) -> bool:
 	for command: ShipControl.Command in ShipControl.LINEAR_COMMANDS:
 		if float(command_set.get(command, 0.0)) > 0.001:
 			return true
 	return false
-
-
-## Hands control back to the solver. Safe to call when not locked.
-func release_orbit_lock() -> void:
-	if flight_mode == FlightMode.PHYSICAL:
-		return
-	flight_mode = FlightMode.PHYSICAL
-	_coasting_time = 0.0
-	_lock_planet = null
-	flight_mode_changed.emit(flight_mode)
 
 
 ## Resolves every hull point that is inside rock.
@@ -624,8 +485,6 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 	if impact_speed > damage_speed_threshold:
 		var damage: float = (impact_speed - damage_speed_threshold) * damage_per_speed
 		hull_impact.emit(impact_speed, damage)
-		# A hit is the other way out of orbit lock (IDEAS.md section 8).
-		release_orbit_lock()
 		take_damage(damage, "impact")
 
 
@@ -910,7 +769,6 @@ func _destroy() -> void:
 	# contrails, the debug layer, and re-instantiating would mean rewiring all
 	# of it on every death in a game whose whole point is dying often. The world
 	# puts it back together in place instead.
-	release_orbit_lock()
 	if flight_mode == FlightMode.LANDED:
 		set_deferred("freeze", false)
 		flight_mode = FlightMode.PHYSICAL
@@ -943,7 +801,6 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 
 	flight_mode = FlightMode.PHYSICAL
 	_landed_planet = null
-	_coasting_time = 0.0
 	freeze = false
 	global_position = at
 	global_rotation = velocity.angle() - PI * 0.5 if not velocity.is_zero_approx() else 0.0

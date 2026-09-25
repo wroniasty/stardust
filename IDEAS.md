@@ -644,35 +644,69 @@ Strefa między atmosferą a granicą pola grawitacyjnego. Orbity wychodzą z fiz
 - Semi-implicit Euler w Godocie: orbity lekko precesują i wahają się, ale nie uciekają. Akceptowalne dla zręcznościówki.
 - Księżyc wewnątrz pola planety: sumowanie sił, blisko księżyca dominuje księżyc. Orbitowanie księżyca działa bez dodatkowego kodu.
 
-### Orbit lock
+### Stan orbity, nie tryb orbity
 
-Ręczne utrzymanie idealnej orbity kołowej jest nudne. Jeśli przez ~2 s brak ciągu, prędkość radialna bliska zeru, prędkość styczna bliska orbitalnej (tolerancja zależna od modułu), statek przechodzi w kinematyczną orbitę kołową liczoną analitycznie, HUD pokazuje "ORBIT". Ciąg lub trafienie wraca do fizyki. Orbity eliptyczne zostają w pełni fizyczne.
+Pierwotny projekt (M1.5) miał **orbit lock**: po ~2 s bez ciągu, przy prawie
+kołowej orbicie, statek przechodził w kinematyczny okrąg liczony analitycznie.
+Uzasadnienie brzmiało „ręczne utrzymanie idealnej orbity kołowej jest nudne",
+czyli zakładało, że orbita ucieka i trzeba ją poprawiać.
 
-Orbita zamknięta to stan spoczynku jak lądowanie: bezpieczne miejsce (jeśli nikt nie patroluje), skanowanie powierzchni, autosave, planowanie.
+**To założenie obaliliśmy własnym pomiarem w tym samym milestonie.**
+`tools/orbit_endurance.gd`, 5 minut lotu: orbita kołowa 2.0 R dryfuje 0,05%,
+eliptyczna 0,003%. Nie ma czego poprawiać. Mechanizm został usunięty.
 
-**Styczna musi być pochodną kąta, nie `orthogonal()`.** Lock prowadzi statek
-analitycznie po okręgu (`angle += omega * dt`), a znak omegi brał się z rzutu
-prędkości na `up.orthogonal()`. `orthogonal()` obraca o 90 stopni przeciwnie do
-ruchu wskazówek, co przy osi Y w dół ma **przeciwną skrętność** niż rosnący kąt
-— więc statek po włączeniu locka zawracał i leciał po orbicie w drugą stronę.
-Do tego prędkość zapisywana dla HUD szła jeszcze starym kierunkiem, więc
-wskazania i ruch przeczyły sobie nawzajem. Styczna liczy się teraz jawnie jako
-`Vector2(-up.y, up.x)`.
+Co kosztował, zanim to do nas dotarło:
 
-**Lock posiada pozycję, nie orientację.** `_integrate_forces` wychodziło w
-trybie locka przed pętlą aplikującą siły silników, więc dysze obrotowe paliły
-się i rysowały wydech, ale żaden moment nie docierał do ciała — statek zaparkowany
-na orbicie nie dawał się obrócić, czyli nie dawał się ustawić do wyjściowego
-odpalenia. Teraz w locku liczony jest sam moment (`_apply_engine_torque`), bez
-sił. To nie przybliżenie: grupy obrotowe są z definicji parami sił o zerowej
-wypadkowej, a każda komenda, która naprawdę by statek przesunęła, i tak zwalnia
-locka.
+- **Druga implementacja ruchu, która musi się zgadzać z pierwszą.** Dwa błędy
+  znalezione przez gracza w dwóch kolejnych sesjach i oba tego samego kształtu:
+  odwrócony kierunek lotu (styczna liczona z inną skrętnością niż kąt, którym
+  lock przesuwał statek) i martwe dysze obrotowe (`_integrate_forces` wychodziło
+  przed pętlą sił, więc zaparkowany statek nie dawał się obrócić).
+- **Cichą zmianę fizyki.** Lock brał aktualny promień i *prędkość kołową*, więc
+  kasował do 6% błędu prędkości i do 6 px/s prędkości radialnej — sam po cichu
+  cyrkularyzował orbitę.
+- **Zawężenie pojęcia orbity.** Tolerancje przyjmowały tylko orbity prawie
+  kołowe, więc porządna elipsa nigdy nie dostawała etykiety ORBIT.
+- **Sześć miejsc w smoke teście z `orbit_lock_enabled = false`**, żeby nie
+  wchodził w drogę innym fazom. Funkcja, którą trzeba wyłączać, żeby testować
+  resztę, rzadko zarabia na siebie.
 
-Test pilnujący promienia tego nie widział, bo okrąg o zadanym promieniu jest
-taki sam w obie strony. Smoke test porównuje więc znak momentu pędu przed
-przejęciem ze znakiem faktycznego przyrostu kąta w locku, i osobno sprawdza, że
-raportowana prędkość zgadza się z kierunkiem, w którym lock naprawdę przesuwa
-statek.
+Teraz „czy jesteśmy na orbicie" jest **czytane z trajektorii**, nie włączane.
+`Planet.orbit_state(point, velocity)` klasyfikuje stożek na podstawie apsyd:
+
+| stan | warunek | HUD |
+|---|---|---|
+| ORBIT | perycentrum nad atmosferą, apocentrum w studni | `ORBIT`, zielony |
+| DECAYING | perycentrum w atmosferze | `ORBIT DECAYING`, bursztyn |
+| SUBORBITAL | perycentrum pod stropem terenu | (cicho), czerwony |
+| ESCAPE | apocentrum poza studnią, albo statek już poza nią | `LEAVING`, szary |
+
+Dwa szczegóły, które nie są oczywiste:
+
+- **Poza `influence_radius` nie ma orbity.** Grawitacja jest tam zerowa, więc
+  stożek byłby fikcją narysowaną wokół ciała, które nie ciągnie.
+- **Trajektoria otwarta lecąca na zewnątrz ma perycentrum w przeszłości, nie w
+  przyszłości.** Dlatego SUBORBITAL wymaga albo ruchu do środka, albo orbity
+  zamkniętej — inaczej start z powierzchni na prędkości ucieczki meldowałby, że
+  za chwilę uderzy w grunt.
+
+SUBORBITAL celowo nie trafia na linię statusu: to normalny stan statku, który
+startuje albo podchodzi do lądowania, więc pisanie tego byłoby szumem na
+wierszu, który ma nieść nowiny. Kolor perycentrum i tak to pokazuje.
+
+Testy poszły za tym: zamiast fazy sprawdzającej, czy lock przejmuje i oddaje
+sterowanie, jest pięć przypadków klasyfikacji (po jednym na stan plus wyjście
+poza studnię) i trzy odczyty ciągłe — kołowa i eliptyczna orbita muszą czytać
+się jako ORBIT tick po ticku przez cały przelot, a aerobraking musi *sam* zacząć
+czytać się jako DECAYING, kiedy drag zje perycentrum.
+
+Orbita zamknięta zostaje stanem spoczynku w sensie rozgrywkowym (autosave,
+skanowanie, planowanie) — tylko że jest nim dlatego, że statek tam jest, a nie
+dlatego, że silnik przestał go liczyć.
+
+Jeśli kiedyś dojdzie przyspieszenie czasu, te 0,05% na 5 minut zrobi się
+widoczne i wtedy wrócą rails — ale jako „propaguj stożek analitycznie", nie
+„przyklej do okręgu", i pisane pod ten cel.
 
 ### Elementy orbity na HUD (M1.5+)
 

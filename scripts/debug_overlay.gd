@@ -73,7 +73,7 @@ func _process(_delta: float) -> void:
 		_ship.get_terrain_contacts(), _ship.hull_integrity, _ship.accumulated_damage,
 	])
 
-	var mode: String = "ORBIT" if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK else "free"
+	var mode: String = "landed" if _ship.flight_mode == Ship.FlightMode.LANDED else "free"
 	lines.append("mode     %-6s  heat %.2f" % [mode, _ship.hull_heat])
 
 	lines.append("commands %s" % _command_summary())

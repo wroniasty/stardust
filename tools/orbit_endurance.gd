@@ -131,7 +131,6 @@ func _begin_case() -> void:
 	var ship_scene: PackedScene = load(SHIP_SCENE) as PackedScene
 	_ship = ship_scene.instantiate() as Ship
 	_ship.use_player_input = false
-	_ship.orbit_lock_enabled = false
 	root.add_child(_ship)
 
 	var case_data: Vector2 = CASES[_case]

@@ -56,7 +56,10 @@ func _process(_delta: float) -> void:
 	var descent: float = -relative.dot(up)
 	var slope: float = planet.slope_at(_ship.global_position)
 
-	_update_orbit(planet)
+	var orbit: Planet.OrbitState = planet.orbit_state(
+		_ship.global_position, _ship.linear_velocity
+	)
+	_update_orbit(planet, orbit)
 	_altitude.text = "ALT  %6.0f" % altitude
 	_descent.text = "V/S  %+6.1f" % -descent
 	_slope.text = "SLOPE %5.1f deg" % rad_to_deg(slope)
@@ -65,7 +68,8 @@ func _process(_delta: float) -> void:
 	_gear.text = "GEAR %s" % _gear_text()
 	_gear.add_theme_color_override("font_color", _gear_color())
 	_update_hull()
-	_status.text = _status_text()
+	_status.text = _status_text(orbit)
+	_status.add_theme_color_override("font_color", _orbit_color(orbit))
 
 
 func _show_in_deep_space() -> void:
@@ -92,7 +96,7 @@ func _show_in_deep_space() -> void:
 ## that clears the terrain, amber one that dips into the air and will decay,
 ## red one that ends in the ground -- which is what a deorbit burn is aiming
 ## for, and what a botched one produces by accident.
-func _update_orbit(planet: Planet) -> void:
+func _update_orbit(planet: Planet, orbit: Planet.OrbitState) -> void:
 	if _ship.flight_mode == Ship.FlightMode.LANDED:
 		_periapsis.text = "PERI      --"
 		_apoapsis.text = "APO       --"
@@ -103,9 +107,10 @@ func _update_orbit(planet: Planet) -> void:
 	var extremes: Vector2 = planet.orbit_extremes(
 		_ship.global_position, _ship.linear_velocity
 	)
-	var periapsis: float = extremes.x
-	_periapsis.text = "PERI %6.0f" % (periapsis - planet.surface_radius)
-	_periapsis.add_theme_color_override("font_color", _periapsis_color(planet, periapsis))
+	_periapsis.text = "PERI %6.0f" % (extremes.x - planet.surface_radius)
+	# Coloured from the same classification the status line reads, so the two
+	# cannot tell the pilot different things about the same trajectory.
+	_periapsis.add_theme_color_override("font_color", _orbit_color(orbit))
 
 	if is_inf(extremes.y):
 		# Not a failure: leaving is a legitimate thing to be doing, and the
@@ -117,12 +122,16 @@ func _update_orbit(planet: Planet) -> void:
 	_apoapsis.add_theme_color_override("font_color", GOOD)
 
 
-func _periapsis_color(planet: Planet, periapsis: float) -> Color:
-	if periapsis <= planet.terrain_ceiling():
-		return BAD
-	if periapsis <= planet.atmosphere_radius():
-		return CAUTION
-	return GOOD
+func _orbit_color(orbit: Planet.OrbitState) -> Color:
+	match orbit:
+		Planet.OrbitState.SUBORBITAL:
+			return BAD
+		Planet.OrbitState.DECAYING:
+			return CAUTION
+		Planet.OrbitState.ESCAPE:
+			return IDLE
+		_:
+			return GOOD
 
 
 func _update_hull() -> void:
@@ -169,11 +178,20 @@ func _descent_color(descent: float) -> Color:
 	return CAUTION if descent > _ship.gear.max_vertical_speed * CAUTION_FRACTION else GOOD
 
 
-func _status_text() -> String:
+func _status_text(orbit: Planet.OrbitState) -> String:
 	if _ship.flight_mode == Ship.FlightMode.LANDED:
 		return "LANDED"
-	if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK:
-		return "ORBIT"
 	if not _ship.last_landing_rejection.is_empty():
 		return "WAVE OFF: %s" % _ship.last_landing_rejection.to_upper()
-	return ""
+	# Only the states worth a word. SUBORBITAL is the normal condition of a
+	# ship taking off or coming in to land, so saying it would be noise on the
+	# line that is meant to carry news.
+	match orbit:
+		Planet.OrbitState.ORBIT:
+			return "ORBIT"
+		Planet.OrbitState.DECAYING:
+			return "ORBIT DECAYING"
+		Planet.OrbitState.ESCAPE:
+			return "LEAVING"
+		_:
+			return ""

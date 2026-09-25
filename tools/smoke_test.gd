@@ -40,16 +40,6 @@ const LANDING_TICKS: int = 600
 ## How far above the local ground the landing test drops the ship.
 const DROP_HEIGHT: float = 60.0
 
-## Orbit lock needs ORBIT_LOCK_DELAY of coasting plus room to prove it holds,
-## then a burst of thrust at the end to prove it lets go.
-const LOCK_TICKS: int = 300
-const LOCK_THRUST_AT_TICK: int = 240
-
-## Aiming is tried well before the thrust that ends the phase, and stopped
-## again, so the two hand-offs cannot be confused for each other.
-const LOCK_AIM_FROM_TICK: int = 160
-const LOCK_AIM_TO_TICK: int = 220
-
 const AEROBRAKE_TICKS: int = 120
 const HEAT_TICKS: int = 120
 
@@ -92,7 +82,7 @@ const DEATH_TICKS: int = 900
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
 	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
-	ELLIPSE, ORBIT_LOCK, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
+	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
 
@@ -108,27 +98,12 @@ var _orbit_max: float = 0.0
 ## What the elements predicted at launch, to be compared with where the ship
 ## actually went once the integrator has had half an orbit to disagree.
 var _predicted_extremes: Vector2 = Vector2.ZERO
+
+## Whether the trajectory reading ever disagreed with what the ship was doing.
+var _orbit_reading_held: bool = true
+var _aerobrake_read_decaying: bool = false
 var _ground_radius: float = 0.0
 var _landing_deepest: float = 0.0
-var _lock_engaged: bool = false
-var _lock_released: bool = false
-## Which way round the ship was going before the lock took over, and which way
-## it actually went afterwards. Sign of the cross product of arm and velocity,
-## which is the sign of the angular rate whatever the screen's handedness.
-var _pre_lock_direction: float = 0.0
-var _lock_travel: float = 0.0
-var _lock_last_angle: float = INF
-
-## Whether the velocity the lock reports ever disagreed with where it moved.
-var _lock_velocity_agrees: bool = true
-
-## Heading before and after aiming while locked, and whether the lock survived.
-var _lock_heading_before: float = 0.0
-var _lock_heading_after: float = 0.0
-var _lock_held_while_aiming: bool = true
-
-var _lock_radius_min: float = INF
-var _lock_radius_max: float = 0.0
 var _entry_speed: float = 0.0
 var _peak_heat: float = 0.0
 var _peak_drift: float = 0.0
@@ -180,41 +155,15 @@ func _physics_process(delta: float) -> bool:
 		var radius: float = _ship.global_position.distance_to(_planet.global_position)
 		_orbit_min = minf(_orbit_min, radius)
 		_orbit_max = maxf(_orbit_max, radius)
-	elif _phase == Phase.ORBIT_LOCK:
-		var arm: Vector2 = _ship.global_position - _planet.global_position
-		if _ship.flight_mode == Ship.FlightMode.ORBIT_LOCK:
-			_lock_engaged = true
-			var locked_radius: float = arm.length()
-			_lock_radius_min = minf(_lock_radius_min, locked_radius)
-			_lock_radius_max = maxf(_lock_radius_max, locked_radius)
-			# Where it actually went this tick, and whether the velocity it
-			# reports points that way. Both matter: the lock drives the
-			# position itself and only writes the velocity for the HUD, so the
-			# two can disagree without anything else noticing.
-			var angle_now: float = arm.angle()
-			if _lock_last_angle < INF:
-				var step: float = angle_difference(_lock_last_angle, angle_now)
-				_lock_travel += step
-				if not is_zero_approx(step):
-					var reported: float = arm.cross(_ship.linear_velocity)
-					if signf(reported) != signf(step):
-						_lock_velocity_agrees = false
-			_lock_last_angle = angle_now
-		elif not _lock_engaged:
-			_pre_lock_direction = signf(arm.cross(_ship.linear_velocity))
-		elif _lock_engaged:
-			_lock_released = true
-		if _ticks == LOCK_AIM_FROM_TICK:
-			_lock_heading_before = _ship.global_rotation
-			_ship.commands[ShipControl.Command.CW] = 1.0
-		if _ticks > LOCK_AIM_FROM_TICK and _ticks <= LOCK_AIM_TO_TICK:
-			if _ship.flight_mode != Ship.FlightMode.ORBIT_LOCK:
-				_lock_held_while_aiming = false
-		if _ticks == LOCK_AIM_TO_TICK:
-			_lock_heading_after = _ship.global_rotation
-			_ship.commands.erase(ShipControl.Command.CW)
-		if _ticks == LOCK_THRUST_AT_TICK:
-			_ship.commands[ShipControl.Command.FORWARD] = 1.0
+		if _planet.orbit_state(
+			_ship.global_position, _ship.linear_velocity
+		) != Planet.OrbitState.ORBIT:
+			_orbit_reading_held = false
+	elif _phase == Phase.AEROBRAKE:
+		if _planet.orbit_state(
+			_ship.global_position, _ship.linear_velocity
+		) == Planet.OrbitState.DECAYING:
+			_aerobrake_read_decaying = true
 	elif _phase == Phase.ROTATE_CW or _phase == Phase.ROTATE_CCW or _phase == Phase.ROTATE_DAMAGED:
 		_peak_drift = maxf(_peak_drift, _ship.linear_velocity.length())
 	elif _phase == Phase.LANDED_RIDE:
@@ -437,8 +386,6 @@ func _phase_ticks() -> int:
 			return KILL_TICKS
 		Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL:
 			return BRAKE_TICKS
-		Phase.ORBIT_LOCK:
-			return LOCK_TICKS
 		Phase.AEROBRAKE:
 			return AEROBRAKE_TICKS
 		Phase.HULL_HEAT:
@@ -538,6 +485,7 @@ func _begin_phase() -> void:
 			_orbit_radius = _planet.surface_radius * 2.0
 			_orbit_min = INF
 			_orbit_max = 0.0
+			_orbit_reading_held = true
 			_ship.global_position = _planet.global_position + Vector2.UP * _orbit_radius
 			# v = sqrt(g * R^2 / r) is the circular orbit speed for an inverse
 			# square field with g measured at the surface.
@@ -568,6 +516,7 @@ func _begin_phase() -> void:
 			_orbit_radius = _planet.surface_radius * 1.4
 			_orbit_min = INF
 			_orbit_max = 0.0
+			_orbit_reading_held = true
 			_ship.global_position = _planet.global_position + Vector2.UP * _orbit_radius
 			_ship.linear_velocity = (
 				Vector2.RIGHT * _planet.circular_orbit_speed(_orbit_radius) * 1.12
@@ -575,35 +524,18 @@ func _begin_phase() -> void:
 			_predicted_extremes = _planet.orbit_extremes(
 				_ship.global_position, _ship.linear_velocity
 			)
-		Phase.ORBIT_LOCK:
-			var lock_radius: float = _planet.surface_radius * 2.0
-			_ship.global_position = _planet.global_position + Vector2.UP * lock_radius
-			_ship.linear_velocity = Vector2.RIGHT * _planet.circular_orbit_speed(lock_radius)
-			_lock_engaged = false
-			_lock_released = false
-			_lock_radius_min = INF
-			_lock_radius_max = 0.0
-			_pre_lock_direction = 0.0
-			_lock_heading_before = 0.0
-			_lock_heading_after = 0.0
-			_lock_held_while_aiming = true
-			_lock_travel = 0.0
-			_lock_last_angle = INF
-			_lock_velocity_agrees = true
 		Phase.AEROBRAKE:
 			# In the thin top shell at orbital speed: the manoeuvre the shells
 			# were shaped for, where drag bites slowly instead of like a wall.
 			var brake_radius: float = _planet.surface_radius + _planet.atmosphere_height * 0.85
 			_ship.global_position = _planet.global_position + Vector2.UP * brake_radius
 			_ship.linear_velocity = Vector2.RIGHT * _planet.circular_orbit_speed(brake_radius)
-			_ship.orbit_lock_enabled = false
 			_entry_speed = _ship.linear_velocity.length()
 		Phase.HULL_HEAT:
 			# Deep and fast: the suicidal entry, where the counter should move.
 			var heat_radius: float = _planet.surface_radius + _planet.atmosphere_height * 0.15
 			_ship.global_position = _planet.global_position + Vector2.UP * heat_radius
 			_ship.linear_velocity = Vector2.RIGHT * Ship.HEAT_REFERENCE_SPEED
-			_ship.orbit_lock_enabled = false
 			_peak_heat = 0.0
 		Phase.PLATEAU, Phase.GEAR:
 			pass
@@ -631,7 +563,6 @@ func _begin_phase() -> void:
 			)
 			_ship.global_rotation = PI
 			_ship.freeze = true
-			_ship.orbit_lock_enabled = false
 			_ship.fire_command = true
 			_self_hit_hull = _ship.hull_integrity
 		Phase.DEATH:
@@ -644,7 +575,6 @@ func _begin_phase() -> void:
 				_planet.surface_radius * 1.4
 			)
 			_ship.linear_velocity = Vector2.DOWN * 400.0
-			_ship.orbit_lock_enabled = false
 			_death_reported = false
 			_death_hull = -1.0
 			_respawn_radius = 0.0
@@ -791,6 +721,10 @@ func _evaluate_phase() -> void:
 					_elapsed, drift * 100.0, _orbit_min, _orbit_max,
 				],
 			)
+			_expect(
+				_orbit_reading_held,
+				"the whole coast reads as ORBIT, tick by tick",
+			)
 		Phase.ELLIPSE:
 			# The whole point of the elements is that they predict where the
 			# ship WILL be, so the test flies there and looks. A sign error or
@@ -808,43 +742,14 @@ func _evaluate_phase() -> void:
 				],
 			)
 			_expect(
+				_orbit_reading_held,
+				"an eccentric orbit reads as ORBIT too, the whole way round",
+			)
+			_expect(
 				_predicted_extremes.y > _orbit_radius * 1.1,
 				"the test orbit is actually eccentric (%.0f .. %.0f px)" % [
 					_predicted_extremes.x, _predicted_extremes.y,
 				],
-			)
-		Phase.ORBIT_LOCK:
-			_expect(_lock_engaged, "a coasting circular orbit engages orbit lock")
-			var held: float = _lock_radius_max - _lock_radius_min
-			_expect(
-				held < 0.5,
-				"orbit lock holds the radius exactly (%.0f .. %.0f px)" % [_lock_radius_min, _lock_radius_max],
-			)
-			# The lock is a hand-off, not a manoeuvre: whatever else it does, the
-			# ship has to keep going the way the pilot was already going.
-			_expect(
-				not is_zero_approx(_lock_travel) and signf(_lock_travel) == _pre_lock_direction,
-				"orbit lock carries on the way the ship was going (was %+.0f, went %+.0f)" % [
-					_pre_lock_direction, signf(_lock_travel),
-				],
-			)
-			_expect(
-				_lock_velocity_agrees,
-				"the velocity the lock reports matches the way it moves",
-			)
-			# The lock owns the position, not the heading: a parked ship still has
-			# to be able to turn, or it cannot line up the burn that leaves.
-			_expect(
-				not is_equal_approx(_lock_heading_before, _lock_heading_after),
-				"the rotation thrusters still aim the ship while locked (%.1f -> %.1f deg)" % [
-					rad_to_deg(_lock_heading_before), rad_to_deg(_lock_heading_after),
-				],
-			)
-			_expect(_lock_held_while_aiming, "aiming does not drop the lock")
-			_expect(_lock_released, "thrust hands control back to the solver")
-			_expect(
-				_ship.flight_mode == Ship.FlightMode.PHYSICAL,
-				"the ship ends the phase under physics again",
 			)
 		Phase.AEROBRAKE:
 			var speed_now: float = _ship.linear_velocity.length()
@@ -859,6 +764,12 @@ func _evaluate_phase() -> void:
 				"the top shell brakes gently rather than like a wall (%.1f%% lost)" % [
 					(1.0 - speed_now / _entry_speed) * 100.0,
 				],
+			)
+			# The one case where the reading has to change by itself: drag eats
+			# the periapsis and the orbit stops being one.
+			_expect(
+				_aerobrake_read_decaying,
+				"aerobraking is read as a decaying orbit while it happens",
 			)
 		Phase.HULL_HEAT:
 			_expect(_peak_heat > 0.0, "a fast pass through thick air heats the hull (peak %.3f)" % _peak_heat)
@@ -1155,7 +1066,6 @@ func _place_for_touchdown(angle: float, descent: float) -> void:
 	_ship.global_rotation = direction.angle() + PI * 0.5
 	_ship.linear_velocity = -direction * descent
 	_ship.angular_velocity = 0.0
-	_ship.orbit_lock_enabled = false
 	_planet.spin_rate = 0.0
 	if _ship.gear != null:
 		# Skipping the deploy timer: how long the legs take is the gear check's
@@ -1248,6 +1158,39 @@ func _check_elements(planet: Planet) -> void:
 	# not come back, whatever the planet.
 	var escape: Vector2 = planet.orbit_extremes(point, Vector2.RIGHT * circular * 1.45)
 	_expect(is_inf(escape.y), "escape velocity has no apoapsis")
+
+	# Being in orbit is read off the trajectory rather than switched on, so the
+	# reading is what has to be tested: each of the four answers, from a state
+	# that plainly deserves it.
+	_expect(
+		planet.orbit_state(point, Vector2.RIGHT * circular) == Planet.OrbitState.ORBIT,
+		"a circular orbit above the air reads as ORBIT",
+	)
+	_expect(
+		planet.orbit_state(point, Vector2.RIGHT * circular * 1.45) == Planet.OrbitState.ESCAPE,
+		"escape velocity reads as ESCAPE",
+	)
+	_expect(
+		planet.orbit_state(point, Vector2.DOWN * 10.0) == Planet.OrbitState.SUBORBITAL,
+		"a ship dropped straight down reads as SUBORBITAL",
+	)
+	# Aimed rather than guessed: for a tangential throw the periapsis comes out
+	# at r*x/(2-x) with x = (v/v_circ)^2, so inverting that puts it exactly
+	# halfway between the highest rock and the top of the air. Picking a round
+	# fraction of circular speed instead dropped it into the ground.
+	var target: float = (planet.terrain_ceiling() + planet.atmosphere_radius()) * 0.5
+	var grazing: float = circular * sqrt(2.0 * target / (radius + target))
+	_expect(
+		planet.orbit_state(point, Vector2.RIGHT * grazing) == Planet.OrbitState.DECAYING,
+		"an orbit whose periapsis is in the air reads as DECAYING",
+	)
+	# Outside the well the planet is not holding anything, whatever the conic
+	# would say if it were asked.
+	var far: Vector2 = planet.global_position + Vector2.UP * (planet.influence_radius * 1.1)
+	_expect(
+		planet.orbit_state(far, Vector2.RIGHT * circular) == Planet.OrbitState.ESCAPE,
+		"beyond the influence radius there is no orbit to be in",
+	)
 
 	# Radial drop: no angular momentum at all, so the periapsis is the centre.
 	var falling: Vector2 = planet.orbit_extremes(point, Vector2.DOWN * 10.0)

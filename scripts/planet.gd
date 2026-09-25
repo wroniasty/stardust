@@ -15,6 +15,20 @@ extends Node2D
 ## keeps the shader pointed at it, and converts between world and local space
 ## for callers (see IDEAS.md section 6).
 
+## What a coasting trajectory is doing with respect to this planet.
+##
+## Derived from the trajectory, never switched on. An earlier version made
+## "in orbit" a mode the ship entered, which meant a second implementation of
+## motion that had to agree with the first and twice did not; and because it
+## only accepted near-circular orbits, a perfectly good ellipse was never
+## called an orbit at all (see IDEAS.md section 8).
+enum OrbitState {
+	ESCAPE,  ## Leaves the well, or is already outside it.
+	ORBIT,  ## Closed, and clears the air the whole way round.
+	DECAYING,  ## Closed, but dips into the atmosphere and will not last.
+	SUBORBITAL,  ## Comes down: the low point is inside the rock.
+}
+
 ## Planets register here so ships can find them without a scene path.
 const GRAVITY_GROUP: StringName = &"gravity_sources"
 
@@ -291,6 +305,31 @@ func orbit_extremes(point: Vector2, velocity: Vector2) -> Vector2:
 	if apoapsis >= influence_radius:
 		return Vector2(semi_major * (1.0 - eccentricity), INF)
 	return Vector2(semi_major * (1.0 - eccentricity), apoapsis)
+
+
+## Classifies the coasting trajectory through `point` at `velocity`.
+##
+## This is what "are we in orbit" means: both ends of the conic inside the
+## well, and the near end clear of the air. Every other answer is a different
+## thing the pilot needs to know about rather than a failure to be in orbit.
+func orbit_state(point: Vector2, velocity: Vector2) -> OrbitState:
+	var arm: Vector2 = point - global_position
+	# Beyond the well the planet has no say: gravity there is zero, so the
+	# conic would be a fiction drawn around a body that is not pulling.
+	if arm.length() >= influence_radius:
+		return OrbitState.ESCAPE
+
+	var extremes: Vector2 = orbit_extremes(point, velocity)
+	var inbound: bool = velocity.dot(arm) < 0.0
+	if extremes.x <= terrain_ceiling() and (inbound or not is_inf(extremes.y)):
+		# An open trajectory heading outwards has a periapsis below the rock in
+		# its past, not its future, so only an inbound one is coming down.
+		return OrbitState.SUBORBITAL
+	if is_inf(extremes.y):
+		return OrbitState.ESCAPE
+	if extremes.x <= atmosphere_radius():
+		return OrbitState.DECAYING
+	return OrbitState.ORBIT
 
 
 func _physics_process(delta: float) -> void:
