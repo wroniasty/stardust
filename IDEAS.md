@@ -146,8 +146,15 @@ zatrzymaniu, rozpędzając statek do tyłu.
     Q  strafe w lewo         E  strafe w prawo
     X  kill rotation         Z  hamowanie
     spacja / ctrl  ogień
-    F7 warstwa debug   F6 konfigurator planety (debug)
-    F5 uszkodź dyszę (debug)   C  krater (debug)
+    F7 / O  warstwa debug      F6 / P  konfigurator planety
+    F5 / K  uszkodź dyszę      C  krater
+
+Każdy klawisz debugowy ma wariant literowy obok funkcyjnego, i to nie jest
+wygoda. Edytor Godota od 4.4 domyślnie osadza uruchomioną grę we własnej
+zakładce (`game_embed_mode = Auto`), a tam F5 do F8 zostają skrótami edytora i
+nie docierają do gry. Klawisz debugowy związany wyłącznie z funkcyjnym bywa
+więc nieosiągalny w tym samym projekcie, zależnie od tego, czy gra chodzi w
+osadzonym oknie, czy w osobnym.
 
 Awarie silników pochodzą ze zderzeń, zużycia i ataków. Awaria to zmiana `health`,
 nic specjalnego w silniku fizycznym.
