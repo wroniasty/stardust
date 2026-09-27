@@ -284,6 +284,13 @@ func release() -> Resource:
 	return item
 
 
+## What this configuration can do, and what is wrong with it. Built fresh
+## rather than cached: it is asked for on a rebuild and on a swap, both of
+## which have just invalidated any stored answer.
+func configuration() -> ConfigurationReport:
+	return ConfigurationReport.of(self)
+
+
 ## Re-reads the fitted engines, recomputes mass, centre of mass and inertia,
 ## and rebuilds the control groups from the new geometry.
 ##
@@ -302,10 +309,9 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 	control.rebuild(engines, center_of_mass, mass, inertia)
 
 	if verbose:
-		print("%s: mass %.1f, com (%.2f, %.2f), inertia %.0f" % [
-			name, mass, center_of_mass.x, center_of_mass.y, inertia,
-		])
-		for line: String in control.describe():
+		var report: PackedStringArray = configuration().lines()
+		print("%s: %s" % [name, report[0]])
+		for line: String in report.slice(1):
 			print("  " + line)
 
 

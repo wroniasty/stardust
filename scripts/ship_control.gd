@@ -148,24 +148,3 @@ func has_authority(command: Command) -> bool:
 
 func command_name(command: Command) -> String:
 	return Command.keys()[int(command)]
-
-
-## One line per group plus a warning for each empty one, printed after a
-## rebuild. A ship that cannot turn one way is a configuration bug, and it
-## should be obvious at startup rather than in flight.
-func describe() -> PackedStringArray:
-	var lines: PackedStringArray = PackedStringArray()
-	for command: Command in COMMAND_AXES:
-		var members: Array = groups.get(command, [])
-		if members.is_empty():
-			lines.append("WARN: no %s authority" % command_name(command))
-			continue
-		var parts: PackedStringArray = PackedStringArray()
-		for member: Dictionary in members:
-			var engine: EngineInstance = member["engine"]
-			parts.append("%s %.2f" % [engine.mount.name, member["weight"]])
-		lines.append(
-			"%-13s authority %8.1f  [%s]"
-			% [command_name(command), authority_of(command), ", ".join(parts)]
-		)
-	return lines

@@ -130,6 +130,50 @@ uszkodzenie przeliczało wagi, zepsuty silnik byłby po cichu kompensowany, a ca
 sens modelu uszkodzeń polega na tym, że pół-martwy silnik sprawia, że statek
 leci krzywo. Kompensujący komputer lotu to moduł do znalezienia w M2.
 
+### Raport konfiguracji
+
+Zamontowanie modułu zmienia naraz masę, środek masy i każdą grupę sterowania,
+a ciekawe awarie to nie „jest gorzej", tylko **„jest krzywo"**: obrót, który
+spycha statek w bok, strafe silniejszy w jedną stronę, kierunek bez niczego za
+sobą. Żadnej z nich nie widać w locie, dopóki pilot już z nią nie walczy.
+
+`ConfigurationReport.of(ship)` to **migawka**, nie widok — trzyma liczby, z
+których powstał, więc raport sprzed wymiany da się porównać z tym po. Sprawdza
+trzy rzeczy:
+
+- **Pusta grupa** — kierunek, za którym nie stoi żaden silnik. Zawsze FAULT.
+- **Para obrotowa, która nie znosi własnych sił.** Zgłaszane jako
+  **przyspieszenie, nie niutony** (`residual / masa`, px/s²): to jest ta część,
+  którą pilot czuje, i zostaje porównywalna między statkami o różnej masie.
+  Progi 1 px/s² (WARN) i 5 px/s² (FAULT) warto zestawiać z grawitacją
+  powierzchniową ~30 px/s²: cały obrót przy 1 to szturchnięcie, przy 5 to dryf,
+  z którym trzeba latać.
+- **Lustrzane pary** (STRAFE_LEFT/RIGHT, CCW/CW) różniące się siłą: słabszy do
+  silniejszego poniżej 0,8 to WARN, poniżej 0,5 FAULT. **Tylko lustrzane** —
+  statek z dużym silnikiem głównym i małym cofającym jest normalny, nie zepsuty,
+  więc FORWARD i BACK nigdy nie są zestawiane ze sobą.
+
+`compare(before)` daje **różnice**, nie stan: kierunki, których autorytet się
+ruszył o ponad 5%, i usterki, **których poprzednia konfiguracja nie miała**.
+Istniejąca usterka nie jest winą właśnie montowanego modułu i powtarzanie jej
+obwiniałoby niewłaściwą część. Moduł, który nie zmienia nic wartego nazwania,
+nie produkuje żadnej linijki — ekran mówi to wprost, zamiast wymyślać
+pocieszenie.
+
+Raport powstał po zepsuciu dokładnie tego przy strojeniu gabarytów: środek masy
+przesunął się o 0,8 px, para obrotowa poszła na wagi 1,00 i 0,82, każdy obrót
+zostawiał boczne pchnięcie. Złapał to test, bo istniał; pilot wymieniający
+silnik testu nie ma.
+
+**I właśnie ten przypadek raport przemilcza — słusznie.** 0,046 N na 13,9 kg to
+0,003 px/s², trzysta razy poniżej progu ostrzeżenia. To nie jest luka, tylko
+podział pracy: test pilnuje **niezmiennika projektowego** i ma prawo żądać
+dokładności co do zera, bo asymetria, której dziś nie czuć, jutro urośnie wraz
+z modułem. Raport mówi pilotowi, **co poczuje**, i wypisanie mu dryfu tysiąc
+razy słabszego od wiatru nauczyłoby go tylko ignorować raport. Dwie różne
+robotę, dwa różne progi — i gdyby raport miał próg testu, byłby bezużyteczny,
+a gdyby test miał próg raportu, nie złapałby niczego.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne

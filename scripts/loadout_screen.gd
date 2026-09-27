@@ -29,6 +29,11 @@ var _text: Label = null
 ## under it cannot leave the cursor pointing at nothing.
 var _cursor: int = 0
 
+## What the last swap did, from ConfigurationReport.compare(). Kept until the
+## next one: "was that an upgrade" is the question the pilot came to the
+## screen for, and it must not vanish on the next redraw.
+var _report: PackedStringArray = PackedStringArray()
+
 
 func _ready() -> void:
 	layer = 15
@@ -132,6 +137,9 @@ func _fit() -> void:
 	if slots.is_empty() or _ship == null:
 		return
 	var slot: Node = slots[_cursor % slots.size()]
+	# Measured before the swap, because the only honest way to say what a
+	# module did is to have measured the ship without it.
+	var before: ConfigurationReport = _ship.configuration()
 	var taken: Resource = _ship.release()
 
 	var removed: Resource = null
@@ -139,6 +147,8 @@ func _fit() -> void:
 		removed = (slot as Hardpoint).fit(taken as WeaponData)
 	elif slot is EngineMount:
 		removed = _ship.fit_engine(slot as EngineMount, taken as EngineData)
+
+	_report = _ship.configuration().compare(before)
 
 	# Whatever came out goes into the hold, so a swap is never a loss and the
 	# pilot can put the old module back if the new one turns out worse.
@@ -172,6 +182,7 @@ func _redraw() -> void:
 	if _ship.carried == null:
 		lines.append("")
 		lines.append("pusto - wleć w skrzynkę")
+		lines.append_array(_report_lines())
 		_text.text = "\n".join(lines)
 		_text.add_theme_color_override("font_color", DIM)
 		return
@@ -195,8 +206,23 @@ func _redraw() -> void:
 		lines.append("")
 		lines.append("F montuje,  Backspace wyrzuca")
 
+	lines.append_array(_report_lines())
+
 	_text.text = "\n".join(lines)
 	_text.add_theme_color_override("font_color", PICK if not slots.is_empty() else DIM)
+
+
+## The last swap, as the configuration report saw it. Shown under the slots
+## rather than in a popup: the pilot is still flying, and the point of these
+## lines is that they can be glanced at.
+func _report_lines() -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	if _report.is_empty():
+		return out
+	out.append("")
+	out.append("-- po wymianie --")
+	out.append_array(_report)
+	return out
 
 
 ## Why the carried module has nowhere to go. "No slot" is not an answer the

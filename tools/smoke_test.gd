@@ -824,6 +824,7 @@ func _evaluate_phase() -> void:
 			_check_loot()
 			_check_hold()
 			_check_bulk()
+			_check_configuration_report()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1445,6 +1446,87 @@ func _check_scanner(planet: Planet) -> void:
 
 	scanner.queue_free()
 	ship.queue_free()
+
+
+## The report is the guard a pilot has instead of a test suite: swapping a
+## module can leave the ship crooked rather than merely worse, and nothing in
+## flight says so. Every fault here is one this project has actually shipped
+## into a working tree at least once.
+func _check_configuration_report() -> void:
+	var ship: Ship = _spawn_ship()
+
+	var stock: ConfigurationReport = ship.configuration()
+	_expect(
+		stock.worst() == ConfigurationReport.Severity.OK,
+		"the stock ship reports a clean configuration (%s)" % _findings_of(stock),
+	)
+	_expect(stock.mass > 0.0 and stock.inertia > 0.0, "and carries the mass properties with it")
+
+	# One side of a torque pair made twice as strong: the torques still add,
+	# the forces no longer cancel, and every turn shoves the ship sideways.
+	# This is the failure that prompted the report, so it is the one it must
+	# not miss.
+	var nose: EngineMount = ship.get_node("NoseLeftTorque") as EngineMount
+	var stronger: EngineData = nose.installed.duplicate() as EngineData
+	stronger.max_thrust = nose.installed.max_thrust * 2.0
+	ship.fit_engine(nose, stronger)
+
+	var crooked: ConfigurationReport = ship.configuration()
+	_expect(
+		crooked.worst() == ConfigurationReport.Severity.FAULT,
+		"a lopsided torque pair is a fault, not a footnote (%s)" % _findings_of(crooked),
+	)
+	_expect(
+		_findings_of(crooked).contains("sideways"),
+		"and it is named as a sideways push rather than as a number nobody can place",
+	)
+	_expect(
+		float(crooked.residual[ShipControl.Command.CW]) > 1.0,
+		"the residual force is measured, not guessed (%.1f N)" % [
+			crooked.residual[ShipControl.Command.CW],
+		],
+	)
+
+	# Comparing against the report taken before the swap is what lets the
+	# screen say what the module did rather than what the ship now is.
+	var delta: PackedStringArray = crooked.compare(stock)
+	_expect(not delta.is_empty(), "a swap that changes the ship is reported as a change")
+	_expect(
+		"
+".join(delta).contains("sideways"),
+		"and a fault the module introduced is blamed on it",
+	)
+	_expect(
+		crooked.compare(crooked).is_empty(),
+		"while comparing a configuration with itself invents nothing",
+	)
+	# The fault existed before this comparison, so it is not news.
+	_expect(
+		not "
+".join(stock.compare(crooked)).contains("sideways"),
+		"a fault already present is not re-blamed on the next module",
+	)
+
+	# A direction with nothing left behind it is the loudest thing the report
+	# can say, and the easiest to cause: one mount emptied.
+	var reverse: EngineMount = ship.get_node("NoseReverseThruster") as EngineMount
+	reverse.installed = null
+	ship.rebuild_control_groups(false)
+	_expect(
+		_findings_of(ship.configuration()).contains("no BACK authority"),
+		"an empty command group is reported outright (%s)" % _findings_of(ship.configuration()),
+	)
+
+	ship.queue_free()
+
+
+func _findings_of(report: ConfigurationReport) -> String:
+	if report.findings.is_empty():
+		return "clean"
+	var parts: PackedStringArray = PackedStringArray()
+	for finding: Dictionary in report.findings:
+		parts.append(finding["text"])
+	return "; ".join(parts)
 
 
 func _check_bulk() -> void:

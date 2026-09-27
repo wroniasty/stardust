@@ -125,7 +125,7 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [ ] `MAX_PENETRATION` i `CONTACT_ITERATIONS` skalowane rozmiarem kadłuba i liczbą punktów, zamiast stałych dobranych pod trójkąt.
 - [ ] Wytyczne obrysu kadłuba (obwód, wierzchołki, wypukłość, najcieńszy detal, rozstaw nóg) sprawdzane w raporcie konfiguracji — wartości i uzasadnienie w IDEAS.md sekcja 6.
 - [ ] Test: iglica terenu węższa niż odstęp punktów kontaktu nie przechodzi przez kadłub.
-- [ ] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par, puste grupy, ostrzeżenie o module, który psuje sterowanie.
+- [x] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par lustrzanych, puste grupy, boczny dryf pary obrotowej jako przyspieszenie. `compare()` pokazuje w ekranie wymiany, co zrobił moduł — różnice, nie stan. Wytyczne obrysu kadłuba dojdą osobno.
 - [ ] Awarie silników: spadek sprawności od zderzeń, niezawodność jako dropout i oscylacja ciągu.
 - [ ] Lądowanie z uszkodzonymi silnikami: asymetria, oscylacje, sprawdzenie, że jest trudno, ale możliwe.
 - [ ] Podwozie jako moduł (tolerancja nachylenia, próg prędkości) i moduły asystujące (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu).
