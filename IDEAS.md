@@ -1108,6 +1108,39 @@ hamuje, prawie nie grzeje), ale rozmija się z zamysłem z sekcji 8, gdzie
 aerobraking miał grzać. Jeśli ma grzać, trzeba albo pogrubić górną powłokę,
 albo podnieść prędkości orbitalne. Do decyzji przy strojeniu feelingu.
 
+### Skaner: znaczniki ciał niebieskich na obrzeżu ekranu (M2, zalążek)
+
+Przy 640x360 planeta albo wypełnia widok, albo nie ma jej wcale — a „nie ma
+jej wcale" obejmuje zarówno „jest tuż za plecami", jak i „jest pół układu
+stąd". Skaner zamienia to na kierunek i liczbę.
+
+- **Czyta grupę `gravity_sources`**, nie własną listę. To ta sama definicja
+  „ciała niebieskiego", której używa fizyka, więc księżyce i gwiazdy z M3
+  pojawią się bez zmiany w tym pliku.
+- **Znacznik tylko dla ciał, których środek jest poza ekranem.** To, co widać,
+  nie potrzebuje strzałki.
+- **Pierścień jest prostokątem, nie okręgiem**, bo ekran jest prostokątem;
+  okrąg zostawiałby puste rogi i tłoczył się przy krótszych bokach.
+- **Rozmiar znacznika mówi, jak duże jest ciało, nie jak blisko.** W 2D nie ma
+  perspektywy — promień planety na ekranie to jej promień razy zoom, niezależnie
+  od odległości — więc odległość nie ma tu nic do powiedzenia. Niesie ją jasność
+  (pełna w polu grawitacyjnym, przygaszona poza nim) i liczba. Pierwsze podejście
+  liczyło „rozmiar pozorny" i było po prostu błędnym rozumowaniem przeniesionym
+  z 3D: oba ciała wpadały w to samo ograniczenie i znaczniki wychodziły
+  identyczne.
+- **Liczba to odległość do powierzchni, nie do środka.** Na planecie o promieniu
+  1000 px to są dwie zupełnie różne wielkości, a pilot działa na tej pierwszej.
+- **Kolor to `surface_color` ciała rozjaśniony do czytelności**, żeby znacznik i
+  planeta, którą się w końcu zobaczy, były rozpoznawalnie tym samym obiektem.
+- **Geometria jest oddzielona od rysowania.** `contacts(to_screen, view)` zwraca
+  dane, `_draw_marker()` je maluje. Dzięki temu testuje się bez kamery i bez
+  wyrenderowanej klatki, a `to_screen` (canvas transform) niesie pozycję, zoom i
+  — kiedy dojdzie kamera lądowania z VISUALS V4 — obrót kamery. Liczenie kąta
+  ręcznie w przestrzeni świata cicho by się wtedy rozjechało.
+
+Zasięg jest na razie stałą. W M5 staje się własnością modułu skanera: lepszy
+skaner widzi dalej, i to jest kolejna rzecz, którą można znaleźć w skrzynce.
+
 ## 9. Seamless: streaming świata
 
 Dwie warstwy:

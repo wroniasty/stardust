@@ -823,6 +823,7 @@ func _evaluate_phase() -> void:
 			_check_loot()
 			_check_hold()
 			_check_bulk()
+			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -1328,6 +1329,82 @@ const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd"
 ## like a size and like a mass at once. The symmetry it can break is already
 ## pinned by _check_control_groups(), which measures the leftover side force
 ## rather than the weights behind it.
+## The scanner reports a direction and a distance for bodies that are off
+## screen. Tested against the geometry rather than the pixels: contacts() is
+## handed the world-to-screen transform, so no camera or rendered frame is
+## needed and the answers are exact.
+func _check_scanner(planet: Planet) -> void:
+	var ship: Ship = _spawn_ship()
+	var scanner: ScannerHud = ScannerHud.new()
+	root.add_child(scanner)
+	scanner.bind(ship)
+
+	var view: Vector2 = Vector2(640.0, 360.0)
+	var centre: Vector2 = view * 0.5
+	var ring: Vector2 = centre - Vector2(scanner.ring_margin, scanner.ring_margin)
+
+	# Straight above the planet, high enough that its centre is off the bottom
+	# of the screen. The transform is the one a camera locked to the ship
+	# produces: the ship at the centre, no zoom, no rotation.
+	var altitude: float = 2000.0
+	ship.global_position = planet.global_position - Vector2(0.0, planet.surface_radius + altitude)
+	var to_screen: Transform2D = Transform2D(0.0, centre - ship.global_position)
+
+	var found: Array[Dictionary] = scanner.contacts(to_screen, view)
+	_expect(found.size() == 1, "one body in range gives one marker (got %d)" % found.size())
+	if found.size() == 1:
+		var contact: Dictionary = found[0]
+		_expect(
+			(contact["direction"] as Vector2).dot(Vector2.DOWN) > 0.99,
+			"the marker points at the planet below, not somewhere else",
+		)
+		_expect(
+			is_equal_approx((contact["at"] as Vector2).y, centre.y + ring.y),
+			"and sits on the bottom of the ring (y %.1f, expected %.1f)" % [
+				(contact["at"] as Vector2).y, centre.y + ring.y,
+			],
+		)
+		_expect(
+			absf(float(contact["distance"]) - altitude) < 1.0,
+			"the number is the distance to the surface, not to the centre (%.0f)" % [
+				contact["distance"],
+			],
+		)
+		_expect(bool(contact["inside"]), "and the marker knows the ship is inside the well")
+
+	# Close enough that the planet's centre is on screen: the pilot can see it,
+	# so an edge marker would be pointing at nothing they need.
+	ship.global_position = planet.global_position - Vector2(0.0, 100.0)
+	_expect(
+		scanner.contacts(Transform2D(0.0, centre - ship.global_position), view).is_empty(),
+		"a body whose centre is on screen gets no edge marker",
+	)
+
+	# And past the scanner's reach there is nothing to report, however large.
+	ship.global_position = planet.global_position - Vector2(
+		0.0, planet.surface_radius + scanner.scan_range + 10.0,
+	)
+	_expect(
+		scanner.contacts(Transform2D(0.0, centre - ship.global_position), view).is_empty(),
+		"a body beyond the scanner's range is not reported",
+	)
+
+	# Outside the well the marker stays, dimmed: still worth steering by.
+	ship.global_position = planet.global_position - Vector2(0.0, planet.influence_radius + 500.0)
+	var far: Array[Dictionary] = scanner.contacts(
+		Transform2D(0.0, centre - ship.global_position), view,
+	)
+	_expect(far.size() == 1, "a body outside its own well is still reported")
+	if far.size() == 1:
+		_expect(not bool(far[0]["inside"]), "but it is marked as outside the well")
+
+	_expect(scanner.distance_text(12345.0) == "12.3k", "long distances are shortened")
+	_expect(scanner.distance_text(-5.0) == "0", "and being underground does not read as negative")
+
+	scanner.queue_free()
+	ship.queue_free()
+
+
 func _check_bulk() -> void:
 	var ship: Ship = _spawn_ship()
 

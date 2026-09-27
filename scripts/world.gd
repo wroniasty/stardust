@@ -47,6 +47,7 @@ var planet: Planet = null
 var _configurator: PlanetConfigurator = null
 var _landing_site: int = 0
 var _loadout: LoadoutScreen = null
+var _scanner: ScannerHud = null
 
 
 ## Radius of the crater the debug key blows in the crust.
@@ -61,6 +62,7 @@ func _ready() -> void:
 		ship.destroyed.connect(_on_ship_destroyed)
 	_build_configurator()
 	_build_loadout()
+	_build_scanner()
 	_spawn_crates()
 
 
@@ -73,6 +75,12 @@ func _build_configurator() -> void:
 	_configurator.bind(planet)
 	_configurator.rebuilt.connect(_on_planet_rebuilt)
 	_configurator.teleport_requested.connect(_on_next_landing_site)
+
+
+func _build_scanner() -> void:
+	_scanner = ScannerHud.new()
+	add_child(_scanner)
+	_scanner.bind((player as Player).ship)
 
 
 func _build_loadout() -> void:
