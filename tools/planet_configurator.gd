@@ -88,10 +88,15 @@ func bind(planet: Planet) -> void:
 
 ## Nothing may leave the tree paused with no panel on screen to explain it.
 ## Cheap insurance against exactly the failure this tool is best placed to
-## cause, and against anything else that pauses and forgets.
+## cause.
+##
+## Releases only this tool's own claim. The earlier version unpaused whatever
+## it found, which read as defensive and was in fact destructive: it undid
+## the ship editor's pause every frame, so the editor opened over a running
+## game and the ship fell out of the sky while its schematic was on screen.
 func _process(_delta: float) -> void:
-	if not is_open() and get_tree().paused:
-		get_tree().paused = false
+	if not is_open():
+		PauseGate.release(self, get_tree())
 
 
 ## Escape has to be caught here rather than in _unhandled_key_input: the panel
@@ -120,7 +125,10 @@ func is_open() -> bool:
 ## visible heading, the second way out on Escape, and _process below.
 func toggle() -> void:
 	_panel.visible = not _panel.visible
-	get_tree().paused = _panel.visible
+	if _panel.visible:
+		PauseGate.hold(self, get_tree())
+	else:
+		PauseGate.release(self, get_tree())
 	if _panel.visible:
 		_refresh()
 

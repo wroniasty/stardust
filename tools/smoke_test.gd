@@ -826,6 +826,8 @@ func _evaluate_phase() -> void:
 			_check_bulk()
 			_check_configuration_report()
 			_check_cargo()
+			_check_editor()
+			_check_pause_gate()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1522,6 +1524,163 @@ func _check_cargo() -> void:
 	crate.queue_free()
 	loot.free()
 	ship.queue_free()
+
+
+## MAUX1: the editor answers "would this be better" before anything is
+## bolted on. Working that out means fitting the module, measuring, and
+## putting everything back -- so the thing that must be true above all is
+## that asking the question changes nothing.
+func _check_editor() -> void:
+	var ship: Ship = _spawn_ship()
+	var editor: ShipEditor = ShipEditor.new()
+	root.add_child(editor)
+	editor.bind(ship)
+
+	var mount: EngineMount = ship.get_node("MainDrive") as EngineMount
+	var stronger: EngineData = mount.installed.duplicate() as EngineData
+	stronger.max_thrust = mount.installed.max_thrust * 2.0
+	ship.take(stronger, 2)
+
+	var mass: float = ship.mass
+	var centre: Vector2 = ship.center_of_mass
+	var authority: float = ship.control.authority_of(ShipControl.Command.FORWARD)
+
+	editor._refresh_preview()
+	_expect(not editor._preview.is_empty(), "the preview says what fitting would do")
+	_expect(
+		"
+".join(editor._preview).contains("FORWARD"),
+		"and names the direction that would change (%s)" % ", ".join(editor._preview),
+	)
+	_expect(
+		is_equal_approx(ship.mass, mass)
+		and ship.center_of_mass.is_equal_approx(centre)
+		and is_equal_approx(ship.control.authority_of(ShipControl.Command.FORWARD), authority),
+		"and asking leaves the ship exactly as it was (%.2f kg, %.1f N)" % [
+			ship.mass, ship.control.authority_of(ShipControl.Command.FORWARD),
+		],
+	)
+	_expect(mount.installed != stronger, "the candidate is not left bolted in")
+
+	# Looking is free, changing is not: the landing pad is what gates a refit.
+	_expect(not editor.can_refit(), "a ship in flight may not be refitted here")
+	editor._fit()
+	_expect(
+		mount.installed != stronger and ship.carried == stronger,
+		"so fitting is refused and the module stays in the hold",
+	)
+
+	ship.flight_mode = Ship.FlightMode.LANDED
+	_expect(editor.can_refit(), "a landed ship may be refitted")
+	editor._fit()
+	_expect(mount.installed == stronger, "and then the module actually goes on")
+	_expect(
+		ship.control.authority_of(ShipControl.Command.FORWARD) > authority * 1.5,
+		"with the change the preview promised (%.0f -> %.0f)" % [
+			authority, ship.control.authority_of(ShipControl.Command.FORWARD),
+		],
+	)
+
+	# Clicking. Resolved against the layout rather than against whatever the
+	# last frame happened to leave behind, which is what makes it checkable
+	# here at all -- headless never draws.
+	var loot: Node = LOOT_SCRIPT.new()
+	ship.take(loot.weapon(555, 1), 1)
+	loot.free()
+	_expect(editor._items().size() >= 2, "there is a list to click on")
+	editor._pick = 0
+	_expect(
+		editor.click_at(editor._row_rect(1, editor._panels()["list"]).get_center()),
+		"a click on the second row hits it",
+	)
+	_expect(editor._pick == 1, "and selects it")
+	_expect(not editor.click_at(Vector2(-50.0, -50.0)), "a click on nothing selects nothing")
+
+	# And on the schematic: a mount the module fits becomes the target, one
+	# it does not is refused by name rather than silently ignored.
+	editor._pick = 0
+	var place: Callable = editor._plan_placement(editor._panels()["plan"])
+	var targets: Array[Node] = editor._targets()
+	_expect(not targets.is_empty(), "the held module fits somewhere")
+	if not targets.is_empty():
+		var fitting: Node = targets[targets.size() - 1]
+		_expect(
+			editor.click_at(place.call((fitting as Node2D).position)),
+			"a click on a mount hits it",
+		)
+		_expect(editor._targets()[editor._slot] == fitting, "and aims the swap at that mount")
+
+	var torque: EngineMount = ship.get_node("NoseLeftTorque") as EngineMount
+	_expect(
+		editor.click_at(place.call(torque.position)) and not editor._targets().has(torque),
+		"a mount the module does not fit is still clickable, and says so",
+	)
+
+	editor.queue_free()
+	ship.queue_free()
+
+
+## A pause is a claim, and only its own holder may drop it.
+##
+## The obvious guard -- "if my panel is shut and the tree is paused, unpause
+## it" -- is correct with one such screen and destructive with two. The
+## planet configurator ran it every frame and released the pause the ship
+## editor had just taken, so the editor opened over a running game and the
+## ship fell out of the sky while its own schematic was on screen.
+##
+## Driven with a null tree: the claim bookkeeping is the part that broke, and
+## actually pausing the tree the smoke test is running in would stall it.
+func _check_pause_gate() -> void:
+	var first: Node = Node.new()
+	var second: Node = Node.new()
+	root.add_child(first)
+	root.add_child(second)
+
+	PauseGate.hold(first, null)
+	_expect(PauseGate.held(), "a claim holds the game")
+	PauseGate.hold(first, null)
+	PauseGate.release(first, null)
+	_expect(not PauseGate.held(), "claiming twice is still one claim")
+
+	PauseGate.hold(first, null)
+	PauseGate.hold(second, null)
+	PauseGate.release(first, null)
+	_expect(PauseGate.held(), "one holder letting go does not release another's claim")
+	PauseGate.release(second, null)
+	_expect(not PauseGate.held(), "and the last one dropped runs the game again")
+
+	PauseGate.release(first, null)
+	_expect(not PauseGate.held(), "releasing a claim never made changes nothing")
+
+	# A screen freed while holding would otherwise pause the game for ever,
+	# with nothing left in the tree that could let go.
+	PauseGate.hold(second, null)
+	second.free()
+	_expect(not PauseGate.held(), "a holder freed while holding stops holding")
+
+	first.free()
+
+	# The bug itself, not just the bookkeeping: the configurator's own guard
+	# running while the editor is open must leave the pause alone. Done
+	# synchronously with no frames in between, so the real tree is paused
+	# only for the length of these three lines.
+	var editor: ShipEditor = ShipEditor.new()
+	var configurator: PlanetConfigurator = PlanetConfigurator.new()
+	root.add_child(editor)
+	root.add_child(configurator)
+	# `paused` rather than get_tree().paused: this script is the SceneTree.
+	editor.toggle()
+	var opened: bool = paused
+	configurator._process(0.016)
+	var survived: bool = paused
+	editor.close()
+	var released: bool = paused
+
+	_expect(opened, "opening the editor pauses the game")
+	_expect(survived, "and another screen's own guard does not undo that pause")
+	_expect(not released, "closing it runs the game again")
+	editor.queue_free()
+	configurator.queue_free()
 
 
 func _check_configuration_report() -> void:

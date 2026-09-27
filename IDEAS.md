@@ -397,6 +397,19 @@ decyzji, które nie są oczywiste:
 - **Panele są w pełni nieprzezroczyste.** Przy 0,95 tekst debug overlay
   przebijał się czytelnie: pięć procent jasnej zieleni na prawie-czerni jest
   dwa razy jaśniejsze niż sam panel.
+- **Patrzeć można zawsze, zmieniać tylko na ziemi.** Ekran otwiera się
+  wszędzie, bo planowanie refitu w drodze do domu jest sensowną rzeczą do
+  robienia, ale przykręcenie modułu wymaga wylądowania — i to daje lądowisku
+  powód istnienia inny niż „miejsce, gdzie się nie ginie". Wyrzucanie za burtę
+  zostaje dostępne w locie: zrzucenie balastu pod presją to dokładnie ta
+  decyzja, o którą chodzi. Ekran nie odmawia otwarcia — mówi, na czym stoisz.
+- **Podgląd skutku przed montażem** liczy się przez montaż na próbę: wkręć,
+  zmierz, odkręć. Rzecz, która musi być prawdziwa przede wszystkim, to że
+  **zadanie pytania niczego nie zmienia** — i to jest osobna asercja w teście.
+  Silniki porównywane są przez grupy sterowania (bo to mount decyduje, do
+  czego silnik służy), broń przez własne liczby wobec tej już w gnieździe (bo
+  ten sam pistolet jest tym samym pistoletem, gdziekolwiek go przykręcić).
+  Wynik jest cache'owany na wyborze, nie liczony co klatkę.
 - **Ekran pauzuje, szybka wymiana na Tab nie.** To dwa różne pytania zadawane
   pod różnym ciśnieniem: Tab to jedna decyzja w locie, edytor to przegląd. W
   wersji docelowej edytor ma być dostępny tylko po wylądowaniu — dziś otwiera
@@ -406,6 +419,28 @@ decyzji, które nie są oczywiste:
 niej statek stojący nad zrzuconym modułem podnosi go w tej samej klatce, czyli
 wyrzucanie jest operacją pustą. Odwracalne wyrzucenie to decyzja taktyczna
 („zrzucam balast, wrócę"); nieodwracalne to tylko sprzątanie ekwipunku.
+
+### Pauza jest roszczeniem, nie flagą
+
+Każdy ekran, który pauzuje, chce też zabezpieczenia przed zostawieniem gry
+zapauzowanej bez niczego na ekranie — zapauzowane drzewo przestaje dostarczać
+wejście i wygląda dokładnie jak martwa klawiatura. Oczywiste zabezpieczenie
+brzmi: „jeśli mój panel jest zamknięty, a drzewo zapauzowane, odpauzuj".
+
+**Jest poprawne przy jednym takim ekranie i destrukcyjne przy dwóch.**
+Konfigurator planety wykonywał je co klatkę i zwalniał pauzę, którą właśnie
+wziął edytor statku. Efekt: edytor otwierał się nad działającą grą, a statek
+spadał z nieba, patrząc na własny schemat. Objaw był banalny („baner mówi
+w locie, choć wylądowałem"), przyczyna nie.
+
+`PauseGate` robi z pauzy **roszczenie trzymane przez nazwanego właściciela**;
+gra rusza dopiero, gdy ostatnie zostanie zwolnione, i każdy ekran zwalnia
+wyłącznie swoje. Statyczny stan, nie autoload — musi działać też w smoke
+teście, a autoloady nie istnieją pod `--script`.
+
+Morał ogólniejszy: **kod obronny, który sprząta po cudzych**, jest agresją
+udającą ostrożność. Zabezpieczenie ma cofać własne skutki, nie wszystkie
+znalezione.
 
 ## 5. Struktura wszechświata
 

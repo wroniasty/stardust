@@ -153,8 +153,7 @@ Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, u
 ## MAUX1: Edytor statku (prototyp)
 
 Cel: jeden ekran, na którym widać cały statek i wszystko, co się na nim wozi.
-Prototyp do testów — otwiera się wszędzie (klawisz `I`), nie tylko po
-wylądowaniu, bo teraz chodzi o to, żeby dało się go pomacać.
+Klawisz `I`. Otwiera się wszędzie, ale montaż wymaga wylądowania.
 
 Szybka wymiana na Tab zostaje tym, czym jest: jedno gniazdo, bez pauzy,
 decyzja podjęta w locie. To jest druga połowa.
@@ -164,9 +163,9 @@ decyzja podjęta w locie. To jest druga połowa.
 - [x] Wyrzucanie za burtę tworzy **prawdziwą skrzynkę**, do której można wrócić, z chwilą nietykalności, żeby nie podnieść jej z powrotem w tej samej klatce.
 - [x] Ekran: cargo + ładownia jako jedna lista, schemat statku, info o module, podświetlenie pasujących gniazd, montaż, chowanie, wyrzucanie.
 - [x] Schemat **generowany** z wielokąta kadłuba i pozycji mountów, nigdy rysowany ręcznie — ręczny byłby nieprawdziwy w chwili, gdy mount się przesunie (a przesunęły się dwa razy przy okazji `bulk`).
-- [ ] Podgląd skutku przed montażem: najechanie na gniazdo pokazuje, co zrobi `ConfigurationReport.compare()`, zanim cokolwiek zostanie wkręcone. Dziś raport pojawia się dopiero po.
-- [ ] Mysz: klikanie po liście i po kropkach schematu. Dziś wszystko na klawiaturze.
-- [ ] Reguła docelowa: edytor tylko po wylądowaniu lub zadokowaniu, żeby lądowisko miało powód istnienia inny niż „miejsce, gdzie się nie ginie".
+- [x] Podgląd skutku przed montażem: wybranie gniazda pokazuje, co zrobi `ConfigurationReport.compare()`, zanim cokolwiek zostanie wkręcone. Silniki przez grupy sterowania, broń przez porównanie z tym, co już w gnieździe.
+- [x] Mysz: klikanie po liście i po kropkach schematu, obok klawiatury.
+- [x] Patrzeć można zawsze, zmieniać tylko na ziemi: ekran otwiera się wszędzie (planowanie refitu w drodze do domu jest sensowne), ale montaż wymaga wylądowania. Wyrzucanie za burtę zostaje dostępne w locie.
 - [ ] Pojemność cargo jako własność kadłuba/modułu, a nie stała.
 
 Gotowe, gdy: da się znaleźć moduł, obejrzeć go obok tego, co już jest zamontowane, wsadzić w konkretne gniazdo i wyrzucić to, czego się nie chce — bez zgadywania, gdzie co pasuje.

@@ -9,8 +9,13 @@ extends CanvasLayer
 ## away what is not wanted. It pauses, because reading a schematic while
 ## falling is not a decision, it is an accident.
 ##
-## Prototype, and deliberately so. It opens anywhere rather than only when
-## landed, because the point of it right now is to be poked at.
+## Looking is free; changing is not. The screen opens anywhere -- planning a
+## refit on the way home is a reasonable thing to do -- but bolting a module
+## on needs the ship on the ground. That gives a landing pad a purpose beyond
+## being somewhere not to die, without the screen refusing to open and
+## refusing to say why. Throwing something overboard stays available in
+## flight: dumping ballast under pressure is exactly the decision worth
+## having.
 ##
 ## The schematic is generated from the same data the ship flies on -- the hull
 ## collision polygon and the mount nodes' own positions -- never drawn by
@@ -61,13 +66,26 @@ var _slot: int = 0
 ## Last line of feedback, from a fit, a stow or a refusal.
 var _notice: String = ""
 
+## What fitting the selected module into the highlighted slot would do,
+## worked out by fitting it, measuring, and putting things back. Cached
+## against the selection rather than recomputed every frame: the answer only
+## changes when the selection does, and a speculative rebuild per frame is
+## work nobody asked for.
+var _preview: PackedStringArray = PackedStringArray()
+var _preview_key: String = ""
+
+
+
 
 func _ready() -> void:
 	layer = 20
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_canvas = Control.new()
 	_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Takes the mouse while it is open, and only then: the node is hidden the
+	# rest of the time, so the game never loses a click to an unseen panel.
+	_canvas.mouse_filter = Control.MOUSE_FILTER_STOP
+	_canvas.gui_input.connect(_on_click)
 	_canvas.draw.connect(_draw_editor)
 	add_child(_canvas)
 	_canvas.hide()
@@ -89,21 +107,23 @@ func toggle() -> void:
 	_slot = 0
 	_notice = ""
 	_canvas.show()
-	get_tree().paused = true
+	PauseGate.hold(self, get_tree())
 
 
 func close() -> void:
 	_canvas.hide()
-	get_tree().paused = false
+	PauseGate.release(self, get_tree())
 
 
 func _process(_delta: float) -> void:
 	if is_open():
+		_refresh_preview()
 		_canvas.queue_redraw()
-	elif get_tree().paused and not _anything_else_paused():
-		# The same guard the planet configurator needs: a screen that pauses
-		# the tree must never be the reason a closed screen leaves it paused.
-		get_tree().paused = false
+	else:
+		# Guard against leaving the game paused with nothing on screen to
+		# explain it. Releases only this screen's own claim -- releasing
+		# everyone's is what broke the pause when there were two screens.
+		PauseGate.release(self, get_tree())
 
 
 func _input(event: InputEvent) -> void:
@@ -137,15 +157,10 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-## Whether some other screen wants the tree paused. Only the configurator
-## does, and asking it directly beats keeping a counter both would have to
-## remember to update.
-func _anything_else_paused() -> bool:
-	for node: Node in get_parent().get_children():
-		var configurator: PlanetConfigurator = node as PlanetConfigurator
-		if configurator != null and configurator.is_open():
-			return true
-	return false
+## Whether the ship is somewhere a module can be changed. Docking joins this
+## when there is anything to dock to.
+func can_refit() -> bool:
+	return _ship != null and _ship.flight_mode == Ship.FlightMode.LANDED
 
 
 ## Everything the pilot can act on, hold first. One list rather than two
@@ -208,6 +223,10 @@ func _fit() -> void:
 		_notice = "nie ma gdzie tego zamontować"
 		return
 
+	if not can_refit():
+		_notice = "montaż tylko na ziemi — wyląduj albo użyj Tab w locie"
+		return
+
 	var slot: Node = targets[posmod(_slot, targets.size())]
 	var item: Resource = picked["item"]
 	var before: ConfigurationReport = _ship.configuration()
@@ -241,6 +260,72 @@ func _fit() -> void:
 	]
 
 
+## Works out what fitting would do without committing to it: bolt the module
+## in, measure, put everything back exactly as it was.
+##
+## Only engines move the control groups -- a weapon is compared on its own
+## numbers instead, further down -- so this is the engine half of the answer.
+func _refresh_preview() -> void:
+	var picked: Dictionary = _selected()
+	var targets: Array[Node] = _targets()
+	var key: String = "%d/%d/%d" % [_pick, _slot, targets.size()]
+	if key == _preview_key:
+		return
+	_preview_key = key
+	_preview = PackedStringArray()
+	if picked.is_empty() or targets.is_empty():
+		return
+
+	var mount: EngineMount = targets[posmod(_slot, targets.size())] as EngineMount
+	var candidate: EngineData = picked["item"] as EngineData
+	if mount == null or candidate == null:
+		return
+
+	var before: ConfigurationReport = _ship.configuration()
+	var previous: EngineData = mount.installed
+	mount.installed = candidate
+	_ship.rebuild_control_groups(false)
+	_preview = _ship.configuration().compare(before)
+	mount.installed = previous
+	_ship.rebuild_control_groups(false)
+
+
+## The one-line answer to "is this better", for whichever kind of module is
+## selected. Engines are compared through the control groups, because where
+## an engine goes decides what it does; a weapon is the same gun wherever it
+## is bolted, so it is compared against the gun already in the slot.
+func _verdict() -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	var targets: Array[Node] = _targets()
+	var picked: Dictionary = _selected()
+	if targets.is_empty() or picked.is_empty():
+		return out
+	var slot: Node = targets[posmod(_slot, targets.size())]
+
+	if slot is Hardpoint:
+		var fitted: WeaponData = (slot as Hardpoint).weapon
+		var candidate: WeaponData = picked["item"] as WeaponData
+		if fitted == null:
+			out.append("%s: pusty" % slot.name)
+		elif candidate != null:
+			out.append("%s: %s  dps %.2f -> %.2f   rozrzut %.1f -> %.1f   krater %.0f -> %.0f" % [
+				slot.name,
+				fitted.display_name,
+				fitted.damage_per_second(),
+				candidate.damage_per_second(),
+				fitted.spread_degrees,
+				candidate.spread_degrees,
+				fitted.crater_radius,
+				candidate.crater_radius,
+			])
+		return out
+
+	out.append("%s: %s" % [
+		slot.name, "bez zmian w sterowaniu" if _preview.is_empty() else ", ".join(_preview),
+	])
+	return out
+
+
 func _stow() -> void:
 	var picked: Dictionary = _selected()
 	if picked.is_empty() or not bool(picked["held"]):
@@ -265,23 +350,105 @@ func _jettison() -> void:
 	_notice = "wyrzucono za burtę"
 
 
+## A click picks whatever is under it: a row in the list, or a mount on the
+## schematic. Only mounts the selected module fits can be picked, because the
+## slot cursor indexes the list of those and pointing it at anything else
+## would mean two ways of saying "nowhere".
+func _on_click(event: InputEvent) -> void:
+	var press: InputEventMouseButton = event as InputEventMouseButton
+	if press == null or not press.pressed or press.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if click_at(press.position):
+		_canvas.accept_event()
+
+
+## Turns a point on screen into a selection. Public so the behaviour can be
+## driven without a mouse or a rendered frame. True when something was hit.
+func click_at(at: Vector2) -> bool:
+	if _ship == null:
+		return false
+	var panels: Dictionary = _panels()
+
+	for i: int in range(_items().size()):
+		if _row_rect(i, panels["list"]).has_point(at):
+			_pick = i
+			_slot = 0
+			return true
+
+	var place: Callable = _plan_placement(panels["plan"])
+	var targets: Array[Node] = _targets()
+	for mount: Node in _all_mounts():
+		if at.distance_to(place.call((mount as Node2D).position)) > DOT_PICKED + 2.0:
+			continue
+		var index: int = targets.find(mount)
+		if index >= 0:
+			_slot = index
+		else:
+			_notice = "%s nie przyjmie tego modułu" % mount.name
+		return true
+	return false
+
+
+## Where the three panels go. A function of the viewport and nothing else,
+## so a click can be resolved without waiting for a frame to have been drawn
+## -- the earlier version read back what the last _draw left behind, which
+## made mouse input untestable and wrong before the first frame.
+func _panels() -> Dictionary:
+	var view: Vector2 = _canvas.size
+	var list: Rect2 = Rect2(6.0, 6.0, view.x * 0.34, view.y * 0.72)
+	return {
+		"view": view,
+		"list": list,
+		"plan": Rect2(list.end.x + 6.0, 6.0, view.x - list.end.x - 12.0, view.y * 0.72),
+		"info": Rect2(6.0, list.end.y + 6.0, view.x - 12.0, view.y - list.end.y - 12.0),
+	}
+
+
+## The clickable box of one row of the list.
+func _row_rect(index: int, list: Rect2) -> Rect2:
+	var top: float = list.position.y + PAD + float(FONT_SIZE) + ROW * (1.5 + float(index))
+	return Rect2(
+		list.position.x + PAD - 2.0,
+		top - float(FONT_SIZE),
+		list.size.x - PAD * 2.0 + 2.0,
+		ROW,
+	)
+
+
+## Maps a point in the ship's own frame onto the schematic, fitting the hull
+## and every mount into the panel with room for the names beside the dots.
+func _plan_placement(plan: Rect2) -> Callable:
+	var bounds: Rect2 = Rect2(Vector2.ZERO, Vector2.ZERO)
+	var first: bool = true
+	for point: Vector2 in _ship.hull_outline():
+		bounds = Rect2(point, Vector2.ZERO) if first else bounds.expand(point)
+		first = false
+	for mount: Node in _all_mounts():
+		bounds = bounds.expand((mount as Node2D).position)
+	bounds = bounds.grow(2.0)
+
+	# Generous horizontal padding: every dot prints its name beside it, and
+	# the names are wider than the ship is.
+	var room: Vector2 = plan.size - Vector2(plan.size.x * 0.52, PAD * 4.0 + float(FONT_SIZE))
+	var scale: float = minf(room.x / bounds.size.x, room.y / bounds.size.y)
+	var origin: Vector2 = plan.position + Vector2(plan.size.x * 0.5, plan.size.y * 0.55)
+	var centre: Vector2 = bounds.get_center()
+	return func(p: Vector2) -> Vector2:
+		return origin + (p - centre) * scale
+
+
 func _draw_editor() -> void:
 	var font: Font = _canvas.get_theme_default_font()
 	if font == null or _ship == null:
 		return
-	var view: Vector2 = _canvas.size
+	var panels: Dictionary = _panels()
 
-	var list: Rect2 = Rect2(6.0, 6.0, view.x * 0.34, view.y * 0.72)
-	var plan: Rect2 = Rect2(list.end.x + 6.0, 6.0, view.x - list.end.x - 12.0, view.y * 0.72)
-	var info: Rect2 = Rect2(6.0, list.end.y + 6.0, view.x - 12.0, view.y - list.end.y - 12.0)
-
-	_canvas.draw_rect(Rect2(Vector2.ZERO, view), SCRIM)
-	_panel(list)
-	_panel(plan)
-	_panel(info)
-	_draw_list(font, list)
-	_draw_plan(font, plan)
-	_draw_info(font, info)
+	_canvas.draw_rect(Rect2(Vector2.ZERO, panels["view"] as Vector2), SCRIM)
+	for key: String in ["list", "plan", "info"]:
+		_panel(panels[key])
+	_draw_list(font, panels["list"])
+	_draw_plan(font, panels["plan"])
+	_draw_info(font, panels["info"])
 
 
 func _panel(rect: Rect2) -> void:
@@ -317,10 +484,7 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 			clampi(int(entry["rarity"]), 0, LootCrate.RARITY_COLORS.size() - 1)
 		]
 		if i == _pick:
-			_canvas.draw_rect(
-				Rect2(x - 2.0, y - float(FONT_SIZE), rect.size.x - PAD * 2.0 + 2.0, ROW),
-				Color(PICK, 0.18),
-			)
+			_canvas.draw_rect(_row_rect(i, rect), Color(PICK, 0.18))
 		_text(font, Vector2(x, y), "%s %-22s %4.1f" % [
 			">" if bool(entry["held"]) else " ", _label(item).left(22), Ship.module_bulk(item),
 		], colour if i != _pick else PICK)
@@ -337,22 +501,8 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	if hull.size() < 3:
 		return
 
-	# Fit the hull and every mount into the panel, leaving room for the name
-	# printed beside each dot.
-	var bounds: Rect2 = Rect2(hull[0], Vector2.ZERO)
-	for point: Vector2 in hull:
-		bounds = bounds.expand(point)
-	for mount: Node in mounts:
-		bounds = bounds.expand((mount as Node2D).position)
-	bounds = bounds.grow(2.0)
-
-	# Generous horizontal padding: every dot prints its name beside it, and
-	# the names are wider than the ship is.
-	var room: Vector2 = rect.size - Vector2(rect.size.x * 0.52, PAD * 4.0 + float(FONT_SIZE))
-	var scale: float = minf(room.x / bounds.size.x, room.y / bounds.size.y)
+	var place: Callable = _plan_placement(rect)
 	var origin: Vector2 = rect.position + Vector2(rect.size.x * 0.5, rect.size.y * 0.55)
-	var place: Callable = func(p: Vector2) -> Vector2:
-		return origin + (p - bounds.get_center()) * scale
 
 	var outline: PackedVector2Array = PackedVector2Array()
 	for point: Vector2 in hull:
@@ -400,13 +550,28 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 		_text(font, Vector2(x, y), line, TEXT)
 		y += ROW
 
+	# What the swap would do, before anything is committed. The reason to
+	# come to this screen rather than press Tab and find out.
+	y += ROW * 0.4
+	for line: String in _verdict():
+		_text(font, Vector2(x, y), line.left(96), FIT)
+		y += ROW
+
 	if not _notice.is_empty():
-		_text(font, Vector2(x, y), _notice.left(88), WARN)
+		_text(font, Vector2(x, y), _notice.left(96), WARN)
+
+	var state: String = "NA ZIEMI — montaż dostępny" if can_refit() else "W LOCIE — montaż po wylądowaniu"
+	_text(
+		font,
+		Vector2(rect.end.x - PAD - _width(font, state), rect.position.y + PAD + float(FONT_SIZE)),
+		state,
+		FIT if can_refit() else WARN,
+	)
 	_text(font, Vector2(x, rect.end.y - PAD), _keys(), LABEL)
 
 
 func _keys() -> String:
-	return "strzałki: wybór / gniazdo    F: montuj    S: schowaj    Backspace: za burtę    Esc: zamknij"
+	return "strzałki / myszka: wybór    F: montuj    S: schowaj    Backspace: za burtę    Esc: zamknij"
 
 
 func _label(item: Resource) -> String:
