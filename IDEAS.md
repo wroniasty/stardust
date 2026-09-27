@@ -442,6 +442,41 @@ Morał ogólniejszy: **kod obronny, który sprząta po cudzych**, jest agresją
 udającą ostrożność. Zabezpieczenie ma cofać własne skutki, nie wszystkie
 znalezione.
 
+### Kadr należy do pilota
+
+Trzy poziomy zoomu (`+` / `-`) i obracanie widoku strzałkami, z `H` jako
+wyjściem awaryjnym.
+
+- **Poziomy mnożą krzywą prędkości, nie zastępują jej.** Odjazd kamery przy
+  dużej prędkości istnieje po to, żeby było widać, dokąd się leci, i to jest
+  prawdą niezależnie od wybranego kadru. Środkowy poziom to 1.0, więc kamera,
+  której nikt nie dotknął, zachowuje się dokładnie jak wcześniej.
+- **Obrót jest akumulowany, nie zawijany** do −π..π. Wygładzanie `Camera2D`
+  interpoluje do wartości `rotation`; wartość skacząca z 6,2 na 0,1 posłałaby
+  widok dookoła. `level_view()` dodaje `angle_difference`, więc zawsze idzie
+  krótszą drogą — i to jest testowane jako *rozmiar ruchu*, nie rozmiar wyniku.
+- **`H` kładzie planetę na dole**, a w pustce prostuje widok. Jedno wyjście z
+  obrotu, którego pilot już nie chce, i zarazem kadr, którego i tak będzie
+  chciał przy podejściu. Wzór jest ten sam, którego używa lądowanie do
+  postawienia statku na nogach (`up.angle() + PI/2`), żeby „góra" znaczyła w
+  tej grze jedną rzecz.
+- **`ignore_rotation` musi być `false`**, inaczej Godot w ogóle nie stosuje
+  obrotu węzła do widoku — i ignoruje przy okazji `rotation_smoothing_*`.
+  Wygładzanie jest więc silnikowe, nie ręczne.
+
+**Starfield nie obracał się sam** — jest na `CanvasLayer` w przestrzeni ekranu.
+Shader dostał `view_rotation`, ale pierwsza wersja brała środek obrotu ze
+skryptu i była o połowę za mała: `FRAGCOORD` jest w pikselach bufora
+(1280x720), a `get_visible_rect()` przy rozciąganiu `canvas_items` zwraca bazowe
+640x360. Sky obracało się wokół punktu w jednej czwartej ekranu, co zmieniało
+gwiazdy, ale nie wyglądało jak obrót. Środek liczy się teraz z
+`SCREEN_PIXEL_SIZE` wewnątrz shadera, gdzie nie ma jak się rozjechać.
+
+Sprawdzone pomiarem, nie okiem: dwie klatki oddalone o 90°, **123 z 239 gwiazd**
+trafia tam, gdzie przewiduje obrót, wobec 3 i 1 dla alternatyw — a 123/239 to
+dokładnie ten ułamek, który może zostać w kadrze, gdy obraca się ramkę 16:9
+(przeżywają tylko gwiazdy w okręgu wpisanym).
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.

@@ -12,6 +12,7 @@ extends SceneTree
 const SHIP_SCENE: String = "res://scenes/ship.tscn"
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
+const STARFIELD_SCENE: String = "res://scenes/starfield.tscn"
 
 ## A seed known to produce a planet with air. Picked once, kept fixed so the
 ## numbers below stay meaningful.
@@ -828,6 +829,7 @@ func _evaluate_phase() -> void:
 			_check_cargo()
 			_check_editor()
 			_check_pause_gate()
+			_check_camera(_planet)
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1681,6 +1683,110 @@ func _check_pause_gate() -> void:
 	_expect(not released, "closing it runs the game again")
 	editor.queue_free()
 	configurator.queue_free()
+
+
+## The pilot's own framing: three zoom levels and a view they can turn.
+##
+## The one that needs checking is levelling, because "put the planet at the
+## bottom" is a sign convention and this project has been caught by one
+## before -- Vector2.orthogonal() turns the opposite way to an increasing
+## polar angle, which sent the old orbit lock backwards.
+func _check_camera(planet: Planet) -> void:
+	var camera: ShipCamera = ShipCamera.new()
+	root.add_child(camera)
+	var ship: Ship = _spawn_ship()
+	camera.set_target(ship)
+
+	_expect(
+		not camera.ignore_rotation,
+		"the camera honours its own rotation, or none of this shows at all",
+	)
+	_expect(
+		camera.zoom_level() == ShipCamera.DEFAULT_LEVEL
+		and is_equal_approx(ShipCamera.ZOOM_LEVELS[ShipCamera.DEFAULT_LEVEL], 1.0),
+		"the middle framing is the old behaviour exactly",
+	)
+	_expect(
+		ShipCamera.ZOOM_LEVELS[0] > ShipCamera.ZOOM_LEVELS[ShipCamera.ZOOM_LEVELS.size() - 1],
+		"the list runs closest to widest",
+	)
+	camera.set_zoom_level(-5)
+	_expect(camera.zoom_level() == 0, "zooming in past the end stops at the closest")
+	camera.set_zoom_level(99)
+	_expect(
+		camera.zoom_level() == ShipCamera.ZOOM_LEVELS.size() - 1,
+		"and out past the end stops at the widest, rather than wrapping round",
+	)
+
+	# Turning accumulates rather than wrapping, so the smoothing never takes
+	# the long way round.
+	camera.rotation = 7.0
+	camera.level_view()
+	# The property is the size of the move, not the size of the result: from
+	# 7 radians the answer is around 6.28, which is upright plus a full turn
+	# and the short way there. Demanding a small absolute value instead would
+	# be demanding the long way round.
+	_expect(
+		absf(camera.rotation - 7.0) <= PI + 0.001,
+		"levelling takes the short way round, never more than half a turn (%.2f rad)" % [
+			absf(camera.rotation - 7.0),
+		],
+	)
+
+	# The sign convention, measured rather than reasoned about: put the ship
+	# to one side of the planet, level the view, and check the planet really
+	# does appear below.
+	for offset: Vector2 in [Vector2(1500.0, 0.0), Vector2(-900.0, 400.0), Vector2(0.0, -2000.0)]:
+		ship.global_position = planet.global_position + offset
+		camera.level_view()
+		# A world vector appears on screen turned by minus the camera's own
+		# rotation.
+		var on_screen: Vector2 = (planet.global_position - ship.global_position).rotated(
+			-camera.rotation
+		)
+		_expect(
+			on_screen.normalized().dot(Vector2.DOWN) > 0.999,
+			"from %s, levelling puts the planet at the bottom of the screen" % offset,
+		)
+
+	camera.set_target(null)
+	camera.rotation = 1.0
+	camera.level_view()
+	_expect(
+		is_zero_approx(camera.rotation),
+		"with nothing to be below, levelling means upright",
+	)
+
+	# The sky is painted on a screen-space quad, so it does not turn by
+	# itself: the script has to hand the shader the rotation being shown.
+	#
+	# Only the wiring is checked here. Whether the field actually turns was
+	# measured on the real renderer -- two frames ninety degrees apart, 123
+	# of 239 stars landing where the rotation predicts against 3 and 1 for
+	# the alternatives, which is every star that can stay inside a turned
+	# 16:9 frame. Headless renders nothing, and get_screen_rotation() only
+	# catches up over frames, so an assertion on the angle itself would
+	# compare zero with zero and could never fail.
+	var sky: Starfield = (load(STARFIELD_SCENE) as PackedScene).instantiate() as Starfield
+	root.add_child(sky)
+	camera.set_target(ship)
+	camera.make_current()
+	sky._process(0.016)
+	var material: ShaderMaterial = (sky.get_node("Sky") as ColorRect).material as ShaderMaterial
+
+	var declared: bool = false
+	for uniform: Dictionary in material.shader.get_shader_uniform_list():
+		if String(uniform["name"]) == "view_rotation":
+			declared = true
+	_expect(declared, "the sky shader takes a view rotation")
+	_expect(
+		material.get_shader_parameter("view_rotation") != null,
+		"and the script feeds it every frame",
+	)
+	sky.queue_free()
+
+	camera.queue_free()
+	ship.queue_free()
 
 
 func _check_configuration_report() -> void:

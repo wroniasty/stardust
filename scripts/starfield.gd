@@ -25,3 +25,8 @@ func _process(_delta: float) -> void:
 	# stars drift at the wrong rate when the camera pulls back.
 	var parallax_offset: Vector2 = camera.get_screen_center_position() * camera.zoom
 	_material.set_shader_parameter("world_offset", parallax_offset)
+
+	# The rotation actually on screen, not the one being asked for: while the
+	# camera eases towards a new angle the sky has to ease with it, or the
+	# stars would arrive before the world does.
+	_material.set_shader_parameter("view_rotation", camera.get_screen_rotation())

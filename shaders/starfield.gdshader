@@ -10,6 +10,18 @@ shader_type canvas_item;
 // the depth.
 
 uniform vec2 world_offset = vec2(0.0);
+
+// The rotation the view is currently showing. Without it the field is
+// painted in screen space and simply does not turn: rotate the camera and
+// the whole universe pivots around a sky nailed to the monitor.
+//
+// The point it turns about is taken from SCREEN_PIXEL_SIZE rather than
+// passed in. FRAGCOORD is in framebuffer pixels while the game's
+// `canvas_items` stretch reports a 640x360 visible rect, so a centre handed
+// over from the script was half the real one and the sky pivoted about a
+// point a quarter of the way in -- which changed the stars without looking
+// remotely like a rotation.
+uniform float view_rotation = 0.0;
 uniform vec3 space_color : source_color = vec3(0.016, 0.02, 0.043);
 uniform vec3 far_color : source_color = vec3(0.55, 0.60, 0.85);
 uniform vec3 mid_color : source_color = vec3(0.80, 0.85, 1.0);
@@ -47,8 +59,18 @@ float star_layer(vec2 pos, float cell, float fill, float radius) {
 	return clamp(light, 0.0, 1.0);
 }
 
+vec2 turn(vec2 v, float angle) {
+	float c = cos(angle);
+	float s = sin(angle);
+	return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+
 void fragment() {
-	vec2 pixel = FRAGCOORD.xy;
+	// A screen offset of d from the centre looks along world direction
+	// d turned by the camera's rotation, so the field is sampled there. Only
+	// the pixel part turns: world_offset is already in the world's frame.
+	vec2 screen_center = 0.5 / SCREEN_PIXEL_SIZE;
+	vec2 pixel = turn(FRAGCOORD.xy - screen_center, view_rotation) + screen_center;
 
 	float far = star_layer(pixel + world_offset * 0.10, 17.0, 0.55, 0.055);
 	float mid = star_layer(pixel + world_offset * 0.30, 41.0, 0.45, 0.045);

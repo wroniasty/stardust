@@ -128,7 +128,9 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 
 ### V4: Prędkość, atmosfera, kamera
 
-- [ ] Obracająca się kamera przy podejściu: promień w górę ekranu, ciągła waga z wysokości, wygładzanie wbudowane w `Camera2D` (`ignore_rotation = false`). Wymaga naprawy starfieldu, który jest w przestrzeni ekranu i sam się nie obróci.
+- [x] Ręczne obracanie kamery strzałkami i `H` — „planeta na dole" na jedno naciśnięcie. Ta sama odpowiedź co niżej, tylko pytana jednorazowo zamiast liczona co klatkę.
+- [x] Starfield obraca się z widokiem (`view_rotation` w shaderze). Obrót liczony wokół środka wyznaczonego z `SCREEN_PIXEL_SIZE`, nie podanego ze skryptu — `FRAGCOORD` jest w pikselach bufora, a `get_visible_rect()` przy rozciąganiu `canvas_items` zwraca bazowe 640x360, więc podany środek był o połowę za mały.
+- [ ] Obracająca się kamera przy podejściu, automatycznie: promień w górę ekranu, ciągła waga z wysokości, wygładzanie wbudowane w `Camera2D`. Ręczna wersja i naprawa starfieldu są już zrobione, zostaje sama waga z wysokości.
 - [ ] Smugi i rozmycie przy dużej prędkości w powietrzu.
 - [ ] Widoczne wejście w atmosferę: jonizacja przed dziobem narastająca z `hull_heat`.
 - [ ] Smugi kondensacyjne przerobione na zależne od gęstości powietrza, nie od samej prędkości.
