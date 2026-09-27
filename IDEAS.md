@@ -257,6 +257,35 @@ Wagi: 55 / 27 / 13 / 4 / 1. Zmierzone na 4000 losowań: 2161 / 1077 / 540 / 178 
 Uwaga praktyczna: smoke test chodzi jako `--script`, gdzie **autoloady nie
 istnieją**, więc sięga po generator przez `preload` i tworzy własną instancję.
 
+### Realizacja (M2: skrzynki i wymiana w locie)
+
+Pętla „znajdź, zamontuj, poczuj różnicę" domyka się po raz pierwszy, więc
+decyzje o jej kształcie:
+
+- **Skrzynki stoją na półkach do lądowania**, nie są rozrzucone losowo. Półki
+  generator i tak buduje jako miejsca do lądowania, więc loot i lądowanie
+  ciągną w tę samą stronę, zamiast kazać pilotowi siadać na klifie. Skrzynka
+  jest dzieckiem planety, więc jeździ z gruntem i nie wymaga liczenia niczego
+  co klatkę.
+- **Skrzynka trzyma wylosowany przedmiot, nie obietnicę losowania.** Seed jest
+  wydawany przy budowie świata, więc ta sama planeta zawsze oferuje te same
+  znaleziska w tych samych miejscach. Rzadkość jedzie obok przedmiotu, bo ani
+  `WeaponData`, ani `EngineData` jej nie nosi — rzadkość jest faktem o
+  losowaniu, nie o module. Kolor pudełka to jedyne, co widać z orbity.
+- **Ładownia ma jedno miejsce.** Pełna ładownia odmawia przyjęcia następnego
+  znaleziska zamiast je gubić, więc ekran wymiany to zawsze jedna decyzja, a
+  nie zarządzanie ekwipunkiem. Wymiana wkłada zdjęty moduł do ładowni, więc
+  nic nie przepada i można się wycofać.
+- **Ekran nie pauzuje gry.** „W locie" znaczy bez lądowania i dokowania, a nie
+  bez upływu czasu; wymiana, która zatrzymuje świat, jest menu, a ciekawa
+  wersja tej decyzji to ta podejmowana, kiedy coś już idzie nie tak. Panel
+  jest mały, w rogu, każda akcja to jeden klawisz (Tab / strzałka w dół / F /
+  Backspace). Przy okazji unika to pułapki, w którą wpadł konfigurator: dwa
+  panele pauzujące grę to dwa sposoby na pozorną awarię klawiatury.
+- **Montaż silnika przebudowuje grupy sterowania.** Inaczej silnik nie byłby
+  lootem, tylko dekoracją: zmierzone w teście, dwukrotnie mocniejszy silnik
+  podnosi autorytet FORWARD z 900 na 1800.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.

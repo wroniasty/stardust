@@ -127,6 +127,10 @@ signal destroyed(at: Vector2, velocity: Vector2)
 ## Emitted whenever the hull changes, for the HUD.
 signal hull_changed(integrity: float)
 
+## Emitted when the hold changes, so the loadout screen can redraw without
+## polling.
+signal hold_changed(item: Resource)
+
 ## If true the ship steers itself from the player's input actions. AI ships and
 ## tests turn this off and write the command fields directly.
 @export var use_player_input: bool = true
@@ -196,6 +200,13 @@ var gear: LandingGear = null
 ## Why the last touchdown was refused, for the HUD. Empty once landed.
 var last_landing_rejection: String = ""
 
+## The one module the ship is carrying loose, and how good it was. One slot,
+## not an inventory: a full hold has to be dealt with before the next find,
+## which keeps the loadout screen to a single decision (IDEAS.md section 4).
+var carried: Resource = null
+var carried_rarity: int = 0
+
+
 var _landed_planet: Planet = null
 var _landed_angle: float = 0.0
 var _landed_radius: float = 0.0
@@ -218,6 +229,59 @@ func _ready() -> void:
 	# refuses mid-flush.
 	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
 	rebuild_control_groups()
+
+
+## Every engine mount on the hull, fitted or empty.
+func engine_mounts() -> Array[EngineMount]:
+	var mounts: Array[EngineMount] = []
+	for child: Node in get_children():
+		var mount: EngineMount = child as EngineMount
+		if mount != null:
+			mounts.append(mount)
+	return mounts
+
+
+## True if `mount` will take an engine of this kind. The mount stores its
+## allowed types as flags, one bit per EngineData.Type.
+func mount_accepts(mount: EngineMount, data: EngineData) -> bool:
+	if mount == null or data == null:
+		return false
+	return (mount.allowed_types & (1 << int(data.type))) != 0
+
+
+## Bolts `data` into `mount` and hands back whatever came out, or hands `data`
+## straight back if the mount will not take it.
+##
+## Rebuilds the control groups, because fitting an engine changes the mass,
+## the centre of mass and what every command can do -- which is the whole
+## point of engines being loot.
+func fit_engine(mount: EngineMount, data: EngineData) -> EngineData:
+	if not mount_accepts(mount, data):
+		return data
+	var previous: EngineData = mount.installed
+	mount.installed = data
+	rebuild_control_groups(false)
+	return previous
+
+
+## Takes a loose module into the hold. Returns false when the hold is full,
+## which is the caller's cue to tell the pilot rather than to lose the item.
+func take(item: Resource, rarity: int) -> bool:
+	if carried != null or item == null:
+		return false
+	carried = item
+	carried_rarity = rarity
+	hold_changed.emit(carried)
+	return true
+
+
+## Empties the hold and returns what was in it.
+func release() -> Resource:
+	var item: Resource = carried
+	carried = null
+	carried_rarity = 0
+	hold_changed.emit(null)
+	return item
 
 
 ## Re-reads the fitted engines, recomputes mass, centre of mass and inertia,

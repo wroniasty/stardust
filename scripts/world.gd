@@ -10,6 +10,17 @@ extends Node2D
 
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const EXPLOSION_SCENE: String = "res://scenes/explosion.tscn"
+const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
+
+## Crates are put on the landing shelves rather than scattered at random. The
+## shelves are the places the generator already built to be landed on, so loot
+## and landing pull in the same direction instead of asking the pilot to set
+## down on a cliff (IDEAS.md section 4).
+const CRATES_PER_PLANET: int = 4
+
+## How far above the ground a crate floats, so it is not half buried in the
+## texels it stands on.
+const CRATE_CLEARANCE: float = 10.0
 
 ## Where a wrecked ship comes back, as a multiple of the planet radius. Outside
 ## the atmosphere, so the pilot gets a moment to gather themselves rather than
@@ -35,6 +46,7 @@ var planet: Planet = null
 ## The dev tool on F6, and which shelf it last put the ship on.
 var _configurator: PlanetConfigurator = null
 var _landing_site: int = 0
+var _loadout: LoadoutScreen = null
 
 
 ## Radius of the crater the debug key blows in the crust.
@@ -48,6 +60,8 @@ func _ready() -> void:
 	if ship != null:
 		ship.destroyed.connect(_on_ship_destroyed)
 	_build_configurator()
+	_build_loadout()
+	_spawn_crates()
 
 
 ## The planet configurator edits the planet; putting the ship somewhere that
@@ -61,12 +75,64 @@ func _build_configurator() -> void:
 	_configurator.teleport_requested.connect(_on_next_landing_site)
 
 
+func _build_loadout() -> void:
+	_loadout = LoadoutScreen.new()
+	add_child(_loadout)
+	_loadout.bind((player as Player).ship)
+
+
+## Rolls one module per shelf from the world seed, so the same world always
+## offers the same finds in the same places.
+func _spawn_crates() -> void:
+	if planet == null:
+		return
+	var sites: PackedFloat32Array = planet.landing_sites()
+	if sites.is_empty():
+		return
+
+	var scene: PackedScene = load(CRATE_SCENE) as PackedScene
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = world_seed + 7919
+
+	for i: int in range(mini(CRATES_PER_PLANET, sites.size())):
+		var angle: float = sites[i]
+		var crate: LootCrate = scene.instantiate() as LootCrate
+		var item_seed: int = rng.randi()
+		var rarity: int = LootGenerator.roll_rarity(rng)
+		crate.hold(LootGenerator.generate(item_seed, rarity), rarity)
+		# A child of the planet, in the planet's own frame, so it turns with
+		# the ground and needs no per-frame bookkeeping.
+		var ground: float = planet.terrain.surface_radius_at(angle)
+		crate.position = Vector2.from_angle(angle) * (ground + CRATE_CLEARANCE)
+		crate.rotation = angle + PI * 0.5
+		crate.touched.connect(_on_crate_touched)
+		planet.add_child(crate)
+
+
+func _on_crate_touched(crate: LootCrate, body: Node) -> void:
+	var ship: Ship = body as Ship
+	if ship == null or crate.item == null:
+		return
+	if not ship.take(crate.item, crate.rarity):
+		# A full hold is the pilot's problem to solve, not a reason to destroy
+		# what they flew into.
+		return
+	print("picked up: %s" % crate.label())
+	_loadout.announce_pickup()
+	crate.queue_free()
+
+
 func _on_planet_rebuilt() -> void:
 	# The ground the ship was standing on may not exist any more, and at worst
 	# the ship is now inside a mountain, so a rebuild always ends with a
 	# landing rather than leaving the pilot wherever they happened to be.
 	_landing_site = 0
 	_land_on_site(_landing_site)
+	# The old crates stood on ground that no longer exists.
+	for child: Node in planet.get_children():
+		if child is LootCrate:
+			child.queue_free()
+	_spawn_crates()
 
 
 func _on_next_landing_site() -> void:

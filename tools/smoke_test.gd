@@ -821,6 +821,7 @@ func _evaluate_phase() -> void:
 		Phase.PLATEAU:
 			_check_weapons()
 			_check_loot()
+			_check_hold()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -1318,6 +1319,50 @@ func _check_weapons() -> void:
 ## The loot generator, reached as a script because the smoke test has no
 ## autoloads (see _check_loot).
 const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd")
+
+
+## The hold is one slot and fitting is a swap: nothing found may be lost, and
+## nothing may be fitted where it does not belong.
+func _check_hold() -> void:
+	var ship: Ship = _spawn_ship()
+	var loot: Node = LOOT_SCRIPT.new()
+
+	_expect(ship.carried == null, "a fresh ship carries nothing")
+
+	var first: WeaponData = loot.weapon(31337, 2)
+	_expect(ship.take(first, 2), "a found module goes into the hold")
+	var second: WeaponData = loot.weapon(31338, 2)
+	_expect(not ship.take(second, 2), "a full hold refuses the next find")
+	_expect(ship.carried == first, "and keeps what it already had")
+	_expect(ship.release() == first, "releasing hands the module back")
+	_expect(ship.carried == null, "and empties the hold")
+
+	# Fitting an engine has to change what the ship can do, or engines are not
+	# loot -- they are decoration.
+	var mount: EngineMount = ship.engine_mounts()[0]
+	var before: float = ship.control.authority_of(ShipControl.Command.FORWARD)
+	var stronger: EngineData = (mount.installed.duplicate() as EngineData)
+	stronger.max_thrust = mount.installed.max_thrust * 2.0
+	var removed: EngineData = ship.fit_engine(mount, stronger)
+	var after: float = ship.control.authority_of(ShipControl.Command.FORWARD)
+	_expect(removed != null, "fitting an engine hands the old one back")
+	_expect(
+		after > before * 1.5,
+		"a stronger engine is felt in the command authority (%.0f -> %.0f)" % [before, after],
+	)
+
+	# And a mount only takes what it says it takes.
+	var refused: EngineData = stronger.duplicate() as EngineData
+	refused.type = EngineData.Type.THRUSTER
+	mount.allowed_types = 1 << int(EngineData.Type.MAIN)
+	_expect(not ship.mount_accepts(mount, refused), "a mount refuses a type it does not list")
+	_expect(
+		ship.fit_engine(mount, refused) == refused and mount.installed == stronger,
+		"a refused engine is handed straight back and changes nothing",
+	)
+
+	loot.free()
+	ship.queue_free()
 
 
 ## Loot has to be reproducible, bounded, and a trade rather than a ladder.
