@@ -13,12 +13,15 @@ extends Node2D
 ## and flipping the convention halfway is a classic source of sign bugs.
 @export var thrust_direction: Vector2 = Vector2.UP
 
-## Engine types this mount accepts. M2 checks it when fitting loot; nothing
-## enforces it yet.
+## Engine types this mount accepts. Left wide open on the stock ship: what an
+## engine is good for comes out of the mount geometry, not out of its type, so
+## a MAIN engine in a nose slot is a strange choice rather than an illegal one.
+## The flags are here for hulls that genuinely cannot take a type at all.
 @export_flags("Main", "Torque", "Thruster") var allowed_types: int = 7
 
-## Structural size of the slot. Doubles as the mass the fitted module adds to
-## the ship, which is how modules move the centre of mass.
+## How much engine the slot has room for. Compared against EngineData.bulk,
+## and nothing else: the slot itself is a hole in the hull and contributes no
+## mass of its own.
 @export var size: float = 1.0
 
 ## The engine currently fitted, or null for an empty mount.
@@ -36,9 +39,10 @@ func force_direction() -> Vector2:
 	return direction.normalized()
 
 
-## Mass this mount contributes when occupied.
+## Mass this mount contributes: the fitted engine's own bulk, or nothing when
+## the slot is empty.
 func module_mass() -> float:
-	return size if installed != null else 0.0
+	return installed.bulk if installed != null else 0.0
 
 
 ## Points the exhaust plume at `amount` of full flow, 0..1.
@@ -57,5 +61,15 @@ func set_exhaust(amount: float) -> void:
 	exhaust.amount_ratio = clampf(amount, 0.0, 1.0)
 
 
+## True if this engine will physically go in: right kind, and small enough.
+func fits(data: EngineData) -> bool:
+	if data == null:
+		return false
+	return accepts(data.type) and data.bulk <= size
+
+
+## True if the slot takes this kind of engine at all, ignoring how big it is.
+## Split out from fits() so the loadout screen can tell "wrong kind" from
+## "too big", which are different problems with different answers.
 func accepts(type: EngineData.Type) -> bool:
 	return (allowed_types & (1 << int(type))) != 0

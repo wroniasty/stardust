@@ -148,6 +148,12 @@ func _fit() -> void:
 		_redraw()
 
 
+## What the panel currently says. The label is the only place the screen's
+## reasoning becomes visible, so the test reads it rather than re-deriving it.
+func panel_text() -> String:
+	return "" if _text == null else _text.text
+
+
 func _on_hold_changed(_item: Resource) -> void:
 	_cursor = 0
 	_redraw()
@@ -177,7 +183,8 @@ func _redraw() -> void:
 	var slots: Array = _slots()
 	lines.append("")
 	if slots.is_empty():
-		lines.append("brak pasującego gniazda")
+		for line: String in _why_nothing_fits():
+			lines.append(line)
 	else:
 		_cursor = posmod(_cursor, slots.size())
 		lines.append("gniazdo (strzałka w dół zmienia):")
@@ -192,6 +199,27 @@ func _redraw() -> void:
 	_text.add_theme_color_override("font_color", PICK if not slots.is_empty() else DIM)
 
 
+## Why the carried module has nowhere to go. "No slot" is not an answer the
+## pilot can act on: too big for this hull is a reason to keep looking for a
+## bigger ship, the wrong kind is a reason to stop carrying it.
+func _why_nothing_fits() -> PackedStringArray:
+	var lines: PackedStringArray = PackedStringArray()
+	lines.append("brak pasującego gniazda")
+	var engine: EngineData = _ship.carried as EngineData
+	if engine == null:
+		return lines
+
+	var largest: float = 0.0
+	for mount: EngineMount in _ship.engine_mounts():
+		if mount.accepts(engine.type):
+			largest = maxf(largest, mount.size)
+	if largest <= 0.0:
+		lines.append("ten kadłub nie bierze tego typu")
+	else:
+		lines.append("gabaryt %.2f, największe gniazdo %.2f" % [engine.bulk, largest])
+	return lines
+
+
 ## What is already in a slot, so a swap is a comparison rather than a leap.
 func _fitted_label(slot: Node) -> String:
 	if slot is Hardpoint:
@@ -201,8 +229,11 @@ func _fitted_label(slot: Node) -> String:
 		var engine: EngineData = (slot as EngineMount).installed
 		if engine == null:
 			return "pusty"
-		return "%s %.0f" % [
-			EngineData.Type.keys()[int(engine.type)].to_lower(), engine.max_thrust,
+		return "%s %.0f  %.2f/%.2f" % [
+			EngineData.Type.keys()[int(engine.type)].to_lower(),
+			engine.max_thrust,
+			engine.bulk,
+			(slot as EngineMount).size,
 		]
 	return "?"
 
@@ -221,6 +252,7 @@ func _describe(item: Resource) -> PackedStringArray:
 		var engine: EngineData = item as EngineData
 		lines.append("%s engine" % EngineData.Type.keys()[int(engine.type)].to_lower())
 		lines.append("ciąg %.0f   rozruch %.2f s" % [engine.max_thrust, engine.spool_time])
+		lines.append("gabaryt %.2f" % engine.bulk)
 		lines.append("niezawodność %.2f   paliwo %.2f" % [engine.reliability, engine.fuel_cost])
 	else:
 		lines.append("nieznany moduł")

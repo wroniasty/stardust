@@ -23,6 +23,21 @@ enum Type {
 ## Force at full throttle and full health, in the ship's local frame.
 @export var max_thrust: float = 100.0
 
+## How big the machine physically is. Does two jobs, and deliberately only one
+## number does both:
+##
+## 1. It is the mass the engine adds to the ship. Not the mount's `size`: a
+##    slot is a hole in the hull, and a hole weighs nothing. What is bolted
+##    into it is what moves the centre of mass.
+## 2. It must be no larger than the slot's `size`, or it does not fit.
+##
+## This is what stops "any engine in any mount" from being a free upgrade.
+## Types stay open on purpose -- a MAIN engine in a nose slot is a legitimate,
+## sluggish choice (see IDEAS.md section 3) -- but a nine-hundred-newton drive
+## is physically large, so it only goes where there is room, and wherever it
+## goes it is felt as mass.
+@export var bulk: float = 1.0
+
 ## Seconds from idle to full thrust, and back. MAIN only; the other types
 ## ignore it.
 @export var spool_time: float = 0.6

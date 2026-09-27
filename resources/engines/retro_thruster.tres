@@ -6,6 +6,7 @@
 script = ExtResource("1_engine_data")
 type = 2
 max_thrust = 500.0
+bulk = 2.2
 spool_time = 0.0
 reliability = 1.0
 fuel_cost = 0.4

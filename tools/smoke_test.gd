@@ -822,6 +822,7 @@ func _evaluate_phase() -> void:
 			_check_weapons()
 			_check_loot()
 			_check_hold()
+			_check_bulk()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -1323,6 +1324,86 @@ const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd"
 
 ## The hold is one slot and fitting is a swap: nothing found may be lost, and
 ## nothing may be fitted where it does not belong.
+## Bulk is the one number that says how big an engine is, and it has to act
+## like a size and like a mass at once. The symmetry it can break is already
+## pinned by _check_control_groups(), which measures the leftover side force
+## rather than the weights behind it.
+func _check_bulk() -> void:
+	var ship: Ship = _spawn_ship()
+
+	var mount: EngineMount = ship.get_node("MainDrive") as EngineMount
+	var base: EngineData = mount.installed
+
+	# A slot is a hole in the hull. What is bolted into it is the mass, so a
+	# heavier engine has to move the centre of mass -- that is the whole point
+	# of bulk being a number rather than a yes/no.
+	var before: Vector2 = ship.center_of_mass
+	var heavy: EngineData = base.duplicate() as EngineData
+	# Right up to the capacity, which is the largest engine the slot can hold
+	# and so the sharpest version of the question.
+	heavy.bulk = mount.size
+	_expect(mount.size > base.bulk, "the stock drive leaves room in its slot (%.2f of %.2f)" % [
+		base.bulk, mount.size,
+	])
+	_expect(mount.fits(heavy), "a slot takes an engine that fills it exactly")
+	ship.fit_engine(mount, heavy)
+	_expect(
+		ship.center_of_mass.distance_to(before) > 0.05,
+		"bulk is felt as mass: the centre of mass moved %.3f px" % [
+			ship.center_of_mass.distance_to(before),
+		],
+	)
+
+	# And past the capacity it simply does not go in, though the type is one
+	# the slot lists.
+	var monster: EngineData = base.duplicate() as EngineData
+	monster.bulk = mount.size + 0.1
+	_expect(mount.accepts(monster.type), "the slot does list this type")
+	_expect(not mount.fits(monster), "but an engine past the slot capacity does not fit")
+	_expect(
+		ship.fit_engine(mount, monster) == monster and mount.installed == heavy,
+		"a refused engine is handed straight back and changes nothing",
+	)
+
+	# Which is what makes 'compact' worth rolling: the same machine, smaller,
+	# opens a slot that the full-sized one is locked out of.
+	var small: EngineMount = ship.get_node("NoseLeftTorque") as EngineMount
+	var shrunk: EngineData = monster.duplicate() as EngineData
+	shrunk.bulk = small.size
+	_expect(not small.fits(monster), "an oversized engine is locked out of a small slot")
+	_expect(small.fits(shrunk), "and a compact one of the same type goes in")
+
+	# An engine can now be too big for the whole hull, so the screen has to say
+	# so. "No slot" on its own is not something a pilot can act on: too big is
+	# a reason to keep it and look for a bigger ship, the wrong kind is a
+	# reason to drop it.
+	var screen: LoadoutScreen = LoadoutScreen.new()
+	root.add_child(screen)
+	screen.bind(ship)
+
+	var giant: EngineData = base.duplicate() as EngineData
+	giant.bulk = 99.0
+	ship.release()
+	ship.take(giant, 0)
+	screen.announce_pickup()
+	var refusal: String = screen.panel_text()
+	_expect(
+		refusal.contains("99.00") and refusal.contains("%.2f" % mount.size),
+		"the screen says how big the engine is and how big the largest slot is",
+	)
+
+	ship.release()
+	ship.take(shrunk, 0)
+	screen.announce_pickup()
+	_expect(
+		screen.panel_text().contains("%.2f" % shrunk.bulk),
+		"and a fitting engine still shows its bulk, so a swap can be compared",
+	)
+
+	screen.queue_free()
+	ship.queue_free()
+
+
 func _check_hold() -> void:
 	var ship: Ship = _spawn_ship()
 	var loot: Node = LOOT_SCRIPT.new()

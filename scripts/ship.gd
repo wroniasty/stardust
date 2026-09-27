@@ -241,12 +241,12 @@ func engine_mounts() -> Array[EngineMount]:
 	return mounts
 
 
-## True if `mount` will take an engine of this kind. The mount stores its
-## allowed types as flags, one bit per EngineData.Type.
+## True if `mount` will take this engine: the right kind, and small enough to
+## go in the slot. The slot is the mount's business, so ask the mount.
 func mount_accepts(mount: EngineMount, data: EngineData) -> bool:
-	if mount == null or data == null:
+	if mount == null:
 		return false
-	return (mount.allowed_types & (1 << int(data.type))) != 0
+	return mount.fits(data)
 
 
 ## Bolts `data` into `mount` and hands back whatever came out, or hands `data`

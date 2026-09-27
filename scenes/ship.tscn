@@ -32,47 +32,55 @@ polygon = PackedVector2Array(0, -12, -8, 10, 8, 10)
 shape = SubResource("ConvexPolygonShape2D_hull")
 
 [node name="MainDrive" parent="." instance=ExtResource("2_mount")]
+size = 3.5
 position = Vector2(0, 10)
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("7_main")
 
 [node name="NoseLeftTorque" parent="." instance=ExtResource("2_mount")]
+size = 0.8
 position = Vector2(-8, -10)
 rotation = 1.5707964
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("8_torque")
 
 [node name="TailRightTorque" parent="." instance=ExtResource("2_mount")]
+size = 0.8
 position = Vector2(8, 13.5)
 rotation = -1.5707964
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("8_torque")
 
 [node name="NoseRightTorque" parent="." instance=ExtResource("2_mount")]
+size = 0.8
 position = Vector2(8, -10)
 rotation = -1.5707964
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("8_torque")
 
 [node name="TailLeftTorque" parent="." instance=ExtResource("2_mount")]
+size = 0.8
 position = Vector2(-8, 13.5)
 rotation = 1.5707964
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("8_torque")
 
 [node name="StrafeLeftThruster" parent="." instance=ExtResource("2_mount")]
+size = 1.0
 position = Vector2(9, 1.75)
 rotation = -1.5707964
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("9_thruster")
 
 [node name="StrafeRightThruster" parent="." instance=ExtResource("2_mount")]
+size = 1.0
 position = Vector2(-9, 1.75)
 rotation = 1.5707964
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("9_thruster")
 
 [node name="NoseReverseThruster" parent="." instance=ExtResource("2_mount")]
+size = 2.5
 position = Vector2(0, -12)
 rotation = 3.1415927
 thrust_direction = Vector2(0, -1)

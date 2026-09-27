@@ -46,10 +46,10 @@ Trzy elementy:
 
 - `EngineMount` (node dziecko statku): `position`, `thrust_direction`
   (jednostkowy wektor **siły na statek**; wylot spalin jest przeciwny),
-  `allowed_types`, `size`. Rozmiar slotu jest zarazem masą, jaką zamontowany
-  moduł dokłada do statku, czyli tym, co przesuwa środek masy.
+  `allowed_types`, `size`. `size` to **pojemność slotu** i nic więcej — sam
+  slot jest dziurą w kadłubie i nie waży nic.
 - `EngineData` (Resource w `resources/engines/`): `type`, `max_thrust`,
-  `spool_time`, `reliability`, `fuel_cost`. To jest przyszły loot z M2.
+  `bulk`, `spool_time`, `reliability`, `fuel_cost`. To jest loot z M2.
 - `EngineInstance`: para (dane, mount) plus `health`, `throttle`,
   `target_throttle`.
 
@@ -58,6 +58,44 @@ Typ opisuje charakter przepustnicy, nie przeznaczenie:
 - **MAIN** rozpędza się liniowo, 1/`spool_time` na sekundę, w obie strony.
 - **TORQUE** jest impulsowy: chwilowa przepustnica to zawsze 0 albo 1.
 - **THRUSTER** odpowiada natychmiast i proporcjonalnie.
+
+### Gabaryt (`bulk`) jako jedyna cena za dopasowanie
+
+Skoro typ nie ogranicza montażu, potrzebna jest cena, inaczej „wszystko pasuje
+wszędzie" jest darmowym buffem, a nie decyzją. Tą ceną jest jedna liczba,
+`EngineData.bulk`, robiąca dwie rzeczy naraz:
+
+1. **Jest masą**, jaką silnik dokłada do statku. Nie `size` mountu: slot to
+   dziura, waży to, co w niej siedzi. Cięższy silnik przesuwa środek masy i
+   zmienia bezwładność, więc czuć go nawet wtedy, kiedy nie pracuje.
+2. **Musi się zmieścić**: `bulk <= size`, inaczej nie wchodzi.
+
+Whitelista typów dałaby ten sam efekt binarnie i odebrałaby generatorowi
+wymiar, na którym może grać. Przy `bulk` reguła „duże silniki idą w duże
+gniazda" **wychodzi sama**, a zostaje miejsce na mały, lekki MAIN, który da się
+wsadzić w dziób — wtedy jego powolna przepustnica jest świadomym kosztem, a nie
+zakazem. Zmierzone na 400 losowaniach: gabaryty 0,31–5,12, największe gniazdo
+bierze 98% znalezisk, najmniejsze 47%, a 1,25% nie mieści się nigdzie na tym
+kadłubie. To ostatnie jest cechą, nie błędem — to loot na większy statek — ale
+ekran wymiany **musi** powiedzieć dlaczego, bo samo „brak gniazda" nie jest
+odpowiedzią, na której da się coś zrobić.
+
+Afiksy `compact` (gabaryt w dół, ciąg w dół) i `oversized` (ciąg w górę,
+gabaryt w górę) czynią z tego handel wymienny, a nie drabinę.
+
+**Gabaryty statku testowego są dobrane tak, żeby środek masy wypadł dokładnie
+na krzyżu dysz obrotowych.** Warunek redukuje się do jednego równania, bo dysze
+obrotowe i para strafe leżą symetrycznie względem `y = 1.75` i wypadają z
+sumy:
+
+    8.25 * bulk_main - 13.75 * bulk_retro = -5.5
+
+Stąd przy `bulk_main = 3.0` wychodzi `bulk_retro = 2.2`, mounty zostają na
+okrągłych pozycjach, a `com` wypada na 1.75 co do cyfry. Pierwsze podejście —
+gabaryty „na oko" i przesunięcie mountów za środkiem masy — natychmiast
+złamało parę obrotową (wagi 1,00 i 0,82, 0,046 N siły bocznej na obrót) i
+zostało złapane przez istniejący test. Loot **będzie** tę równowagę psuł i o to
+chodzi; statek fabryczny ma z niej startować.
 
 ### Grupy sterowania liczone z geometrii
 

@@ -73,6 +73,14 @@ const ENGINE_AFFIXES: Array[Dictionary] = [
 	{"name": &"hardened", "field": "reliability", "factor": Vector2(1.05, 1.20)},
 	{"name": &"frugal", "field": "fuel_cost", "factor": Vector2(0.50, 0.80)},
 	{
+		"name": &"compact", "field": "bulk", "factor": Vector2(0.65, 0.85),
+		"cost_field": "max_thrust", "cost": Vector2(0.78, 0.92),
+	},
+	{
+		"name": &"oversized", "field": "max_thrust", "factor": Vector2(1.25, 1.60),
+		"cost_field": "bulk", "cost": Vector2(1.20, 1.55),
+	},
+	{
 		"name": &"tuned", "field": "max_thrust", "factor": Vector2(1.08, 1.20),
 		"cost_field": "fuel_cost", "cost": Vector2(1.20, 1.60),
 	},
@@ -89,6 +97,7 @@ const HIGHER_IS_BETTER: Dictionary = {
 	"crater_radius": true,
 	"max_thrust": true,
 	"reliability": true,
+	"bulk": false,
 	"spread_degrees": false,
 	"spool_time": false,
 	"fuel_cost": false,
@@ -104,6 +113,11 @@ const LIMITS: Dictionary = {
 	"range_px": Vector2(100.0, 20000.0),
 	"crater_radius": Vector2(2.0, 80.0),
 	"max_thrust": Vector2(1.0, 5000.0),
+	# Generous on purpose. An engine too big for the hull you are flying is a
+	# legitimate find rather than a bad roll -- it is loot for a bigger ship --
+	# so the ceiling belongs to the machine, not to the stock hull's largest
+	# slot. The loadout screen is what has to explain why it will not go in.
+	"bulk": Vector2(0.1, 8.0),
 	"spool_time": Vector2(0.05, 5.0),
 	"reliability": Vector2(0.1, 1.0),
 	"fuel_cost": Vector2(0.0, 100.0),
