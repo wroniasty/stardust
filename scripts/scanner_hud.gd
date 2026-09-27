@@ -33,17 +33,19 @@ extends CanvasLayer
 ## not turn the edge of the screen into a picket fence.
 @export var max_loot: int = 6
 
-## How far in from the edge of the screen the ring of markers sits. Enough to
-## clear the marker and its label.
-@export var ring_margin: float = 16.0
+## How far in from the edge of the screen the ring of markers sits. Only
+## enough to keep the marker itself on screen: the markers belong to the edge,
+## and every pixel they sit inward of it is a pixel taken off the view.
+@export var ring_margin: float = 8.0
 
 ## Half-length of the marker triangle before scaling. Small on purpose: the
 ## whole screen is 640x360 and this must not compete with the view.
-const MARKER_SIZE: float = 3.5
+const MARKER_SIZE: float = 2.5
 
 ## Bounds on the size scaling, so a moon stays visible and a star does not
-## take over the corner.
-const MARKER_SCALE: Vector2 = Vector2(0.7, 2.0)
+## take over the corner. Narrower than the sizes it ranges over, because at
+## two pixels the difference between a marker and a speck is one pixel.
+const MARKER_SCALE: Vector2 = Vector2(0.8, 1.8)
 
 ## Body radius that draws a marker at scale 1.0. A rocky planet, so moons come
 ## out smaller and stars larger.
@@ -54,12 +56,13 @@ const FONT_SIZE: int = 8
 ## Half-size of a loot marker on the ring. Fixed: one crate is much like
 ## another in size, so the only thing worth encoding in a diamond is its
 ## rarity colour.
-const LOOT_SIZE: float = 3.0
+const LOOT_SIZE: float = 2.2
 
-## Half-size of the bracket drawn around a crate that is on screen. It has to
-## clear the crate's own glow, which is 22 px across and already painted in
-## the rarity colour: the first version was smaller than the box it marked and
-## the same colour as it, so it drew perfectly and was invisible.
+## Half-size of the bracket drawn around a crate that is on screen. Not a
+## matter of taste like the others: it has to clear the crate's own glow,
+## which is 22 px across and already painted in the rarity colour. The first
+## version was smaller than the box it marked and the same colour as it, so it
+## drew perfectly and was invisible.
 const LOOT_BRACKET: float = 15.0
 
 ## Markers dim outside the body's influence radius, so "I am in this well" is
