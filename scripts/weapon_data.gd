@@ -59,8 +59,12 @@ enum Type {
 ## not leave rounds hanging behind the ship.
 @export var inherit_velocity: bool = true
 
-## Energy per shot. Unused until the power economy lands in M5; the field
-## exists so the loot tables have somewhere to put it.
+## Energy per shot, paid out of the ship's generator. Zero until the power
+## economy lands later in M2; the field exists so the loot tables have somewhere
+## to put it.
+##
+## This is what limits sustained fire: rate of fire says how fast the gun
+## shoots, energy says how long (see IDEAS.md section 14).
 @export var energy_cost: float = 0.0
 
 ## Names of the affixes rolled into the numbers above, for display only.

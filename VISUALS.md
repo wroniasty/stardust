@@ -145,6 +145,7 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 - [ ] HUD przestaje być etykietami debugowymi: typografia, kolumny, hierarchia.
 - [ ] Stany ostrzegawcze czytelne bez czytania (kolor, puls, pozycja).
 - [ ] Wskaźnik horyzontu i wektora prędkości przy lądowaniu.
+- [ ] Pasek energii: podziałka co koszt strzału, cisza timeoutu odróżnialna od doładowywania bez patrzenia na liczby (mechanika w IDEAS.md sekcja 14).
 - [ ] Rozdzielenie: HUD gry kontra overlay debugowy pod F7, dziś mieszają się rolami.
 
 ---
@@ -195,6 +196,7 @@ Gotowe, gdy: przelot przez atmosferę słychać jako wejście świata, a nie jak
 ### S6: Interfejs i ostrzeżenia
 
 - [ ] Zmiana stanu orbity na DECAYING, niska integralność kadłuba, przegrzanie.
+- [ ] Puste magazyny energii: odmowa strzału jako krótki, jednoznaczny klik — bez niego brak energii brzmi jak zacięty klawisz.
 - [ ] Zasada: ostrzeżenie dźwiękowe tylko dla rzeczy, na które gracz ma jeszcze czas zareagować.
 
 **Skąd dźwięki.** Proponuję małą bazę próbek plus mocna parametryzacja

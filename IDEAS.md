@@ -207,6 +207,9 @@ Definicja broni jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, prę
 
 To samo podejście dla silników, skanerów, napędów skokowych i baków: każdy moduł statku jest lootem z parametrami.
 
+Koszt energii, generator i moduły wpinane w samą broń mają własną sekcję 14:
+kadencja mówi, jak szybko broń strzela, a energia mówi, jak długo.
+
 ### Realizacja (M1.4)
 
 `Hardpoint` działa tak samo jak `ShipEngine`: transformacja node'a jest
@@ -1265,13 +1268,205 @@ Sceny:
 - `System`: gwiazda, planety, stacje, instancjonowany per aktywny system.
 - `Planet`: komponenty ładowane warunkowo (Atmosphere, Terrain, Surface).
 - `Ship`: RigidBody2D, komponenty Engine, Hardpoint, Module.
-- `HUD`: wskaźniki skoku, stan silników, paliwo.
+- `HUD`: wskaźniki skoku, stan silników, paliwo, energia.
 
-## 14. Otwarte pytania
+## 14. Energia
+
+Statek ma dwie ekonomie i celowo się nie mieszają:
+
+- **Energia** reguluje tempo walki, w sekundach. Odnawia się sama, nigdy się jej
+  nie kupuje i nie da się jej odłożyć na później.
+- **Paliwo** reguluje zasięg, w minutach i skokach. Nie odnawia się samo, bierze
+  się ze stacji i planet (M5), a jego brak kończy się dryfowaniem.
+
+Silniki palą paliwo, broń i elektronika żrą energię. Rozdział jest po to, żeby
+seria strzałów nigdy nie zabrała pilotowi możliwości hamowania: statek, który po
+walce nie umie wylądować, jest wrogi, nie trudny.
+
+Wzorem jest mana z różdżek Noity, nie kondensator z symulatora.
+
+### Generator
+
+`GeneratorData` (Resource, czyli moduł, czyli loot):
+
+- `capacity` — maksymalna energia,
+- `recharge_rate` — jednostek na sekundę,
+- `recharge_delay` — sekundy ciszy, po których doładowanie się zaczyna,
+- `bulk` — jak przy silnikach: masa, którą dokłada, i warunek zmieszczenia się w
+  slocie.
+
+Cały model to: wydatek zeruje licznik ciszy, po `recharge_delay` sekundach bez
+wydatku pula rośnie o `recharge_rate` na sekundę do `capacity`.
+
+**Timeout liczy się od ostatniego wydatku, nie od ostatniej serii.** Każdy strzał
+przesuwa moment startu doładowania, więc w trakcie ognia generator nie ładuje się
+w ogóle. Doładowanie ciągłe (regen, który tyka zawsze) zostało odrzucone, bo przy
+nim broń o drenażu niższym niż `recharge_rate` strzelałaby bez końca, a energia
+byłaby podatkiem, nie decyzją. Stan „broń milczy" jest tu celem, nie efektem
+ubocznym.
+
+**Strzał albo wychodzi cały, albo nie wychodzi.** Brak energii na pełny koszt to
+odmowa, a nie słabszy pocisk: pół strzału jest nieczytelne i rozjeżdża każdy
+afiks liczony na obrażeniach.
+
+**Kadłub ma własną, nędzną szynę.** Statek bez generatora dostaje pulę wbudowaną
+w kadłub (wartości robocze 40 / 15 / 1.5) i strzela, tylko bardzo źle. Powód ten
+sam, co przy ładowni odmawiającej przyjęcia lootu zamiast go gubić (sekcja 4):
+zła wymiana modułu ma być kiepskim wyborem, a nie stanem, z którego nie ma
+wyjścia.
+
+### Jak się to składa
+
+Strzelanie do wyczerpania puli daje przepływ energii, który składa się jak opory
+równoległe:
+
+    1 / E_sustained = 1 / E_drain + 1 / recharge_rate + recharge_delay / capacity
+
+gdzie `E_drain = energy_cost * rounds_per_second` to drenaż przy ciągłym ogniu.
+Stąd trzy wnioski, które w tej mechanice są najważniejsze:
+
+- **Broń ustala burst, generator ustala sustained.** Kadencja i obrażenia na
+  strzał opisują szczyt i długość serii; średnia w dłuższej walce należy do
+  generatora i do obrażeń na jednostkę energii. To znaczy, że znaleziony
+  generator jest odczuwalnym awansem każdej broni naraz, a nie +5% do
+  statystyki.
+- **Pojemność płaci za timeout.** Składnik `recharge_delay / capacity` to jedyne
+  miejsce, w którym pojemność występuje: większa pula nie podnosi pułapu, tylko
+  rzadziej każe płacić ciszę. Dlatego mała pula z szybkim doładowaniem i duża z
+  wolnym to naprawdę różne statki, a nie dwie drogi do tej samej liczby.
+- **Kadencja kupuje przepustowość, ale tylko do pułapu.** Przy bazowym
+  generatorze pułap to `1 / (1/40 + 0.8/100)` = 30 jednostek na sekundę, mimo
+  `recharge_rate` równego 40 — resztę zjada timeout.
+
+Wniosek dla pilota: **opłaca się opróżniać pulę, nie stukać w spust.** Krótka
+seria płaci ten sam timeout od mniejszej ilości energii, więc mikroburst wychodzi
+gorzej od pełnej serii i mechanika nie zamienia się w zawody w klikaniu.
+
+Wartości robocze, generator bazowy 100 / 40 / 0.8:
+
+| broń | koszt | seria z pełnej puli | burst dps | sustained dps |
+| --- | --- | --- | --- | --- |
+| autocannon 4/s, 0.08 | 6 | 16 strzałów w 4.0 s | 0.32 | 0.18 |
+| siege slug 1/s, 0.30 | 22 | 4 strzały w 4.0 s | 0.30 | 0.17 |
+
+**Bazowe bronie mają celowo zbliżone obrażenia na jednostkę energii** (0.0133 i
+0.0136). Energia nie ma po cichu wskazywać zwycięzcy — autocannon i slug różnią
+się charakterem (przebicie, zasięg, krater), nie wydajnością, i tak to zostało
+ustawione w sekcji 4. Nowa bazowa broń dobiera koszt z linii `damage / 0.0133` i
+odchyla się od niej świadomie. Afiksy i moduły są tym, co tę linię łamie.
+
+Przypadek brzegowy, bo od niego wyszedł cały pomysł: broń 20 strzałów/s po 1.5
+jednostki i 0.02 obrażeń drenuje 30 u/s, więc wypala pełną pulę w 3.3 s (66
+strzałów) i milczy następne 3.3 s. Burst dps 0.40 to 1.25× autocannona, sustained
+0.20 to 1.12×. Szybkostrzelność kupuje szczyt i prawie nie rusza średniej —
+dokładnie tak ma wyglądać „minigun, który się zatyka".
+
+### Stały pobór
+
+Asysty (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu,
+auto-orbit z sekcji 8) pobierają stały prąd, który **odejmuje się od
+`recharge_rate`, a nie resetuje timeoutu**. Włączona asysta ma skracać serie, nie
+zabraniać strzelania. Implementacyjnie to jedna odjęta liczba; na HUD widać ją
+jako wolniejsze napełnianie, nie jako drugi pasek.
+
+### Moduły ruszają statystyki, których „nie dotyczą"
+
+To jest sedno buildu i powód, dla którego loot przestaje być listą zakupów:
+silnik z afiksem `dynamo` daje +8 do `recharge_rate` i zabiera 12% ciągu. Pilot,
+który woli strzelać, lata wolniejszym statkiem. Odwrotnie, `buffered` kupuje
+pojemność masą. To ta sama zasada, co przy rzadkości: przedmiot ma być bardziej
+skrajny, nie jednostajnie lepszy.
+
+Mechanizm:
+
+- Każdy moduł ma `stat_add` i `stat_mul` (StringName → float). **Dwa słowniki, a
+  nie jeden z konwencją zależną od nazwy klucza.** Reguła „pojemności dodajemy,
+  koszty mnożymy" wymaga pamiętania, o które pole chodzi, a tabele lootu są
+  danymi, których przy pisaniu nikt nie sprawdza.
+- Kolejność jest stała: baza plus suma `stat_add`, potem iloczyn `stat_mul`. Suma
+  najpierw, żeby mnożnik działał na cały statek, a nie na to, co zdążyło się już
+  zmontować.
+- **Agregat liczony przy montażu, nigdy co klatkę** — w tym samym miejscu, w
+  którym już przebudowują się grupy sterowania (`Ship.rebuild_control_groups()`).
+  Statystyka przeliczana co klatkę jest statystyką, której nie da się pokazać w
+  raporcie.
+- **Nieznany klucz to `push_error`, nie cisza.** Literówka w tabeli afiksów,
+  która po prostu nic nie robi, przejdzie każdy test, jaki napiszemy.
+- **Raport konfiguracji (M2) wypisuje statystyki z rozbiciem na moduły.** Bonus
+  międzystatowy, którego pilot nie widzi, jest losowością, nie decyzją. Ten
+  warunek należy do mechaniki, nie do UI.
+
+### Moduły broni (różdżkowe)
+
+Broń ma `mod_slots` (robocze 0..3, rzadkość podnosi) i listę wpiętych
+`ShotModData`.
+
+Rozróżnienie wobec afiksów jest tu istotne: **afiks jest cechą przedmiotu, moduł
+jest decyzją pilota.** Dlatego afiksy zostają wpalone w liczby przy generacji
+(sekcja 4), a moduły nie mogą — pilot je wpina i wypina. Liczby wynikowe
+przeliczają się raz, przy zmianie modułu, i przy strzale są czytane z cache'u.
+
+**Każdy moduł podnosi koszt energii.** `energy_multiplier > 1` jest
+niezmiennikiem tabeli, pilnowanym testem tak samo jak koszty afiksów. Slot mówi,
+ile modułów się zmieści; energia mówi, ile się z nimi ustrzela. Autocannon z
+dwoma modułami (×1.35 i ×1.25) kosztuje 10.1 zamiast 6, więc seria spada z 16
+strzałów na 9. Slug obwieszony eksplozją i podpaleniem strzela trzy razy i
+zostawia statek bezbronny — to jest ciekawy build, nie błąd balansu.
+
+Moduły robią dwie rzeczy:
+
+- ruszają liczby (kadencja, obrażenia, rozrzut, krater, zasięg, prędkość),
+- dodają pociskowi zachowanie: eksplozja przy kontakcie, podpalenie, przebicie,
+  rozszczepienie, odbicie.
+
+Zachowania są **danymi czytanymi przez pocisk przy spawnie, nie osobnymi
+scenami**. Sekcja 4 już tak stoi („kilka klas bazowych pocisków, reszta to
+dane") i moduły nie mają powodu tego łamać: inaczej każda kombinacja modułów
+jest nowym plikiem.
+
+**Kolejność modułów nie ma znaczenia** — świadome odejście od Noity. Kolejność
+jest mechaniką warsztatu z przeciąganiem, a ekran wymiany jest małym panelem w
+rogu, bez pauzy, z jedną akcją na klawisz (sekcja 4). Jeśli stacje kiedyś dostaną
+prawdziwy warsztat, można to otworzyć ponownie.
+
+Broń ciągła (laser) liczy się jak bardzo szybki pulse: koszt za impuls. Jedna
+reguła energii dla wszystkiego i zero drugiej ścieżki w kodzie.
+
+### Czytelność
+
+Pasek energii ma powiedzieć trzy rzeczy i żadna z nich nie jest liczbą jednostek:
+
+- ile zostało **strzałów** — pasek ma podziałkę co `energy_cost` zamontowanej
+  broni, więc pilot liczy kreski, a nie procenty,
+- czy timeout jeszcze leci (pasek czeka), czy już się ładuje (pasek rośnie),
+- odmowa strzału musi być widoczna i słyszalna od razu, inaczej wygląda jak
+  zacięty klawisz.
+
+Jak to wygląda, należy do VISUALS.md. Że te trzy rzeczy muszą być czytelne bez
+wpatrywania się w liczby, należy do mechaniki: energia, której nie widać, jest
+losowym zanikaniem broni.
+
+### Odrzucone
+
+- **Dopalanie z kadłuba (overdraw).** Strzelanie za HP zamienia każdą walkę w
+  powolne umieranie i przenosi koszt tam, gdzie pilot go nie widzi.
+- **Energia jako paliwo silników.** Patrz podział na początku sekcji.
+- **Regen ciągły** i **strzał za częściową energię.** Oba usuwają stan „broń
+  milczy", który jest tu jedyną prawdziwą karą.
+
+## 15. Otwarte pytania
 
 - Jednostki: ile jednostek ma promień typowej planety i typowego systemu? Decyduje o potrzebie floating origin.
 - ~~Czy teren planety zawija się czy jest to bitmapa w układzie biegunowym?~~ Rozstrzygnięte w M1.3: bitmapa biegunowa, 1.5 px na teksel, tylko pas skorupy. Szczegóły i pomiary w sekcji 6.
 - Ile chunków terenu jednocześnie w scenie przy podejściu do planety?
 - Ekonomia paliwa: czy paliwo to zasób z planet, ze stacji, czy jedno i drugie?
+- Tarcza (jeśli będzie): z tej samej puli co broń, czy z własnej? Wspólna daje
+  decyzję „strzelać czy przeżyć", osobna daje dwa niezależne paski.
+- Uszkodzony generator: traci `recharge_rate`, `capacity`, czy wydłuża timeout?
+  Awarie silników z M2 dadzą wzór, którym można to zrobić tak samo.
+- Czy pułap sustained nie spłaszcza broni za mocno — do zmierzenia na trzech
+  bazach, kiedy energia będzie już w kodzie (sekcja 14).
+- Kondensator jako moduł: jednorazowy zrzut całej puli na impuls ciągu albo
+  tarczę, z długim doładowaniem?
 - Śmierć: co gracz traci, co zostaje (statek, loot, odkryte systemy)?
 - Zapis: autosave przy skoku i lądowaniu, czy permadeath z meta-progresją?

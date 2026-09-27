@@ -137,8 +137,14 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] `EngineData.bulk`: gabaryt silnika jako jego masa i zarazem warunek zmieszczenia się w slocie (`bulk <= size`). Typy zostają otwarte; ceną za dziwne dopasowanie jest fizyka, nie tabelka.
 - [ ] Pozostałe typy broni: laser, dumb missile, homing missile, AoE, pulse.
 - [x] Skrzynki z lootem na powierzchni planety, podnoszenie, wymiana modułu w locie (Tab, bez pauzy). Skrzynki stoją na półkach do lądowania, kolor z rzadkości.
+- [ ] Energia: `GeneratorData` (pojemność, recharge, timeout, bulk) jako moduł, pula na statku liczona w `_physics_process`, minimalna szyna wbudowana w kadłub, gdy generatora nie ma (IDEAS.md sekcja 14).
+- [ ] `energy_cost` broni faktycznie wydawany: strzał bez pełnego kosztu nie wychodzi, każdy wydatek resetuje timeout. `energy_cost` wchodzi do tabel lootu (afiksy `efficient`, `capacitor-fed`), do `HIGHER_IS_BETTER` i do `LIMITS`.
+- [ ] HUD energii: pasek z podziałką co koszt zamontowanej broni (pilot liczy strzały, nie procenty), widoczna różnica między „czeka na timeout" i „ładuje się", wyraźna odmowa strzału.
+- [ ] Statystyki statku liczone przy montażu: `stat_add` i `stat_mul` na modułach, agregat w raporcie konfiguracji z rozbiciem na moduły, nieznany klucz to `push_error`. Afiksy międzystatowe na silnikach (`dynamo`, `buffered`) — silnik, który podnosi recharge.
+- [ ] Moduły broni: `mod_slots` na broni, `ShotModData` z `energy_multiplier > 1`, efekty pocisku jako dane (eksplozja przy kontakcie, podpalenie, przebicie), kolejność bez znaczenia. Test: każdy moduł w tabeli podnosi koszt energii.
+- [ ] Pomiar energii: sustained dps bazowych broni w granicach ±10%, burst różny co najmniej 1.5× — generator nie może spłaszczyć różnic między broniami do jednej liczby.
 
-Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, a uszkodzony silnik zmienia sposób latania.
+Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, uszkodzony silnik zmienia sposób latania, a spust ma swój koszt — seria się kończy i trzeba zdecydować, kiedy przestać strzelać.
 
 ---
 
