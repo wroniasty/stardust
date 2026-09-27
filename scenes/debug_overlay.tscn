@@ -6,10 +6,25 @@
 script = ExtResource("1_overlay")
 
 [node name="Label" type="Label" parent="."]
-offset_left = 4.0
-offset_top = 4.0
-offset_right = 320.0
-offset_bottom = 180.0
+offset_left = 3.0
+offset_top = 3.0
+offset_right = 300.0
+offset_bottom = 356.0
 theme_override_colors/font_color = Color(0.6, 1, 0.7, 1)
-theme_override_font_sizes/font_size = 10
+theme_override_constants/line_spacing = -1
+theme_override_font_sizes/font_size = 7
 text = "no ship"
+
+[node name="Planet" type="Label" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -232.0
+offset_top = 3.0
+offset_right = -3.0
+offset_bottom = 356.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(0.72, 0.82, 1, 1)
+theme_override_constants/line_spacing = -1
+theme_override_font_sizes/font_size = 7
+text = ""

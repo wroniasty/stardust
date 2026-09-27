@@ -227,6 +227,15 @@ zmieniło, kosztuje minutę startu, transferu i lądowania. W praktyce znaczy to
 pytanie „jak się lata przy 3 g i rzadkim powietrzu" w dziesięć sekund:
 suwaki parametrów, przycisk, nowa planeta, statek stoi na jej lądowisku.
 
+Overlay debugowy (F7 / O) dostał drugą kolumnę z **kompletem parametrów
+planety** — wszystkim, co generator wylosował, plus tym, co z tego zbudował
+(pasmo skorupy, strop powietrza, prędkość ucieczki i kołowa, długość doby,
+siatka terenu, pełny piętnastowartościowy zestaw pogody). Cała planeta bierze
+się z jednego seeda, więc kiedy świat lata dziwnie, pytanie zawsze brzmi
+„którą z tych liczb dostał", a odczytanie jej z ekranu bije dopisanie printa i
+restart. Kolumna jest po prawej, więc zostaje czytelna przy otwartym panelu po
+lewej: zmieniasz parametr, przebudowujesz, widzisz wynik bez zamykania czegokolwiek.
+
 Konsekwencja architektoniczna, warta zapisania niezależnie od narzędzia:
 `generate()` rozpadło się na **`roll_parameters()`** (wypełnia pola z seeda) i
 **`rebuild()`** (buduje skorupę, atmosferę i pogodę z tego, co w polach stoi

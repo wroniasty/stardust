@@ -10,6 +10,7 @@ const DEBUG_GROUP: StringName = &"debug_visuals"
 @export var ship_path: NodePath
 
 @onready var _label: Label = $Label
+@onready var _planet_label: Label = $Planet
 
 var _ship: Ship = null
 
@@ -42,6 +43,7 @@ func _process(_delta: float) -> void:
 		return
 	if _ship == null:
 		_label.text = "no ship"
+		_planet_label.text = ""
 		return
 
 	var lines: PackedStringArray = PackedStringArray()
@@ -84,6 +86,65 @@ func _process(_delta: float) -> void:
 		])
 
 	_label.text = "\n".join(lines)
+	_planet_label.text = "\n".join(_planet_lines(planet))
+
+
+## Every parameter the generator rolled, plus what it built out of them.
+##
+## The whole planet comes from one seed, so when a world flies strangely the
+## question is always which of these numbers it got -- and reading them off a
+## screen beats adding a print and restarting. Paired with the configurator on
+## F6, which edits the same fields (IDEAS.md section 5).
+func _planet_lines(planet: Planet) -> PackedStringArray:
+	var lines: PackedStringArray = PackedStringArray()
+	if planet == null:
+		return PackedStringArray(["PLANET   none in range"])
+
+	lines.append("PLANET   seed %d" % planet.planet_seed)
+	lines.append("radius   %7.0f   gravity %6.1f" % [planet.surface_radius, planet.surface_gravity])
+	lines.append("influence%7.0f   mu   %7.1f M" % [
+		planet.influence_radius, planet.gravitational_parameter() / 1000000.0,
+	])
+	lines.append("crust    %7.0f .. %.0f" % [planet.terrain.inner_radius, planet.terrain.outer_radius])
+	lines.append("air h    %7.0f   density %6.2f" % [planet.atmosphere_height, planet.atmosphere_density])
+	lines.append("air top  %7.0f   v_esc   %6.1f" % [
+		planet.atmosphere_radius(),
+		sqrt(2.0 * planet.gravitational_parameter() / maxf(planet.surface_radius, 1.0)),
+	])
+	lines.append("v_circ   %7.1f at surface" % planet.circular_orbit_speed(planet.surface_radius))
+	var day: String = "never"
+	if not is_zero_approx(planet.spin_rate):
+		day = "%.0f s" % (TAU / absf(planet.spin_rate))
+	lines.append("spin    %8.4f rad/s  day %s" % [planet.spin_rate, day])
+	lines.append("shelves  %7d   grid %d x %d" % [
+		planet.landing_sites().size(), planet.terrain.angular_samples, planet.terrain.radial_samples,
+	])
+	lines.append("ground   #%s   sky #%s" % [
+		planet.surface_color.to_html(false), planet.atmosphere_color.to_html(false),
+	])
+
+	lines.append("")
+	if not planet.has_clouds:
+		lines.append("WEATHER  none")
+		return lines
+
+	lines.append("WEATHER  %s   %d clouds" % [
+		Planet.CloudType.keys()[planet.cloud_type], planet.cloud_count(),
+	])
+	lines.append("deck     %7.0f .. %.0f" % [planet.cloud_base_radius(), planet.cloud_ceiling()])
+	lines.append("base/dep %7.2f / %.2f of air h" % [planet.cloud_base, planet.cloud_depth])
+	lines.append("coverage %7.2f   opacity %6.2f" % [planet.cloud_coverage, planet.cloud_opacity])
+	lines.append("puff     %7.2f x %.2f of deck" % [planet.cloud_puff_size, planet.cloud_puff_height])
+	lines.append("soft/warp%7.2f / %.2f" % [planet.cloud_softness, planet.cloud_warp])
+	lines.append("relief   %7.2f   flat base %5.2f" % [
+		planet.cloud_height_variation, planet.cloud_flat_base,
+	])
+	lines.append("shear    %7.2f   shading %6.2f" % [planet.cloud_shear, planet.cloud_shading])
+	lines.append("lobes    %7d   spin %8.4f" % [planet.cloud_octaves + 1, planet.cloud_speed])
+	lines.append("colour   #%s   under #%s" % [
+		planet.cloud_color.to_html(false), planet.cloud_shade_color().to_html(false),
+	])
+	return lines
 
 
 ## Only the commands actually asked for this tick, so the line stays short.

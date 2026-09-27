@@ -54,6 +54,12 @@ const FONT_SIZE: int = 8
 ## Margin between the panel and the edge of the screen.
 const SCREEN_MARGIN: int = 6
 
+## The panel's own background. The default theme's panel is translucent, which
+## is right for a HUD floating over the game and wrong for a form: reading a
+## number off a spin box with a planet moving behind it is needless work.
+const BACKGROUND: Color = Color(0.07, 0.07, 0.09, 0.97)
+const BORDER: Color = Color(0.45, 0.50, 0.60, 1.0)
+
 var _planet: Planet = null
 var _panel: PanelContainer = null
 var _spins: Dictionary = {}
@@ -132,6 +138,13 @@ func _build_ui() -> void:
 
 	var compact: Theme = Theme.new()
 	compact.default_font_size = FONT_SIZE
+
+	var background: StyleBoxFlat = StyleBoxFlat.new()
+	background.bg_color = BACKGROUND
+	background.border_color = BORDER
+	background.set_border_width_all(1)
+	background.set_content_margin_all(4)
+	compact.set_stylebox("panel", "PanelContainer", background)
 
 	_panel = PanelContainer.new()
 	_panel.theme = compact
