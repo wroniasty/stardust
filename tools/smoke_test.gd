@@ -520,9 +520,13 @@ func _begin_phase() -> void:
 			_target_point = _planet.global_position + Vector2.UP * (_ground_radius - 4.0)
 			var hardpoint: Hardpoint = _ship.hardpoints[0]
 			# No spread and no inherited motion: the round must land where the
-			# test says it will, not somewhere in a cone.
-			hardpoint.spread_degrees = 0.0
-			hardpoint.inherit_velocity = false
+			# test says it will, not somewhere in a cone. Done by fitting a
+			# copy rather than by poking the mount, because the numbers belong
+			# to the weapon now -- which is also the swap the loot flow uses.
+			var aimed: WeaponData = hardpoint.weapon.duplicate() as WeaponData
+			aimed.spread_degrees = 0.0
+			aimed.inherit_velocity = false
+			hardpoint.fit(aimed)
 			_muzzle_point = hardpoint.global_position
 			_target_was_solid = _planet.is_solid_at(_target_point)
 			_rounds_fired = 0
@@ -815,6 +819,7 @@ func _evaluate_phase() -> void:
 				"hull heat stays inside its range (%.3f)" % _ship.hull_heat,
 			)
 		Phase.PLATEAU:
+			_check_weapons()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -1012,7 +1017,7 @@ func _evaluate_phase() -> void:
 			_round_container.child_entered_tree.disconnect(_on_round_spawned)
 			_expect(_target_was_solid, "the ground under the muzzle was solid before firing")
 			_expect(_rounds_fired > 0, "holding the trigger spawns rounds (%d in %.1f s)" % [_rounds_fired, _elapsed])
-			var expected: float = _ship.hardpoints[0].rounds_per_second * _elapsed
+			var expected: float = _ship.hardpoints[0].weapon.rounds_per_second * _elapsed
 			_expect(
 				absf(float(_rounds_fired) - expected) <= 2.0,
 				"rate of fire is respected (%d rounds, expected about %.0f)" % [_rounds_fired, expected],
@@ -1245,6 +1250,68 @@ func _check_determinism(planet: Planet) -> void:
 ## a sliding one both move.
 func _polar_angle() -> float:
 	return (_ship.global_position - _planet.global_position).angle() - _planet.global_rotation
+
+
+## A weapon is loot: its numbers live in the Resource, and fitting a different
+## one has to change what the gun does without touching the mount.
+func _check_weapons() -> void:
+	var stock: WeaponData = load("res://resources/weapons/autocannon.tres") as WeaponData
+	var siege: WeaponData = load("res://resources/weapons/siege_slug.tres") as WeaponData
+	_expect(stock != null and siege != null, "both stock weapons load as resources")
+	if stock == null or siege == null:
+		return
+
+	# Range rather than lifetime is the stat, so the derived lifetime has to
+	# follow the speed: the same range at 900 px/s must not live as long.
+	_expect(
+		is_equal_approx(stock.lifetime(), stock.range_px / stock.muzzle_speed),
+		"lifetime is range over speed (%.2f s for %.0f px at %.0f px/s)" % [
+			stock.lifetime(), stock.range_px, stock.muzzle_speed,
+		],
+	)
+
+	# The point of two weapons: they have to be different in ways a pilot
+	# notices, or the loot generator has nothing to vary.
+	_expect(
+		siege.damage > stock.damage * 2.0 and siege.rounds_per_second < stock.rounds_per_second,
+		"the siege slug trades rate of fire for damage (%.2f at %.1f/s vs %.2f at %.1f/s)" % [
+			siege.damage, siege.rounds_per_second, stock.damage, stock.rounds_per_second,
+		],
+	)
+	_expect(
+		stock.damage_per_second() > siege.damage_per_second(),
+		"and the autocannon still wins on sustained damage (%.2f vs %.2f per s)" % [
+			stock.damage_per_second(), siege.damage_per_second(),
+		],
+	)
+	_expect(
+		stock.shots_to_kill() == 13 and siege.shots_to_kill() == 4,
+		"shots to kill reads as whole rounds (%d vs %d)" % [
+			stock.shots_to_kill(), siege.shots_to_kill(),
+		],
+	)
+
+	var probe: Ship = _spawn_ship()
+	var mount: Hardpoint = probe.hardpoints[0]
+	_expect(mount.weapon != null, "the stock hull comes with a gun fitted")
+
+	# An empty accepted-type list is a general purpose mount.
+	_expect(mount.can_fit(siege), "a general purpose mount takes any weapon")
+	var previous: WeaponData = mount.fit(siege)
+	_expect(
+		mount.weapon == siege and previous == stock,
+		"fitting hands the old weapon back",
+	)
+
+	# A mount that names its types refuses everything else, which is what
+	# stops a missile rack from holding an autocannon.
+	mount.accepts = [WeaponData.Type.HOMING_MISSILE]
+	_expect(not mount.can_fit(stock), "a mount that names its types refuses the rest")
+	_expect(
+		mount.fit(stock) == stock and mount.weapon == siege,
+		"a refused weapon is handed straight back and changes nothing",
+	)
+	probe.queue_free()
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

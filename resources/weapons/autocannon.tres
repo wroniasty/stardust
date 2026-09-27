@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon_data"]
+[ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="2_projectile"]
+
+[resource]
+script = ExtResource("1_weapon_data")
+type = 0
+display_name = "autocannon"
+projectile_scene = ExtResource("2_projectile")
+damage = 0.08
+rounds_per_second = 4.0
+muzzle_speed = 600.0
+spread_degrees = 2.0
+range_px = 2400.0
+crater_radius = 14.0
+inherit_velocity = true
+energy_cost = 0.0
+affixes = Array[StringName]([])

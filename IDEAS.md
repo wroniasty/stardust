@@ -197,6 +197,36 @@ Pociski na razie lecą prosto. Grawitacja na pociskach jest zaplanowana na M3
 (razem z procą grawitacyjną) i sprowadza się do jednej linijki, bo
 `Ship.gravity_acceleration_at()` już istnieje.
 
+### Realizacja (M2: broń jako Resource)
+
+`WeaponData` powtarza podział, który sprawdził się przy silnikach: Resource
+trzyma liczby, `Hardpoint` trzyma pozycję i kąt. Przełożenie broni na inny
+montaż zmienia, gdzie celuje, i nic poza tym.
+
+Decyzje warte zapisania:
+
+- **Scena pocisku należy do broni, nie do hardpointu.** Montaż nie decyduje,
+  czy strzela slugami, czy rakietami. Dzięki temu `Type.HOMING_MISSILE` będzie
+  później po prostu inną sceną w tym samym polu.
+- **Zasięg w pikselach, nie czas życia w sekundach.** Zasięg jest tym, co pilot
+  ocenia, i tym, co afiks powinien zmieniać: pocisk lecący szybciej ma sięgać
+  dalej, a nie żyć tyle samo sekund. `lifetime()` wylicza się z zasięgu i
+  prędkości.
+- **Afiksy są wpalone w liczby przy generacji**, a nie nakładane w locie jako
+  modyfikatory. Wylosowany przedmiot już się nie zmienia, więc obok wartości
+  musi przetrwać tylko lista nazw do wyświetlenia.
+- **Lista dopuszczalnych typów jest na montażu** (`accepts`), pusta znaczy
+  „dowolny". Sprawdzenie siedzi w `Hardpoint.can_fit()`, a nie w generatorze,
+  żeby znalezioną broń dało się skonfrontować ze statkiem, który ma ją unieść.
+- **`fit()` oddaje poprzednią broń**, więc wymiana modułu w locie nie potrzebuje
+  osobnego kodu na „co zrobić ze starym".
+
+Dwie bronie startowe są celowo przeciwstawne, żeby loot miał czym się różnić i
+żeby testy miały co porównywać: autocannon 0.08 × 4/s (13 strzałów na kadłub,
+0.32 dps) i siege slug 0.30 × 1/s (4 strzały, 0.30 dps, krater 30 px zamiast
+14). Większe obrażenia na strzał **nie** dają większego dps — kupuje się za nie
+przebicie i zasięg.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.

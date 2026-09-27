@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/engine_mount.tscn" id="2_mount"]
 [ext_resource type="Script" path="res://scripts/hardpoint.gd" id="3_hardpoint"]
-[ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="4_projectile"]
+[ext_resource type="Resource" path="res://resources/weapons/autocannon.tres" id="12_autocannon"]
 [ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
 [ext_resource type="Script" path="res://scripts/engine_debug_draw.gd" id="6_engine_draw"]
 [ext_resource type="Script" path="res://scripts/landing_gear.gd" id="11_gear"]
@@ -81,7 +81,7 @@ installed = ExtResource("10_retro")
 [node name="NoseHardpoint" type="Node2D" parent="."]
 position = Vector2(0, -14)
 script = ExtResource("3_hardpoint")
-projectile_scene = ExtResource("4_projectile")
+weapon = ExtResource("12_autocannon")
 
 [node name="LeftContrail" type="Line2D" parent="."]
 top_level = true

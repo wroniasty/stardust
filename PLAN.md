@@ -132,7 +132,7 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [ ] Auto-orbit jako opcjonalna funkcja komputera lotu: część komputerów ją ma, część nie. Załącza się w polu grawitacyjnym i poza atmosferą, sam wchodzi na orbitę (IDEAS.md sekcja 8).
 - [ ] Zużycie w czasie, naprawa (na razie klawisz debug).
 - [ ] Silniki manewrowe i hamujące, statek z pełnym zestawem vs statek minimalny.
-- [ ] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, afiksy.
+- [x] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, afiksy. Hardpoint to montaż z listą dopuszczalnych typów, `fit()` oddaje poprzednią broń.
 - [ ] `LootGenerator`: tabele rzadkości, afiksy, generacja broni i silników.
 - [ ] Pozostałe typy broni: laser, dumb missile, homing missile, AoE, pulse.
 - [ ] Skrzynki z lootem na powierzchni planety, podnoszenie, wymiana modułu w locie (prosty ekran).
