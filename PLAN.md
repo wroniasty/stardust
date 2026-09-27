@@ -86,6 +86,13 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 - [x] Kadłub ma HP, zderzenia i własne pociski zadają obrażenia.
 - [x] Śmierć: efekt, natychmiastowy respawn na orbicie. Bez menu.
 
+
+### 1.8 Narzędzia deweloperskie
+
+- [x] Konfigurator planety (F6): parametry generatora w panelu, przebudowa planety i teleport na jej lądowisko. Wymusił rozdzielenie `roll_parameters()` od `rebuild()` w `Planet` (IDEAS.md sekcja 5).
+- [x] `tools/cloud_preview.tscn`: zrzuty archetypów chmur do PNG.
+- [x] `tools/check.ps1`: przebieg gry plus smoke test, wspólne wyłapywanie błędów silnika i shaderów.
+
 Gotowe, gdy: da się wystartować z powierzchni, wejść na orbitę i na niej zaparkować, zejść deorbitem na wybrane miejsce, wylądować na zboczu i zobaczyć, że to zależy od nachylenia i prędkości, rozwalić kawałek góry, rozbić się i od razu lecieć dalej.
 
 Ocena subiektywna ograniczona do **sterowania**: czy statek robi to, co każe

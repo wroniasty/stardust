@@ -32,6 +32,10 @@ const RESPAWN_RADIUS_RATIO: float = 2.0
 
 var planet: Planet = null
 
+## The dev tool on F6, and which shelf it last put the ship on.
+var _configurator: PlanetConfigurator = null
+var _landing_site: int = 0
+
 
 ## Radius of the crater the debug key blows in the crust.
 const DEBUG_CRATER_RADIUS: float = 28.0
@@ -43,6 +47,58 @@ func _ready() -> void:
 	var ship: Ship = (player as Player).ship
 	if ship != null:
 		ship.destroyed.connect(_on_ship_destroyed)
+	_build_configurator()
+
+
+## The planet configurator edits the planet; putting the ship somewhere that
+## still exists afterwards is the world's business, the same way respawning
+## after a death is.
+func _build_configurator() -> void:
+	_configurator = PlanetConfigurator.new()
+	add_child(_configurator)
+	_configurator.bind(planet)
+	_configurator.rebuilt.connect(_on_planet_rebuilt)
+	_configurator.teleport_requested.connect(_on_next_landing_site)
+
+
+func _on_planet_rebuilt() -> void:
+	# The ground the ship was standing on may not exist any more, and at worst
+	# the ship is now inside a mountain, so a rebuild always ends with a
+	# landing rather than leaving the pilot wherever they happened to be.
+	_landing_site = 0
+	_land_on_site(_landing_site)
+
+
+func _on_next_landing_site() -> void:
+	_landing_site += 1
+	_land_on_site(_landing_site)
+
+
+## Sets the ship down just above the shelf at `index`, at rest with respect to
+## the ground and with the legs out.
+func _land_on_site(index: int) -> void:
+	var ship: Ship = (player as Player).ship
+	if ship == null or planet == null:
+		return
+
+	var sites: PackedFloat32Array = planet.landing_sites()
+	if sites.is_empty():
+		_place_ship()
+		return
+
+	var angle: float = sites[posmod(index, sites.size())]
+	var ground: float = planet.terrain.surface_radius_at(angle)
+	var point: Vector2 = planet.polar_to_world(angle, ground + LANDING_CLEARANCE)
+
+	# Standing up: the ship's nose has to point away from the centre. Local -y
+	# is the nose, and a Node2D at rotation r sends local -y to (sin r, -cos r),
+	# so the outward angle plus a quarter turn is what stands it on its legs.
+	var up: Vector2 = (point - planet.global_position).normalized()
+	ship.respawn(point, planet.surface_velocity_at(point))
+	ship.global_rotation = up.angle() + PI * 0.5
+	if ship.gear != null:
+		ship.gear.set_deployed(true)
+		ship.gear.extension = 1.0
 
 
 ## Death is the world's business, not the ship's: the ship reports that it has
@@ -81,6 +137,10 @@ func _spawn_explosion(at: Vector2, velocity: Vector2) -> void:
 ## Health the debug key drops an engine to, low enough for the asymmetry to be
 ## obvious in flight.
 const DEBUG_ENGINE_HEALTH: float = 0.3
+
+## How far above the shelf the configurator drops the ship. Enough for the
+## legs to be clear, little enough that it settles at once instead of falling.
+const LANDING_CLEARANCE: float = 22.0
 
 
 func _unhandled_input(event: InputEvent) -> void:

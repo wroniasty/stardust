@@ -779,6 +779,8 @@ func _evaluate_phase() -> void:
 			)
 		Phase.PLATEAU:
 			_check_plateaus(_planet)
+			_check_landing_sites(_planet)
+			_check_determinism(_planet)
 			_check_elements(_planet)
 			_check_weather(_planet)
 		Phase.GEAR:
@@ -1135,6 +1137,49 @@ func _check_weather(planet: Planet) -> void:
 		)
 
 	probe.generate(planet.planet_seed)
+
+
+## The shelves the generator reports have to be the shelves it levelled.
+##
+## The configurator teleports onto these angles, so a stale or empty list puts
+## the ship inside a mountain. Checked against the slope the gear will judge.
+func _check_landing_sites(planet: Planet) -> void:
+	var sites: PackedFloat32Array = planet.landing_sites()
+	_expect(
+		sites.size() == planet.plateau_count,
+		"the planet reports every shelf it levelled (%d of %d)" % [sites.size(), planet.plateau_count],
+	)
+
+	var probe: Ship = _spawn_ship()
+	var tolerance: float = probe.gear.max_slope
+	var steepest: float = 0.0
+	for angle: float in sites:
+		var point: Vector2 = planet.polar_to_world(angle, planet.surface_radius)
+		steepest = maxf(steepest, absf(planet.slope_at(point, 24.0)))
+	probe.queue_free()
+	_expect(
+		steepest < tolerance,
+		"every reported shelf is flat enough to stand on (worst %.1f deg, gear takes %.1f)" % [
+			rad_to_deg(steepest), rad_to_deg(tolerance),
+		],
+	)
+
+
+## Rolling and building are separate calls now, so the pair still has to add up
+## to what one generate() used to do.
+func _check_determinism(planet: Planet) -> void:
+	planet.roll_parameters(4242)
+	var radius: float = planet.surface_radius
+	var gravity: float = planet.surface_gravity
+	var air: float = planet.atmosphere_height
+	planet.roll_parameters(4242)
+	_expect(
+		is_equal_approx(planet.surface_radius, radius)
+			and is_equal_approx(planet.surface_gravity, gravity)
+			and is_equal_approx(planet.atmosphere_height, air),
+		"the same seed rolls the same planet twice",
+	)
+	planet.generate(planet.planet_seed)
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

@@ -146,7 +146,8 @@ zatrzymaniu, rozpędzając statek do tyłu.
     Q  strafe w lewo         E  strafe w prawo
     X  kill rotation         Z  hamowanie
     spacja / ctrl  ogień
-    F7 warstwa debug   F5 uszkodź dyszę (debug)   C  krater (debug)
+    F7 warstwa debug   F6 konfigurator planety (debug)
+    F5 uszkodź dyszę (debug)   C  krater (debug)
 
 Awarie silników pochodzą ze zderzeń, zużycia i ataków. Awaria to zmiana `health`,
 nic specjalnego w silniku fizycznym.
@@ -210,6 +211,39 @@ Drag przez Area2D z `linear_damp` (tryb replace lub combine). Kilka koncentryczn
 ### Orbity
 
 Księżyce i orbitujące stacje liczone analitycznie: pozycja = f(globalny czas). Kinematyczne, nie fizyczne. Dzięki temu poruszają się także wtedy, kiedy nie istnieją w scenie.
+
+### Konfigurator planety (narzędzie deweloperskie, F6)
+
+Ocena świata wymaga do niego dolecenia, a dolot do świata, który się właśnie
+zmieniło, kosztuje minutę startu, transferu i lądowania. W praktyce znaczy to,
+że nikt nic nie zmienia i piaskownica ma szerokość jednej planety. F6 zamienia
+pytanie „jak się lata przy 3 g i rzadkim powietrzu" w dziesięć sekund:
+suwaki parametrów, przycisk, nowa planeta, statek stoi na jej lądowisku.
+
+Konsekwencja architektoniczna, warta zapisania niezależnie od narzędzia:
+`generate()` rozpadło się na **`roll_parameters()`** (wypełnia pola z seeda) i
+**`rebuild()`** (buduje skorupę, atmosferę i pogodę z tego, co w polach stoi
+teraz). Bez tego podziału ustawienie pojedynczego parametru ręcznie wymagałoby
+znalezienia seeda, który by go wylosował. Ten sam podział jest potrzebny w M3:
+streaming zapisuje i odtwarza parametry planety, zamiast losować je od nowa.
+
+Druga: `PlanetTerrain` zapamiętuje teraz kąty półek, które wypoziomował
+(`plateau_angles`), zamiast zostawiać je do odnalezienia przez skanowanie
+nachylenia. Teleport celuje w miejsce zbudowane po to, żeby na nim lądować, a
+nie w pierwszy płaski punkt, jaki znajdzie. W M3 to samo pole wskaże, gdzie
+mogą stanąć bazy.
+
+Dwie pułapki zapłacone od razu, obie niewidoczne dla testów:
+
+- Narzędzie pauzuje drzewo, więc świat przestaje dostawać input — klawisz
+  otwierający musi należeć do narzędzia (`PROCESS_MODE_ALWAYS`), inaczej
+  otwartego panelu nie da się zamknąć.
+- `SpinBox` zwraca `float`, a `plateau_count` jest `int`. Przypisanie przez
+  `set()` do statycznie typowanego pola jest wtedy błędem, nie zaokrągleniem.
+
+Sprawdzone przebiegiem na prawdziwej scenie świata, bo smoke test jej nie
+ładuje: po przebudowie statek siada 20 px nad gruntem, 0.0001 rad od środka
+półki, i po 200 tickach jest w stanie LANDED.
 
 ### Realizacja (M1.2)
 

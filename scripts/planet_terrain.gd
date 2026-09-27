@@ -62,6 +62,11 @@ var outer_radius: float = 0.0
 
 var texture: ImageTexture = null
 
+## Angles of the shelves levelled into the relief, in the planet's own frame.
+## What the generator built to be landed on, so nothing has to go hunting for
+## a flat spot that was put there on purpose.
+var plateau_angles: PackedFloat32Array = PackedFloat32Array()
+
 ## Radius of the highest rock in each column. Kept in step with carving.
 var _surface_radius: PackedFloat32Array = PackedFloat32Array()
 
@@ -132,6 +137,7 @@ func generate(terrain_seed: int, surface_radius: float, plateau_count: int = 0) 
 ## Flattens `count` arcs to a constant radius, with a soft ramp at each end so a
 ## shelf does not sit on the plain behind a cliff.
 func _level_plateaus(heights: PackedFloat32Array, terrain_seed: int, count: int) -> void:
+	plateau_angles.clear()
 	if count <= 0:
 		return
 
@@ -148,6 +154,7 @@ func _level_plateaus(heights: PackedFloat32Array, terrain_seed: int, count: int)
 		# Level to the height already at the middle, so the shelf stays part of
 		# the landscape instead of hovering at some invented altitude.
 		var level: float = heights[wrapi(centre, 0, angular_samples)]
+		plateau_angles.append(_angle_of(centre))
 		for offset: int in range(-half_width - ramp, half_width + ramp + 1):
 			var column: int = wrapi(centre + offset, 0, angular_samples)
 			var distance: int = absi(offset)

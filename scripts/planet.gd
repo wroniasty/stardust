@@ -408,8 +408,20 @@ func gravity_at(point: Vector2) -> Vector2:
 	return (to_centre / distance) * strength
 
 
-## Rolls every parameter from a seed and rebuilds crust and atmosphere.
+## Rolls every parameter from a seed and builds the planet from them.
+##
+## The two halves are separate on purpose. Rolling fills the fields; building
+## reads them. That lets the planet configurator (F6) change a field by hand
+## and rebuild without having to invent a seed that would have produced it,
+## and it is the same split streaming will need in M3, where a planet's
+## parameters are saved and restored rather than re-rolled.
 func generate(new_seed: int) -> void:
+	roll_parameters(new_seed)
+	rebuild()
+
+
+## Fills every parameter from the seed, touching nothing that is drawn.
+func roll_parameters(new_seed: int) -> void:
 	planet_seed = new_seed
 
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -444,11 +456,23 @@ func generate(new_seed: int) -> void:
 
 	_roll_weather(rng)
 
+
+## Rebuilds crust, atmosphere and weather from whatever the fields say now.
+func rebuild() -> void:
 	terrain.generate(planet_seed, surface_radius, plateau_count)
 
 	_build_terrain_quad()
 	_build_atmosphere()
 	_build_clouds()
+
+
+## Angles, in the planet's own frame, of the shelves the generator levelled.
+##
+## These are the places the planet was built to be landed on, so anything that
+## wants to put something down -- the configurator's teleport, a base in M3 --
+## should ask rather than hunt for a flat spot.
+func landing_sites() -> PackedFloat32Array:
+	return terrain.plateau_angles
 
 
 ## Rolls the cloud deck. Airless rocks get no weather.
