@@ -576,6 +576,52 @@ Przewracanie się na bok jest teraz normalnym wynikiem i tak ma być — to
 zaplanowana forma nieudanego lądowania (sekcja 7). Nogi podwozia i progi
 lądowania przychodzą w M1.6.
 
+### Obrys kadłuba a solver (M2)
+
+Solver kontaktów jest bezkształtny: impuls liczy się z ramienia do środka masy,
+pętla leci po liczbie punktów, a masa, środek masy i moment bezwładności
+wychodzą z wielokąta i modułów. Nie uogólniają się natomiast **wejścia** —
+`HULL_POINTS` to ręcznie wypisana lista sześciu punktów tego jednego trójkąta.
+Przy modularnych kadłubach z M2 to jest pierwsza rzecz, która pęknie.
+
+**Decyzja: obrys kolizyjny to przybliżenie, nie grafika.** Kadłub rysowany i
+kadłub liczony to dwie różne rzeczy; obrys ma pasować na tyle, żeby nie
+wyglądało dziwnie, a poza tym być tani i przewidywalny dla solvera. Z tego
+wynikają wytyczne, a nie odwrotnie — zamiast uczyć solver radzić sobie z
+dowolnym kształtem, ograniczamy kształty.
+
+**Punkty kontaktu wyprowadzane z obrysu:** wierzchołki plus podział krawędzi ze
+stałym krokiem, liczone raz przy `configure()`. Krok wynika z terenu, nie z
+gustu: teren ma 1,5 px na teksel, więc przy kroku ~6 px (cztery teksele) żadna
+istotna forma terenu nie zmieści się między punktami. Dziś największa przerwa
+to ~11 px i na trójkącie 16×22 px to uchodzi — na kadłubie 60 px już nie,
+bo iglica węższa niż przerwa przechodzi między punktami i kadłub siada na niej
+niezauważony albo przez nią przenika.
+
+**Wytyczne projektowania obrysu** (do sprawdzenia w raporcie konfiguracji,
+który M2 i tak przewiduje):
+
+| reguła | wartość | dlaczego |
+|---|---|---|
+| obwód obrysu | ≤ ~240 px | przy kroku 6 px to ≤ 40 punktów: bench daje 0,123 ms na 6 punktów, czyli ~0,8 ms na 40 z 16,6 ms budżetu klatki |
+| liczba wierzchołków | ≤ ~12 | podział krawędzi i tak wypełni resztę; więcej wierzchołków to tylko więcej przypadków brzegowych |
+| wypukłość | obrys wypukły lub prawie | `ConvexPolygonShape2D` dla pocisków bez dekompozycji; wklęsłości zostają w grafice |
+| najcieńszy detal | ≥ 2× krok (≥ 12 px) | cokolwiek cieńszego jest dla próbkowania terenu niewidzialne, więc nie należy do obrysu |
+| rozstaw nóg | ≥ 12 px | poniżej tego pojedynczy schodek między tekselami czyta się jako urwisko (zmierzone w M1.6) |
+
+**Kształt dla pocisków liczony, nie rysowany drugi raz.** `CollisionShape2D`
+powstaje z tego samego obrysu jako jego otoczka wypukła (`Geometry2D.convex_hull`).
+Jedno źródło prawdy, a rozjazd między tym, w co trafia pocisk, a tym, co dotyka
+gruntu, przestaje być możliwy.
+
+**Stałe, które muszą przestać być bezwzględne.** `MAX_PENETRATION` (24 px w
+marszu po terenie) nasyci się na większym kadłubie spadającym szybciej, a
+korekta pozycji po cichu poprawi za mało — musi skalować się rozmiarem statku.
+`CONTACT_ITERATIONS` = 4 ma w komentarzu „plenty for six points"; zbieżność
+sekwencyjnych impulsów spada z liczbą kontaktów, więc albo iteracje rosną z
+liczbą punktów, albo liczba punktów ma twardy limit (i wtedy limit jest tym,
+co wymusza obwód z tabeli).
+
 ## 7. Lądowanie
 
 Lądowanie jest mechaniką skillową. Trudność wynika z parametrów (G, stan silników, atmosfera, teren), nie ze skryptów.

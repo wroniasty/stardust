@@ -120,6 +120,11 @@ Cel: statek jako zestaw modułów, które są lootem.
 
 - [ ] Komputer lotu: alokacja NNLS z rzeczywistymi ciągami i stanem silników, czysty obrót i czysty strafe mimo asymetrii i uszkodzeń. Zastępuje heurystykę wag z M1.1 tam, gdzie gracz znajdzie moduł.
 - [ ] Gimbal na silniku MAIN: sterowany wektor ciągu zamiast stałego kierunku montażu.
+- [ ] Punkty kontaktu wyprowadzane z obrysu kadłuba zamiast stałej `HULL_POINTS`: wierzchołki plus podział krawędzi krokiem ~6 px (cztery teksele terenu), liczone raz przy `configure()`.
+- [ ] `CollisionShape2D` dla pocisków liczony z tego samego obrysu jako otoczka wypukła, zamiast rysowany drugi raz.
+- [ ] `MAX_PENETRATION` i `CONTACT_ITERATIONS` skalowane rozmiarem kadłuba i liczbą punktów, zamiast stałych dobranych pod trójkąt.
+- [ ] Wytyczne obrysu kadłuba (obwód, wierzchołki, wypukłość, najcieńszy detal, rozstaw nóg) sprawdzane w raporcie konfiguracji — wartości i uzasadnienie w IDEAS.md sekcja 6.
+- [ ] Test: iglica terenu węższa niż odstęp punktów kontaktu nie przechodzi przez kadłub.
 - [ ] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par, puste grupy, ostrzeżenie o module, który psuje sterowanie.
 - [ ] Awarie silników: spadek sprawności od zderzeń, niezawodność jako dropout i oscylacja ciągu.
 - [ ] Lądowanie z uszkodzonymi silnikami: asymetria, oscylacje, sprawdzenie, że jest trudno, ale możliwe.
