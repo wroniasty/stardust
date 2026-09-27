@@ -237,13 +237,29 @@ Dwie pułapki zapłacone od razu, obie niewidoczne dla testów:
 
 - Narzędzie pauzuje drzewo, więc świat przestaje dostawać input — klawisz
   otwierający musi należeć do narzędzia (`PROCESS_MODE_ALWAYS`), inaczej
-  otwartego panelu nie da się zamknąć.
+  otwartego panelu nie da się zamknąć. **I to jest cena tej pauzy:** przy
+  otwartym panelu F5 i F7 są martwe, bo obsługuje je świat. Wygląda to jak
+  awaria klawiatury, więc panel krzyczy nagłówkiem, że gra stoi, zamyka się
+  też Escape'em, a `_process` narzędzia odpauzowuje drzewo, gdyby kiedykolwiek
+  zostało spauzowane z zamkniętym panelem.
+- Escape musi być łapany w `_input`, nie w `_unhandled_key_input`: panel jest
+  pełen kontrolek, a GUI zjada `ui_cancel` na długo przed tym, zanim zdarzenie
+  uznane zostanie za nieobsłużone.
 - `SpinBox` zwraca `float`, a `plateau_count` jest `int`. Przypisanie przez
   `set()` do statycznie typowanego pola jest wtedy błędem, nie zaokrągleniem.
 
 Sprawdzone przebiegiem na prawdziwej scenie świata, bo smoke test jej nie
 ładuje: po przebudowie statek siada 20 px nad gruntem, 0.0001 rad od środka
-półki, i po 200 tickach jest w stanie LANDED.
+półki, i po 200 tickach jest w stanie LANDED. Klawisze zmierzone osobno: F6
+otwiera, Escape zamyka, wymuszona pauza przy zamkniętym panelu cofa się sama.
+
+Metodologiczna nauczka z tego samego przebiegu: sonda wstrzykiwała wyłącznie
+`pressed = true` bez zwolnienia klawisza, przez co jedno naciśnięcie docierało
+dwukrotnie i przełączało panel tam i z powrotem. Wyglądało to dokładnie jak
+błąd w narzędziu i doprowadziło do fałszywej diagnozy. Syntetyczne zdarzenie
+klawisza musi mieć parę wciśnięcie/zwolnienie, a akcje wiązane przez
+`keycode` (jak wbudowane `ui_*`) nie zadziałają, jeśli ustawi się tylko
+`physical_keycode`.
 
 ### Realizacja (M1.2)
 

@@ -46,6 +46,7 @@ const FIELDS: Array[Dictionary] = [
 const PANEL_WIDTH: float = 250.0
 
 var _planet: Planet = null
+var _panel: PanelContainer = null
 var _spins: Dictionary = {}
 var _seed_spin: SpinBox = null
 var _surface_picker: ColorPickerButton = null
@@ -60,8 +61,8 @@ func _ready() -> void:
 	# The tree is paused while the panel is open, so the ship does not fall out
 	# of the sky while its world is being edited.
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	visible = false
 	_build_ui()
+	_panel.hide()
 
 
 ## Points the tool at the planet it edits. Safe to call again after a respawn.
@@ -70,31 +71,58 @@ func bind(planet: Planet) -> void:
 	_refresh()
 
 
+## Nothing may leave the tree paused with no panel on screen to explain it.
+## Cheap insurance against exactly the failure this tool is best placed to
+## cause, and against anything else that pauses and forgets.
+func _process(_delta: float) -> void:
+	if not is_open() and get_tree().paused:
+		get_tree().paused = false
+
+
+## Escape has to be caught here rather than in _unhandled_key_input: the panel
+## is full of Controls, and the GUI eats ui_cancel long before an event is
+## considered unhandled.
+func _input(event: InputEvent) -> void:
+	if is_open() and event.is_action_pressed(&"ui_cancel"):
+		toggle()
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed(TOGGLE_ACTION):
 		toggle()
 		get_viewport().set_input_as_handled()
 
 
+func is_open() -> bool:
+	return _panel.visible
+
+
+## Opening pauses the tree, which is the point -- the ship should not fall out
+## of the sky while its world is being edited -- but it is also the one way
+## this tool can wreck a session: a paused tree stops delivering input to the
+## world, so F5 and F7 go dead until the panel is closed again. Hence the very
+## visible heading, the second way out on Escape, and _process below.
 func toggle() -> void:
-	visible = not visible
-	get_tree().paused = visible
-	if visible:
+	_panel.visible = not _panel.visible
+	get_tree().paused = _panel.visible
+	if _panel.visible:
 		_refresh()
 
 
 func _build_ui() -> void:
-	var panel: PanelContainer = PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.position = Vector2(8, 8)
-	panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
-	add_child(panel)
+	_panel = PanelContainer.new()
+	_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_panel.position = Vector2(8, 8)
+	_panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
+	add_child(_panel)
 
 	var rows: VBoxContainer = VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 2)
-	panel.add_child(rows)
+	_panel.add_child(rows)
 
-	rows.add_child(_heading("KONFIGURATOR PLANETY  (F6)"))
+	rows.add_child(_heading("KONFIGURATOR PLANETY - GRA W PAUZIE"))
+	rows.add_child(_heading("F6 lub Esc zamyka"))
 
 	_seed_spin = SpinBox.new()
 	_seed_spin.min_value = 0
