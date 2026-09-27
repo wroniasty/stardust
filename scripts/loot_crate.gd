@@ -37,6 +37,12 @@ const RARITY_COLORS: Array[Color] = [
 	Color(1.00, 0.70, 0.25),
 ]
 
+## Seconds before the crate will answer a ship at all. A jettisoned module
+## is dropped by a ship that is still sitting on top of it, and without this
+## the pilot picks it straight back up in the same frame -- which turns
+## throwing something overboard into a no-op.
+var grace: float = 0.0
+
 @onready var _body: Polygon2D = $Body
 @onready var _glow: Polygon2D = $Glow
 
@@ -75,5 +81,19 @@ func _paint() -> void:
 	_glow.color = Color(colour.r, colour.g, colour.b, 0.25)
 
 
+func _process(delta: float) -> void:
+	if grace <= 0.0:
+		return
+	grace = maxf(grace - delta, 0.0)
+	if grace <= 0.0:
+		# Whoever was standing in it while it was inert has to be noticed now,
+		# or a crate dropped and left alone would stay invisible to a ship
+		# that never re-entered the area.
+		for body: Node2D in get_overlapping_bodies():
+			touched.emit(self, body)
+
+
 func _on_body_entered(body: Node2D) -> void:
+	if grace > 0.0:
+		return
 	touched.emit(self, body)

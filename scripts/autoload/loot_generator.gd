@@ -59,6 +59,10 @@ const WEAPON_AFFIXES: Array[Dictionary] = [
 	{"name": &"long", "field": "range_px", "factor": Vector2(1.25, 1.60)},
 	{"name": &"breaching", "field": "crater_radius", "factor": Vector2(1.30, 1.90)},
 	{
+		"name": &"lightweight", "field": "bulk", "factor": Vector2(0.60, 0.85),
+		"cost_field": "damage", "cost": Vector2(0.80, 0.92),
+	},
+	{
 		"name": &"hot-loaded", "field": "muzzle_speed", "factor": Vector2(1.15, 1.40),
 		"cost_field": "crater_radius", "cost": Vector2(0.75, 0.90),
 	},

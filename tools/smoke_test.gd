@@ -825,6 +825,7 @@ func _evaluate_phase() -> void:
 			_check_hold()
 			_check_bulk()
 			_check_configuration_report()
+			_check_cargo()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1452,6 +1453,77 @@ func _check_scanner(planet: Planet) -> void:
 ## module can leave the ship crooked rather than merely worse, and nothing in
 ## flight says so. Every fault here is one this project has actually shipped
 ## into a working tree at least once.
+## MAUX1: the cargo bay is a capacity, not a rack of slots, and what it holds
+## is mass like anything else. Jettison has to produce something recoverable,
+## or throwing a module overboard is tidying up rather than a decision.
+func _check_cargo() -> void:
+	var ship: Ship = _spawn_ship()
+	var loot: Node = LOOT_SCRIPT.new()
+
+	_expect(Ship.module_bulk(loot.weapon(11, 0)) > 0.0, "a weapon has a bulk, like an engine")
+	_expect(ship.cargo_used() == 0.0, "a fresh bay is empty")
+	_expect(
+		is_equal_approx(ship.cargo_free(), ship.cargo_capacity),
+		"and all of its capacity is free",
+	)
+
+	# Carrying is felt. A bay full of engines is a slower ship, which is the
+	# price of hoarding and the reason to choose what to keep.
+	var light: float = ship.mass
+	var heavy: EngineData = loot.engine(4242, 0)
+	heavy.bulk = 4.0
+	ship.take(heavy, 0)
+	_expect(ship.stow(), "the hold empties into the bay")
+	_expect(ship.carried == null, "and the hold is free for the next find")
+	_expect(
+		is_equal_approx(ship.cargo_used(), 4.0),
+		"the bay is measured in bulk, not in slots (%.1f)" % ship.cargo_used(),
+	)
+	_expect(
+		ship.mass > light + 3.9,
+		"cargo is mass: the ship went from %.1f to %.1f" % [light, ship.mass],
+	)
+
+	# And the capacity is the constraint, not a suggestion.
+	var enormous: EngineData = loot.engine(4243, 0)
+	enormous.bulk = ship.cargo_free() + 0.1
+	ship.take(enormous, 0)
+	_expect(not ship.stow(), "a module too big for the space left is refused")
+	_expect(ship.carried == enormous, "and stays in the hold rather than vanishing")
+	ship.release()
+
+	_expect(ship.retrieve(0) and ship.carried == heavy, "what was stowed comes back out")
+	_expect(ship.cargo.is_empty(), "and leaves the bay")
+	_expect(not ship.retrieve(0), "an empty bay has nothing to hand over")
+
+	# Jettison announces rather than destroys: who turns it back into a crate
+	# is the world's business, but something must survive the throw.
+	var thrown: Array[Resource] = []
+	ship.jettisoned.connect(func(item: Resource, _rarity: int) -> void: thrown.append(item))
+	_expect(ship.jettison() == heavy, "jettison hands back what went overboard")
+	_expect(thrown.size() == 1 and thrown[0] == heavy, "and announces it exactly once")
+	_expect(ship.carried == null, "leaving the hold empty")
+	_expect(ship.jettison() == null, "an empty hold has nothing to throw")
+
+	# A crate dropped by a ship sitting on top of it must not be picked back
+	# up in the same frame, or throwing something away is a no-op.
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	crate.hold(heavy, 0)
+	crate.grace = 2.0
+	root.add_child(crate)
+	var touches: Array[int] = []
+	crate.touched.connect(func(_c: LootCrate, _b: Node) -> void: touches.append(1))
+	crate._on_body_entered(ship)
+	_expect(touches.is_empty(), "a just-jettisoned crate ignores the ship that dropped it")
+	crate.grace = 0.0
+	crate._on_body_entered(ship)
+	_expect(touches.size() == 1, "and answers once the grace has run out")
+
+	crate.queue_free()
+	loot.free()
+	ship.queue_free()
+
+
 func _check_configuration_report() -> void:
 	var ship: Ship = _spawn_ship()
 

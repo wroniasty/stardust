@@ -131,6 +131,13 @@ signal hull_changed(integrity: float)
 ## polling.
 signal hold_changed(item: Resource)
 
+## The cargo bay changed. Separate from hold_changed because the two answer
+## different questions and the editor redraws different panels for each.
+signal cargo_changed()
+
+## The pilot threw a module overboard. The world turns it into a crate.
+signal jettisoned(item: Resource, rarity: int)
+
 ## If true the ship steers itself from the player's input actions. AI ships and
 ## tests turn this off and write the command fields directly.
 @export var use_player_input: bool = true
@@ -206,6 +213,26 @@ var last_landing_rejection: String = ""
 var carried: Resource = null
 var carried_rarity: int = 0
 
+## The cargo bay: things stowed for later, measured in the same bulk unit as
+## everything else. Not slots -- a capacity -- so "can I take this" is a
+## question about the machine rather than about a grid, and a full bay of
+## heavy modules is felt in how the ship flies.
+##
+## Entries are { "item": Resource, "rarity": int }, in the order they were
+## stowed. Rarity rides alongside because no module Resource carries it.
+var cargo: Array[Dictionary] = []
+
+## Total bulk the bay can hold. A hull property for now; a bigger hold is the
+## obvious thing for a bigger hull to have.
+@export var cargo_capacity: float = 12.0
+
+## Where the cargo sits, in the ship's frame. Placed on the stock centre of
+## mass on purpose: a bay anywhere else would make loading up a balance fault
+## as well as a mass gain, and nagging the pilot for picking things up would
+## teach them to ignore the configuration report. Loading is felt as
+## sluggishness, not as a warning.
+const CARGO_BAY: Vector2 = Vector2(0.0, 1.75)
+
 
 var _landed_planet: Planet = null
 var _landed_angle: float = 0.0
@@ -275,6 +302,71 @@ func take(item: Resource, rarity: int) -> bool:
 	return true
 
 
+## How big any module is, whichever kind it is. The one place that knows
+## that both module Resources answer to the same field.
+static func module_bulk(item: Resource) -> float:
+	if item is EngineData:
+		return (item as EngineData).bulk
+	if item is WeaponData:
+		return (item as WeaponData).bulk
+	return 0.0
+
+
+func cargo_used() -> float:
+	var total: float = 0.0
+	for entry: Dictionary in cargo:
+		total += module_bulk(entry["item"] as Resource)
+	return total
+
+
+func cargo_free() -> float:
+	return maxf(cargo_capacity - cargo_used(), 0.0)
+
+
+## Moves what is in the hold into the bay. Fails, rather than overfilling,
+## when there is no room: the bay is the constraint, not a suggestion.
+##
+## Rebuilds the control groups, because cargo is mass and mass is handling.
+func stow() -> bool:
+	if carried == null or module_bulk(carried) > cargo_free():
+		return false
+	cargo.append({"item": carried, "rarity": carried_rarity})
+	carried = null
+	carried_rarity = 0
+	rebuild_control_groups(false)
+	hold_changed.emit(null)
+	cargo_changed.emit()
+	return true
+
+
+## Moves one thing out of the bay and into the hold, which must be empty.
+func retrieve(index: int) -> bool:
+	if carried != null or index < 0 or index >= cargo.size():
+		return false
+	var entry: Dictionary = cargo[index]
+	cargo.remove_at(index)
+	carried = entry["item"]
+	carried_rarity = int(entry["rarity"])
+	rebuild_control_groups(false)
+	hold_changed.emit(carried)
+	cargo_changed.emit()
+	return true
+
+
+## Throws what is in the hold overboard. Announced rather than destroyed: who
+## turns it back into a crate in the world is the world's business, and a
+## jettison that annihilates the cargo is not a tactical decision, it is
+## tidying up.
+func jettison() -> Resource:
+	if carried == null:
+		return null
+	var item: Resource = carried
+	var rarity: int = carried_rarity
+	release()
+	jettisoned.emit(item, rarity)
+	return item
+
+
 ## Empties the hold and returns what was in it.
 func release() -> Resource:
 	var item: Resource = carried
@@ -334,6 +426,12 @@ func _recompute_mass_properties() -> void:
 		total_mass += module
 		weighted += engine.mount.position * module
 
+	# Cargo is mass like anything else. A hold full of engines is a slower
+	# ship, which is the price of hoarding and the reason to choose.
+	var load: float = cargo_used()
+	total_mass += load
+	weighted += CARGO_BAY * load
+
 	var centre: Vector2 = weighted / maxf(total_mass, 0.0001)
 
 	# Parallel axis theorem: the hull's own inertia about its centroid, shifted
@@ -341,11 +439,19 @@ func _recompute_mass_properties() -> void:
 	var total_inertia: float = hull_inertia + HULL_MASS * hull_centroid.distance_squared_to(centre)
 	for engine: EngineInstance in engines:
 		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
+	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
 
 	mass = total_mass
 	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = centre
 	inertia = maxf(total_inertia, 0.0001)
+
+
+## The hull as a polygon in the ship's own frame. Public because the editor
+## draws its schematic from it: a hand-drawn diagram would have been wrong the
+## moment a mount moved, and mounts moved twice while bulk was going in.
+func hull_outline() -> PackedVector2Array:
+	return _hull_polygon()
 
 
 func _hull_polygon() -> PackedVector2Array:

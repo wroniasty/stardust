@@ -371,6 +371,42 @@ decyzje o jej kształcie:
   lootem, tylko dekoracją: zmierzone w teście, dwukrotnie mocniejszy silnik
   podnosi autorytet FORWARD z 900 na 1800.
 
+### MAUX1: edytor statku
+
+Prototypowy ekran (klawisz `I`), na którym widać cały statek naraz. Kilka
+decyzji, które nie są oczywiste:
+
+- **Jedna jednostka na wszystko.** `bulk` jest teraz i na silnikach, i na
+  broni, więc cargo mierzy pojemność jedną liczbą. Dwie jednostki znaczyłyby
+  tabelę przeliczeń w kodzie i drugą liczbę do nauczenia dla pilota.
+- **Cargo to pojemność, nie sloty.** „Czy to zabrać" staje się pytaniem o
+  maszynę, a nie o wolną kratkę, a ładunek jest masą: 4 gabaryty w luku to
+  statek 14,6 → 18,6 kg i wyraźnie leniwszy.
+- **Luk cargo siedzi na środku masy pustego statku** (0, 1.75). Gdziekolwiek
+  indziej ładowanie byłoby jednocześnie usterką wyważenia, a raport
+  konfiguracji marudziłby za każdym razem, gdy gracz coś podniesie — i
+  nauczyłby go ignorować raport. Ładunek ma być czuć jako ociężałość, nie
+  jako ostrzeżenie.
+- **Schemat jest generowany** z wielokąta kolizji kadłuba i pozycji mountów —
+  z tych samych danych, na których statek lata. Ręcznie narysowany byłby
+  nieprawdziwy w chwili, gdy ktoś przesunie mount; krzyż dysz obrotowych
+  przesunął się dwa razy w trakcie prac nad `bulk`.
+- **Nazwy gniazd idą na zewnątrz kadłuba.** Do środka spotykają się na osi i
+  obie połowy każdej lustrzanej pary drukują się jedna na drugiej — widać to
+  było na pierwszym zrzucie.
+- **Panele są w pełni nieprzezroczyste.** Przy 0,95 tekst debug overlay
+  przebijał się czytelnie: pięć procent jasnej zieleni na prawie-czerni jest
+  dwa razy jaśniejsze niż sam panel.
+- **Ekran pauzuje, szybka wymiana na Tab nie.** To dwa różne pytania zadawane
+  pod różnym ciśnieniem: Tab to jedna decyzja w locie, edytor to przegląd. W
+  wersji docelowej edytor ma być dostępny tylko po wylądowaniu — dziś otwiera
+  się wszędzie, bo jest prototypem do testów.
+
+**Wyrzucanie tworzy prawdziwą skrzynkę** z chwilą nietykalności (2 s). Bez
+niej statek stojący nad zrzuconym modułem podnosi go w tej samej klatce, czyli
+wyrzucanie jest operacją pustą. Odwracalne wyrzucenie to decyzja taktyczna
+(„zrzucam balast, wrócę"); nieodwracalne to tylko sprzątanie ekwipunku.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.

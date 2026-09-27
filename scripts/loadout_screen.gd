@@ -83,7 +83,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"loadout_drop"):
 		if _ship != null:
-			_ship.release()
+			_ship.jettison()
 		get_viewport().set_input_as_handled()
 
 

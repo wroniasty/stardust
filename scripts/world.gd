@@ -22,6 +22,11 @@ const CRATES_PER_PLANET: int = 4
 ## texels it stands on.
 const CRATE_CLEARANCE: float = 10.0
 
+## How long a jettisoned crate ignores the ship that dropped it. Long enough
+## to fly clear at a crawl, short enough that coming straight back for it is
+## a decision rather than a wait.
+const JETTISON_GRACE: float = 2.0
+
 ## Where a wrecked ship comes back, as a multiple of the planet radius. Outside
 ## the atmosphere, so the pilot gets a moment to gather themselves rather than
 ## respawning already on fire.
@@ -48,6 +53,7 @@ var _configurator: PlanetConfigurator = null
 var _landing_site: int = 0
 var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
+var _editor: ShipEditor = null
 
 
 ## Radius of the crater the debug key blows in the crust.
@@ -62,6 +68,7 @@ func _ready() -> void:
 		ship.destroyed.connect(_on_ship_destroyed)
 	_build_configurator()
 	_build_loadout()
+	_build_editor()
 	_build_scanner()
 	_spawn_crates()
 
@@ -77,6 +84,12 @@ func _build_configurator() -> void:
 	_configurator.teleport_requested.connect(_on_next_landing_site)
 
 
+func _build_editor() -> void:
+	_editor = ShipEditor.new()
+	add_child(_editor)
+	_editor.bind((player as Player).ship)
+
+
 func _build_scanner() -> void:
 	_scanner = ScannerHud.new()
 	add_child(_scanner)
@@ -86,7 +99,28 @@ func _build_scanner() -> void:
 func _build_loadout() -> void:
 	_loadout = LoadoutScreen.new()
 	add_child(_loadout)
-	_loadout.bind((player as Player).ship)
+	var ship: Ship = (player as Player).ship
+	_loadout.bind(ship)
+	if ship != null:
+		ship.jettisoned.connect(_on_jettisoned)
+
+
+## A module thrown overboard becomes a crate where the ship was, so it can be
+## flown back to. Parented to the planet when there is one, so it rides the
+## turning ground like every other crate rather than hanging in the sky the
+## ground moves out from under.
+func _on_jettisoned(item: Resource, rarity: int) -> void:
+	var ship: Ship = (player as Player).ship
+	if ship == null:
+		return
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	crate.hold(item, rarity)
+	crate.grace = JETTISON_GRACE
+	crate.touched.connect(_on_crate_touched)
+	var host: Node = planet if planet != null else self
+	host.add_child(crate)
+	crate.global_position = ship.global_position
+	print("jettisoned: %s" % crate.label())
 
 
 ## Rolls one module per shelf from the world seed, so the same world always
