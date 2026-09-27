@@ -820,6 +820,7 @@ func _evaluate_phase() -> void:
 			)
 		Phase.PLATEAU:
 			_check_weapons()
+			_check_loot()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -1312,6 +1313,100 @@ func _check_weapons() -> void:
 		"a refused weapon is handed straight back and changes nothing",
 	)
 	probe.queue_free()
+
+
+## The loot generator, reached as a script because the smoke test has no
+## autoloads (see _check_loot).
+const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd")
+
+
+## Loot has to be reproducible, bounded, and a trade rather than a ladder.
+func _check_loot() -> void:
+	# Instantiated rather than reached through the autoload: this test runs as
+	# a --script main loop, where autoloads do not exist.
+	var _loot: Node = LOOT_SCRIPT.new()
+	# Reproducible: a container is its seed. Two pilots opening the same crate,
+	# or one pilot after a reload, must find the same thing.
+	var first: WeaponData = _loot.weapon(90210)
+	var again: WeaponData = _loot.weapon(90210)
+	_expect(
+		is_equal_approx(first.damage, again.damage)
+			and is_equal_approx(first.rounds_per_second, again.rounds_per_second)
+			and first.display_name == again.display_name,
+		"the same seed rolls the same weapon (%s)" % first.display_name,
+	)
+	var other: WeaponData = _loot.weapon(90211)
+	_expect(
+		not is_equal_approx(first.damage, other.damage)
+			or first.display_name != other.display_name,
+		"a different seed rolls something else (%s)" % other.display_name,
+	)
+
+	# Rarity buys affixes, and exactly as many as the table promises.
+	for rarity: int in range(LOOT_SCRIPT.RARITY_AFFIXES.size()):
+		var item: WeaponData = _loot.weapon(1000 + rarity, rarity)
+		_expect(
+			item.affixes.size() == LOOT_SCRIPT.RARITY_AFFIXES[rarity],
+			"%s weapons carry %d affixes (%s)" % [
+				_loot.rarity_name(rarity), item.affixes.size(), item.display_name,
+			],
+		)
+
+	# Nothing the generator can roll may be unusable. Every field of every
+	# rolled item has to land inside the limits, at every rarity, or a lucky
+	# seed produces a gun with no rate of fire.
+	var strays: int = 0
+	for i: int in range(400):
+		var rarity: int = i % LOOT_SCRIPT.RARITY_AFFIXES.size()
+		strays += _fields_outside_limits(_loot.weapon(5000 + i, rarity))
+		strays += _fields_outside_limits(_loot.engine(7000 + i, rarity))
+	_expect(strays == 0, "800 rolled items stay inside their limits (%d strays)" % strays)
+
+	# The weights have to produce the shape they describe: common common,
+	# legendary rare. Checked as an ordering, not as exact counts.
+	var counts: Array[int] = [0, 0, 0, 0, 0]
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 424242
+	for i: int in range(4000):
+		counts[_loot.roll_rarity(rng)] += 1
+	var ordered: bool = true
+	for i: int in range(counts.size() - 1):
+		if counts[i] <= counts[i + 1]:
+			ordered = false
+	_expect(ordered, "rarity thins out as it climbs (%s)" % [counts])
+
+	# The design claim, guarded at the table rather than at one sample: an
+	# affix that has a cost must actually cost something. Rarity that is only
+	# ever better is a number going up, not a choice.
+	var costed: int = 0
+	var free_lunches: int = 0
+	for table: Array[Dictionary] in [LOOT_SCRIPT.WEAPON_AFFIXES, LOOT_SCRIPT.ENGINE_AFFIXES]:
+		for affix: Dictionary in table:
+			if not affix.has("cost_field"):
+				continue
+			costed += 1
+			var field: String = String(affix["cost_field"])
+			var cost: Vector2 = affix["cost"] as Vector2
+			var helps: bool = cost.x > 1.0 if bool(LOOT_SCRIPT.HIGHER_IS_BETTER[field]) else cost.x < 1.0
+			if helps:
+				free_lunches += 1
+	_expect(costed >= 3, "several affixes are trades rather than gifts (%d of them)" % costed)
+	_expect(free_lunches == 0, "and every one of those trades actually costs something")
+	_loot.free()
+
+
+## How many fields of `item` fall outside what the generator promises.
+func _fields_outside_limits(item: Resource) -> int:
+	var strays: int = 0
+	for field: String in LOOT_SCRIPT.LIMITS:
+		if not (field in item):
+			continue
+		var bounds: Vector2 = LOOT_SCRIPT.LIMITS[field]
+		var value: float = float(item.get(field))
+		if value < bounds.x - 0.0001 or value > bounds.y + 0.0001:
+			print("  stray: %s = %.3f outside %.3f..%.3f" % [field, value, bounds.x, bounds.y])
+			strays += 1
+	return strays
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

@@ -227,6 +227,36 @@ Dwie bronie startowe są celowo przeciwstawne, żeby loot miał czym się różn
 14). Większe obrażenia na strzał **nie** dają większego dps — kupuje się za nie
 przebicie i zasięg.
 
+### Realizacja (M2: LootGenerator)
+
+Bazowy szablon plus 0..4 afiksy, wszystko z jawnego seeda — ta sama skrzynka
+zawsze trzyma to samo, także po przeładowaniu gry.
+
+**Rzadkość nie znaczy „lepszy".** Mocne afiksy mają koszt wpisany w tabelę:
+`heavy` podnosi obrażenia i obniża kadencję, `rapid` odwrotnie, `overbored`
+kupuje ciąg za niezawodność. Rzadki przedmiot jest więc **bardziej skrajny**, a
+nie jednostajnie lepszy, i to pilot decyduje, czy to dla niego awans. Loot
+sprowadzony do jednej skali to rosnąca liczba, nie wybór. Pilnuje tego test na
+poziomie tabeli: każdy afiks z kosztem musi ruszać pole w niekorzystną stronę
+(kierunki są w `HIGHER_IS_BETTER`, które przyda się też raportowi konfiguracji).
+
+**Siła rzadkości to wykładnik, nie mnożnik.** Współczynnik poniżej 1 skalowany
+liniowo przechodzi przez zero — przy sile 1.75 afiks `precise` (0.40) dałby
+rozrzut −0.05. `pow(rolled, strength)` zostaje po właściwej stronie zera
+niezależnie od tego, jak bardzo podniesiemy rzadkość.
+
+**Granice domykane są na całym przedmiocie, nie tylko na polach ruszonych
+przez afiks.** Powód wyszedł z testu: thrustery mają w bazie `spool_time = 0`,
+bo ich typ ignoruje to pole, więc gotowy przedmiot wypadał poza deklarowany
+zakres mimo poprawnego skalowania. Niezmiennik z przypisem jest niezmiennikiem,
+którego nikt nie sprawdzi — teraz brzmi po prostu „wylosowany przedmiot mieści
+się w granicach" i 800 losowań to potwierdza.
+
+Wagi: 55 / 27 / 13 / 4 / 1. Zmierzone na 4000 losowań: 2161 / 1077 / 540 / 178 / 44.
+
+Uwaga praktyczna: smoke test chodzi jako `--script`, gdzie **autoloady nie
+istnieją**, więc sięga po generator przez `preload` i tworzy własną instancję.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.
