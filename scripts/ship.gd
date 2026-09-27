@@ -89,6 +89,16 @@ const GEAR_OVERLOAD_DAMAGE: float = 0.01
 ## Below this speed the brake stops the ship outright rather than chasing it.
 const BRAKE_EPS: float = 2.0
 
+## Below this speed there is no direction of travel to point at, so the
+## heading assist does nothing rather than chasing numerical noise.
+const HEADING_MIN_SPEED: float = 8.0
+
+## How close counts as pointed, in radians, and the fastest the assist will
+## swing the ship. The cap keeps a light ship with strong jets from spinning
+## up to something that looks like a fault.
+const HEADING_EPS: float = 0.02
+const HEADING_MAX_SPIN: float = 2.0
+
 ## Heating. The hull warms with the power the air is dissipating, which for
 ## the linear damping the shells apply goes as density times speed squared.
 ## Tying it to the same quantity that does the braking is what stops the heat
@@ -176,6 +186,13 @@ var active_commands: Dictionary = {}
 ## Assist holds, set from input or by an AI.
 var kill_rotation_command: bool = false
 var brake_command: bool = false
+
+## Which way the heading assist is pointing the nose, if at all. Set from the
+## Q+E+W and Q+E+S chords, and left here for an AI to drive the same way.
+var heading_command: ControlChords.Chord = ControlChords.Chord.NONE
+
+## Reads the chorded commands off the held keys.
+var chords: ControlChords = ControlChords.new()
 
 ## Held-down trigger. Read by the weapons every physics tick.
 var fire_command: bool = false
@@ -507,7 +524,7 @@ func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid
 ## landed ship that only listened there could never be told to take off again.
 func _physics_process(delta: float) -> void:
 	if use_player_input:
-		read_player_input()
+		read_player_input(delta)
 		fire_command = Input.is_action_pressed("ship_fire")
 		if Input.is_action_just_pressed("toggle_gear") and gear != null:
 			gear.set_deployed(not gear.is_deployed() and not gear.is_moving())
@@ -1042,16 +1059,30 @@ func get_forward_speed() -> float:
 
 ## Fills the command set from the input actions. Only action names here, never
 ## keycodes. Called from _physics_process, see the note there.
-func read_player_input() -> void:
+func read_player_input(delta: float) -> void:
 	commands.clear()
-	_set_command(ShipControl.Command.FORWARD, Input.get_action_strength("thrust_forward"))
-	_set_command(ShipControl.Command.BACK, Input.get_action_strength("thrust_reverse"))
-	_set_command(ShipControl.Command.CCW, Input.get_action_strength("rotate_left"))
-	_set_command(ShipControl.Command.CW, Input.get_action_strength("rotate_right"))
-	_set_command(ShipControl.Command.STRAFE_LEFT, Input.get_action_strength("strafe_left"))
-	_set_command(ShipControl.Command.STRAFE_RIGHT, Input.get_action_strength("strafe_right"))
-	kill_rotation_command = Input.is_action_pressed("kill_rotation")
+
+	# Chords first: a key taken over by one must not also be read as the
+	# command it usually means.
+	var chord: ControlChords.Chord = chords.update(ControlChords.poll(), delta)
+	var taken: Array[StringName] = chords.consumed()
+
+	_set_command(ShipControl.Command.FORWARD, _strength(&"thrust_forward", taken))
+	_set_command(ShipControl.Command.BACK, _strength(&"thrust_reverse", taken))
+	_set_command(ShipControl.Command.CCW, _strength(&"rotate_left", taken))
+	_set_command(ShipControl.Command.CW, _strength(&"rotate_right", taken))
+	_set_command(ShipControl.Command.STRAFE_LEFT, _strength(&"strafe_left", taken))
+	_set_command(ShipControl.Command.STRAFE_RIGHT, _strength(&"strafe_right", taken))
+
+	kill_rotation_command = chord == ControlChords.Chord.KILL_ROTATION
+	heading_command = chord
+	if chord == ControlChords.Chord.KILL_ROTATION:
+		heading_command = ControlChords.Chord.NONE
 	brake_command = Input.is_action_pressed("brake")
+
+
+func _strength(action: StringName, taken: Array[StringName]) -> float:
+	return 0.0 if taken.has(action) else Input.get_action_strength(action)
 
 
 func _set_command(command: ShipControl.Command, amount: float) -> void:
@@ -1064,6 +1095,8 @@ func _resolve_commands(state: PhysicsDirectBodyState2D) -> void:
 	active_commands = commands.duplicate()
 	if kill_rotation_command:
 		_apply_kill_rotation(state)
+	if heading_command != ControlChords.Chord.NONE:
+		_apply_heading_hold(state)
 	if brake_command:
 		_apply_brake(state)
 
@@ -1088,6 +1121,58 @@ func _apply_kill_rotation(state: PhysicsDirectBodyState2D) -> void:
 		return
 	var amount: float = clampf(absf(spin) / KILL_ROTATION_GAIN, 0.0, 1.0)
 	active_commands[opposing] = maxf(float(active_commands.get(opposing, 0.0)), amount)
+
+
+## Swings the nose onto the direction of travel, or onto its opposite.
+##
+## Velocity is measured against the ground, the same frame the landing check
+## and the contact solver use, so a ship parked on a turning planet reads as
+## stopped rather than as drifting east at eight pixels a second. In orbit
+## that differs from the true orbital prograde by the surface speed, a few
+## degrees at most; when M2's auto-orbit needs better it will work from the
+## orbital elements rather than from this.
+##
+## Bang-bang rather than a pair of tuned gains: aim for the fastest spin that
+## can still be stopped by the time the nose arrives, which is the same
+## time-to-kill shape the brake uses and needs no constants that would go
+## stale the next time the torque jets change.
+func _apply_heading_hold(state: PhysicsDirectBodyState2D) -> void:
+	var travel: Vector2 = state.linear_velocity
+	var planet: Planet = nearest_planet()
+	if planet != null:
+		travel -= planet.surface_velocity_at(global_position)
+	if travel.length() < HEADING_MIN_SPEED:
+		return
+	if heading_command == ControlChords.Chord.RETROGRADE:
+		travel = -travel
+
+	# Where the ship must be rotated to for its nose to lie along `travel`.
+	var wanted: float = angle_difference(
+		state.transform.get_rotation(), travel.angle() - FORWARD.angle()
+	)
+	var spin: float = state.angular_velocity
+
+	var toward: ShipControl.Command = (
+		ShipControl.Command.CW if wanted > 0.0 else ShipControl.Command.CCW
+	)
+	var alpha: float = control.authority_of(toward) / maxf(inertia, 0.0001)
+	if alpha <= 0.0:
+		return
+
+	# Arrive with no spin left: the fastest approach speed from which the
+	# remaining angle is still enough room to stop in.
+	var cruise: float = signf(wanted) * minf(sqrt(2.0 * alpha * absf(wanted)), HEADING_MAX_SPIN)
+	var change: float = cruise - spin
+	if absf(wanted) <= HEADING_EPS and absf(spin) <= HEADING_EPS:
+		state.angular_velocity = 0.0
+		return
+
+	var command: ShipControl.Command = (
+		ShipControl.Command.CW if change > 0.0 else ShipControl.Command.CCW
+	)
+	var reach: float = control.authority_of(command) / maxf(inertia, 0.0001) * state.step
+	var amount: float = clampf(absf(change) / maxf(reach, 0.0001), 0.0, 1.0)
+	active_commands[command] = maxf(float(active_commands.get(command, 0.0)), amount)
 
 
 ## Kills linear velocity by pushing against it, one axis at a time.

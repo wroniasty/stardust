@@ -477,6 +477,51 @@ trafia tam, gdzie przewiduje obrót, wobec 3 i 1 dla alternatyw — a 123/239 to
 dokładnie ten ułamek, który może zostać w kadrze, gdy obraca się ramkę 16:9
 (przeżywają tylko gwiazdy w okręgu wpisanym).
 
+### Akordy zamiast kolejnych klawiszy
+
+Klawiatura jest prawie pełna, a komputer lotu ma jeszcze długą listę rzeczy,
+które będzie chciał dostać do powiedzenia. Akordy kupują miejsce, ale **tylko
+tam, gdzie kombinacja i tak nic nie znaczy**:
+
+| akord | znaczenie |
+|---|---|
+| `A` + `D` | przestań się obracać (zastąpiło `X`) |
+| `Q` + `E` + `W` | dziób na kierunek lotu |
+| `Q` + `E` + `S` | dziób przeciwnie do kierunku lotu |
+
+`A` i `D` to przeciwne momenty, które się znoszą — trzymanie obu nie ma
+żadnego innego odczytu, a „wciskam oba hamulce" to uczciwy sposób na
+powiedzenie „stój". `Q` i `E` znoszą się tak samo, co zostawia `W`/`S` wolne
+do wskazania kierunku.
+
+Trzy rzeczy, bez których to nie działa:
+
+- **Akord zjada swoje klawisze.** Inaczej `Q+E+S` celowałby wstecz wzdłuż
+  prędkości i *jednocześnie* odpalał silnik cofający — a to nie jest
+  hamowanie, tylko rozpędzanie się w stronę, z której się przyleciało.
+- **Okno ustalenia (60 ms).** Przetoczenie palca z `A` na `D` nakłada oba na
+  kilkadziesiąt milisekund i bez tego czyta się jako „stój" w środku skrętu,
+  który pilot właśnie wykonuje. Puszczenie działa natychmiast — rezygnacji
+  trzeba wierzyć od razu.
+- **Stop wygrywa.** Akordy sprawdzane są po kolei i `A+D` jest pierwszy:
+  pilot, który w panice łapie oba, chce się zatrzymać niezależnie od tego, co
+  robią jego pozostałe palce.
+
+**Asysta kursu jest bang-bang, nie parą dobranych wzmocnień**: celuje w
+najszybszy obrót, który da się jeszcze zatrzymać na pozostałym kącie
+(`sqrt(2·α·błąd)`) — ten sam kształt „czasu do wyhamowania", którego używa
+hamulec, i bez stałych, które zwietrzeją przy następnej zmianie dysz.
+Prędkość mierzona jest **względem gruntu**, w tej samej ramce co sprawdzenie
+lądowania i solver kontaktów, więc statek stojący na obracającej się planecie
+czyta się jako nieruchomy, a nie jako dryfujący. Na orbicie różni się to od
+prawdziwego prograde o prędkość powierzchni — kilka stopni; kiedy auto-orbit
+z M2 będzie potrzebował lepiej, policzy to z elementów orbity.
+
+Ograniczenie sprzętowe warte zapisania: `Q+W+E` to trzy klawisze w jednym
+rzędzie i tańsze klawiatury potrafią zgubić trzeci (ghosting). Jeśli okaże
+się to realnym problemem, akord da się przenieść na klawisze rozrzucone po
+klawiaturze bez zmiany niczego poza tabelą w `ControlChords`.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.

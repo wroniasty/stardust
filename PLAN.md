@@ -127,6 +127,7 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [ ] Test: iglica terenu węższa niż odstęp punktów kontaktu nie przechodzi przez kadłub.
 - [x] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par lustrzanych, puste grupy, boczny dryf pary obrotowej jako przyspieszenie. `compare()` pokazuje w ekranie wymiany, co zrobił moduł — różnice, nie stan. Wytyczne obrysu kadłuba dojdą osobno.
 - [ ] Awarie silników: spadek sprawności od zderzeń, niezawodność jako dropout i oscylacja ciągu.
+- [x] Akordy klawiszy zamiast kolejnych przycisków: `A+D` zatrzymuje obrót (zastąpiło `X`), `Q+E+W` celuje na kierunek lotu, `Q+E+S` przeciwnie. Akord zjada swoje klawisze, okno ustalenia 60 ms, stop wygrywa z resztą.
 - [ ] Lądowanie z uszkodzonymi silnikami: asymetria, oscylacje, sprawdzenie, że jest trudno, ale możliwe.
 - [ ] Podwozie jako moduł (tolerancja nachylenia, próg prędkości) i moduły asystujące (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu).
 - [ ] Auto-orbit jako opcjonalna funkcja komputera lotu: część komputerów ją ma, część nie. Załącza się w polu grawitacyjnym i poza atmosferą, sam wchodzi na orbitę (IDEAS.md sekcja 8).

@@ -24,6 +24,12 @@ const BURN_TICKS: int = 60
 const FORWARD_BURN_TICKS: int = 120
 
 ## Spin handed to the kill-rotation phase, and the second it is allowed.
+## How long the heading assist gets to swing the ship round and settle, and
+## the velocity it is aiming along. Deep space, so nothing pulls the ship off
+## the straight line the assist is being judged against.
+const HEADING_TICKS: int = 900
+const HEADING_TRAVEL: Vector2 = Vector2(140.0, -60.0)
+
 const KILL_SPIN: float = 2.0
 const KILL_TICKS: int = 90
 
@@ -89,7 +95,7 @@ const DEATH_TICKS: int = 900
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
-	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
+	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
@@ -154,7 +160,7 @@ var _failures: int = 0
 
 func _initialize() -> void:
 	for action: String in ["thrust_forward", "thrust_reverse", "rotate_left",
-			"rotate_right", "strafe_left", "strafe_right", "kill_rotation", "brake"]:
+			"rotate_right", "strafe_left", "strafe_right", "brake"]:
 		_expect(InputMap.has_action(action), "input action %s is defined" % action)
 	_begin_phase()
 
@@ -404,6 +410,8 @@ func _phase_ticks() -> int:
 			return FORWARD_BURN_TICKS
 		Phase.KILL_ROTATION:
 			return KILL_TICKS
+		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
+			return HEADING_TICKS
 		Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL:
 			return BRAKE_TICKS
 		Phase.AEROBRAKE:
@@ -446,7 +454,7 @@ func _phase_needs_planet() -> bool:
 	match _phase:
 		Phase.HULL:
 			return false
-		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.STRAFE:
+		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE, Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.STRAFE:
 			return false
 		_:
 			return true
@@ -481,6 +489,16 @@ func _begin_phase() -> void:
 			_ship.angular_velocity = KILL_SPIN
 			_ship.kill_rotation_command = true
 			_kill_ticks = -1
+		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
+			# Pointing the wrong way to start with, so the assist has most of
+			# a turn to make and cannot pass by accident.
+			_ship.global_rotation = 2.5
+			_ship.angular_velocity = 0.0
+			_ship.linear_velocity = HEADING_TRAVEL
+			_ship.heading_command = (
+				ControlChords.Chord.PROGRADE if _phase == Phase.POINT_PROGRADE
+				else ControlChords.Chord.RETROGRADE
+			)
 		Phase.BRAKE:
 			_ship.linear_velocity = Ship.FORWARD * BRAKE_SPEED
 			_ship.brake_command = true
@@ -727,6 +745,24 @@ func _evaluate_phase() -> void:
 					_peak_speed, BRAKE_SPEED,
 				],
 			)
+		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
+			var facing: float = 1.0 if _phase == Phase.POINT_PROGRADE else -1.0
+			var nose: Vector2 = Ship.FORWARD.rotated(_ship.global_rotation)
+			var along: float = nose.dot(HEADING_TRAVEL.normalized()) * facing
+			_expect(
+				along > 0.99,
+				"%s brings the nose onto the direction of travel (%.4f)" % [
+					"prograde" if facing > 0.0 else "retrograde", along,
+				],
+			)
+			# Arriving still spinning would mean it sails past and comes
+			# back, which is a wobble rather than a hold.
+			_expect(
+				absf(_ship.angular_velocity) < 0.05,
+				"and stops there rather than swinging through (%.3f rad/s)" % [
+					_ship.angular_velocity,
+				],
+			)
 		Phase.BRAKE:
 			_expect(
 				_ship.linear_velocity.length() < 1.0,
@@ -830,6 +866,7 @@ func _evaluate_phase() -> void:
 			_check_editor()
 			_check_pause_gate()
 			_check_camera(_planet)
+			_check_chords()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1787,6 +1824,64 @@ func _check_camera(planet: Planet) -> void:
 
 	camera.queue_free()
 	ship.queue_free()
+
+
+## Commands made by holding keys together. The whole idea rests on the
+## combination meaning nothing else -- A and D are opposite torques that
+## cancel -- so the thing to pin is that a chord takes its keys out of
+## circulation, and that a finger rolling from one to the other does not
+## count as pressing both.
+func _check_chords() -> void:
+	var chords: ControlChords = ControlChords.new()
+	var down: Callable = func(keys: Array) -> Dictionary:
+		var held: Dictionary = {}
+		for key: StringName in keys:
+			held[key] = true
+		return held
+
+	_expect(
+		chords.update(down.call([&"rotate_left"]), 0.5) == ControlChords.Chord.NONE,
+		"one key of a chord is just that key",
+	)
+
+	# The settle window: held together but not yet long enough is still not a
+	# chord, which is what a roll from A to D looks like.
+	var both: Dictionary = down.call([&"rotate_left", &"rotate_right"])
+	_expect(
+		chords.update(both, ControlChords.SETTLE * 0.4) == ControlChords.Chord.NONE,
+		"a brief overlap while rolling from one key to the other is not a chord",
+	)
+	_expect(
+		chords.update(both, ControlChords.SETTLE) == ControlChords.Chord.KILL_ROTATION,
+		"holding both long enough is",
+	)
+	_expect(
+		chords.consumed().has(&"rotate_left") and chords.consumed().has(&"rotate_right"),
+		"and it takes both keys out of circulation",
+	)
+	_expect(
+		chords.update(down.call([&"rotate_left"]), 0.001) == ControlChords.Chord.NONE,
+		"letting go of one is believed at once, without a window",
+	)
+
+	var prograde: Dictionary = down.call([&"strafe_left", &"strafe_right", &"thrust_forward"])
+	chords.update(prograde, 1.0)
+	_expect(chords.active() == ControlChords.Chord.PROGRADE, "Q+E+W points along the way we go")
+	_expect(
+		chords.consumed().has(&"thrust_forward"),
+		"and swallows the thrust key: aiming backwards while burning backwards is not braking",
+	)
+	chords.update(down.call([&"strafe_left", &"strafe_right", &"thrust_reverse"]), 1.0)
+	_expect(chords.active() == ControlChords.Chord.RETROGRADE, "Q+E+S points back along it")
+
+	# Stopping is the panic gesture and must win whatever else is held.
+	chords.update(down.call([
+		&"strafe_left", &"strafe_right", &"thrust_forward", &"rotate_left", &"rotate_right",
+	]), 1.0)
+	_expect(
+		chords.active() == ControlChords.Chord.KILL_ROTATION,
+		"grabbing A and D means stop, whatever else the hands are doing",
+	)
 
 
 func _check_configuration_report() -> void:

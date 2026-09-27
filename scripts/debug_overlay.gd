@@ -154,6 +154,8 @@ func _command_summary() -> String:
 		parts.append("%s %.2f" % [_ship.control.command_name(command), _ship.active_commands[command]])
 	if _ship.kill_rotation_command:
 		parts.append("KILLROT")
+	if _ship.heading_command != ControlChords.Chord.NONE:
+		parts.append(ControlChords.Chord.keys()[int(_ship.heading_command)])
 	if _ship.brake_command:
 		parts.append("BRAKE")
 	return " ".join(parts) if not parts.is_empty() else "-"
