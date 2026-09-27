@@ -43,7 +43,16 @@ const FIELDS: Array[Dictionary] = [
 	{"name": "cloud_opacity", "label": "chmury krycie", "min": 0.0, "max": 1.0, "step": 0.05},
 ]
 
-const PANEL_WIDTH: float = 250.0
+const PANEL_WIDTH: float = 226.0
+
+## Everything in the panel is drawn at this size. Set through a Theme rather
+## than per control, because a SpinBox keeps its own default height otherwise:
+## at the stock size twenty rows come to six hundred pixels in a window three
+## hundred and sixty tall, and the bottom half simply is not there.
+const FONT_SIZE: int = 8
+
+## Margin between the panel and the edge of the screen.
+const SCREEN_MARGIN: int = 6
 
 var _planet: Planet = null
 var _panel: PanelContainer = null
@@ -111,18 +120,40 @@ func toggle() -> void:
 
 
 func _build_ui() -> void:
+	# Anchored to the whole screen so the panel knows how tall it is allowed to
+	# be, whatever the window does. The list inside scrolls; FIELDS is meant to
+	# grow every time someone wonders about a parameter, and a panel that has
+	# to be counted before adding a row would stop growing.
+	var margin: MarginContainer = MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side: String in ["left", "top", "right", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, SCREEN_MARGIN)
+	add_child(margin)
+
+	var compact: Theme = Theme.new()
+	compact.default_font_size = FONT_SIZE
+
 	_panel = PanelContainer.new()
-	_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_panel.position = Vector2(8, 8)
-	_panel.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
-	add_child(_panel)
+	_panel.theme = compact
+	_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	# Fills the height it is given rather than shrinking to its contents: a
+	# ScrollContainer asks for no height at all, so shrinking collapsed the
+	# whole panel to nothing.
+	_panel.size_flags_vertical = Control.SIZE_FILL
+	margin.add_child(_panel)
+
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(PANEL_WIDTH, 0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_panel.add_child(scroll)
 
 	var rows: VBoxContainer = VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 2)
-	_panel.add_child(rows)
+	rows.add_theme_constant_override("separation", 1)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
 
-	rows.add_child(_heading("KONFIGURATOR PLANETY - GRA W PAUZIE"))
-	rows.add_child(_heading("F6 lub Esc zamyka"))
+	rows.add_child(_heading("PLANETA - PAUZA - F6 / P / Esc zamyka"))
 
 	_seed_spin = SpinBox.new()
 	_seed_spin.min_value = 0
@@ -148,20 +179,27 @@ func _build_ui() -> void:
 	rows.add_child(_labelled("typ nieba", _cloud_type))
 
 	_surface_picker = ColorPickerButton.new()
-	_surface_picker.custom_minimum_size = Vector2(60, 16)
+	_surface_picker.custom_minimum_size = Vector2(40, 12)
 	rows.add_child(_labelled("kolor gruntu", _surface_picker))
 
 	_atmosphere_picker = ColorPickerButton.new()
-	_atmosphere_picker.custom_minimum_size = Vector2(60, 16)
+	_atmosphere_picker.custom_minimum_size = Vector2(40, 12)
 	rows.add_child(_labelled("kolor nieba", _atmosphere_picker))
 
-	rows.add_child(_button("Nowy seed (losuj wszystko)", _on_reroll))
-	rows.add_child(_button("Przebuduj i wyląduj", _on_rebuild))
-	rows.add_child(_button("Następne lądowisko", _on_next_site))
-	rows.add_child(_button("Zamknij", toggle))
+	# One row of three: four stacked buttons pushed the last of them off the
+	# bottom of a 360 px screen, and closing has three keys already.
+	var actions: HBoxContainer = HBoxContainer.new()
+	for entry: Array in [
+		["Nowy seed", _on_reroll],
+		["Przebuduj", _on_rebuild],
+		["Lądowisko", _on_next_site],
+	]:
+		var button: Button = _button(String(entry[0]), entry[1] as Callable)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		actions.add_child(button)
+	rows.add_child(actions)
 
 	_status = Label.new()
-	_status.add_theme_font_size_override("font_size", 9)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rows.add_child(_status)
 
@@ -169,7 +207,6 @@ func _build_ui() -> void:
 func _heading(text: String) -> Label:
 	var label: Label = Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 10)
 	return label
 
 
@@ -177,8 +214,7 @@ func _labelled(text: String, control: Control) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	var label: Label = Label.new()
 	label.text = text
-	label.custom_minimum_size = Vector2(96, 0)
-	label.add_theme_font_size_override("font_size", 9)
+	label.custom_minimum_size = Vector2(86, 0)
 	row.add_child(label)
 	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(control)
@@ -188,7 +224,6 @@ func _labelled(text: String, control: Control) -> HBoxContainer:
 func _button(text: String, handler: Callable) -> Button:
 	var button: Button = Button.new()
 	button.text = text
-	button.add_theme_font_size_override("font_size", 9)
 	button.pressed.connect(handler)
 	return button
 

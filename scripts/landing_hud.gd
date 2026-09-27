@@ -34,6 +34,10 @@ var _ship: Ship = null
 
 
 func _ready() -> void:
+	# Keeps reading while the tree is paused, so the planet configurator can
+	# rebuild a world and show its numbers without unpausing first. A readout
+	# that freezes with stale values is worse than no readout.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
 
