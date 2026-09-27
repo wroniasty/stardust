@@ -11,6 +11,7 @@ extends SceneTree
 
 const SHIP_SCENE: String = "res://scenes/ship.tscn"
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
+const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
 
 ## A seed known to produce a planet with air. Picked once, kept fixed so the
 ## numbers below stay meaningful.
@@ -1397,6 +1398,47 @@ func _check_scanner(planet: Planet) -> void:
 	_expect(far.size() == 1, "a body outside its own well is still reported")
 	if far.size() == 1:
 		_expect(not bool(far[0]["inside"]), "but it is marked as outside the well")
+
+	# Loot rides the same ring but answers to its own range, and is worth a
+	# mark even on screen -- eight pixels of box against a whole planet.
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	crate.hold(WeaponData.new(), 3)
+	root.add_child(crate)
+
+	ship.global_position = Vector2(50000.0, 50000.0)
+	crate.global_position = ship.global_position + Vector2(0.0, scanner.loot_range + 10.0)
+	to_screen = Transform2D(0.0, centre - ship.global_position)
+	_expect(
+		scanner.loot_contacts(to_screen, view).is_empty(),
+		"a crate past the loot range is not reported, though a planet at that range would be",
+	)
+
+	crate.global_position = ship.global_position + Vector2(0.0, 1200.0)
+	var near: Array[Dictionary] = scanner.loot_contacts(
+		Transform2D(0.0, centre - ship.global_position), view,
+	)
+	_expect(near.size() == 1, "a crate inside the loot range is reported")
+	if near.size() == 1:
+		_expect(bool(near[0]["on_ring"]), "off screen it goes on the ring")
+		_expect(int(near[0]["rarity"]) == 3, "and carries its rarity, which is its colour")
+
+	crate.global_position = ship.global_position + Vector2(20.0, 30.0)
+	var seen: Array[Dictionary] = scanner.loot_contacts(
+		Transform2D(0.0, centre - ship.global_position), view,
+	)
+	_expect(seen.size() == 1, "a crate on screen is still reported")
+	if seen.size() == 1:
+		_expect(
+			not bool(seen[0]["on_ring"])
+			and (seen[0]["at"] as Vector2).is_equal_approx(centre + Vector2(20.0, 30.0)),
+			"and is marked where it actually is, not shoved out to the edge",
+		)
+
+	_expect(
+		scanner.contacts(Transform2D(0.0, centre - ship.global_position), view).is_empty(),
+		"a crate is not mistaken for a celestial body",
+	)
+	crate.queue_free()
 
 	_expect(scanner.distance_text(12345.0) == "12.3k", "long distances are shortened")
 	_expect(scanner.distance_text(-5.0) == "0", "and being underground does not read as negative")

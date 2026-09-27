@@ -135,7 +135,7 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, afiksy. Hardpoint to montaż z listą dopuszczalnych typów, `fit()` oddaje poprzednią broń.
 - [x] `LootGenerator`: tabele rzadkości, afiksy, generacja broni i silników. Pięć poziomów rzadkości, 0..4 afiksy, siła jako wykładnik; każdy przedmiot z jawnego seeda.
 - [x] `EngineData.bulk`: gabaryt silnika jako jego masa i zarazem warunek zmieszczenia się w slocie (`bulk <= size`). Typy zostają otwarte; ceną za dziwne dopasowanie jest fizyka, nie tabelka.
-- [x] Skaner jako element HUD: znaczniki ciał niebieskich na obrzeżu ekranu, kierunek, odległość do powierzchni, rozmiar pozorny, wygaszenie poza polem grawitacyjnym. Zalążek — zasięg stały, w M5 własność modułu skanera.
+- [x] Skaner jako element HUD: trójkąty dla ciał niebieskich (kierunek, odległość do powierzchni, rozmiar ciała, wygaszenie poza polem grawitacyjnym) i romby dla lootu (kolor z rzadkości, osobny krótszy zasięg, znacznik także na ekranie). Zalążek — zasięgi stałe, w M5 własność modułu skanera.
 - [ ] Pozostałe typy broni: laser, dumb missile, homing missile, AoE, pulse.
 - [x] Skrzynki z lootem na powierzchni planety, podnoszenie, wymiana modułu w locie (Tab, bez pauzy). Skrzynki stoją na półkach do lądowania, kolor z rzadkości.
 - [ ] Energia: `GeneratorData` (pojemność, recharge, timeout, bulk) jako moduł, pula na statku liczona w `_physics_process`, minimalna szyna wbudowana w kadłub, gdy generatora nie ma (IDEAS.md sekcja 14).

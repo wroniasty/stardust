@@ -1138,7 +1138,34 @@ stąd". Skaner zamienia to na kierunek i liczbę.
   — kiedy dojdzie kamera lądowania z VISUALS V4 — obrót kamery. Liczenie kąta
   ręcznie w przestrzeni świata cicho by się wtedy rozjechało.
 
-Zasięg jest na razie stałą. W M5 staje się własnością modułu skanera: lepszy
+#### Loot na skanerze
+
+Skrzynki dostają **romb**, nie trójkąt, żeby nigdy nie czytały się jak mała
+planeta, i **własny, dużo krótszy zasięg** (4000 px wobec 20000): skrzynka po
+drugiej stronie układu nie jest decyzją, tylko szumem. Kolor to rzadkość — ta
+sama tabela, którą pomalowane jest samo pudełko. Lista jest sortowana od
+najbliższej i przycinana, żeby ograna planeta nie zamieniła krawędzi ekranu w
+płot.
+
+Dwie rzeczy różnią loot od ciał niebieskich i obie są celowe:
+
+- **Skrzynka dostaje znacznik także wtedy, kiedy jest na ekranie.** Planeta
+  przestaje go potrzebować, gdy ją widać; skrzynka to 12 px pudełka na tle
+  całej planety terenu, a wskaźnik znikający w chwili, gdy zwracasz się ku
+  rzeczy, którą wskazywał, zawodzi dokładnie wtedy, kiedy jest używany. Na
+  ekranie jest to pusty romb **obejmujący** skrzynkę. Pierwsza wersja miała
+  9 px i kolor rzadkości — czyli była mniejsza od pudełka i w dokładnie tym
+  samym kolorze co ono. Rysowała się bezbłędnie i była niewidoczna; teraz ma
+  30 px i wychodzi poza poświatę.
+- **Kolizje etykiet są rozstrzygane, nie ignorowane.** Dwa znaczniki w prawie
+  tym samym kierunku drukowały liczby jedna na drugiej, co czyta się jak jedna
+  zła liczba, a nie jak dwie dobre (złapane na zrzucie: planeta i skrzynka po
+  jej drugiej stronie, obie na górze pierścienia, `12249`). Pierwsza etykieta
+  zajmuje miejsce; ciała rysują się przed lootem, a loot od najbliższego, więc
+  z kolizji wychodzi odczyt bardziej wart posiadania. Znaczniki zostają
+  zawsze — gubi się tylko liczba.
+
+Zasięgi są na razie stałymi. W M5 stają się własnością modułu skanera: lepszy
 skaner widzi dalej, i to jest kolejna rzecz, którą można znaleźć w skrzynce.
 
 ## 9. Seamless: streaming świata

@@ -15,6 +15,12 @@ extends Area2D
 ## the ship can take it -- the hold might be full -- so it waits to be told.
 signal touched(crate: LootCrate, body: Node)
 
+## Every crate joins this, so anything that wants to find loot -- the scanner
+## now, salvage and cargo later -- asks the group rather than walking the
+## planet's children. The same shape as Planet.GRAVITY_GROUP, and for the same
+## reason: the day crates stop hanging off planets, one line changes.
+const LOOT_GROUP: StringName = &"loot"
+
 ## What is inside, and how good it is. Rarity travels alongside the item
 ## because neither WeaponData nor EngineData carries it: rarity is a fact
 ## about the roll, not about the module.
@@ -36,6 +42,7 @@ const RARITY_COLORS: Array[Color] = [
 
 
 func _ready() -> void:
+	add_to_group(LOOT_GROUP)
 	body_entered.connect(_on_body_entered)
 	_paint()
 
