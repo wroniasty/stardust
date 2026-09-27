@@ -473,7 +473,7 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 	# Torque comes from the lever arm to the centre of mass, not to the origin.
 	# On this hull they are ~3 px apart, which is enough to matter.
 	var centre_of_mass: Vector2 = body_transform.origin + state.center_of_mass
-	var impact_speed: float = _apply_contact_impulses(state, centre_of_mass, points, normals)
+	var impact_speed: float = _apply_contact_impulses(state, planet, centre_of_mass, points, normals)
 
 	# Positional correction is deliberately partial and leaves a sliver of
 	# overlap. Pushing the hull fully clear every tick adds height that gravity
@@ -495,6 +495,7 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 ## changes the closing speed at the tail. Four is plenty for six points.
 func _apply_contact_impulses(
 	state: PhysicsDirectBodyState2D,
+	planet: Planet,
 	centre_of_mass: Vector2,
 	points: Array[Vector2],
 	normals: Array[Vector2],
@@ -507,8 +508,15 @@ func _apply_contact_impulses(
 		for i: int in range(points.size()):
 			var arm: Vector2 = points[i] - centre_of_mass
 			var normal: Vector2 = normals[i]
+			# Everything here is measured against the GROUND, not the world.
+			# The rock at this point is moving if the planet turns, and a
+			# solver that does not know it drives the hull to a standstill in
+			# world space instead -- which is the planet sliding out from
+			# under a ship that looks parked (IDEAS.md section 7).
+			var ground: Vector2 = planet.surface_velocity_at(points[i])
+			var relative: Vector2 = _velocity_at(state, arm) - ground
 
-			var closing: float = _velocity_at(state, arm).dot(normal)
+			var closing: float = relative.dot(normal)
 			if closing >= 0.0:
 				continue
 			if iteration == 0:
@@ -527,7 +535,8 @@ func _apply_contact_impulses(
 
 			# Coulomb friction along the surface, capped by the normal impulse.
 			var tangent: Vector2 = Vector2(-normal.y, normal.x)
-			var sliding: float = _velocity_at(state, arm).dot(tangent)
+			# Re-read after the normal impulse, and again against the ground.
+			var sliding: float = (_velocity_at(state, arm) - ground).dot(tangent)
 			var tangent_arm: float = arm.cross(tangent)
 			var tangent_mass: float = inverse_mass + tangent_arm * tangent_arm * inverse_inertia
 			if tangent_mass <= 0.0:

@@ -61,6 +61,12 @@ const HARD_DESCENT: float = 120.0
 const TEST_SPIN: float = 0.02
 const RIDE_TICKS: int = 120
 
+## Long enough for a hull dropped on a turning planet to settle and then be
+## watched for a while. Friction needs a moment to bring it up to the speed of
+## the ground, so the slip is measured over the second half only.
+const GROUND_RIDE_TICKS: int = 240
+const GROUND_RIDE_SETTLE: int = 120
+
 ## Long enough for a round to cross the gap below and dig in.
 const WEAPON_TICKS: int = 60
 
@@ -83,7 +89,7 @@ const DEATH_TICKS: int = 900
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
 	ROTATE_DAMAGED, KILL_ROTATION, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
-	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE,
+	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
 
 var _phase: int = Phase.FIELD
@@ -114,6 +120,12 @@ var _peak_turn_during_brake: float = 0.0
 var _peak_speed: float = 0.0
 var _flat_angle: float = 0.0
 var _steep_angle: float = 0.0
+## Where the resting hull sat in the planet's own frame once it had settled,
+## and how far it drifted from there afterwards.
+var _ground_start_polar: float = 0.0
+var _ground_slip: float = 0.0
+var _ground_contacts: int = 0
+
 var _ride_start_world: Vector2 = Vector2.ZERO
 var _ride_start_polar: float = 0.0
 var _took_off: bool = false
@@ -185,6 +197,12 @@ func _physics_process(delta: float) -> bool:
 			_ship.commands[ShipControl.Command.FORWARD] = 1.0
 		if _ticks > RIDE_TICKS - 20 and _ship.flight_mode == Ship.FlightMode.PHYSICAL:
 			_took_off = true
+	elif _phase == Phase.GROUND_RIDE:
+		if _ticks == GROUND_RIDE_SETTLE:
+			_ground_start_polar = _polar_angle()
+		if _ticks > GROUND_RIDE_SETTLE:
+			_ground_slip = absf(angle_difference(_polar_angle(), _ground_start_polar))
+			_ground_contacts = maxi(_ground_contacts, _ship.get_terrain_contacts())
 	elif _phase == Phase.DEATH:
 		if _death_reported and _respawn_radius == 0.0:
 			# The world is not in this scene, so the test stands in for it and
@@ -410,6 +428,8 @@ func _phase_ticks() -> int:
 			return DEATH_TICKS
 		Phase.FREE_FALL:
 			return FALL_TICKS
+		Phase.GROUND_RIDE:
+			return GROUND_RIDE_TICKS
 		Phase.ORBIT:
 			return ORBIT_TICKS
 		Phase.ELLIPSE:
@@ -509,6 +529,23 @@ func _begin_phase() -> void:
 			_round_container = _ship.projectile_container()
 			_round_container.child_entered_tree.connect(_on_round_spawned)
 			_ship.fire_command = true
+		Phase.GROUND_RIDE:
+			# Dropped onto a turning planet with the LEGS UP, so the landing
+			# check refuses it and the contact solver is what holds it there.
+			# That is the path a ship is on whenever it is sitting on rock
+			# without having landed properly, and it was the one that slid.
+			_planet.spin_rate = TEST_SPIN
+			_ground_start_polar = 0.0
+			_ground_slip = 0.0
+			_ground_contacts = 0
+			if _ship.gear != null:
+				_ship.gear.set_deployed(false)
+				_ship.gear.extension = 0.0
+			_ground_radius = _find_ground(_planet, -PI * 0.5)
+			_ship.global_position = _planet.global_position + Vector2.UP * (_ground_radius + 12.0)
+			_ship.global_rotation = 0.0
+			_ship.linear_velocity = Vector2.ZERO
+			_ship.angular_velocity = 0.0
 		Phase.ELLIPSE:
 			# Just above the air, thrown tangentially harder than a circle
 			# needs: the launch point is then exactly the periapsis, which is
@@ -845,6 +882,18 @@ func _evaluate_phase() -> void:
 				_ship.hull_integrity == _self_hit_hull,
 				"a ship is not hit by its own muzzle blast (hull %.2f)" % _ship.hull_integrity,
 			)
+		Phase.GROUND_RIDE:
+			_expect(_ground_contacts > 0, "the hull really is resting on the rock")
+			# What the ground did underneath it while it was watched. Sliding
+			# instead of being carried shows up as the hull keeping its world
+			# position while this angle runs away.
+			var turned: float = TEST_SPIN * float(GROUND_RIDE_TICKS - GROUND_RIDE_SETTLE) / 60.0
+			_expect(
+				_ground_slip < turned * 0.25,
+				"a hull resting on a turning planet is carried, not slid (%.4f rad of slip, ground turned %.4f)" % [
+					_ground_slip, turned,
+				],
+			)
 		Phase.DEATH:
 			_expect(_death_reported, "a fatal impact reports the ship destroyed")
 			_expect(
@@ -903,9 +952,18 @@ func _evaluate_phase() -> void:
 					resting, _ground_radius,
 				],
 			)
+			# Measured against the GROUND, not the world. A hull at rest on a
+			# turning planet is moving in world coordinates, and it should be:
+			# checking the world speed would pass a ship that is sliding and
+			# fail one that is correctly being carried along.
+			var ground_speed: float = (
+				_ship.linear_velocity - _planet.surface_velocity_at(_ship.global_position)
+			).length()
 			_expect(
-				_ship.linear_velocity.length() < 20.0,
-				"a landed ship comes to rest (%.1f px/s)" % _ship.linear_velocity.length(),
+				ground_speed < 5.0,
+				"a landed ship comes to rest on the ground (%.1f px/s relative, %.1f absolute)" % [
+					ground_speed, _ship.linear_velocity.length(),
+				],
 			)
 			# The bug this replaced: an aggregated central impulse produced no
 			# torque at all, so a ship landing on one corner never tipped.
@@ -1180,6 +1238,13 @@ func _check_determinism(planet: Planet) -> void:
 		"the same seed rolls the same planet twice",
 	)
 	planet.generate(planet.planet_seed)
+
+
+## Where the ship sits in the planet's own frame, which is the only place a
+## slip against the ground can be seen: in world coordinates a carried ship and
+## a sliding one both move.
+func _polar_angle() -> float:
+	return (_ship.global_position - _planet.global_position).angle() - _planet.global_rotation
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

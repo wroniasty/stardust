@@ -580,6 +580,33 @@ lądowania przychodzą w M1.6.
 
 Lądowanie jest mechaniką skillową. Trudność wynika z parametrów (G, stan silników, atmosfera, teren), nie ze skryptów.
 
+
+**Kontakty liczy się względem gruntu, nie względem świata.** Solver brał
+prędkość kadłuba w układzie świata, więc tarcie dążyło do zatrzymania statku
+**w świecie** — a grunt pod nim jedzie, bo planeta się obraca. Efekt: statek
+stojący na powierzchni ślizgał się po niej, i to tym szybciej, im szybciej
+kręci się planeta (przy `MAX_SPIN_RATE` to 20 px/s, a konfiguratorem można
+ustawić dziesięć razy tyle).
+
+Poprawka jest jednolinijkowa w zamyśle: prędkość w punkcie kontaktu to
+`_velocity_at(...) - planet.surface_velocity_at(punkt)`, i to zarówno dla
+składowej normalnej, jak i stycznej. Tarcie zaczyna wtedy dociągać statek do
+prędkości gruntu, czyli robi to, co tarcie.
+
+Dlaczego testy tego nie widziały: jedyny test obrotu planety sprawdzał statek
+**zamrożony po udanym lądowaniu**, którego pozycję przelicza osobny kod
+(`polar_to_world`), a nie solver. Ścieżka, na której statek po prostu leży na
+skale — podwozie schowane, lądowanie odrzucone, kontakt trzyma go solverem —
+nie miała żadnego pokrycia. Doszła faza GROUND_RIDE: zrzut na obracającą się
+planetę ze schowanym podwoziem i pomiar dryfu w ramce planety. Bez poprawki
+0.0165 rad poślizgu na 0.0400 rad obrotu gruntu, z poprawką 0.0031.
+
+Przy okazji wyszło, że test „a landed ship comes to rest" mierzył prędkość
+względem świata. Po poprawce statek stojący na planecie *ma* prędkość w
+świecie (8.0 px/s na tym seedzie) i to jest poprawne, więc test mierzył od
+tamtej chwili złą rzecz: przepuściłby ślizgający się statek i odrzucił
+prawidłowo niesiony. Mierzy teraz prędkość względem gruntu, co pozwoliło
+zacieśnić próg z 20 do 5 px/s — wychodzi 0.2.
 ### Podwozie i warunki udanego lądowania
 
 Statek ma podwozie jako 2 do 3 punktów kontaktu na kadłubie, wysuwane klawiszem. Wysunięte podwozie zwiększa drag w atmosferze; lądowanie bez podwozia daje obrażenia.
