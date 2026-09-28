@@ -92,6 +92,7 @@ Cel: piaskownica. Jeden statek, jedna planeta, można latać, spadać, rozbijać
 - [x] Konfigurator planety (F6): parametry generatora w panelu, przebudowa planety i teleport na jej lądowisko. Wymusił rozdzielenie `roll_parameters()` od `rebuild()` w `Planet` (IDEAS.md sekcja 5).
 - [x] `tools/cloud_preview.tscn`: zrzuty archetypów chmur do PNG.
 - [x] `tools/check.ps1`: przebieg gry plus smoke test, wspólne wyłapywanie błędów silnika i shaderów.
+- [x] `CreativeTool` (`T`): sandbox. Spawnowanie dowolnego modułu do ładowni/cargo przez prawdziwy generator, wymiana kształtu kadłuba na jeden z sześciu presetów ze skalą, naprawa/naładowanie/uszkodzenie statku, i raport konfiguracji na żywo. Powstał, bo większości z M2 nie da się ocenić inaczej niż lotem.
 
 Gotowe, gdy: da się wystartować z powierzchni, wejść na orbitę i na niej zaparkować, zejść deorbitem na wybrane miejsce, wylądować na zboczu i zobaczyć, że to zależy od nachylenia i prędkości, rozwalić kawałek góry, rozbić się i od razu lecieć dalej.
 

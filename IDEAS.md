@@ -244,6 +244,38 @@ uszkodzenie nie ruszało w niej nic. Raport liczy teraz drugą resztkę, ważon�
 uszkodzenie za asymetrię, która była tam wcześniej. Zmierzone na statku z dyszą
 na 60%: `damage makes CW push sideways at 3.9 px/s2`.
 
+### Sandbox (`T`) i to, co od razu znalazł
+
+Większości z M2 nie da się ocenić inaczej niż lotem, a losowanie aż wypadnie
+gimballed drive nie jest testowaniem gimbala. Narzędzie spawnuje dowolny moduł
+**przez prawdziwy generator** — narzędzie, które umie wyczarować przedmiot
+niemożliwy, testuje grę, w którą nikt nie zagra — i podmienia kadłub na jeden
+z sześciu presetów ze skalą.
+
+Presety są rozrzutem, nie zestawem ładnych statków: długi cienki i szeroki
+płaski psują się inaczej, a chodzi o to, żeby się dowiedzieć jak. Jeden
+(`sliver`) jest celowo zły i raport ma go za takiego uznać.
+
+Znalazł dwie rzeczy w pierwszym przebiegu:
+
+- **Masa kadłuba była stałą 6,0 niezależnie od kształtu.** Cegła o czterokrotnie
+  większej powierzchni ważyła dokładnie tyle co stockowy trójkąt. Przechodziło
+  niezauważone, dopóki istniał jeden kadłub. Teraz masa to pole × gęstość, a
+  gęstość dobrana tak, żeby stockowy obrys nadal wychodził na 6,0 — więc nic,
+  co było pod niego strojone, się nie rusza.
+- **`_hull_polygon()` czytał kształt kolizji, nie obrys.** Kształt jest *pochodną*
+  obrysu, więc czytanie go w pierwszej kolejności było czytaniem kopii i
+  rozjeżdżało się w chwili, gdy obrys zmienił się bez przebudowy.
+
+Ostrzeżenia „obrót spycha statek w bok" przy każdym przebudowanym kadłubie **nie
+są błędem** — to udokumentowana konsekwencja z sekcji 3: zmiana obrysu przesuwa
+środek masy, a krzyż dysz zostaje na miejscu i para przestaje się znosić. Nowy
+kadłub potrzebuje mountów dobranych pod siebie i raport mówi to wprost.
+
+**Rysunek podąża za kształtem tylko w sandboxie.** W grze kadłub rysowany i
+liczony to dwie różne rzeczy (sekcja 6); w narzędziu trzymane są razem, bo
+inaczej przebudowa kształtu nie byłaby widoczna.
+
 ### Komputer lotu: rozdział ciągu przez najmniejsze kwadraty
 
 Heurystyka wag sortuje silniki do grup po tym, jak czysto każdy pcha wzdłuż

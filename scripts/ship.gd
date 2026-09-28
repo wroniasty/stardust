@@ -71,9 +71,18 @@ const RESTITUTION_CUTOFF: float = 30.0
 const PENETRATION_SLOP: float = 0.5
 const PENETRATION_CORRECTION: float = 0.6
 
-## Mass of the bare hull, before any modules. Modules add their mount size on
-## top, which is what lets fitting and losing them move the centre of mass.
-const HULL_MASS: float = 6.0
+## Mass of the bare hull per square pixel of outline.
+##
+## Was a flat 6.0 whatever the shape, which went unnoticed while there was
+## one hull and became obvious the moment the sandbox could make another: a
+## brick four times the area of the stock dart weighed exactly the same. The
+## density is set so the stock outline still comes out at 6.0, so nothing
+## that was tuned against it moves.
+const HULL_DENSITY: float = 6.0 / 176.0
+
+## What the bare hull weighs today. Derived, not declared.
+func hull_mass() -> float:
+	return maxf(_polygon_area(_hull_polygon()) * HULL_DENSITY, 0.0001)
 
 ## Floor for the angular speed at which kill rotation gives up pulsing and just
 ## zeroes the spin. The real threshold is computed per tick from the ship's own
@@ -592,10 +601,11 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 func _recompute_mass_properties() -> void:
 	var polygon: PackedVector2Array = _hull_polygon()
 	var hull_centroid: Vector2 = _polygon_centroid(polygon)
-	var hull_inertia: float = _polygon_inertia(polygon, HULL_MASS, hull_centroid)
+	var bare: float = hull_mass()
+	var hull_inertia: float = _polygon_inertia(polygon, bare, hull_centroid)
 
-	var total_mass: float = HULL_MASS
-	var weighted: Vector2 = hull_centroid * HULL_MASS
+	var total_mass: float = bare
+	var weighted: Vector2 = hull_centroid * bare
 	for engine: EngineInstance in engines:
 		var module: float = engine.mount.module_mass()
 		total_mass += module
@@ -618,7 +628,7 @@ func _recompute_mass_properties() -> void:
 
 	# Parallel axis theorem: the hull's own inertia about its centroid, shifted
 	# to the combined centre, plus each module as a point mass.
-	var total_inertia: float = hull_inertia + HULL_MASS * hull_centroid.distance_squared_to(centre)
+	var total_inertia: float = hull_inertia + bare * hull_centroid.distance_squared_to(centre)
 	for engine: EngineInstance in engines:
 		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
 	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
@@ -636,13 +646,25 @@ func _recompute_mass_properties() -> void:
 
 func _hull_polygon() -> PackedVector2Array:
 	var shape_node: CollisionShape2D = get_node_or_null("HullShape") as CollisionShape2D
+	if hull_outline.size() >= 3:
+		return hull_outline
+	# Only for a hull whose outline was never set: the collision shape is
+	# derived from the outline, so reading it in preference was reading a
+	# copy of the source and going stale the moment the outline changed
+	# without a rebuild.
 	if shape_node != null:
 		var convex: ConvexPolygonShape2D = shape_node.shape as ConvexPolygonShape2D
 		if convex != null and convex.points.size() >= 3:
 			return convex.points
-	# The outline is the source; the shape above is derived from it and this
-	# is only the path taken before _ready has run.
 	return hull_outline
+
+
+## Unsigned area of a polygon, by the shoelace sum.
+func _polygon_area(polygon: PackedVector2Array) -> float:
+	var twice: float = 0.0
+	for i: int in range(polygon.size()):
+		twice += polygon[i].cross(polygon[(i + 1) % polygon.size()])
+	return absf(twice) * 0.5
 
 
 func _polygon_centroid(polygon: PackedVector2Array) -> Vector2:

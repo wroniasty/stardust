@@ -1,0 +1,147 @@
+<svg viewBox="0 0 660 812" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Eurostile', 'Square721 BT', 'Arial Narrow', Arial, sans-serif"><title>HUD i konsola warsztatowa gry stardust w stylistyce Star Wars</title><desc>Dwie makiety ekranu 640x360. Kokpit: widok przez oszklenie zajmuje górę, celownik jako prostokąt z narożnymi kreskami, komputer celowniczy jako wpuszczony ekranik w metalowej obudowie z jednobarwną bursztynową grafiką, a dolną trzecią zajmuje fizyczna konsola z rzędami kwadratowych lampek, okienkami odczytów i przełącznikami. Konsola warsztatowa: cały ekran jest sprzętem, gniazda montażowe to podświetlane przyciski z opisami szablonowymi, kadłub widać jako bursztynowy szkielet na wpuszczonym ekranie, a autorytet silników pokazują grube paski pocięte na komórki. Paleta jest jednobarwna: bursztyn na czerni, lampki zielone i czerwone, blachy w odcieniach grafitu.</desc>
+<defs>
+<pattern id="hz" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="8" fill="#E8B317"/><rect x="4" width="4" height="8" fill="#1B1E21"/></pattern>
+<pattern id="scan" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#FFA820" opacity="0.07"/></pattern>
+<clipPath id="canopy"><rect x="26" y="0" width="588" height="276"/></clipPath>
+<clipPath id="tgt"><rect x="462" y="18" width="144" height="96"/></clipPath>
+<clipPath id="bay"><rect x="116" y="38" width="332" height="282"/></clipPath>
+</defs>
+<rect x="0" y="0" width="660" height="812" fill="#0A0A0C"/>
+
+<text x="10" y="16" font-size="11" fill="#78899C" font-family="ui-monospace, monospace">E — STAR WARS: sprzęt przed grafiką. Jednobarwny bursztyn, rzędy lampek, blacha i wpuszczony komputer celowniczy.</text>
+<g transform="translate(10,24)">
+<rect x="0" y="0" width="640" height="360" fill="#07090A"/>
+<g clip-path="url(#canopy)">
+<g fill="#8A9098" opacity="0.7"><rect x="60" y="24" width="1" height="1"/><rect x="128" y="52" width="1" height="1"/><rect x="196" y="18" width="1" height="1"/><rect x="264" y="66" width="1" height="1"/><rect x="352" y="30" width="1" height="1"/><rect x="440" y="58" width="1" height="1"/><rect x="520" y="22" width="1" height="1"/><rect x="580" y="74" width="1" height="1"/><rect x="96" y="108" width="1" height="1"/><rect x="300" y="96" width="1" height="1"/><rect x="480" y="112" width="1" height="1"/></g>
+<circle cx="320" cy="1010" r="750" fill="#161C22"/>
+<path d="M26 262 L120 258 L220 266 L320 260 L420 268 L520 258 L614 264" fill="none" stroke="#5A6470" stroke-width="1"/>
+<path d="M26 262 L120 258 L220 266 L320 260 L420 268 L520 258 L614 264 L614 276 L26 276 Z" fill="#232B33"/>
+</g>
+<g stroke="#FFA820" stroke-width="1" fill="none">
+<path d="M286 122 L286 112 L300 112"/><path d="M354 122 L354 112 L340 112"/><path d="M286 178 L286 188 L300 188"/><path d="M354 178 L354 188 L340 188"/>
+<path d="M314 150 L326 150"/><path d="M320 144 L320 156"/>
+</g>
+<g stroke="#FFA820" stroke-width="1" fill="none" opacity="0.5"><path d="M256 150 L276 150"/><path d="M364 150 L384 150"/></g>
+<g fill="#FF3B2F"><path d="M424 116 L436 110 L424 104 L428 110 Z"/></g>
+<g stroke="#FF3B2F" stroke-width="1" fill="none"><path d="M414 96 L406 96 L406 103"/><path d="M446 96 L454 96 L454 103"/><path d="M414 126 L406 126 L406 119"/><path d="M446 126 L454 126 L454 119"/></g>
+<text x="462" y="132" font-size="8" fill="#FF3B2F" font-family="ui-monospace, monospace">620</text>
+<rect x="0" y="0" width="26" height="276" fill="#33383C"/><rect x="25" y="0" width="1" height="276" fill="#1B1E21"/><rect x="0" y="0" width="1" height="276" fill="#474D52"/>
+<g><rect x="9" y="20" width="8" height="8" fill="#46E07A"/><rect x="9" y="34" width="8" height="8" fill="#46E07A"/><rect x="9" y="48" width="8" height="8" fill="#FFA820"/><rect x="9" y="62" width="8" height="8" fill="#14471F"/><rect x="9" y="76" width="8" height="8" fill="#14471F"/><rect x="9" y="90" width="8" height="8" fill="#4A1210"/><rect x="9" y="104" width="8" height="8" fill="#FF3B2F"/></g>
+<g fill="#1B1E21"><rect x="7" y="130" width="12" height="20" rx="2"/><rect x="7" y="156" width="12" height="20" rx="2"/><rect x="7" y="182" width="12" height="20" rx="2"/></g>
+<g fill="#5A6470"><rect x="8" y="131" width="10" height="9" rx="1"/><rect x="8" y="167" width="10" height="9" rx="1"/><rect x="8" y="183" width="10" height="9" rx="1"/></g>
+<rect x="614" y="0" width="26" height="276" fill="#33383C"/><rect x="614" y="0" width="1" height="276" fill="#1B1E21"/><rect x="639" y="0" width="1" height="276" fill="#474D52"/>
+<g><rect x="623" y="152" width="8" height="8" fill="#46E07A"/><rect x="623" y="166" width="8" height="8" fill="#14471F"/><rect x="623" y="180" width="8" height="8" fill="#14471F"/><rect x="623" y="194" width="8" height="8" fill="#FFA820"/><rect x="623" y="208" width="8" height="8" fill="#14471F"/></g>
+<rect x="458" y="14" width="152" height="104" fill="#33383C"/><rect x="458" y="14" width="152" height="1" fill="#474D52"/><rect x="458" y="117" width="152" height="1" fill="#1B1E21"/>
+<rect x="462" y="18" width="144" height="96" fill="#07090A"/>
+<g clip-path="url(#tgt)">
+<rect x="462" y="18" width="144" height="96" fill="url(#scan)"/>
+<path d="M466 84 L494 80 L522 88 L550 82 L578 88 L602 84" fill="none" stroke="#FFA820" stroke-width="1"/>
+<path d="M466 84 L494 80 L522 88 L550 82 L578 88 L602 84 L602 114 L466 114 Z" fill="#FFA820" opacity="0.1"/>
+<g stroke="#FFA820" stroke-width="1" fill="none"><path d="M516 82 L510 82 L510 76"/><path d="M556 82 L562 82 L562 76"/></g>
+<g stroke="#7A4E0C" stroke-width="1"><path d="M470 30 L470 70"/><path d="M470 36 L476 36"/><path d="M470 48 L476 48"/><path d="M470 60 L476 60"/></g>
+<g font-size="7" font-family="ui-monospace, monospace" fill="#FFA820"><text x="484" y="34">SHELF 04</text><text x="484" y="46">RNG  1412</text><text x="484" y="58">SLP   6.2</text><text x="484" y="70" fill="#FF3B2F">V/S -28.4</text></g>
+</g>
+<text x="462" y="128" font-size="7" fill="#99A0A8" letter-spacing="1">TARGETING COMPUTER</text>
+<rect x="0" y="276" width="640" height="84" fill="#33383C"/><rect x="0" y="276" width="640" height="1" fill="#474D52"/><rect x="0" y="359" width="640" height="1" fill="#1B1E21"/>
+<g fill="#1B1E21"><circle cx="8" cy="284" r="2"/><circle cx="632" cy="284" r="2"/><circle cx="8" cy="352" r="2"/><circle cx="632" cy="352" r="2"/></g>
+<g fill="#1B1E21"><rect x="170" y="280" width="1" height="76"/><rect x="330" y="280" width="1" height="76"/><rect x="470" y="280" width="1" height="76"/></g>
+<g fill="#474D52"><rect x="171" y="280" width="1" height="76"/><rect x="331" y="280" width="1" height="76"/><rect x="471" y="280" width="1" height="76"/></g>
+<g font-family="ui-monospace, monospace" font-size="7">
+<rect x="16" y="288" width="70" height="15" fill="#07090A"/><text x="20" y="299" fill="#7A4E0C">ALT</text><text x="82" y="299" fill="#FFA820" text-anchor="end">1412</text>
+<rect x="92" y="288" width="70" height="15" fill="#07090A"/><text x="96" y="299" fill="#7A4E0C">V/S</text><text x="158" y="299" fill="#FF3B2F" text-anchor="end">-28.4</text>
+<rect x="16" y="307" width="70" height="15" fill="#07090A"/><text x="20" y="318" fill="#7A4E0C">SPD</text><text x="82" y="318" fill="#FFA820" text-anchor="end">212</text>
+<rect x="92" y="307" width="70" height="15" fill="#07090A"/><text x="96" y="318" fill="#7A4E0C">SLP</text><text x="158" y="318" fill="#46E07A" text-anchor="end">6.2</text>
+</g>
+<text x="16" y="340" font-size="7" fill="#99A0A8" letter-spacing="1.4">FLIGHT DATA</text>
+<g>
+<g fill="#46E07A"><rect x="180" y="288" width="10" height="8"/><rect x="193" y="288" width="10" height="8"/><rect x="232" y="288" width="10" height="8"/><rect x="180" y="300" width="10" height="8"/><rect x="206" y="300" width="10" height="8"/></g>
+<g fill="#FFA820"><rect x="206" y="288" width="10" height="8"/><rect x="219" y="288" width="10" height="8"/><rect x="245" y="300" width="10" height="8"/></g>
+<g fill="#14471F"><rect x="245" y="288" width="10" height="8"/><rect x="258" y="288" width="10" height="8"/><rect x="271" y="288" width="10" height="8"/><rect x="193" y="300" width="10" height="8"/><rect x="219" y="300" width="10" height="8"/><rect x="232" y="300" width="10" height="8"/><rect x="258" y="300" width="10" height="8"/><rect x="271" y="300" width="10" height="8"/></g>
+<g fill="#FF3B2F"><rect x="284" y="288" width="10" height="8"/></g>
+<g fill="#4A1210"><rect x="284" y="300" width="10" height="8"/><rect x="297" y="288" width="10" height="8"/><rect x="297" y="300" width="10" height="8"/></g>
+</g>
+<g font-size="7" fill="#99A0A8" letter-spacing="1"><text x="180" y="322">ENG 1-6</text><text x="245" y="322">AUX</text><text x="284" y="322" fill="#FF3B2F">ENG 3</text></g>
+<text x="180" y="340" font-size="7" fill="#99A0A8" letter-spacing="1.4">SYSTEM STATUS</text>
+<g>
+<g fill="#FFA820"><rect x="340" y="288" width="18" height="13"/><rect x="361" y="288" width="18" height="13"/><rect x="382" y="288" width="18" height="13"/></g>
+<g fill="#3A2A10"><rect x="403" y="288" width="18" height="13"/><rect x="424" y="288" width="18" height="13"/><rect x="445" y="288" width="18" height="13"/></g>
+</g>
+<g><rect x="340" y="308" width="26" height="12" rx="2" fill="#1B1E21"/><rect x="341" y="309" width="24" height="5" rx="1" fill="#5A6470"/><rect x="372" y="308" width="26" height="12" rx="2" fill="#1B1E21"/><rect x="373" y="314" width="24" height="5" rx="1" fill="#5A6470"/><rect x="404" y="308" width="26" height="12" rx="2" fill="#1B1E21"/><rect x="405" y="309" width="24" height="5" rx="1" fill="#5A6470"/></g>
+<text x="340" y="340" font-size="7" fill="#99A0A8" letter-spacing="1.4">POWER · 3 SHOTS</text>
+<rect x="480" y="286" width="150" height="8" fill="url(#hz)"/>
+<g><rect x="480" y="298" width="150" height="12" fill="#1B1E21"/><rect x="480" y="298" width="130" height="12" fill="#FFA820"/></g>
+<text x="484" y="307" font-size="7" fill="#07090A" font-family="ui-monospace, monospace">HULL 87</text>
+<g><rect x="480" y="316" width="10" height="8" fill="#46E07A"/><text x="494" y="323" font-size="7" fill="#99A0A8" letter-spacing="1">GEAR DOWN</text><rect x="560" y="316" width="10" height="8" fill="#FFA820"/><text x="574" y="323" font-size="7" fill="#99A0A8" letter-spacing="1">HEAT</text></g>
+<text x="480" y="340" font-size="7" fill="#99A0A8" letter-spacing="1.4">HULL &amp; GEAR</text>
+<text x="480" y="352" font-size="7" fill="#5A6470" letter-spacing="1" font-family="ui-monospace, monospace">MODE: LANDING</text>
+</g>
+
+<text x="10" y="404" font-size="11" fill="#78899C" font-family="ui-monospace, monospace">F — STAR WARS, warsztat: cały ekran jest blachą. Gniazdo to przycisk z lampką, raport to grube paski i szablony.</text>
+<g transform="translate(10,412)">
+<rect x="0" y="0" width="640" height="360" fill="#33383C"/>
+<rect x="0" y="0" width="640" height="1" fill="#474D52"/><rect x="0" y="359" width="640" height="1" fill="#1B1E21"/>
+<rect x="8" y="6" width="624" height="10" fill="url(#hz)"/>
+<text x="8" y="30" font-size="9" fill="#E8E4D8" letter-spacing="1.6">MAINTENANCE BAY 04</text>
+<text x="632" y="30" font-size="9" fill="#99A0A8" letter-spacing="1.4" text-anchor="end">LIGHT FRAME · LANDED</text>
+<g fill="#1B1E21"><circle cx="8" cy="352" r="2"/><circle cx="632" cy="352" r="2"/></g>
+<g font-size="7" letter-spacing="1">
+<rect x="8" y="40" width="96" height="22" fill="#3C4247"/><rect x="8" y="40" width="96" height="1" fill="#4F565C"/><rect x="8" y="61" width="96" height="1" fill="#1B1E21"/><rect x="13" y="47" width="7" height="7" fill="#46E07A"/><text x="26" y="54" fill="#D8D4C8">MOUNT A MAIN</text>
+<rect x="8" y="66" width="96" height="22" fill="#3C4247"/><rect x="8" y="66" width="96" height="1" fill="#4F565C"/><rect x="8" y="87" width="96" height="1" fill="#1B1E21"/><rect x="13" y="73" width="7" height="7" fill="#46E07A"/><text x="26" y="80" fill="#D8D4C8">MOUNT B MAIN</text>
+<rect x="8" y="92" width="96" height="22" fill="#4A4438"/><rect x="8" y="92" width="96" height="1" fill="#6A6350"/><rect x="8" y="113" width="96" height="1" fill="#1B1E21"/><rect x="13" y="99" width="7" height="7" fill="#FFA820"/><text x="26" y="106" fill="#FFD9A0">MOUNT C OPEN</text>
+<rect x="8" y="118" width="96" height="22" fill="#4A4438"/><rect x="8" y="118" width="96" height="1" fill="#6A6350"/><rect x="8" y="139" width="96" height="1" fill="#1B1E21"/><rect x="13" y="125" width="7" height="7" fill="#FFA820"/><text x="26" y="132" fill="#FFD9A0">MOUNT D OPEN</text>
+<rect x="8" y="144" width="96" height="22" fill="#3C4247"/><rect x="8" y="144" width="96" height="1" fill="#4F565C"/><rect x="8" y="165" width="96" height="1" fill="#1B1E21"/><rect x="13" y="151" width="7" height="7" fill="#46E07A"/><text x="26" y="158" fill="#D8D4C8">HARD 1 GUN</text>
+<rect x="8" y="170" width="96" height="22" fill="#3C4247"/><rect x="8" y="170" width="96" height="1" fill="#4F565C"/><rect x="8" y="191" width="96" height="1" fill="#1B1E21"/><rect x="13" y="177" width="7" height="7" fill="#46E07A"/><text x="26" y="184" fill="#D8D4C8">HARD 2 GUN</text>
+<rect x="8" y="200" width="96" height="22" fill="#2E3A44"/><rect x="8" y="200" width="96" height="1" fill="#44525E"/><rect x="8" y="221" width="96" height="1" fill="#1B1E21"/><rect x="13" y="207" width="7" height="7" fill="#55AEFF"/><text x="26" y="214" fill="#BFD8EE">CARGO 1</text>
+</g>
+<text x="8" y="242" font-size="7" fill="#99A0A8" letter-spacing="1.4">MOUNT SELECT</text>
+<rect x="8" y="250" width="96" height="76" fill="#2A2E32"/><text x="14" y="264" font-size="7" fill="#5A6470" font-family="ui-monospace, monospace">SER 17-C</text><text x="14" y="276" font-size="7" fill="#5A6470" font-family="ui-monospace, monospace">HULL LF-2</text><text x="14" y="288" font-size="7" fill="#5A6470" font-family="ui-monospace, monospace">CYCLES 214</text>
+<rect x="112" y="34" width="340" height="290" fill="#1B1E21"/><rect x="112" y="34" width="340" height="1" fill="#474D52"/>
+<rect x="116" y="38" width="332" height="282" fill="#07090A"/>
+<g clip-path="url(#bay)">
+<rect x="116" y="38" width="332" height="282" fill="url(#scan)"/>
+<g stroke="#7A4E0C" stroke-width="1" opacity="0.5"><path d="M180 38 L180 320"/><path d="M248 38 L248 320"/><path d="M316 38 L316 320"/><path d="M384 38 L384 320"/><path d="M116 108 L448 108"/><path d="M116 178 L448 178"/><path d="M116 248 L448 248"/></g>
+<path d="M226 128 L334 128 L360 158 L360 194 L334 224 L226 224 L210 196 L210 156 Z" fill="#FFA820" opacity="0.08"/>
+<path d="M226 128 L334 128 L360 158 L360 194 L334 224 L226 224 L210 196 L210 156 Z" fill="none" stroke="#FFA820" stroke-width="1"/>
+<path d="M226 128 L226 224" stroke="#7A4E0C" stroke-width="1"/><path d="M334 128 L334 224" stroke="#7A4E0C" stroke-width="1"/>
+<g fill="#46E07A"><rect x="190" y="152" width="10" height="5"/><rect x="190" y="196" width="10" height="5"/><rect x="364" y="172" width="12" height="9"/></g>
+<g stroke="#FFA820" stroke-width="1" fill="none"><path d="M266 122 L266 112 L276 112"/><path d="M304 122 L304 112 L294 112"/><path d="M266 230 L266 240 L276 240"/><path d="M304 230 L304 240 L294 240"/></g>
+<g opacity="0.7"><rect x="274" y="98" width="22" height="12" fill="#FFA820"/><path d="M280 98 L280 90 L290 90 L290 98" fill="#FFA820"/></g>
+<text x="310" y="98" font-size="7" fill="#FFA820" letter-spacing="1">MK2 TORQUE</text><text x="310" y="108" font-size="7" fill="#46E07A" letter-spacing="1">FITS C+D</text>
+<g stroke="#7A4E0C" stroke-width="1"><path d="M270 176 L282 176"/><path d="M276 170 L276 182"/></g>
+<g stroke="#46E07A" stroke-width="1"><path d="M266 182 L278 182"/><path d="M272 176 L272 188"/></g>
+<text x="122" y="312" font-size="7" fill="#7A4E0C" font-family="ui-monospace, monospace">HULL OUTLINE = COLLISION</text>
+</g>
+<g font-family="ui-monospace, monospace" font-size="7">
+<rect x="460" y="40" width="172" height="15" fill="#07090A"/><text x="464" y="51" fill="#7A4E0C">MASS</text><text x="628" y="51" fill="#FFA820" text-anchor="end">4.20 t</text>
+<rect x="460" y="59" width="172" height="15" fill="#07090A"/><text x="464" y="70" fill="#7A4E0C">C OF M</text><text x="628" y="70" fill="#FFA820" text-anchor="end">2.1 aft</text>
+<rect x="460" y="78" width="172" height="15" fill="#07090A"/><text x="464" y="89" fill="#7A4E0C">INERTIA</text><text x="628" y="89" fill="#FFA820" text-anchor="end">1.84</text>
+</g>
+<rect x="460" y="102" width="172" height="8" fill="url(#hz)"/>
+<text x="460" y="124" font-size="7" fill="#99A0A8" letter-spacing="1.4">THRUST AUTHORITY</text>
+<g font-size="7" fill="#99A0A8" letter-spacing="1"><text x="460" y="140">FWD</text><text x="460" y="156">REV</text><text x="460" y="172">LEFT</text><text x="460" y="188">RIGHT</text><text x="460" y="204">ROT+</text><text x="460" y="220">ROT-</text></g>
+<g>
+<g fill="#FFA820"><rect x="496" y="132" width="11" height="9"/><rect x="509" y="132" width="11" height="9"/><rect x="522" y="132" width="11" height="9"/><rect x="535" y="132" width="11" height="9"/><rect x="548" y="132" width="11" height="9"/><rect x="561" y="132" width="11" height="9"/><rect x="574" y="132" width="11" height="9"/><rect x="587" y="132" width="11" height="9"/></g>
+<g fill="#2A2013"><rect x="600" y="132" width="11" height="9"/><rect x="613" y="132" width="11" height="9"/></g>
+<g fill="#FF3B2F"><rect x="496" y="148" width="11" height="9"/><rect x="509" y="148" width="11" height="9"/><rect x="522" y="148" width="11" height="9"/></g>
+<g fill="#2A2013"><rect x="535" y="148" width="11" height="9"/><rect x="548" y="148" width="11" height="9"/><rect x="561" y="148" width="11" height="9"/><rect x="574" y="148" width="11" height="9"/><rect x="587" y="148" width="11" height="9"/><rect x="600" y="148" width="11" height="9"/><rect x="613" y="148" width="11" height="9"/></g>
+<g fill="#FFA820"><rect x="496" y="164" width="11" height="9"/><rect x="509" y="164" width="11" height="9"/><rect x="522" y="164" width="11" height="9"/><rect x="535" y="164" width="11" height="9"/><rect x="548" y="164" width="11" height="9"/></g>
+<g fill="#2A2013"><rect x="561" y="164" width="11" height="9"/><rect x="574" y="164" width="11" height="9"/><rect x="587" y="164" width="11" height="9"/><rect x="600" y="164" width="11" height="9"/><rect x="613" y="164" width="11" height="9"/></g>
+<g fill="#FFA820"><rect x="496" y="180" width="11" height="9"/><rect x="509" y="180" width="11" height="9"/><rect x="522" y="180" width="11" height="9"/><rect x="535" y="180" width="11" height="9"/><rect x="548" y="180" width="11" height="9"/></g>
+<g fill="#2A2013"><rect x="561" y="180" width="11" height="9"/><rect x="574" y="180" width="11" height="9"/><rect x="587" y="180" width="11" height="9"/><rect x="600" y="180" width="11" height="9"/><rect x="613" y="180" width="11" height="9"/></g>
+<g fill="#46E07A"><rect x="496" y="196" width="11" height="9"/><rect x="509" y="196" width="11" height="9"/><rect x="522" y="196" width="11" height="9"/><rect x="535" y="196" width="11" height="9"/><rect x="548" y="196" width="11" height="9"/><rect x="561" y="196" width="11" height="9"/></g>
+<g fill="#14471F"><rect x="574" y="196" width="11" height="9"/><rect x="587" y="196" width="11" height="9"/><rect x="600" y="196" width="11" height="9"/><rect x="613" y="196" width="11" height="9"/></g>
+<g fill="#46E07A"><rect x="496" y="212" width="11" height="9"/><rect x="509" y="212" width="11" height="9"/><rect x="522" y="212" width="11" height="9"/><rect x="535" y="212" width="11" height="9"/><rect x="548" y="212" width="11" height="9"/><rect x="561" y="212" width="11" height="9"/></g>
+<g fill="#14471F"><rect x="574" y="212" width="11" height="9"/><rect x="587" y="212" width="11" height="9"/><rect x="600" y="212" width="11" height="9"/><rect x="613" y="212" width="11" height="9"/></g>
+</g>
+<g><rect x="460" y="234" width="172" height="14" fill="#4A1210"/><rect x="464" y="237" width="8" height="8" fill="#FF3B2F"/><text x="478" y="245" font-size="7" fill="#FFB0AA" letter-spacing="1.2">REVERSE THRUST LOW</text></g>
+<text x="460" y="266" font-size="7" fill="#99A0A8" letter-spacing="1.4">IF FITTED TO C+D</text>
+<g font-family="ui-monospace, monospace" font-size="7"><text x="460" y="280" fill="#46E07A">ROT+ 0.67 &#8594; 0.91</text><text x="460" y="292" fill="#46E07A">ROT- 0.64 &#8594; 0.88</text><text x="460" y="304" fill="#FF3B2F">MASS 4.20 &#8594; 4.58</text><text x="460" y="316" fill="#FFA820">COM  2.1 &#8594; 0.4 aft</text></g>
+<g font-size="7" letter-spacing="1.2">
+<rect x="112" y="332" width="76" height="20" rx="2" fill="#1B1E21"/><rect x="113" y="333" width="74" height="8" rx="1" fill="#5A6470"/><text x="150" y="348" fill="#D8D4C8" text-anchor="middle">SELECT</text>
+<rect x="194" y="332" width="76" height="20" rx="2" fill="#1B1E21"/><rect x="195" y="333" width="74" height="8" rx="1" fill="#FFA820"/><text x="232" y="348" fill="#FFD9A0" text-anchor="middle">F  FIT</text>
+<rect x="276" y="332" width="76" height="20" rx="2" fill="#1B1E21"/><rect x="277" y="344" width="74" height="8" rx="1" fill="#5A6470"/><text x="314" y="348" fill="#D8D4C8" text-anchor="middle">S  STOW</text>
+<rect x="358" y="332" width="90" height="20" rx="2" fill="#1B1E21"/><rect x="359" y="344" width="88" height="8" rx="1" fill="#FF3B2F"/><text x="403" y="348" fill="#FFB0AA" text-anchor="middle">DEL JETTISON</text>
+<rect x="460" y="332" width="172" height="20" rx="2" fill="#1B1E21"/><rect x="461" y="333" width="170" height="8" rx="1" fill="#5A6470"/><text x="546" y="348" fill="#D8D4C8" text-anchor="middle">I  CLOSE BAY</text>
+</g>
+</g>
+</svg>

@@ -32,6 +32,10 @@ const FORWARD_BURN_TICKS: int = 120
 ## would miss the assist overshooting afterwards.
 const AUTO_ORBIT_TICKS: int = 2400
 
+## Index of the preset the sandbox offers as a deliberately poor outline,
+## so the test that it is reported as poor names it rather than counting.
+const SLIVER_SHAPE: int = 5
+
 const HEADING_TICKS: int = 900
 const HEADING_TRAVEL: Vector2 = Vector2(140.0, -60.0)
 
@@ -966,6 +970,7 @@ func _evaluate_phase() -> void:
 			_check_gear_module()
 			_check_weapon_types(_planet)
 			_check_ship_fitouts()
+			_check_creative_tool()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -2986,6 +2991,73 @@ func _check_ship_fitouts() -> void:
 
 	minimal.queue_free()
 	full.queue_free()
+
+
+## The sandbox exists because most of what M2 built can only be judged by
+## flying it, and rolling for a gimballed drive until one drops is not
+## testing the gimbal. What has to hold is that nothing it conjures is
+## something the game could not have dropped, and that every shape it offers
+## actually goes through the machinery.
+func _check_creative_tool() -> void:
+	# Hull mass follows the outline now. It was a flat constant, which went
+	# unnoticed while there was one hull and became obvious the moment the
+	# sandbox could make another: a brick four times the area weighed the
+	# same as the dart.
+	var ship: Ship = _spawn_ship()
+	var stock_mass: float = ship.hull_mass()
+	_expect(
+		absf(stock_mass - 6.0) < 0.01,
+		"the stock outline still weighs what it always did (%.2f)" % stock_mass,
+	)
+
+	for shape: Dictionary in CreativeTool.SHAPES:
+		var outline: PackedVector2Array = PackedVector2Array(shape["outline"])
+		_expect(
+			Geometry2D.convex_hull(outline).size() >= outline.size(),
+			"%s is convex, as the guidelines ask" % shape["name"],
+		)
+
+		ship.hull_outline = outline
+		ship._build_contact_points()
+		ship._build_collision_shape()
+		ship.rebuild_control_groups(false)
+		_expect(
+			ship.contact_points().size() >= outline.size(),
+			"%s gets at least a contact point per corner (%d)" % [
+				shape["name"], ship.contact_points().size(),
+			],
+		)
+		var convex: ConvexPolygonShape2D = (
+			ship.get_node("HullShape") as CollisionShape2D
+		).shape as ConvexPolygonShape2D
+		_expect(
+			convex.points == Geometry2D.convex_hull(outline),
+			"%s hands the same shape to projectiles" % shape["name"],
+		)
+
+	# Twice the size is four times the area, so four times the mass.
+	var small: PackedVector2Array = PackedVector2Array(CreativeTool.SHAPES[0]["outline"])
+	ship.hull_outline = small
+	var one: float = ship.hull_mass()
+	var doubled: PackedVector2Array = PackedVector2Array()
+	for point: Vector2 in small:
+		doubled.append(point * 2.0)
+	ship.hull_outline = doubled
+	_expect(
+		absf(ship.hull_mass() / maxf(one, 0.0001) - 4.0) < 0.01,
+		"a hull twice as long is four times the mass (%.2fx)" % [ship.hull_mass() / one],
+	)
+
+	# And the one shape put in as a bad example has to be caught.
+	ship.hull_outline = PackedVector2Array(CreativeTool.SHAPES[SLIVER_SHAPE]["outline"])
+	ship._build_contact_points()
+	ship.rebuild_control_groups(false)
+	_expect(
+		_findings_of(ship.configuration()).contains("thinnest outline detail"),
+		"the deliberately bad preset is reported as bad",
+	)
+
+	ship.queue_free()
 
 
 func _check_configuration_report() -> void:
