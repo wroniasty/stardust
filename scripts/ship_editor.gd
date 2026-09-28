@@ -204,6 +204,9 @@ func _targets() -> Array[Node]:
 	elif item is GeneratorData:
 		if _ship.generator_bay != null and _ship.generator_bay.fits(item as GeneratorData):
 			out.append(_ship.generator_bay)
+	elif item is FlightComputerData:
+		if _ship.computer_bay != null and _ship.computer_bay.fits(item as FlightComputerData):
+			out.append(_ship.computer_bay)
 	return out
 
 
@@ -218,6 +221,8 @@ func _all_mounts() -> Array[Node]:
 		out.append(mount)
 	if _ship.generator_bay != null:
 		out.append(_ship.generator_bay)
+	if _ship.computer_bay != null:
+		out.append(_ship.computer_bay)
 	return out
 
 
@@ -251,6 +256,10 @@ func _fit() -> void:
 		var bay: GeneratorBay = slot as GeneratorBay
 		removed = bay.installed
 		bay.installed = item as GeneratorData
+	elif slot is ComputerBay:
+		var box: ComputerBay = slot as ComputerBay
+		removed = box.installed
+		box.installed = item as FlightComputerData
 
 	# Whatever came out goes back to the bay, or to the hold when the bay is
 	# full. Never nowhere: a swap must always be reversible.
@@ -593,6 +602,8 @@ func _label(item: Resource) -> String:
 		]
 	if item is GeneratorData:
 		return (item as GeneratorData).display_name
+	if item is FlightComputerData:
+		return (item as FlightComputerData).display_name
 	return "moduł"
 
 
@@ -614,6 +625,17 @@ func _describe(item: Resource) -> PackedStringArray:
 		out.append("ciąg %.0f   rozruch %.2f s   niezawodność %.2f   paliwo %.2f" % [
 			engine.max_thrust, engine.spool_time, engine.reliability, engine.fuel_cost,
 		])
+	elif item is FlightComputerData:
+		var box: FlightComputerData = item as FlightComputerData
+		var has: PackedStringArray = PackedStringArray()
+		if box.allocation == FlightComputerData.Allocation.NNLS:
+			has.append("rozdział ciągu")
+		if box.has_auto_level:
+			has.append("auto-poziom")
+		if box.has_auto_orbit:
+			has.append("auto-orbita")
+		out.append("funkcje: %s" % (", ".join(has) if not has.is_empty() else "żadne"))
+		out.append("pobór %.1f/s" % box.idle_draw)
 	elif item is GeneratorData:
 		var cell: GeneratorData = item as GeneratorData
 		out.append("pojemność %.0f   ładowanie %.0f/s   cisza %.2f s   pułap %.0f/s" % [

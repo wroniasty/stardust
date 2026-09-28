@@ -118,7 +118,7 @@ Pytania do rozstrzygnięcia na koniec M1 (zapisać odpowiedzi w IDEAS.md):
 
 Cel: statek jako zestaw modułów, które są lootem.
 
-- [ ] Komputer lotu: alokacja NNLS z rzeczywistymi ciągami i stanem silników, czysty obrót i czysty strafe mimo asymetrii i uszkodzeń. Zastępuje heurystykę wag z M1.1 tam, gdzie gracz znajdzie moduł.
+- [x] Komputer lotu jako moduł (`FlightComputerData` w `ComputerBay`): alokacja przez ograniczone najmniejsze kwadraty z rzeczywistym ciągiem i kondycją każdego silnika. Na uszkodzonym statku obrót zostawia 36 N zamiast 88 N siły bocznej.
 - [ ] Gimbal na silniku MAIN: sterowany wektor ciągu zamiast stałego kierunku montażu.
 - [x] Punkty kontaktu wyprowadzane z `hull_outline`: wierzchołki plus podział krawędzi krokiem 6 px (cztery teksele), liczone raz w `_ready()`. `HULL_POINTS` zniknęło.
 - [x] `CollisionShape2D` liczony z tego samego obrysu przez `Geometry2D.convex_hull()`. Jedno źródło — to, w co trafia pocisk, nie może się rozjechać z tym, co dotyka gruntu.
@@ -130,7 +130,7 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] Akordy klawiszy zamiast kolejnych przycisków: `A+D` zatrzymuje obrót (zastąpiło `X`), `Q+E+W` celuje na kierunek lotu, `Q+E+S` przeciwnie. Akord zjada swoje klawisze, okno ustalenia 60 ms, stop wygrywa z resztą.
 - [x] Lądowanie z uszkodzonymi silnikami: faza testu sadza statek z silnikami na 65% i niezawodnością 0,5 — da się wylądować.
 - [ ] Podwozie jako moduł (tolerancja nachylenia, próg prędkości) i moduły asystujące (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu).
-- [ ] Auto-orbit jako opcjonalna funkcja komputera lotu: część komputerów ją ma, część nie. Załącza się w polu grawitacyjnym i poza atmosferą, sam wchodzi na orbitę (IDEAS.md sekcja 8).
+- [x] Auto-orbit jako opcjonalna funkcja komputera (`Q+E+D`): obraca dziób na wektor korekty, potem pali. Elipsa 32% schodzi do 1,1% rozrzutu. Komputer bez tej funkcji odmawia. Auto-poziom na `Q+E+A`.
 - [x] Naprawa na klawiszu debug (`R`). Zużycie w czasie zostaje — dziś silniki psują się tylko od uderzeń.
 - [ ] Silniki manewrowe i hamujące, statek z pełnym zestawem vs statek minimalny.
 - [x] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, afiksy. Hardpoint to montaż z listą dopuszczalnych typów, `fit()` oddaje poprzednią broń.

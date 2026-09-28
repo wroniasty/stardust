@@ -128,6 +128,15 @@ const HEADING_MIN_SPEED: float = 8.0
 const HEADING_EPS: float = 0.02
 const HEADING_MAX_SPIN: float = 2.0
 
+## How close to circular counts as done, in px/s. Chasing the last fraction
+## would have the assist burning for ever against its own corrections.
+const AUTO_ORBIT_EPS: float = 1.5
+
+## How closely the nose must already be on the burn direction before the
+## assist lights the engine. Burning while still swinging round pushes the
+## ship somewhere it did not want to go and lengthens the job.
+const AUTO_ORBIT_ALIGNMENT: float = 0.92
+
 ## Heating. The hull warms with the power the air is dissipating, which for
 ## the linear damping the shells apply goes as density times speed squared.
 ## Tying it to the same quantity that does the braking is what stops the heat
@@ -219,6 +228,11 @@ var active_commands: Dictionary = {}
 ## Assist holds, set from input or by an AI.
 var kill_rotation_command: bool = false
 var brake_command: bool = false
+
+## The optional assists, engaged by the pilot and refused by the ship when
+## the computer in the bay does not offer them.
+var auto_orbit_command: bool = false
+var auto_level_command: bool = false
 
 ## Which way the heading assist is pointing the nose, if at all. Set from the
 ## Q+E+W and Q+E+S chords, and left here for an AI to drive the same way.
@@ -324,6 +338,9 @@ var _since_spend: float = 0.0
 ## The bay, if the hull has one. Found at ready like the other mounts.
 var generator_bay: GeneratorBay = null
 
+## The flight computer bay, if the hull has one.
+var computer_bay: ComputerBay = null
+
 ## Contact points along the outline, without the gear's. Built once.
 var _outline_contacts: Array[Vector2] = []
 
@@ -352,6 +369,8 @@ func _ready() -> void:
 			hardpoints.append(child as Hardpoint)
 		elif child is GeneratorBay:
 			generator_bay = child as GeneratorBay
+		elif child is ComputerBay:
+			computer_bay = child as ComputerBay
 		elif child is LandingGear:
 			gear = child as LandingGear
 	# Set once here rather than at every landing: it never changes, and writing
@@ -523,6 +542,12 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 	_aggregate_stats()
 	_recompute_mass_properties()
 	control.rebuild(engines, center_of_mass, mass, inertia)
+	# Which allocator runs is a property of the box in the bay, read once per
+	# refit rather than asked every tick.
+	var box: FlightComputerData = computer()
+	control.solve_allocation = (
+		box != null and box.allocation == FlightComputerData.Allocation.NNLS
+	)
 	# Fitting a smaller generator must not leave the pool holding more than
 	# the new one can. Topping it up on a swap is the other way round and
 	# would make refitting a free reload.
@@ -560,10 +585,12 @@ func _recompute_mass_properties() -> void:
 	total_mass += load
 	weighted += CARGO_BAY * load
 
-	if generator_bay != null:
-		var bay_mass: float = generator_bay.module_mass()
+	for bay: Node2D in [generator_bay, computer_bay]:
+		if bay == null:
+			continue
+		var bay_mass: float = bay.call("module_mass")
 		total_mass += bay_mass
-		weighted += generator_bay.position * bay_mass
+		weighted += bay.position * bay_mass
 
 	var centre: Vector2 = weighted / maxf(total_mass, 0.0001)
 
@@ -573,10 +600,11 @@ func _recompute_mass_properties() -> void:
 	for engine: EngineInstance in engines:
 		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
 	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
-	if generator_bay != null:
-		total_inertia += generator_bay.module_mass() * generator_bay.position.distance_squared_to(
-			centre
-		)
+	for bay: Node2D in [generator_bay, computer_bay]:
+		if bay != null:
+			total_inertia += float(bay.call("module_mass")) * bay.position.distance_squared_to(
+				centre
+			)
 
 	mass = total_mass
 	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
@@ -688,6 +716,9 @@ func fitted_modules() -> Array[Dictionary]:
 		var bay: GeneratorBay = child as GeneratorBay
 		if bay != null and bay.installed != null:
 			out.append({"name": child.name, "module": bay.installed})
+		var box: ComputerBay = child as ComputerBay
+		if box != null and box.installed != null:
+			out.append({"name": child.name, "module": box.installed})
 	return out
 
 
@@ -729,6 +760,12 @@ func _record_stat(key: StringName, source: String, kind: String, value: float) -
 		return false
 	(stat_sources[key] as Array).append({"module": source, "kind": kind, "value": value})
 	return true
+
+
+## The flight computer fitted, or null when the ship flies on the built-in
+## weight heuristic.
+func computer() -> FlightComputerData:
+	return computer_bay.installed if computer_bay != null else null
 
 
 ## The generator fitted, or null when running on the hull's own rail.
@@ -1431,9 +1468,14 @@ func read_player_input(delta: float) -> void:
 	_set_command(ShipControl.Command.STRAFE_RIGHT, _strength(&"strafe_right", taken))
 
 	kill_rotation_command = chord == ControlChords.Chord.KILL_ROTATION
-	heading_command = chord
-	if chord == ControlChords.Chord.KILL_ROTATION:
-		heading_command = ControlChords.Chord.NONE
+	auto_orbit_command = chord == ControlChords.Chord.AUTO_ORBIT
+	auto_level_command = chord == ControlChords.Chord.AUTO_LEVEL
+	# Only the two pointing chords drive the heading assist; the rest mean
+	# something else entirely and would have it chasing the velocity while
+	# another assist steered.
+	heading_command = ControlChords.Chord.NONE
+	if chord == ControlChords.Chord.PROGRADE or chord == ControlChords.Chord.RETROGRADE:
+		heading_command = chord
 	brake_command = Input.is_action_pressed("brake")
 
 
@@ -1453,6 +1495,10 @@ func _resolve_commands(state: PhysicsDirectBodyState2D) -> void:
 		_apply_kill_rotation(state)
 	if heading_command != ControlChords.Chord.NONE:
 		_apply_heading_hold(state)
+	if auto_orbit_command:
+		_apply_auto_orbit(state)
+	if auto_level_command:
+		_apply_auto_level(state)
 	if brake_command:
 		_apply_brake(state)
 
@@ -1502,9 +1548,20 @@ func _apply_heading_hold(state: PhysicsDirectBodyState2D) -> void:
 	if heading_command == ControlChords.Chord.RETROGRADE:
 		travel = -travel
 
-	# Where the ship must be rotated to for its nose to lie along `travel`.
+	point_nose_along(state, travel)
+
+
+## Swings the nose onto `direction`, arriving without spin left over.
+##
+## Bang-bang rather than a pair of tuned gains: aim for the fastest turn that
+## can still be stopped in the angle that remains, which is the same
+## time-to-kill shape the brake uses and needs no constants that would go
+## stale the next time the torque jets change.
+func point_nose_along(state: PhysicsDirectBodyState2D, direction: Vector2) -> void:
+	if direction.is_zero_approx():
+		return
 	var wanted: float = angle_difference(
-		state.transform.get_rotation(), travel.angle() - FORWARD.angle()
+		state.transform.get_rotation(), direction.angle() - FORWARD.angle()
 	)
 	var spin: float = state.angular_velocity
 
@@ -1515,8 +1572,6 @@ func _apply_heading_hold(state: PhysicsDirectBodyState2D) -> void:
 	if alpha <= 0.0:
 		return
 
-	# Arrive with no spin left: the fastest approach speed from which the
-	# remaining angle is still enough room to stop in.
 	var cruise: float = signf(wanted) * minf(sqrt(2.0 * alpha * absf(wanted)), HEADING_MAX_SPIN)
 	var change: float = cruise - spin
 	if absf(wanted) <= HEADING_EPS and absf(spin) <= HEADING_EPS:
@@ -1529,6 +1584,108 @@ func _apply_heading_hold(state: PhysicsDirectBodyState2D) -> void:
 	var reach: float = control.authority_of(command) / maxf(inertia, 0.0001) * state.step
 	var amount: float = clampf(absf(change) / maxf(reach, 0.0001), 0.0, 1.0)
 	active_commands[command] = maxf(float(active_commands.get(command, 0.0)), amount)
+
+
+## Asks for thrust along `world_push`, whatever combination of linear
+## commands that takes on this hull. The commands are in the ship's frame, so
+## the direction is turned into it first.
+func push_along(state: PhysicsDirectBodyState2D, world_push: Vector2) -> void:
+	if world_push.is_zero_approx():
+		return
+	var local: Vector2 = world_push.rotated(-state.transform.get_rotation())
+	_push_axis(local.y, ShipControl.Command.FORWARD, ShipControl.Command.BACK)
+	_push_axis(local.x, ShipControl.Command.STRAFE_RIGHT, ShipControl.Command.STRAFE_LEFT)
+
+
+## One axis of a wanted push. Forward is -Y, so a negative component wants
+## FORWARD; +X is to the right and wants STRAFE_RIGHT.
+func _push_axis(
+	component: float, wants_negative: ShipControl.Command, wants_positive: ShipControl.Command
+) -> void:
+	if is_zero_approx(component):
+		return
+	var command: ShipControl.Command = wants_negative if component < 0.0 else wants_positive
+	var authority: float = control.authority_of(command)
+	if authority <= 0.0:
+		return
+	var amount: float = clampf(absf(component) * mass / authority, 0.0, 1.0)
+	active_commands[command] = maxf(float(active_commands.get(command, 0.0)), amount)
+
+
+## Flies the ship onto a circular orbit at whatever height it is already at.
+##
+## Only inside a gravity well and only above the air, because the manoeuvre
+## means nothing in deep space and cannot be held where there is drag. Refused
+## outright when the fitted computer does not have the function -- some do and
+## some do not, and finding one that does is a real upgrade rather than a
+## number going up (IDEAS.md section 8).
+func _apply_auto_orbit(state: PhysicsDirectBodyState2D) -> void:
+	var box: FlightComputerData = computer()
+	if box == null or not box.has_auto_orbit:
+		return
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+
+	var arm: Vector2 = state.transform.origin - planet.global_position
+	var radius: float = arm.length()
+	if radius >= planet.influence_radius or radius <= planet.atmosphere_radius():
+		return
+
+	# The circular velocity here, in whichever direction the ship is already
+	# going round. Turning an orbit round is a different manoeuvre and not
+	# one an autopilot should do on its own.
+	var tangent: Vector2 = Vector2(-arm.y, arm.x).normalized()
+	if tangent.dot(state.linear_velocity) < 0.0:
+		tangent = -tangent
+	var wanted: Vector2 = tangent * sqrt(planet.gravitational_parameter() / radius)
+
+	var change: Vector2 = wanted - state.linear_velocity
+	if change.length() <= AUTO_ORBIT_EPS:
+		return
+
+	# Turn to the burn, then burn. A hull's thrust is wildly lopsided -- 900 N
+	# out of the nose against 290 N sideways on the stock ship -- so an assist
+	# that only pushed with whatever happened to be pointing the right way
+	# would barely move the orbit at all. Pointing first is what real
+	# autopilots do and what makes this converge.
+	point_nose_along(state, change)
+	var nose: Vector2 = FORWARD.rotated(state.transform.get_rotation())
+	if nose.dot(change.normalized()) > AUTO_ORBIT_ALIGNMENT:
+		push_along(state, change)
+
+
+## Runs the orbit assist once against the ship's present state, for a test
+## that needs to see whether it asks for anything at all. Not used in flight:
+## _integrate_forces owns the real call and owns the physics state.
+func _apply_auto_orbit_probe() -> void:
+	var box: FlightComputerData = computer()
+	if box == null or not box.has_auto_orbit:
+		return
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+	var arm: Vector2 = global_position - planet.global_position
+	var radius: float = arm.length()
+	if radius >= planet.influence_radius or radius <= planet.atmosphere_radius():
+		return
+	var tangent: Vector2 = Vector2(-arm.y, arm.x).normalized()
+	if tangent.dot(linear_velocity) < 0.0:
+		tangent = -tangent
+	var change: Vector2 = tangent * sqrt(planet.gravitational_parameter() / radius) - linear_velocity
+	if change.length() > AUTO_ORBIT_EPS:
+		active_commands[ShipControl.Command.FORWARD] = 1.0
+
+
+## Holds the nose level with the horizon, so a descent is flown feet-first.
+func _apply_auto_level(state: PhysicsDirectBodyState2D) -> void:
+	var box: FlightComputerData = computer()
+	if box == null or not box.has_auto_level:
+		return
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+	point_nose_along(state, state.transform.origin - planet.global_position)
 
 
 ## Kills linear velocity by pushing against it, one axis at a time.

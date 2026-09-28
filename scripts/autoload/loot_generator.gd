@@ -225,6 +225,34 @@ func generator(item_seed: int, rarity: int = ROLLED) -> GeneratorData:
 	return _build_generator(_rng_for(item_seed), rarity)
 
 
+## Rolls a flight computer. Not from a base resource: what makes one
+## interesting is which functions it has, and that is a set of switches
+## rather than a set of numbers to scale.
+func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
+	var rng: RandomNumberGenerator = _rng_for(item_seed)
+	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	var box: FlightComputerData = FlightComputerData.new()
+	box.allocation = (
+		FlightComputerData.Allocation.NNLS if rolled >= Rarity.UNCOMMON
+		else FlightComputerData.Allocation.HEURISTIC
+	)
+	# The good functions are what rarity buys here, not bigger numbers.
+	box.has_auto_level = rolled >= Rarity.UNCOMMON and rng.randf() < 0.7
+	box.has_auto_orbit = rolled >= Rarity.RARE and rng.randf() < 0.6
+	box.bulk = rng.randf_range(0.4, 1.2)
+	box.idle_draw = rng.randf_range(0.5, 3.0)
+
+	var parts: PackedStringArray = PackedStringArray()
+	if box.allocation == FlightComputerData.Allocation.NNLS:
+		parts.append("solving")
+	if box.has_auto_level:
+		parts.append("levelling")
+	if box.has_auto_orbit:
+		parts.append("orbital")
+	box.display_name = "%s computer" % " ".join(parts) if not parts.is_empty() else "basic computer"
+	return box
+
+
 ## Builds one shot mod from the catalogue.
 func shot_mod(index: int) -> ShotModData:
 	var entry: Dictionary = SHOT_MODS[clampi(index, 0, SHOT_MODS.size() - 1)]

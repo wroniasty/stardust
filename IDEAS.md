@@ -217,6 +217,51 @@ uszkodzenie nie ruszało w niej nic. Raport liczy teraz drugą resztkę, ważon�
 uszkodzenie za asymetrię, która była tam wcześniej. Zmierzone na statku z dyszą
 na 60%: `damage makes CW push sideways at 3.9 px/s2`.
 
+### Komputer lotu: rozdział ciągu przez najmniejsze kwadraty
+
+Heurystyka wag sortuje silniki do grup po tym, jak czysto każdy pcha wzdłuż
+komendy. To dobra odpowiedź dla symetrycznego statku w dobrym stanie i zła
+poza tym: grupy budowane są z ciągu **nominalnego** i stałych udziałów, więc
+półmartwa dysza dostaje pełny przydział, dostarcza mniej niż jej partnerka, i
+statek obraca się, ślizgając w bok.
+
+`ThrustAllocator` zadaje właściwe pytanie: każdy silnik dokłada znane
+przyspieszenie, więc znajdź przepustnice najbliższe temu, o co poproszono, przy
+ograniczeniu, że przepustnica jest między niczym a wszystkim. Czyli
+`min |A t − b|`, `t ∈ [0,1]` — ograniczone najmniejsze kwadraty, nieujemne, bo
+silnik nie umie ssać.
+
+**Rzut gradientu, nie Lawson-Hanson.** Przy kilku silnikach zbiega w stałej,
+małej liczbie przebiegów, każdy przebieg to ta sama arytmetyka i nie ma zbioru
+aktywnego, który mógłby się zepsuć. Stały koszt na tick jest tu wart więcej niż
+ostatnie miejsce po przecinku optymalności. Krok z górnego ograniczenia stałej
+Lipschitza przez ślad `AᵀA` — luźne, co znaczy tylko, że kroki są ostrożne.
+
+**Kondycja wchodzi przy rozwiązywaniu, nie przy przebudowie.** Kolumny są
+nominalne (bo grupy takie są), a `health` mnoży je dopiero w solverze — inaczej
+komputer kompensowałby uszkodzenie już na etapie, na którym z założenia nikt go
+nie kompensuje.
+
+Zmierzone na statku z dyszą pary obrotowej na 45%: **siła boczna przy obrocie
+88 N → 36 N**, moment nadal 955 N·px. Na zdrowym statku bez zmian — moduł ma
+być awansem, nie wymianą.
+
+### Auto-orbit: obróć się na wektor, potem pal
+
+Pierwsza wersja pchała po prostu w stronę korekty i nie zbiegała (rozrzut 55%).
+Powód jest fizyczny: ciąg kadłuba jest skrajnie anizotropowy — **900 N z dziobu
+wobec 290 N w bok** — więc asysta pchająca tym, co akurat wskazuje właściwą
+stronę, ledwo ruszała orbitę.
+
+Teraz obraca dziób na wektor korekty i pali dopiero przy zgodności powyżej 0,92.
+To jest to, co robią prawdziwe autopiloty, i to jest to, co zbiega: elipsa 32%
+schodzi do **1,1% rozrzutu**.
+
+Asysty jeżdżą na akordach `Q+E+D` (orbita) i `Q+E+A` (poziom). `Q` i `E` są
+modyfikatorem, czwarty klawisz wybiera funkcję — dlatego to się skaluje:
+komputer ma jeszcze długą listę rzeczy do powiedzenia i żadna nie potrzebuje
+własnego klawisza.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne

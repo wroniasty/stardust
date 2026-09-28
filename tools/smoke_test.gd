@@ -27,6 +27,11 @@ const FORWARD_BURN_TICKS: int = 120
 ## How long the heading assist gets to swing the ship round and settle, and
 ## the velocity it is aiming along. Deep space, so nothing pulls the ship off
 ## the straight line the assist is being judged against.
+## Long enough to shape an elliptical arrival into a circle and then hold
+## it: circularising is not instant, and a test that only watched the burn
+## would miss the assist overshooting afterwards.
+const AUTO_ORBIT_TICKS: int = 2400
+
 const HEADING_TICKS: int = 900
 const HEADING_TRAVEL: Vector2 = Vector2(140.0, -60.0)
 
@@ -102,7 +107,7 @@ const DEATH_TICKS: int = 900
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
-	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
+	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_DAMAGED, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
@@ -191,6 +196,13 @@ func _physics_process(delta: float) -> bool:
 				continue
 			_damaged_output_low = minf(_damaged_output_low, engine.effective_output())
 			_damaged_output_high = maxf(_damaged_output_high, engine.effective_output())
+	if _phase == Phase.AUTO_ORBIT:
+		# Only once the burn has had time to work: the first stretch is the
+		# ellipse it was handed, not the circle it made.
+		if _ticks > AUTO_ORBIT_TICKS / 2:
+			var reached: float = _ship.global_position.distance_to(_planet.global_position)
+			_orbit_min = minf(_orbit_min, reached)
+			_orbit_max = maxf(_orbit_max, reached)
 	if _phase == Phase.ORBIT or _phase == Phase.ELLIPSE:
 		var radius: float = _ship.global_position.distance_to(_planet.global_position)
 		_orbit_min = minf(_orbit_min, radius)
@@ -432,6 +444,8 @@ func _phase_ticks() -> int:
 			return KILL_TICKS
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
 			return HEADING_TICKS
+		Phase.AUTO_ORBIT:
+			return AUTO_ORBIT_TICKS
 		Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL:
 			return BRAKE_TICKS
 		Phase.AEROBRAKE:
@@ -509,6 +523,22 @@ func _begin_phase() -> void:
 			_ship.angular_velocity = KILL_SPIN
 			_ship.kill_rotation_command = true
 			_kill_ticks = -1
+		Phase.AUTO_ORBIT:
+			# Thrown along a plainly elliptical path, with a computer that
+			# knows how to fix it. Well above the air, or the assist would be
+			# fighting drag it cannot win against.
+			var height: float = _planet.atmosphere_radius() + 1400.0
+			_ship.global_position = _planet.global_position + Vector2.UP * height
+			# Nine tenths of circular: an ellipse about a third out of round,
+			# whose low point still clears the air. Any slower and the test
+			# would be about rescuing a suborbital arc, which is a different
+			# manoeuvre the assist is not claiming to do.
+			var circular: float = sqrt(_planet.gravitational_parameter() / height)
+			_ship.linear_velocity = Vector2.RIGHT * circular * 0.9
+			_fit_computer(_ship, true)
+			_ship.auto_orbit_command = true
+			_orbit_min = INF
+			_orbit_max = 0.0
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
 			# Pointing the wrong way to start with, so the assist has most of
 			# a turn to make and cannot pass by accident.
@@ -799,6 +829,29 @@ func _evaluate_phase() -> void:
 					_ship.angular_velocity,
 				],
 			)
+		Phase.AUTO_ORBIT:
+			var spread: float = (_orbit_max - _orbit_min) / maxf(_orbit_max, 1.0)
+			_expect(
+				spread < 0.10,
+				"auto-orbit turns an elliptical path into a round one (%.0f..%.0f px, %.1f%% spread)" % [
+					_orbit_min, _orbit_max, spread * 100.0,
+				],
+			)
+			_expect(
+				_orbit_min > _planet.atmosphere_radius(),
+				"and holds it clear of the air (%.0f px against %.0f)" % [
+					_orbit_min, _planet.atmosphere_radius(),
+				],
+			)
+			# A box without the function has to refuse, or it would not be
+			# an optional function at all.
+			_fit_computer(_ship, false)
+			_ship.active_commands.clear()
+			_ship._apply_auto_orbit_probe()
+			_expect(
+				_ship.active_commands.is_empty(),
+				"a computer without auto-orbit asks for nothing when it is engaged",
+			)
 		Phase.BRAKE:
 			_expect(
 				_ship.linear_velocity.length() < 1.0,
@@ -908,6 +961,7 @@ func _evaluate_phase() -> void:
 			_check_energy_balance()
 			_check_engine_failures()
 			_check_hull_outline(_planet)
+			_check_allocator()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1176,6 +1230,18 @@ func _mount_spool(mount_name: String) -> float:
 		if engine.mount.name == mount_name:
 			return engine.data.spool_time
 	return 0.0
+
+
+## Puts a flight computer in the bay, with or without the orbit function.
+func _fit_computer(ship: Ship, with_auto_orbit: bool) -> void:
+	if ship.computer_bay == null:
+		return
+	var box: FlightComputerData = FlightComputerData.new()
+	box.allocation = FlightComputerData.Allocation.NNLS
+	box.has_auto_orbit = with_auto_orbit
+	box.bulk = 0.5
+	ship.computer_bay.installed = box
+	ship.rebuild_control_groups(false)
 
 
 func _damage_mount(mount_name: String, health: float) -> void:
@@ -2529,6 +2595,86 @@ func _check_hull_outline(planet: Planet) -> void:
 	)
 
 	ship.queue_free()
+
+
+## The flight computer earns its place on a ship that is damaged or
+## lopsided, which is exactly when the weight heuristic is worst: the groups
+## are built from nominal thrust with fixed shares, so a half-dead jet is
+## still asked for its full part, delivers less than its partner, and the
+## turn comes with a shove the pilot has to fly against.
+func _check_allocator() -> void:
+	# The solver on its own first, where the right answer is known.
+	var columns: Array[Vector3] = [
+		Vector3(1.0, 0.0, 0.0), Vector3(0.0, 1.0, 0.0), Vector3(0.0, 0.0, 1.0),
+	]
+	var exact: PackedFloat32Array = ThrustAllocator.solve(columns, Vector3(0.5, 0.25, 0.0))
+	_expect(
+		absf(exact[0] - 0.5) < 0.02 and absf(exact[1] - 0.25) < 0.02 and exact[2] < 0.02,
+		"the allocator finds the obvious answer when there is one (%.2f, %.2f, %.2f)" % [
+			exact[0], exact[1], exact[2],
+		],
+	)
+	var over: PackedFloat32Array = ThrustAllocator.solve(columns, Vector3(9.0, 0.0, 0.0))
+	_expect(
+		over[0] <= 1.0,
+		"and never asks an engine for more than it has (%.2f)" % over[0],
+	)
+	var backwards: PackedFloat32Array = ThrustAllocator.solve(columns, Vector3(-1.0, 0.0, 0.0))
+	_expect(
+		backwards[0] >= 0.0,
+		"nor for less than nothing: an engine cannot suck (%.2f)" % backwards[0],
+	)
+
+	# Now on a real ship with one jet of a rotation pair half dead. Same
+	# demand through both allocators; the question is how much sideways
+	# force is left over.
+	var sideways: Dictionary = {}
+	for solve: bool in [false, true]:
+		var ship: Ship = _spawn_ship()
+		for engine: EngineInstance in ship.engines:
+			if engine.mount.name == "NoseLeftTorque":
+				engine.health = 0.45
+		ship.control.solve_allocation = solve
+		ship.control.apply_commands(ship.engines, {ShipControl.Command.CW: 1.0})
+
+		var residual: Vector2 = Vector2.ZERO
+		var torque: float = 0.0
+		for engine: EngineInstance in ship.engines:
+			var delivered: Vector2 = engine.nominal_force() * engine.target_throttle * engine.health
+			residual += delivered
+			torque += (engine.mount.position - ship.center_of_mass).cross(delivered)
+		sideways[solve] = {"push": residual.length(), "torque": absf(torque)}
+		ship.queue_free()
+
+	_expect(
+		sideways[true]["push"] < sideways[false]["push"],
+		"a computer turns a damaged ship with less shove than the weights do (%.1f against %.1f N)" % [
+			sideways[true]["push"], sideways[false]["push"],
+		],
+	)
+	_expect(
+		sideways[true]["torque"] > 0.0,
+		"while still actually turning it (%.0f N px)" % sideways[true]["torque"],
+	)
+
+	# And it must not make a healthy ship worse, or fitting one would be a
+	# trade rather than an upgrade.
+	var clean: Dictionary = {}
+	for solve: bool in [false, true]:
+		var ship: Ship = _spawn_ship()
+		ship.control.solve_allocation = solve
+		ship.control.apply_commands(ship.engines, {ShipControl.Command.CW: 1.0})
+		var residual: Vector2 = Vector2.ZERO
+		for engine: EngineInstance in ship.engines:
+			residual += engine.nominal_force() * engine.target_throttle * engine.health
+		clean[solve] = residual.length()
+		ship.queue_free()
+	_expect(
+		clean[true] <= clean[false] + 0.5,
+		"and leaves a sound ship no worse than it found it (%.2f against %.2f N)" % [
+			clean[true], clean[false],
+		],
+	)
 
 
 func _check_configuration_report() -> void:

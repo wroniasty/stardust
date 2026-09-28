@@ -12,6 +12,12 @@ extends RefCounted
 ##     A + D          stop turning
 ##     Q + E + W      point along the way we are going
 ##     Q + E + S      point back along it
+##     Q + E + D      hold a circular orbit
+##     Q + E + A      keep the nose level with the horizon
+##
+## Q and E together are the modifier and the fourth key picks the function,
+## which is why this scales: the flight computer has a long list of things it
+## will want to be told, and none of them needs a key of its own.
 ##
 ## A chord consumes the keys it is made of. Otherwise Q+E+S would aim
 ## backwards along the velocity and fire the reverse thruster at the same
@@ -20,7 +26,7 @@ extends RefCounted
 ## Deliberately free of Input: the caller passes the held actions, so the
 ## behaviour can be driven in a test without a keyboard.
 
-enum Chord { NONE, KILL_ROTATION, PROGRADE, RETROGRADE }
+enum Chord { NONE, KILL_ROTATION, PROGRADE, RETROGRADE, AUTO_ORBIT, AUTO_LEVEL }
 
 ## How long every key of a chord must be held together before it engages.
 ##
@@ -45,6 +51,14 @@ const CHORDS: Array[Dictionary] = [
 	{
 		"chord": Chord.RETROGRADE,
 		"keys": [&"strafe_left", &"strafe_right", &"thrust_reverse"],
+	},
+	{
+		"chord": Chord.AUTO_ORBIT,
+		"keys": [&"strafe_left", &"strafe_right", &"rotate_right"],
+	},
+	{
+		"chord": Chord.AUTO_LEVEL,
+		"keys": [&"strafe_left", &"strafe_right", &"rotate_left"],
 	},
 ]
 

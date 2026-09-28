@@ -50,6 +50,15 @@ var weight_threshold: float = 0.05
 ## command -> Array of { "engine": EngineInstance, "weight": float }.
 var groups: Dictionary = {}
 
+## One Vector3 per engine: the acceleration it delivers at full power, in the
+## same space the commands live in. Kept from the rebuild so the allocator
+## does not have to work them out again every tick.
+var columns: Array[Vector3] = []
+
+## Whether to allocate by bounded least squares rather than by the weights.
+## Set from the fitted flight computer; false is the built-in behaviour.
+var solve_allocation: bool = false
+
 ## command -> total contribution along the command axis at full throttle, in
 ## native units: force for the linear commands, torque for the rotational ones.
 ## Braking divides by this, so it has to be a real force, not a score.
@@ -68,6 +77,7 @@ func rebuild(
 
 	var gyration: float = sqrt(maxf(inertia, 0.0001) / maxf(mass, 0.0001))
 
+	columns.clear()
 	var contributions: Array[Vector3] = []
 	var torques: PackedFloat32Array = PackedFloat32Array()
 	var forces: Array[Vector2] = []
@@ -80,6 +90,14 @@ func rebuild(
 		contributions.append(
 			Vector3(force.x / mass, force.y / mass, (torque / inertia) * gyration)
 		)
+		# The same vector, kept for the allocator. Nominal here as well: what
+		# an engine can still manage is read at solve time, because condition
+		# changes between rebuilds and the groups deliberately do not.
+		columns.append(contributions[contributions.size() - 1])
+
+	_engine_order.clear()
+	for i: int in range(engines.size()):
+		_engine_order[engines[i]] = i
 
 	for command: Command in COMMAND_AXES:
 		var axis: Vector3 = COMMAND_AXES[command]
@@ -126,6 +144,10 @@ func apply_commands(engines: Array[EngineInstance], commands: Dictionary) -> voi
 	for engine: EngineInstance in engines:
 		engine.target_throttle = 0.0
 
+	if solve_allocation:
+		_allocate(engines, commands)
+		return
+
 	for command: Command in commands:
 		var amount: float = commands[command]
 		if amount <= 0.0 or not groups.has(command):
@@ -148,3 +170,51 @@ func has_authority(command: Command) -> bool:
 
 func command_name(command: Command) -> String:
 	return Command.keys()[int(command)]
+
+
+## Allocates by bounded least squares against what the engines can actually
+## deliver right now.
+##
+## The demand is the same axes the groups use, so a pilot pressing FORWARD
+## and CW asks for the sum of those two directions. Scaled by the authority
+## the heuristic would have found, so a full command still means full thrust
+## rather than one unit of an abstract axis.
+func _allocate(engines: Array[EngineInstance], commands: Dictionary) -> void:
+	var demand: Vector3 = Vector3.ZERO
+	for command: Command in commands:
+		var amount: float = commands[command]
+		if amount <= 0.0:
+			continue
+		demand += (COMMAND_AXES[command] as Vector3) * amount * _axis_scale(command)
+	if demand.length_squared() <= 0.0:
+		return
+
+	# Condition folded in here and not at rebuild: a damaged engine must be
+	# asked for less, which is the entire reason to run this instead of the
+	# weights.
+	var live: Array[Vector3] = []
+	for i: int in range(engines.size()):
+		live.append(columns[i] * engines[i].health)
+
+	var throttles: PackedFloat32Array = ThrustAllocator.solve(live, demand)
+	for i: int in range(engines.size()):
+		engines[i].target_throttle = throttles[i]
+
+
+## How much acceleration one unit of a command is worth, so the allocator is
+## aiming at the same magnitude the weights would have produced.
+func _axis_scale(command: Command) -> float:
+	var best: float = 0.0
+	for member: Dictionary in groups.get(command, []):
+		var contribution: Vector3 = columns[_index_of(member["engine"])]
+		best = maxf(best, absf(contribution.dot(COMMAND_AXES[command] as Vector3)))
+	return best
+
+
+func _index_of(engine: EngineInstance) -> int:
+	return _engine_order.get(engine, 0)
+
+
+## engine -> its column index, filled at rebuild so the lookup above is not a
+## linear scan every tick.
+var _engine_order: Dictionary = {}
