@@ -144,8 +144,9 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] `energy_cost` w tabelach lootu: afiksy `efficient` i `capacitor-fed`, wpisy w `HIGHER_IS_BETTER` i `LIMITS`. Generatory jako loot z własną tabelą (`deep`, `brisk`, `responsive`, `compact`).
 - [x] HUD energii: pasek z podziałką co koszt najtańszej broni, osobny kolor dla „czeka" i „ładuje się", czerwona ramka przy odmowie strzału (sygnał `shot_refused`).
 - [x] Statystyki statku liczone przy montażu: `stat_add`/`stat_mul` na wspólnej bazie `ModuleData`, agregat z rozbiciem na moduły w raporcie konfiguracji, nieznany klucz to `push_error`. Afiksy `dynamo` i `buffered` na silnikach.
-- [ ] Moduły broni: `mod_slots` na broni, `ShotModData` z `energy_multiplier > 1`, efekty pocisku jako dane (eksplozja przy kontakcie, podpalenie, przebicie), kolejność bez znaczenia. Test: każdy moduł w tabeli podnosi koszt energii.
-- [ ] Pomiar energii: sustained dps bazowych broni w granicach ±10%, burst różny co najmniej 1.5× — generator nie może spłaszczyć różnic między broniami do jednej liczby.
+- [x] Moduły broni: `mod_slots` (z rzadkości), `ShotModData` z `energy_multiplier > 1`, liczby wynikowe cache'owane przy zmianie modułów. Efekty jako dane czytane przy spawnie: `PIERCE` i `BLAST` zaimplementowane, `INCENDIARY` zadeklarowane i czeka na obrażenia w czasie.
+- [ ] Moduły broni jako loot i wpinanie ich w edytorze — dziś katalog istnieje i działa, ale nie da się go znaleźć ani wpiąć z poziomu gry.
+- [x] Pomiar energii: sustained bazowych broni 0,179 i 0,174 (±3%), każda sustainuje mniej niż burstuje, minigun 0,40 burst przy 0,20 sustained. Liczby z IDEAS sekcja 14 zgadzają się z zasobami.
 
 Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, uszkodzony silnik zmienia sposób latania, a spust ma swój koszt — seria się kończy i trzeba zdecydować, kiedy przestać strzelać.
 

@@ -39,6 +39,18 @@ signal impacted(point: Vector2, damage: float)
 ## Radius of the hole punched in the crust on impact.
 @export var crater_radius: float = 14.0
 
+## How many more things this round survives before it stops. Set by the
+## hardpoint from the mods plugged into it: a behaviour is data the round
+## reads at spawn, not another projectile scene, or every combination of
+## mods would be a new file (IDEAS.md section 14).
+var pierces: int = 0
+
+## Radius over which the impact hurts things it did not actually hit, and
+## the share of the damage the outermost edge gets. Zero when no mod asked
+## for it, which is the common case and costs nothing.
+var blast_radius: float = 0.0
+const BLAST_EDGE_SHARE: float = 0.25
+
 ## Travel in world space, set by the hardpoint that fired it.
 var velocity: Vector2 = Vector2.ZERO
 
@@ -102,5 +114,37 @@ func _impact(point: Vector2) -> void:
 	global_position = point
 	if _planet != null:
 		_planet.carve(point, crater_radius)
+	if blast_radius > 0.0:
+		_blast(point)
 	impacted.emit(point, damage)
+	if pierces > 0:
+		# Straight on through the hole it just made. Nudged past the crater
+		# so the next tick does not find the same wall again and spend
+		# another pierce on it.
+		pierces -= 1
+		global_position = point + velocity.normalized() * (crater_radius + SAMPLE_STEP)
+		return
 	queue_free()
+
+
+## Hurts everything inside `blast_radius`, falling off with distance so that
+## a near miss is worth less than a hit. Queried against the physics server
+## rather than against a group, because what counts as damageable is whatever
+## has a body here -- the same question the round already asks on contact.
+func _blast(point: Vector2) -> void:
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var circle: CircleShape2D = CircleShape2D.new()
+	circle.radius = blast_radius
+	var query: PhysicsShapeQueryParameters2D = PhysicsShapeQueryParameters2D.new()
+	query.shape = circle
+	query.transform = Transform2D(0.0, point)
+	query.collide_with_bodies = true
+
+	for hit: Dictionary in space.intersect_shape(query, 16):
+		var ship: Ship = hit.get("collider") as Ship
+		if ship == null:
+			continue
+		var reach: float = clampf(
+			ship.global_position.distance_to(point) / maxf(blast_radius, 0.0001), 0.0, 1.0
+		)
+		ship.take_damage(damage * lerpf(1.0, BLAST_EDGE_SHARE, reach), "blast")

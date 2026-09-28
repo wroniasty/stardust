@@ -874,6 +874,8 @@ func _evaluate_phase() -> void:
 			_check_camera(_planet)
 			_check_chords()
 			_check_energy()
+			_check_shot_mods()
+			_check_energy_balance()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -2091,6 +2093,162 @@ func _check_energy() -> void:
 
 	loot.free()
 	ship.queue_free()
+
+
+## Mods are the pilot's decision where affixes are the item's nature, so the
+## thing to guarantee is that a decision costs something. Every entry in the
+## catalogue raises the price of a shot, and no arrangement of them changes
+## the answer -- which is what lets the swap screen ignore order.
+func _check_shot_mods() -> void:
+	var ship: Ship = _spawn_ship()
+	var loot: Node = LOOT_SCRIPT.new()
+	var mount: Hardpoint = ship.hardpoints[0]
+	var gun: WeaponData = mount.weapon.duplicate() as WeaponData
+	gun.mod_slots = 3
+	mount.fit(gun)
+	var bare: float = mount.energy_cost()
+
+	for index: int in range(LOOT_SCRIPT.SHOT_MODS.size()):
+		var mod: ShotModData = loot.shot_mod(index)
+		_expect(
+			mod.energy_multiplier > 1.0,
+			"%s costs more to fire, as every mod must" % mod.display_name,
+		)
+		mount.mods.clear()
+		mount._rebuild_effective()
+		_expect(mount.add_mod(mod), "%s plugs into a free slot" % mod.display_name)
+		_expect(
+			mount.energy_cost() > bare,
+			"and the shot costs more with it in (%.1f against %.1f)" % [
+				mount.energy_cost(), bare,
+			],
+		)
+
+	# Order cannot matter, because every mod is a multiplier and
+	# multiplication does not care. Declared in IDEAS, so measured here.
+	mount.mods.clear()
+	mount._rebuild_effective()
+	for index: int in [0, 2, 3]:
+		mount.add_mod(loot.shot_mod(index))
+	var one_way: float = mount.energy_cost()
+	var one_way_damage: float = mount.effective().damage
+	mount.mods.clear()
+	mount._rebuild_effective()
+	for index: int in [3, 0, 2]:
+		mount.add_mod(loot.shot_mod(index))
+	_expect(
+		is_equal_approx(mount.energy_cost(), one_way)
+		and is_equal_approx(mount.effective().damage, one_way_damage),
+		"the order mods are plugged in makes no difference (%.2f vs %.2f)" % [
+			one_way, mount.energy_cost(),
+		],
+	)
+
+	# The behaviours have to reach the round, not just sit in the resource.
+	mount.mods.clear()
+	mount._rebuild_effective()
+	mount.add_mod(loot.shot_mod(4))
+	var pierced: Projectile = mount.fire(Vector2.ZERO, root, ship)
+	_expect(
+		pierced != null and pierced.pierces > 0,
+		"a penetrator round is spawned knowing it goes through things",
+	)
+	if pierced != null:
+		pierced.queue_free()
+
+	mount.mods.clear()
+	mount._rebuild_effective()
+	mount.add_mod(loot.shot_mod(5))
+	mount._cooldown = 0.0
+	var blasted: Projectile = mount.fire(Vector2.ZERO, root, ship)
+	_expect(
+		blasted != null and blasted.blast_radius > 0.0,
+		"and a shrapnel round knowing it hurts what it missed (%.0f px)" % [
+			0.0 if blasted == null else blasted.blast_radius,
+		],
+	)
+	if blasted != null:
+		blasted.queue_free()
+	mount.mods.clear()
+	mount._rebuild_effective()
+	for index: int in [0, 2, 3]:
+		mount.add_mod(loot.shot_mod(index))
+
+	# And the slots are a limit, not a suggestion.
+	_expect(not mount.add_mod(loot.shot_mod(1)), "a fourth mod will not fit three slots")
+	_expect(mount.mods.size() == 3, "and the ones already in stay in")
+
+	# A weapon with no slots takes none, whatever is offered.
+	var plain: WeaponData = gun.duplicate() as WeaponData
+	plain.mod_slots = 0
+	mount.fit(plain)
+	_expect(mount.mods.is_empty(), "a gun with no slots drops the mods the old one held")
+	_expect(not mount.add_mod(loot.shot_mod(0)), "and refuses new ones")
+
+	loot.free()
+	ship.queue_free()
+
+
+## Does the arithmetic in IDEAS section 14 survive contact with the actual
+## resources? The claim is that the generator sets sustained output and the
+## weapon sets burst, so two base guns should come out close on the first and
+## far apart on the second. If they collapse to one number, energy has
+## flattened the weapons into a single stat and the whole economy is a tax.
+func _check_energy_balance() -> void:
+	var cell: GeneratorData = load(
+		"res://resources/generators/standard_cell.tres"
+	) as GeneratorData
+	var guns: Array[WeaponData] = []
+	for path: String in ["res://resources/weapons/autocannon.tres",
+			"res://resources/weapons/siege_slug.tres"]:
+		guns.append(load(path) as WeaponData)
+
+	var burst: Array[float] = []
+	var sustained: Array[float] = []
+	for gun: WeaponData in guns:
+		burst.append(gun.damage_per_second())
+		# Damage per unit of energy times the energy the cell can actually
+		# deliver against this weapon's drain.
+		var drain: float = gun.energy_cost * gun.rounds_per_second
+		var per_unit: float = gun.damage / maxf(gun.energy_cost, 0.0001)
+		sustained.append(per_unit * cell.sustained_throughput(drain))
+
+	var sustained_gap: float = absf(sustained[0] - sustained[1]) / maxf(sustained[0], 0.0001)
+	_expect(
+		sustained_gap < 0.10,
+		"the generator levels sustained damage across weapons (%.3f, %.3f)" % [
+			sustained[0], sustained[1],
+		],
+	)
+	for i: int in range(guns.size()):
+		_expect(
+			sustained[i] < burst[i],
+			"%s sustains less than it bursts (%.3f against %.3f)" % [
+				guns[i].display_name, sustained[i], burst[i],
+			],
+		)
+
+	# And a weapon built to be extreme has to read as extreme: high rate of
+	# fire buys the peak and barely moves the average, which is what makes a
+	# minigun a minigun rather than a better autocannon.
+	var minigun: WeaponData = guns[0].duplicate() as WeaponData
+	minigun.rounds_per_second = 20.0
+	minigun.damage = 0.02
+	minigun.energy_cost = 1.5
+	var minigun_burst: float = minigun.damage_per_second()
+	var minigun_sustained: float = (minigun.damage / minigun.energy_cost) * cell.sustained_throughput(
+		minigun.energy_cost * minigun.rounds_per_second
+	)
+	_expect(
+		minigun_burst > burst[0] * 1.15,
+		"rate of fire buys a real peak (%.2f against %.2f)" % [minigun_burst, burst[0]],
+	)
+	_expect(
+		minigun_sustained < minigun_burst / 1.5,
+		"but the average barely follows it (%.2f sustained against %.2f burst)" % [
+			minigun_sustained, minigun_burst,
+		],
+	)
 
 
 func _check_configuration_report() -> void:

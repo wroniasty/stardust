@@ -1014,6 +1014,42 @@ W stanie wylądowanym: naprawa, tankowanie, zbieranie zasobów, handel na lądow
 
 Generator gwarantuje miejsca do lądowania: po szumie przebieg wyrównujący wybrane odcinki (plateau), częstość zależna od typu planety. Lądowiska przy bazach płaskie z definicji. Kratery po eksplozjach tworzą nowe zbocza; lądowanie na skraju krateru jest ryzykowne.
 
+### Realizacja (M2, moduły broni i pomiar)
+
+`ShotModData` dziedziczy po `ModuleData`, a liczby wynikowe **cache'uje
+Hardpoint**: `effective()` i `energy_cost()` przeliczają się przy zmianie
+modułu albo broni, nigdy przy strzale. Gdy nic nie jest wpięte, `effective()`
+zwraca samą broń — najczęstszy przypadek nie alokuje nic.
+
+**Kolejność nie ma znaczenia, bo wszystko jest mnożnikiem**, a mnożenie tego
+nie rozróżnia. To nie jest deklaracja, tylko konsekwencja kształtu danych — i
+jest zmierzona testem: 14,09 w obu kolejnościach.
+
+Efekty pocisku są danymi czytanymi przy spawnie. `PIERCE` przesuwa pocisk za
+krater i odejmuje jedno przebicie (inaczej następny tick trafiłby w tę samą
+ścianę). `BLAST` robi zapytanie kształtem do serwera fizyki i rani to, czego
+nie trafił, z odległością liniowo do 25% obrażeń — pytanie „co da się zranić"
+zadane tak samo jak przy kontakcie, czyli bez osobnej grupy. `INCENDIARY` jest
+na razie tylko wartością enuma.
+
+**Rzadkość kupuje sloty**, nie tylko większe liczby: `mod_slots = min(rzadkość, 3)`.
+
+### Pomiar: arytmetyka z tej sekcji przeżyła kontakt z zasobami
+
+| | burst | sustained | w IDEAS |
+| --- | --- | --- | --- |
+| autocannon | 0,320 | **0,179** | 0,18 |
+| siege slug | 0,300 | **0,174** | 0,17 |
+| „minigun" 20/s | 0,400 | **0,200** | 0,40 / 0,20 |
+
+Rozjazd sustained między bazowymi broniami: **3%** przy dopuszczalnych 10%.
+Każda broń sustainuje wyraźnie mniej, niż burstuje. Minigun kupuje szczyt
+(1,25× autocannona) i prawie nie rusza średniej — dokładnie „minigun, który
+się zatyka".
+
+To jest test, który powie, kiedy nowa broń albo nowy generator zaczną
+spłaszczać bronie do jednej liczby.
+
 ### Czytelność na HUD
 
 - wysokościomierz i prędkość pionowa,

@@ -630,7 +630,9 @@ func _physics_process(delta: float) -> void:
 		# Charged before fired: a shot either comes out whole or does not come
 		# out. Half a shot is unreadable and breaks every affix reckoned on
 		# damage (IDEAS.md section 14).
-		if not spend_energy(hardpoint.weapon.energy_cost):
+		# The mounted cost, not the bare weapon's: mods are paid for at the
+		# trigger, which is the whole reason they cost energy at all.
+		if not spend_energy(hardpoint.energy_cost()):
 			# Announced, not silent. A trigger that does nothing and says
 			# nothing reads as a stuck key (IDEAS.md section 14).
 			shot_refused.emit()

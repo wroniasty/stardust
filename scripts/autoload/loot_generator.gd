@@ -132,6 +132,22 @@ const GENERATOR_AFFIXES: Array[Dictionary] = [
 	},
 ]
 
+## Shot mods, as a fixed catalogue rather than a rolled template: a mod is a
+## decision the pilot makes, so the interesting variety is in which ones they
+## own, not in each one being slightly different.
+##
+## Every entry raises the cost of a shot. That is an invariant of the table,
+## checked by a test the same way affix costs are: the slot says how many fit,
+## energy says how much you get to fire with them.
+const SHOT_MODS: Array[Dictionary] = [
+	{"name": "heavy slug", "energy": 1.35, "damage": 1.40, "rate": 0.85},
+	{"name": "choke", "energy": 1.15, "spread": 0.45},
+	{"name": "breaching charge", "energy": 1.45, "crater": 1.90, "speed": 0.85},
+	{"name": "long barrel", "energy": 1.20, "range": 1.50, "speed": 1.25},
+	{"name": "penetrator", "energy": 1.55, "damage": 0.85, "effect": 1, "pierce": 2},
+	{"name": "shrapnel shell", "energy": 1.50, "damage": 0.80, "effect": 2},
+]
+
 ## Which way is up for each field, so an affix cost can be checked for
 ## actually costing something and a configuration report can say whether a
 ## swap is an upgrade (M2).
@@ -209,6 +225,24 @@ func generator(item_seed: int, rarity: int = ROLLED) -> GeneratorData:
 	return _build_generator(_rng_for(item_seed), rarity)
 
 
+## Builds one shot mod from the catalogue.
+func shot_mod(index: int) -> ShotModData:
+	var entry: Dictionary = SHOT_MODS[clampi(index, 0, SHOT_MODS.size() - 1)]
+	var mod: ShotModData = ShotModData.new()
+	mod.display_name = String(entry["name"])
+	mod.energy_multiplier = float(entry["energy"])
+	mod.damage_multiplier = float(entry.get("damage", 1.0))
+	mod.rate_multiplier = float(entry.get("rate", 1.0))
+	mod.spread_multiplier = float(entry.get("spread", 1.0))
+	mod.crater_multiplier = float(entry.get("crater", 1.0))
+	mod.range_multiplier = float(entry.get("range", 1.0))
+	mod.speed_multiplier = float(entry.get("speed", 1.0))
+	mod.effect = int(entry.get("effect", 0)) as ShotModData.Effect
+	mod.pierce_count = int(entry.get("pierce", 1))
+	mod.bulk = 0.2
+	return mod
+
+
 ## Picks a rarity from the weights.
 func roll_rarity(rng: RandomNumberGenerator) -> int:
 	var total: float = 0.0
@@ -237,6 +271,8 @@ func _build_weapon(rng: RandomNumberGenerator, rarity: int) -> WeaponData:
 	var item: WeaponData = base.duplicate() as WeaponData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.affixes = _apply_affixes(rng, item, WEAPON_AFFIXES, rolled)
+	# Rarity buys room for decisions, not just bigger numbers.
+	item.mod_slots = mini(rolled, 3)
 	_clamp_all(item)
 	item.display_name = _name_for(item.display_name, item.affixes)
 	return item

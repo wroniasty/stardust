@@ -67,6 +67,11 @@ enum Type {
 ## shoots, energy says how long (see IDEAS.md section 14).
 @export var energy_cost: float = 0.0
 
+## How many shot mods can be plugged into this weapon. Rarity raises it: the
+## slot count is what a found gun offers, and what the pilot then does with
+## the slots is theirs (IDEAS.md section 14).
+@export var mod_slots: int = 0
+
 
 ## Names of the affixes rolled into the numbers above, for display only.
 @export var affixes: Array[StringName] = []
