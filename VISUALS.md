@@ -144,11 +144,31 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 
 ### V6: Interfejs
 
-- [ ] HUD przestaje być etykietami debugowymi: typografia, kolumny, hierarchia.
-- [ ] Stany ostrzegawcze czytelne bez czytania (kolor, puls, pozycja).
-- [ ] Wskaźnik horyzontu i wektora prędkości przy lądowaniu.
-- [ ] Pasek energii: podziałka co koszt strzału, cisza timeoutu odróżnialna od doładowywania bez patrzenia na liczby (mechanika w IDEAS.md sekcja 14).
-- [ ] Rozdzielenie: HUD gry kontra overlay debugowy pod F7, dziś mieszają się rolami.
+Styl jest rozpisany osobno: **UI_STYLE.md**. Teza tamtego pliku, w jednym
+zdaniu: retro siedzi w kształcie i typografii (kreska 1 px, wektorowe
+przyrządy, monospace), nowoczesność w ruchu i świetle (wygładzanie, poświata
+tylko na akcencie, reakcja w 80 ms) — i żadnego kostiumu CRT. Tutaj zostaje
+tylko kolejność prac.
+
+- [ ] Paleta jako zasób `resources/ui/palette.tres` i pikselowy font monospace w theme. Dziś HUD ma font proporcjonalny, więc cyfry drgają — to jest najtańsza poprawka o największym skutku. Wspólne z V0.
+- [ ] `scripts/ui/ui_draw.gd`: wiersz odczytu i narożny nawias, plus `tools/gallery.tscn` do ich oglądania.
+- [ ] Układ w czterech narożnikach, środek 400x220 pusty (UI_STYLE.md sekcja 5). Przeniesienie tego, co już jest, na ramę.
+- [ ] `scripts/ui/ui_value.gd`: wygładzanie geometrii (~120 ms) osobno od kwantowania cyfr (10 Hz). Bez tego HUD dalej wygląda na debugowy, choćby miał dobry font.
+- [ ] Stany ostrzegawcze czytelne bez czytania: kolor, puls prostokątny 2 Hz na tle a nie na tekście, stała pozycja.
+- [ ] Pasek energii: komórki z podziałką co koszt strzału, cisza timeoutu odróżnialna od doładowywania bez patrzenia na liczby (mechanika w IDEAS.md sekcja 14). Łuk segmentowy na ciepło kadłuba.
+- [ ] Wskaźnik horyzontu i wektora prędkości przy lądowaniu, rysowany nad światem a nie w panelu.
+- [ ] Rozdzielenie: HUD gry kontra overlay debugowy pod F7. Rozdzielenie jest stylistyczne (UI_STYLE.md sekcja 8), więc samo się pilnuje.
+- [ ] `scripts/ui/hud_mode.gd`: tryby DEEP / ORBIT / LANDING / COMBAT wyprowadzone z liczb, które symulacja już liczy, z histerezą i minimalnym czasem trwania (UI_STYLE.md sekcja 10). `Ship` nie dowiaduje się, że tryby istnieją.
+- [ ] Awans i wycofanie przyrządów na przejściu trybu: 120 ms w górę, 400 ms w dół, przygaszanie zamiast usuwania.
+- [ ] Przyrząd jako widget w gniazdach panelu, z bramką zdolności i bramką trybu (UI_STYLE.md sekcja 12). Układ liczony przy montażu i zmianie trybu, nie co klatkę.
+- [ ] Trzy odróżnialne obrazy braku: brak danych, brak modułu, moduł uszkodzony. Bez tego brakujący przyrząd czyta się jako zepsuty odczyt.
+- [ ] Zdolności statku (`ALTIMETRY`, `ORBIT_SOLUTION`, `SCAN`, `GROUND_SLOPE`) jako zbiór wyprowadzony z zamontowanych modułów — zadanie szwu, bo mieszka w linii głównej razem z modułami (M5).
+- [ ] Raport konfiguracji mówi o brakujących przyrządach (`no altimetry`) tam, gdzie dziś mówi o pustej grupie komend.
+- [ ] Poświata jako ostatnia: osobna warstwa, próg tylko na akcentach, jeden wyłącznik.
+
+Ekrany pełnoekranowe (edytor, mapa systemu, mapa galaktyki) mają własne reguły
+w UI_STYLE.md sekcja 11. Mapy należą do M3 i M4 i nie zaczynamy ich wcześniej —
+tutaj jest tylko zapisany ich styl, żeby powstały od razu w tym języku.
 
 ---
 

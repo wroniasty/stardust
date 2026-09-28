@@ -1,0 +1,95 @@
+<svg viewBox="0 0 660 1180" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, Menlo, Consolas, monospace" role="img"><title>Makiety trzech ekranów pełnoekranowych: edytor statku, mapa systemu, mapa galaktyki</title><desc>Edytor statku pokazuje kadłub na siatce montażowej z nawiasami przy gniazdach, podniesiony moduł jako widmo przy kursorze i prawą kolumnę z raportem konfiguracji: masa, środek masy i sześć pasków autorytetu na komendę, z różnicą względem poprzedniej konfiguracji. Mapa systemu to schemat: gwiazda w środku, orbity jako kreskowane okręgi, ciała jako dyski, statek jako nawias z przewidywaną trajektorią i kropkowany okrąg granicy wpływu. Mapa galaktyki to punkty gwiazd kolorowane klasą widmową, nawias na systemie bieżącym, kreskowany okrąg zasięgu skoku i trasa złożona z trzech przeskoków.</desc>
+<defs>
+<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="1" height="1" fill="#3A4757" opacity="0.55"/></pattern>
+</defs>
+<rect x="0" y="0" width="660" height="1180" fill="#05070B"/>
+
+<text x="10" y="16" font-size="11" fill="#78899C">5 — EDYTOR STATKU: jedyny ekran z pełną ramą i tytułem, bo to warsztat, a nie kokpit. Prawa kolumna to raport, nie lista.</text>
+<g transform="translate(10,24)">
+<rect x="0" y="0" width="640" height="360" fill="#070A10"/>
+<text x="8" y="19" font-size="16" fill="#D8E4F0">SHIP EDITOR</text>
+<g font-size="8"><text x="632" y="12" fill="#78899C" text-anchor="end">PAUSED · LANDED · SHELF 04</text><text x="632" y="22" fill="#4A5665" text-anchor="end">hull: LIGHT FRAME  ·  4 mounts  ·  2 hardpoints</text></g>
+<path d="M8 28 L632 28" stroke="#26303D" stroke-width="1"/>
+<rect x="8" y="34" width="418" height="272" fill="url(#dots)"/>
+<g stroke="#26303D" stroke-width="1" fill="none"><path d="M8 42 L8 34 L16 34"/><path d="M418 306 L426 306 L426 298"/></g>
+<path d="M150 118 L286 118 L316 152 L316 188 L286 222 L150 222 L132 190 L132 150 Z" fill="#101826" stroke="#4A5665" stroke-width="1"/>
+<path d="M150 118 L150 222" stroke="#26303D" stroke-width="1"/><path d="M286 118 L286 222" stroke="#26303D" stroke-width="1"/>
+<g stroke="#5FE3C0" stroke-width="1" fill="none"><path d="M126 138 L120 138 L120 148"/><path d="M126 202 L120 202 L120 192"/></g>
+<g fill="#5FE3C0"><rect x="112" y="142" width="8" height="4"/><rect x="112" y="194" width="8" height="4"/></g>
+<g stroke="#5FE3C0" stroke-width="1" fill="none"><path d="M316 164 L326 164 L326 176"/></g><rect x="320" y="166" width="10" height="8" fill="#5FE3C0"/>
+<g stroke="#FFC24A" stroke-width="1" fill="none"><path d="M196 112 L196 104 L206 104"/><path d="M236 112 L236 104 L226 104"/><path d="M196 228 L196 236 L206 236"/><path d="M236 228 L236 236 L226 236"/></g>
+<g opacity="0.55"><rect x="204" y="92" width="24" height="12" fill="#FFC24A"/><path d="M210 92 L210 84 L222 84 L222 92" fill="#FFC24A"/></g>
+<text x="244" y="92" font-size="8" fill="#FFC24A">Mk2 TORQUE</text><text x="244" y="102" font-size="8" fill="#62E08C">fits · pair</text>
+<g stroke="#78899C" stroke-width="1"><path d="M218 166 L230 166"/><path d="M224 160 L224 172"/></g><text x="234" y="163" font-size="7" fill="#78899C">COM</text>
+<g stroke="#62E08C" stroke-width="1"><path d="M214 172 L226 172"/><path d="M220 166 L220 178"/></g>
+<g font-size="8"><text x="14" y="300" fill="#4A5665">grid 8 px  ·  hull outline is the collision shape</text></g>
+<path d="M434 34 L434 306" stroke="#26303D" stroke-width="1"/>
+<text x="444" y="42" font-size="8" fill="#78899C">CONFIGURATION</text>
+<g font-size="8"><text x="444" y="58" fill="#78899C">MASS</text><text x="632" y="58" fill="#D8E4F0" text-anchor="end">4.20 t</text><text x="444" y="69" fill="#78899C">COM</text><text x="632" y="69" fill="#FFC24A" text-anchor="end">2.1 aft</text><text x="444" y="80" fill="#78899C">INER</text><text x="632" y="80" fill="#D8E4F0" text-anchor="end">1.84</text></g>
+<path d="M444 86 L632 86" stroke="#26303D" stroke-width="1"/>
+<text x="444" y="99" font-size="8" fill="#78899C">AUTHORITY</text>
+<g font-size="8" fill="#78899C"><text x="444" y="113">FWD</text><text x="444" y="127">REV</text><text x="444" y="141">LEFT</text><text x="444" y="155">RIGHT</text><text x="444" y="169">ROT+</text><text x="444" y="183">ROT-</text></g>
+<g><rect x="482" y="107" width="110" height="5" fill="none" stroke="#3A4757"/><rect x="483" y="108" width="92" height="3" fill="#5FE3C0"/><rect x="482" y="121" width="110" height="5" fill="none" stroke="#3A4757"/><rect x="483" y="122" width="34" height="3" fill="#5FE3C0"/><rect x="482" y="135" width="110" height="5" fill="none" stroke="#3A4757"/><rect x="483" y="136" width="58" height="3" fill="#5FE3C0"/><rect x="482" y="149" width="110" height="5" fill="none" stroke="#3A4757"/><rect x="483" y="150" width="56" height="3" fill="#5FE3C0"/><rect x="482" y="163" width="110" height="5" fill="none" stroke="#3A4757"/><rect x="483" y="164" width="74" height="3" fill="#62E08C"/><rect x="482" y="177" width="110" height="5" fill="none" stroke="#3A4757"/><rect x="483" y="178" width="70" height="3" fill="#62E08C"/></g>
+<g font-size="8" text-anchor="end"><text x="632" y="113" fill="#D8E4F0">0.84</text><text x="632" y="127" fill="#FFC24A">0.31</text><text x="632" y="141" fill="#D8E4F0">0.53</text><text x="632" y="155" fill="#D8E4F0">0.51</text><text x="632" y="169" fill="#62E08C">0.67</text><text x="632" y="183" fill="#62E08C">0.64</text></g>
+<path d="M444 191 L632 191" stroke="#26303D" stroke-width="1"/>
+<text x="444" y="204" font-size="8" fill="#78899C">IF FITTED</text>
+<g font-size="8"><text x="444" y="218" fill="#62E08C">ROT+  0.67 → 0.91</text><text x="444" y="229" fill="#62E08C">ROT-  0.64 → 0.88</text><text x="444" y="240" fill="#FF5B4D">MASS  4.20 → 4.58 t</text><text x="444" y="251" fill="#FFC24A">COM   2.1 → 0.4 aft</text></g>
+<path d="M444 259 L632 259" stroke="#26303D" stroke-width="1"/>
+<text x="444" y="273" font-size="8" fill="#4A5665">No empty command group.</text><text x="444" y="284" font-size="8" fill="#4A5665">Reverse is weak: 0.31</text>
+<path d="M8 316 L632 316" stroke="#26303D" stroke-width="1"/>
+<g font-size="8"><text x="8" y="330" fill="#78899C">ARROWS</text><text x="60" y="330" fill="#D8E4F0">select mount</text><text x="160" y="330" fill="#78899C">F</text><text x="176" y="330" fill="#D8E4F0">fit</text><text x="208" y="330" fill="#78899C">S</text><text x="224" y="330" fill="#D8E4F0">stow</text><text x="268" y="330" fill="#78899C">DEL</text><text x="296" y="330" fill="#D8E4F0">jettison</text><text x="380" y="330" fill="#78899C">I</text><text x="396" y="330" fill="#D8E4F0">close</text></g>
+<text x="8" y="346" font-size="8" fill="#4A5665">Refit only on the ground. Preview above is not committed.</text>
+</g>
+
+<text x="10" y="404" font-size="11" fill="#78899C">6 — MAPA SYSTEMU: schemat, nie widok. Kreskowany okrąg to orbita, kropkowany to granica wpływu, nawias to statek.</text>
+<g transform="translate(10,412)">
+<rect x="0" y="0" width="640" height="360" fill="#070A10"/>
+<g font-size="8"><text x="8" y="14" fill="#7BA7FF">SYSTEM KEPLER</text><text x="8" y="25" fill="#4A5665">seed 481203  ·  4 bodies  ·  1 moon</text></g>
+<g fill="none" stroke="#7BA7FF" stroke-width="1" stroke-dasharray="2 4" opacity="0.4"><circle cx="286" cy="188" r="46"/><circle cx="286" cy="188" r="84"/><circle cx="286" cy="188" r="128"/><circle cx="286" cy="188" r="172"/></g>
+<circle cx="286" cy="188" r="16" fill="#FFC24A" opacity="0.12"/><circle cx="286" cy="188" r="7" fill="#FFC24A"/>
+<text x="286" y="210" font-size="8" fill="#FFC24A" text-anchor="middle">KEPLER</text>
+<circle cx="322" cy="160" r="3" fill="#4E5A6B"/><text x="330" y="158" font-size="8" fill="#78899C">a</text>
+<circle cx="214" cy="146" r="5" fill="#39424F"/><text x="196" y="138" font-size="8" fill="#78899C">b</text>
+<g><circle cx="382" cy="272" r="7" fill="#2A3342"/><circle cx="382" cy="272" r="9" fill="none" stroke="#7BA7FF" stroke-width="1" opacity="0.35"/><circle cx="382" cy="272" r="30" fill="none" stroke="#7BA7FF" stroke-width="1" stroke-dasharray="1 3" opacity="0.4"/><circle cx="404" cy="254" r="2" fill="#4E5A6B"/></g>
+<text x="396" y="290" font-size="8" fill="#D8E4F0">KEPLER-9b</text>
+<circle cx="140" cy="286" r="4" fill="#39424F"/><text x="122" y="300" font-size="8" fill="#78899C">d</text>
+<g stroke="#5FE3C0" stroke-width="1" fill="none"><path d="M362 250 L356 250 L356 256"/><path d="M376 250 L382 250 L382 256"/><path d="M362 266 L356 266 L356 260"/><path d="M376 266 L382 266 L382 260"/></g>
+<path d="M369 258 C 340 230, 330 196, 348 168" fill="none" stroke="#5FE3C0" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
+<text x="352" y="164" font-size="8" fill="#5FE3C0">T+2:10</text>
+<g fill="#FFC24A"><path d="M398 300 L401 296 L404 300 L401 304 Z"/><path d="M370 306 L373 302 L376 306 L373 310 Z"/></g><text x="410" y="303" font-size="8" fill="#FFC24A">2 crates</text>
+<path d="M496 30 L496 330" stroke="#26303D" stroke-width="1"/>
+<text x="506" y="42" font-size="8" fill="#7BA7FF">KEPLER-9b</text>
+<g font-size="8"><text x="506" y="58" fill="#78899C">RADIUS</text><text x="632" y="58" fill="#D8E4F0" text-anchor="end">4200</text><text x="506" y="69" fill="#78899C">GRAV</text><text x="632" y="69" fill="#D8E4F0" text-anchor="end">98.4</text><text x="506" y="80" fill="#78899C">AIR</text><text x="632" y="80" fill="#62E08C" text-anchor="end">0.82</text><text x="506" y="91" fill="#78899C">DAY</text><text x="632" y="91" fill="#D8E4F0" text-anchor="end">318 s</text><text x="506" y="102" fill="#78899C">SHELVES</text><text x="632" y="102" fill="#D8E4F0" text-anchor="end">7</text><text x="506" y="113" fill="#78899C">V_ESC</text><text x="632" y="113" fill="#D8E4F0" text-anchor="end">2140</text></g>
+<path d="M506 121 L632 121" stroke="#26303D" stroke-width="1"/>
+<g font-size="8"><text x="506" y="134" fill="#78899C">WEATHER</text><text x="506" y="145" fill="#D8E4F0">STRATUS · 62% cover</text><text x="506" y="160" fill="#78899C">VISITED</text><text x="632" y="160" fill="#62E08C" text-anchor="end">yes</text><text x="506" y="171" fill="#78899C">CRATES</text><text x="632" y="171" fill="#FFC24A" text-anchor="end">2 seen</text></g>
+<path d="M506 179 L632 179" stroke="#26303D" stroke-width="1"/>
+<text x="506" y="193" font-size="8" fill="#5FE3C0">ENTER  set course</text><text x="506" y="204" font-size="8" fill="#78899C">M      galaxy map</text>
+<g stroke="#3A4757" stroke-width="1"><path d="M8 344 L88 344"/><path d="M8 340 L8 348"/><path d="M88 340 L88 348"/></g><text x="94" y="347" font-size="8" fill="#78899C">10 Mm</text>
+</g>
+
+<text x="10" y="792" font-size="11" fill="#78899C">7 — MAPA GALAKTYKI: punkt na klasę widmową, nawias na systemie bieżącym, kreskowany okrąg zasięgu skoku, trasa liczona w przeskokach.</text>
+<g transform="translate(10,800)">
+<rect x="0" y="0" width="640" height="360" fill="#070A10"/>
+<g font-size="8"><text x="8" y="14" fill="#7BA7FF">GALAXY</text><text x="8" y="25" fill="#4A5665">seed 481203  ·  visited 12  ·  jump range 6.0 ly</text></g>
+<circle cx="242" cy="192" r="86" fill="none" stroke="#5FE3C0" stroke-width="1" stroke-dasharray="2 4" opacity="0.4"/>
+<g fill="#4A5665"><rect x="52" y="64" width="2" height="2"/><rect x="118" y="46" width="2" height="2"/><rect x="176" y="88" width="2" height="2"/><rect x="88" y="132" width="2" height="2"/><rect x="34" y="196" width="2" height="2"/><rect x="146" y="252" width="2" height="2"/><rect x="72" y="296" width="2" height="2"/><rect x="204" y="312" width="2" height="2"/><rect x="288" y="66" width="2" height="2"/><rect x="352" y="40" width="2" height="2"/><rect x="420" y="88" width="2" height="2"/><rect x="466" y="52" width="2" height="2"/><rect x="392" y="146" width="2" height="2"/><rect x="452" y="196" width="2" height="2"/><rect x="336" y="268" width="2" height="2"/><rect x="284" y="322" width="2" height="2"/><rect x="408" y="308" width="2" height="2"/><rect x="176" y="176" width="2" height="2"/><rect x="128" y="212" width="2" height="2"/><rect x="216" y="108" width="2" height="2"/></g>
+<g><rect x="196" y="140" width="3" height="3" fill="#7BA7FF"/><rect x="298" y="150" width="3" height="3" fill="#7BA7FF"/><rect x="262" y="256" width="3" height="3" fill="#7BA7FF"/><rect x="160" y="230" width="3" height="3" fill="#7BA7FF"/><rect x="330" y="204" width="3" height="3" fill="#FFC24A"/><rect x="118" y="164" width="3" height="3" fill="#FF5B4D"/><rect x="368" y="112" width="3" height="3" fill="#FF5B4D"/><rect x="226" y="82" width="3" height="3" fill="#D8E4F0"/><rect x="304" y="96" width="4" height="4" fill="#D8E4F0"/><rect x="196" y="300" width="3" height="3" fill="#FFC24A"/></g>
+<g stroke="#5FE3C0" stroke-width="1" fill="none"><path d="M232 182 L226 182 L226 188"/><path d="M252 182 L258 182 L258 188"/><path d="M232 202 L226 202 L226 196"/><path d="M252 202 L258 202 L258 196"/></g>
+<rect x="241" y="191" width="4" height="4" fill="#5FE3C0"/><text x="266" y="195" font-size="8" fill="#5FE3C0">KEPLER</text>
+<g stroke="#7BA7FF" stroke-width="1" opacity="0.8"><path d="M245 193 L299 152"/><path d="M301 152 L331 205"/><path d="M331 206 L369 114"/></g>
+<g fill="none" stroke="#7BA7FF" stroke-width="1"><path d="M296 149 L302 149 L302 155 L296 155 Z"/><path d="M328 202 L334 202 L334 208 L328 208 Z"/></g>
+<g stroke="#FFC24A" stroke-width="1" fill="none"><path d="M364 108 L360 108 L360 112"/><path d="M374 108 L378 108 L378 112"/><path d="M364 120 L360 120 L360 116"/><path d="M374 120 L378 120 L378 116"/></g>
+<text x="386" y="118" font-size="8" fill="#FFC24A">VELA-3</text>
+<g font-size="8"><text x="245" y="228" fill="#78899C">3 JUMPS</text><text x="245" y="239" fill="#D8E4F0">14.2 ly  ·  fuel 3/5</text></g>
+<path d="M496 30 L496 330" stroke="#26303D" stroke-width="1"/>
+<text x="506" y="42" font-size="8" fill="#FFC24A">VELA-3</text>
+<g font-size="8"><text x="506" y="58" fill="#78899C">CLASS</text><text x="632" y="58" fill="#FFC24A" text-anchor="end">K orange</text><text x="506" y="69" fill="#78899C">DIST</text><text x="632" y="69" fill="#D8E4F0" text-anchor="end">14.2 ly</text><text x="506" y="80" fill="#78899C">JUMPS</text><text x="632" y="80" fill="#D8E4F0" text-anchor="end">3</text><text x="506" y="91" fill="#78899C">BODIES</text><text x="632" y="91" fill="#4A5665" text-anchor="end">unknown</text><text x="506" y="102" fill="#78899C">VISITED</text><text x="632" y="102" fill="#4A5665" text-anchor="end">no</text></g>
+<path d="M506 110 L632 110" stroke="#26303D" stroke-width="1"/>
+<text x="506" y="124" font-size="8" fill="#78899C">ROUTE</text>
+<g font-size="8"><text x="506" y="138" fill="#D8E4F0">KEPLER</text><text x="506" y="149" fill="#D8E4F0">LYRA-7</text><text x="632" y="149" fill="#78899C" text-anchor="end">4.9</text><text x="506" y="160" fill="#D8E4F0">ODIN-2</text><text x="632" y="160" fill="#78899C" text-anchor="end">5.1</text><text x="506" y="171" fill="#FFC24A">VELA-3</text><text x="632" y="171" fill="#78899C" text-anchor="end">4.2</text></g>
+<path d="M506 179 L632 179" stroke="#26303D" stroke-width="1"/>
+<text x="506" y="193" font-size="8" fill="#5FE3C0">ENTER  jump to LYRA-7</text><text x="506" y="204" font-size="8" fill="#78899C">M      system map</text>
+<g font-size="8"><text x="506" y="226" fill="#4A5665">grey = never scanned</text><text x="506" y="237" fill="#4A5665">colour = spectral class</text></g>
+<g stroke="#3A4757" stroke-width="1"><path d="M8 344 L88 344"/><path d="M8 340 L8 348"/><path d="M88 340 L88 348"/></g><text x="94" y="347" font-size="8" fill="#78899C">20 ly</text>
+</g>
+</svg>
