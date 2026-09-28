@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+[ext_resource type="PackedScene" path="res://scenes/missile.tscn" id="2_round"]
+
+[resource]
+script = ExtResource("1_weapon")
+type = 3
+display_name = "seeker"
+damage = 0.28
+rounds_per_second = 0.6
+muzzle_speed = 150.0
+spread_degrees = 0.5
+range_px = 4200.0
+crater_radius = 16.0
+energy_cost = 21.0
+bulk = 1.9
+missile_thrust = 340.0
+missile_turn_rate = 2.2
+blast_radius = 26.0
+projectile_scene = ExtResource("2_round")

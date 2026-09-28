@@ -41,7 +41,13 @@ func tick(delta: float) -> void:
 
 
 func can_fire() -> bool:
-	return _cooldown <= 0.0 and weapon != null and weapon.projectile_scene != null
+	if _cooldown > 0.0 or weapon == null:
+		return false
+	# A beam has no projectile scene because nothing travels. Demanding one
+	# meant a laser could never fire at all -- it failed this check every
+	# tick and returned quietly, which is the worst way for a weapon to be
+	# broken.
+	return weapon.is_beam() or weapon.projectile_scene != null
 
 
 ## The weapon as it fires, with every mod folded in. The base weapon when
@@ -151,13 +157,17 @@ func fire(carrier_velocity: Vector2, container: Node, shooter: Node = null) -> P
 	var firing: WeaponData = effective()
 	_cooldown = 1.0 / maxf(firing.rounds_per_second, 0.001)
 
-	var round_instance: Projectile = firing.projectile_scene.instantiate() as Projectile
-	if round_instance == null:
-		return null
-
 	var spread: float = deg_to_rad(firing.spread_degrees)
 	var aim: float = global_rotation + randf_range(-spread * 0.5, spread * 0.5)
 	var direction: Vector2 = MUZZLE_DIRECTION.rotated(aim)
+
+	if firing.is_beam():
+		_fire_beam(firing, direction, container, shooter)
+		return null
+
+	var round_instance: Projectile = firing.projectile_scene.instantiate() as Projectile
+	if round_instance == null:
+		return null
 
 	# The round carries the weapon's numbers rather than its own defaults: a
 	# projectile scene is a chassis, and what it hits for is loot.
@@ -165,7 +175,16 @@ func fire(carrier_velocity: Vector2, container: Node, shooter: Node = null) -> P
 	round_instance.crater_radius = firing.crater_radius
 	round_instance.lifetime = firing.lifetime()
 	round_instance.pierces = _pierces()
-	round_instance.blast_radius = _blast_radius(firing)
+	# The weapon's own blast and the mods' both count; a shrapnel shell in an
+	# AoE launcher should be worse than either alone.
+	round_instance.blast_radius = maxf(firing.blast_radius, _blast_radius(firing))
+
+	var missile: Missile = round_instance as Missile
+	if missile != null:
+		missile.thrust = firing.missile_thrust
+		missile.turn_rate = firing.missile_turn_rate
+		if firing.type == WeaponData.Type.HOMING_MISSILE:
+			missile.target = Missile.find_target(global_position, shooter, get_tree())
 
 	round_instance.shooter = shooter
 	round_instance.global_position = global_position
@@ -194,3 +213,52 @@ func _blast_radius(firing: WeaponData) -> float:
 		if mod.effect == ShotModData.Effect.BLAST:
 			return firing.crater_radius * 2.0
 	return 0.0
+
+
+## Resolves a laser along its ray: the first thing it meets takes the damage,
+## and a line is left behind to show where it went.
+##
+## Range rather than lifetime, because nothing is travelling. Stepped at the
+## same interval the terrain is sampled at, so a beam cannot slip through a
+## wall a round would have hit.
+func _fire_beam(
+	firing: WeaponData, direction: Vector2, container: Node, shooter: Node
+) -> void:
+	var reach: float = firing.range_px
+	var hit_at: Vector2 = global_position + direction * reach
+	var planet: Planet = Planet.nearest(get_tree(), global_position)
+
+	var struck: Ship = null
+	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(
+		global_position, hit_at
+	)
+	query.collide_with_bodies = true
+	if shooter is CollisionObject2D:
+		query.exclude = [(shooter as CollisionObject2D).get_rid()]
+	var body_hit: Dictionary = space.intersect_ray(query)
+	if not body_hit.is_empty():
+		hit_at = body_hit["position"]
+		struck = body_hit.get("collider") as Ship
+
+	if planet != null:
+		var travelled: float = 0.0
+		var limit: float = global_position.distance_to(hit_at)
+		while travelled < limit:
+			travelled += Projectile.SAMPLE_STEP
+			var probe: Vector2 = global_position + direction * travelled
+			if planet.is_solid_at(probe):
+				hit_at = probe
+				struck = null
+				break
+
+	if struck != null:
+		struck.take_damage(firing.damage, "beam")
+	elif planet != null and firing.crater_radius > 0.0:
+		planet.carve(hit_at, firing.crater_radius)
+
+	var line: Beam = Beam.new()
+	line.from = global_position
+	line.to = hit_at
+	line.seconds = firing.beam_seconds
+	container.add_child(line)

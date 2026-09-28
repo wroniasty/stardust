@@ -33,6 +33,11 @@ const RARITY_NAMES: Array[String] = ["common", "uncommon", "rare", "epic", "lege
 const WEAPON_BASES: Array[String] = [
 	"res://resources/weapons/autocannon.tres",
 	"res://resources/weapons/siege_slug.tres",
+	"res://resources/weapons/pulse_repeater.tres",
+	"res://resources/weapons/beam_lance.tres",
+	"res://resources/weapons/dumb_rocket.tres",
+	"res://resources/weapons/seeker.tres",
+	"res://resources/weapons/burst_shell.tres",
 ]
 
 const GENERATOR_BASES: Array[String] = [
@@ -61,6 +66,14 @@ const WEAPON_AFFIXES: Array[Dictionary] = [
 	},
 	{"name": &"precise", "field": "spread_degrees", "factor": Vector2(0.40, 0.70)},
 	{"name": &"long", "field": "range_px", "factor": Vector2(1.25, 1.60)},
+	{
+		"name": &"wide", "field": "blast_radius", "factor": Vector2(1.25, 1.65),
+		"cost_field": "damage", "cost": Vector2(0.82, 0.94),
+	},
+	{
+		"name": &"eager", "field": "missile_thrust", "factor": Vector2(1.25, 1.70),
+		"cost_field": "range_px", "cost": Vector2(0.75, 0.90),
+	},
 	{"name": &"breaching", "field": "crater_radius", "factor": Vector2(1.30, 1.90)},
 	{
 		"name": &"lightweight", "field": "bulk", "factor": Vector2(0.60, 0.85),
@@ -178,6 +191,9 @@ const LIMITS: Dictionary = {
 	"muzzle_speed": Vector2(50.0, 3000.0),
 	"range_px": Vector2(100.0, 20000.0),
 	"crater_radius": Vector2(2.0, 80.0),
+	"blast_radius": Vector2(0.0, 160.0),
+	"missile_thrust": Vector2(0.0, 2000.0),
+	"missile_turn_rate": Vector2(0.0, 8.0),
 	"energy_cost": Vector2(0.5, 200.0),
 	"capacity": Vector2(10.0, 600.0),
 	"recharge_rate": Vector2(2.0, 200.0),

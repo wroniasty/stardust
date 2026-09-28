@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+[ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="2_round"]
+
+[resource]
+script = ExtResource("1_weapon")
+type = 4
+display_name = "burst shell"
+damage = 0.22
+rounds_per_second = 1.2
+muzzle_speed = 520.0
+spread_degrees = 2.5
+range_px = 2000.0
+crater_radius = 30.0
+energy_cost = 16.5
+bulk = 1.5
+blast_radius = 48.0
+projectile_scene = ExtResource("2_round")

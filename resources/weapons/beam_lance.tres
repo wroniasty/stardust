@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+
+[resource]
+script = ExtResource("1_weapon")
+type = 1
+display_name = "beam lance"
+damage = 0.05
+rounds_per_second = 10.0
+muzzle_speed = 0.0
+spread_degrees = 0.0
+range_px = 1400.0
+crater_radius = 3.0
+energy_cost = 3.8
+bulk = 1.4
+beam_seconds = 0.07

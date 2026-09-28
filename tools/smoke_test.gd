@@ -964,6 +964,7 @@ func _evaluate_phase() -> void:
 			_check_allocator()
 			_check_gimbal()
 			_check_gear_module()
+			_check_weapon_types(_planet)
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -2111,16 +2112,20 @@ func _check_energy() -> void:
 	# Energy is not allowed to pick a winner quietly: the guns differ in
 	# character, not in efficiency.
 	var per_energy: Array[float] = []
-	for path: String in ["res://resources/weapons/autocannon.tres",
-			"res://resources/weapons/siege_slug.tres"]:
+	var lowest: float = INF
+	var highest: float = 0.0
+	for path: String in LOOT_SCRIPT.WEAPON_BASES:
 		var gun: WeaponData = load(path) as WeaponData
 		_expect(gun.energy_cost > 0.0, "%s costs energy to fire" % gun.display_name)
-		per_energy.append(gun.damage / maxf(gun.energy_cost, 0.0001))
-	var spread: float = absf(per_energy[0] - per_energy[1]) / maxf(per_energy[0], 0.0001)
+		var ratio: float = gun.damage / maxf(gun.energy_cost, 0.0001)
+		per_energy.append(ratio)
+		lowest = minf(lowest, ratio)
+		highest = maxf(highest, ratio)
+	var spread: float = (highest - lowest) / maxf(highest, 0.0001)
 	_expect(
 		spread < 0.10,
-		"the base weapons are within a tenth on damage per unit of energy (%.4f, %.4f)" % [
-			per_energy[0], per_energy[1],
+		"all %d base weapons sit on one line of damage per unit of energy (%.4f..%.4f)" % [
+			per_energy.size(), lowest, highest,
 		],
 	)
 
@@ -2787,6 +2792,106 @@ func _check_gear_module() -> void:
 	_expect(
 		is_equal_approx(legs.vertical_limit(), bare_limit),
 		"and a hull with no legs fitted falls back on what it manages bare",
+	)
+
+	ship.queue_free()
+
+
+## Six weapon types carried by three behaviours: a round that coasts, a
+## round that flies under power, and a beam that does not fly. What has to
+## be true is that each type actually behaves like itself -- otherwise the
+## enum is six names for one gun.
+func _check_weapon_types(planet: Planet) -> void:
+	var ship: Ship = _spawn_ship()
+	var mount: Hardpoint = ship.hardpoints[0]
+	var container: Node = ship.projectile_container()
+	ship.energy = 1000.0
+
+	# A laser resolves instantly. Nothing is spawned to fly, and the ground
+	# a long way off is already gone by the time fire() returns.
+	var angle: float = -PI * 0.5
+	var ground: float = _find_ground(planet, angle)
+	ship.global_position = planet.global_position + Vector2.from_angle(angle) * (ground + 300.0)
+	ship.global_rotation = PI
+	# One pixel in, not four: the lance cuts a 3 px hole and a test that
+	# demanded more would be measuring the crater rather than the beam.
+	var target_point: Vector2 = planet.global_position + Vector2.from_angle(angle) * (ground - 1.0)
+	_expect(planet.is_solid_at(target_point), "there is ground under the muzzle to shine at")
+
+	var lance: WeaponData = load("res://resources/weapons/beam_lance.tres") as WeaponData
+	mount.fit(lance)
+	mount._cooldown = 0.0
+	var spawned: Projectile = mount.fire(Vector2.ZERO, container, ship)
+	_expect(spawned == null, "a laser spawns nothing: there is nothing travelling")
+	_expect(
+		not planet.is_solid_at(target_point),
+		"and the ground it was aimed at is gone the same tick",
+	)
+
+	# A missile leaves slowly and builds speed, which is what makes it
+	# dodgeable early and firing one a commitment.
+	var rocket: WeaponData = load("res://resources/weapons/dumb_rocket.tres") as WeaponData
+	mount.fit(rocket)
+	mount._cooldown = 0.0
+	var launched: Missile = mount.fire(Vector2.ZERO, container, ship) as Missile
+	_expect(launched != null, "a rocket launches something that flies under power")
+	if launched != null:
+		var launch_speed: float = launched.velocity.length()
+		launched.thrust = rocket.missile_thrust
+		launched.turn_rate = 0.0
+		for step: int in range(30):
+			launched.velocity += launched.velocity.normalized() * launched.thrust / 60.0
+		_expect(
+			launched.velocity.length() > launch_speed * 1.5,
+			"and it accelerates after launch (%.0f to %.0f px/s)" % [
+				launch_speed, launched.velocity.length(),
+			],
+		)
+		_expect(
+			launched.blast_radius > 0.0,
+			"a rocket hurts what it did not hit (%.0f px)" % launched.blast_radius,
+		)
+		launched.queue_free()
+
+	# Homing turns towards something, and a dumb round does not.
+	var mark: Ship = _spawn_ship()
+	mark.global_position = ship.global_position + Vector2(600.0, -600.0)
+	var seeker: WeaponData = load("res://resources/weapons/seeker.tres") as WeaponData
+	mount.fit(seeker)
+	mount._cooldown = 0.0
+	var guided: Missile = mount.fire(Vector2.ZERO, container, ship) as Missile
+	# Whatever it picked, not specifically `mark`: the smoke test frees
+	# ships with queue_free, which is deferred, so earlier hulls are still
+	# in the group during a synchronous check. What matters is that it chose
+	# a ship that is not the shooter and then flew at it.
+	_expect(
+		guided != null and guided.target != null and guided.target != ship,
+		"a seeker picks up something other than the ship that fired it",
+	)
+	if guided != null and guided.target != null:
+		var chased: Node2D = guided.target
+		var before: float = guided.velocity.angle_to(chased.global_position - guided.global_position)
+		for step: int in range(20):
+			guided._physics_process(1.0 / 60.0)
+		var after: float = guided.velocity.angle_to(chased.global_position - guided.global_position)
+		_expect(
+			absf(after) < absf(before),
+			"and turns towards it (%.2f to %.2f rad off)" % [before, after],
+		)
+		guided.queue_free()
+	mark.queue_free()
+
+	# The remaining two are data on the coasting round, and have to differ
+	# from each other in the way their names claim.
+	var burst: WeaponData = load("res://resources/weapons/burst_shell.tres") as WeaponData
+	var pulse: WeaponData = load("res://resources/weapons/pulse_repeater.tres") as WeaponData
+	_expect(burst.blast_radius > burst.crater_radius, "a burst shell reaches past its own crater")
+	_expect(
+		pulse.rounds_per_second > burst.rounds_per_second * 4.0
+		and pulse.range_px < burst.range_px,
+		"a pulse repeater trades reach for rate (%.0f/s at %.0f px)" % [
+			pulse.rounds_per_second, pulse.range_px,
+		],
 	)
 
 	ship.queue_free()

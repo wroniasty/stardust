@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+[ext_resource type="PackedScene" path="res://scenes/projectile.tscn" id="2_round"]
+
+[resource]
+script = ExtResource("1_weapon")
+type = 5
+display_name = "pulse repeater"
+damage = 0.04
+rounds_per_second = 8.0
+muzzle_speed = 900.0
+spread_degrees = 3.5
+range_px = 900.0
+crater_radius = 6.0
+energy_cost = 3.0
+bulk = 0.8
+projectile_scene = ExtResource("2_round")

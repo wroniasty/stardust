@@ -56,6 +56,11 @@ const ITERATION_REFERENCE_POINTS: int = 6
 ## world instead of riding along with the ship that fired them.
 const PROJECTILE_GROUP: StringName = &"projectile_container"
 
+## Every ship joins this. A homing round asks the group what is worth
+## chasing, the same way the scanner asks for celestial bodies: one
+## definition of "a ship", not one per feature.
+const SHIP_GROUP: StringName = &"ships"
+
 ## Below this closing speed a contact does not bounce at all, in px/s. Without
 ## it a resting hull keeps trading tiny impulses with the ground.
 const RESTITUTION_CUTOFF: float = 30.0
@@ -376,6 +381,7 @@ func _ready() -> void:
 	# Set once here rather than at every landing: it never changes, and writing
 	# it from _integrate_forces would be another state change the server
 	# refuses mid-flush.
+	add_to_group(SHIP_GROUP)
 	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
 	# Both derived from the outline, before anything asks for either.
 	_build_contact_points()

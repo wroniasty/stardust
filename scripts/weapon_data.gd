@@ -11,17 +11,30 @@ extends ModuleData
 ## rolled it never changes, so a list of names for display is all that has to
 ## survive alongside the values.
 
-## What the weapon throws. Only PROJECTILE flies today; the rest are declared
-## because the hardpoint's accepted-type list has to be able to name them, and
-## they land later in M2.
+## What the weapon throws.
+##
+## Three behaviours carry all six: a round that coasts, a round that flies
+## under power, and a beam that does not fly at all. The rest is data on this
+## resource. A class per type would become a class per combination the moment
+## mods start changing what a round does (IDEAS.md section 4).
 enum Type {
 	PROJECTILE, ## A round with travel time, sampled along its path.
-	LASER, ## Hitscan.
-	DUMB_MISSILE, ## Slow, accelerating, no guidance.
-	HOMING_MISSILE, ## Slow, accelerating, turns towards a target.
-	AOE, ## Damage over an area rather than at a point.
-	PULSE, ## Short burst at close range.
+	LASER, ## Hitscan: the beam is drawn, the damage is instant.
+	DUMB_MISSILE, ## Accelerates after launch, flies straight.
+	HOMING_MISSILE, ## Accelerates and turns towards what it can find.
+	AOE, ## A round that hurts what it did not hit.
+	PULSE, ## Short burst at close range: cheap, fast, no reach.
 }
+
+
+## Whether this type flies under power rather than coasting.
+func is_missile() -> bool:
+	return type == Type.DUMB_MISSILE or type == Type.HOMING_MISSILE
+
+
+## Whether it is resolved along a ray instead of being spawned.
+func is_beam() -> bool:
+	return type == Type.LASER
 
 @export var type: Type = Type.PROJECTILE
 
@@ -71,6 +84,26 @@ enum Type {
 ## slot count is what a found gun offers, and what the pilot then does with
 ## the slots is theirs (IDEAS.md section 14).
 @export var mod_slots: int = 0
+
+
+## Acceleration after launch, px/s^2, and how fast the round can turn to
+## follow something, radians per second. Missiles only; a coasting round
+## ignores both.
+##
+## A missile leaves the rail slowly and builds speed, which is what makes it
+## dodgeable early and what makes firing one a commitment rather than a
+## click.
+@export var missile_thrust: float = 0.0
+@export var missile_turn_rate: float = 0.0
+
+## How far an impact reaches past what it struck. Zero on a round that only
+## hurts what it hits.
+@export var blast_radius: float = 0.0
+
+## How long the beam stays drawn. Only the drawing: the damage lands the
+## instant the trigger is pulled, so a laser is a very fast pulse and energy
+## keeps one rule for everything (IDEAS.md section 14).
+@export var beam_seconds: float = 0.06
 
 
 ## Names of the affixes rolled into the numbers above, for display only.

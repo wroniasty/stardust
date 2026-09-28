@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_weapon"]
+[ext_resource type="PackedScene" path="res://scenes/missile.tscn" id="2_round"]
+
+[resource]
+script = ExtResource("1_weapon")
+type = 2
+display_name = "dumb rocket"
+damage = 0.35
+rounds_per_second = 0.8
+muzzle_speed = 180.0
+spread_degrees = 1.5
+range_px = 3000.0
+crater_radius = 22.0
+energy_cost = 26.0
+bulk = 1.6
+missile_thrust = 420.0
+blast_radius = 34.0
+projectile_scene = ExtResource("2_round")
