@@ -52,7 +52,7 @@ func _report(planet: Planet) -> void:
 		CARVE_RADIUS, _time_carve(planet), CARVE_SAMPLES,
 	])
 	print("  hull sampling: %.3f ms per physics tick (%d points, worst case all in rock)" % [
-		_time_sampling(planet), Ship.HULL_POINTS.size(),
+		_time_sampling(planet), Ship.new().contact_points().size(),
 	])
 
 
@@ -81,13 +81,17 @@ func _time_carve(planet: Planet) -> float:
 
 ## Worst case: every hull point buried, so every point pays for a normal and a
 ## penetration march on top of the occupancy lookup.
+## The outline's contact points, taken once from a throwaway hull.
+var _bench_points: Array[Vector2] = []
+
+
 func _time_sampling(planet: Planet) -> float:
 	var centre: Vector2 = planet.global_position
 	var inside: Vector2 = centre + Vector2.UP * (planet.surface_radius * 0.95)
 
 	var started: int = Time.get_ticks_usec()
 	for batch: int in range(SAMPLE_BATCHES):
-		for hull_point: Vector2 in Ship.HULL_POINTS:
+		for hull_point: Vector2 in _bench_points:
 			var point: Vector2 = inside + hull_point
 			if planet.is_solid_at(point):
 				var normal: Vector2 = planet.surface_normal_at(point)

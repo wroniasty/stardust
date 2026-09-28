@@ -19,22 +19,42 @@ const FORWARD: Vector2 = Vector2.UP
 ## physics body (see IDEAS.md section 6): it is pixels, and these are the
 ## pixels we ask about. Nose and the two rear corners carry the hull outline,
 ## the rest stop a long edge from sinking in between corners.
-const HULL_POINTS: Array[Vector2] = [
+## The shape the simulation uses, in the ship's own frame. Everything
+## physical is derived from it and from nothing else: the contact points that
+## sample the terrain, the convex shape projectiles hit, the mass, the centre
+## of mass and the inertia.
+##
+## It is an approximation of the drawn hull, not a copy of it. The drawing and
+## the shape are two different things; the outline only has to match closely
+## enough not to look odd, and otherwise be cheap and predictable for the
+## solver. That is why there are guidelines for drawing one -- see the
+## configuration report -- rather than a solver clever enough for any shape
+## (IDEAS.md section 6).
+@export var hull_outline: PackedVector2Array = PackedVector2Array([
 	Vector2(0, -12),
 	Vector2(-8, 10),
 	Vector2(8, 10),
-	Vector2(-4, -1),
-	Vector2(4, -1),
-	Vector2(0, 10),
-]
+])
+
+## Spacing of the contact points along the outline, in pixels.
+##
+## Comes from the terrain, not from taste: the crust is 1.5 px per texel, so
+## at four texels no terrain feature worth noticing fits between two points.
+## A spike narrower than the gap slips between them and the hull either rests
+## on nothing or sinks through it.
+const CONTACT_STEP: float = 6.0
+
+## Solver passes per tick, at the point count the stock hull has, and the
+## ceiling. Sequential impulses converge more slowly the more contacts there
+## are, so the passes grow with the outline instead of staying at a number
+## chosen for a triangle.
+const CONTACT_ITERATIONS: int = 4
+const CONTACT_ITERATIONS_MAX: int = 10
+const ITERATION_REFERENCE_POINTS: int = 6
 
 ## Projectiles are parented to the node in this group, so they stay put in the
 ## world instead of riding along with the ship that fired them.
 const PROJECTILE_GROUP: StringName = &"projectile_container"
-
-## Passes of the contact solver per tick. The contacts are coupled, so one
-## pass leaves the ship visibly soft on a multi-point landing.
-const CONTACT_ITERATIONS: int = 4
 
 ## Below this closing speed a contact does not bounce at all, in px/s. Without
 ## it a resting hull keeps trading tiny impulses with the ground.
@@ -304,6 +324,9 @@ var _since_spend: float = 0.0
 ## The bay, if the hull has one. Found at ready like the other mounts.
 var generator_bay: GeneratorBay = null
 
+## Contact points along the outline, without the gear's. Built once.
+var _outline_contacts: Array[Vector2] = []
+
 ## Where the cargo sits, in the ship's frame. Placed on the stock centre of
 ## mass on purpose: a bay anywhere else would make loading up a balance fault
 ## as well as a mass gain, and nagging the pilot for picking things up would
@@ -335,6 +358,9 @@ func _ready() -> void:
 	# it from _integrate_forces would be another state change the server
 	# refuses mid-flush.
 	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
+	# Both derived from the outline, before anything asks for either.
+	_build_contact_points()
+	_build_collision_shape()
 	rebuild_control_groups()
 	# A ship starts charged. The rebuild above only clamps downwards, so
 	# without this a fresh hull would come out of the yard unable to fire.
@@ -558,22 +584,15 @@ func _recompute_mass_properties() -> void:
 	inertia = maxf(total_inertia, 0.0001)
 
 
-## The hull as a polygon in the ship's own frame. Public because the editor
-## draws its schematic from it: a hand-drawn diagram would have been wrong the
-## moment a mount moved, and mounts moved twice while bulk was going in.
-func hull_outline() -> PackedVector2Array:
-	return _hull_polygon()
-
-
 func _hull_polygon() -> PackedVector2Array:
 	var shape_node: CollisionShape2D = get_node_or_null("HullShape") as CollisionShape2D
 	if shape_node != null:
 		var convex: ConvexPolygonShape2D = shape_node.shape as ConvexPolygonShape2D
 		if convex != null and convex.points.size() >= 3:
 			return convex.points
-	# Falling back on the contact points keeps a ship without a shape usable
-	# rather than dividing by a zero area.
-	return PackedVector2Array(HULL_POINTS)
+	# The outline is the source; the shape above is derived from it and this
+	# is only the path taken before _ready has run.
+	return hull_outline
 
 
 func _polygon_centroid(polygon: PackedVector2Array) -> Vector2:
@@ -872,7 +891,7 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 			continue
 		points.append(world_point)
 		normals.append(point_normal)
-		var depth: float = planet.penetration_at(world_point, point_normal)
+		var depth: float = planet.penetration_at(world_point, point_normal, penetration_limit())
 		if depth > deepest:
 			deepest = depth
 			deepest_normal = point_normal
@@ -919,7 +938,7 @@ func _apply_contact_impulses(
 	var inverse_inertia: float = state.inverse_inertia
 	var hardest: float = 0.0
 
-	for iteration: int in range(CONTACT_ITERATIONS):
+	for iteration: int in range(contact_iterations()):
 		for i: int in range(points.size()):
 			var arm: Vector2 = points[i] - centre_of_mass
 			var normal: Vector2 = normals[i]
@@ -983,10 +1002,67 @@ func _apply_impulse_at(
 ## fully out. The legs are appended last so the contact loop can tell which
 ## contacts were made on them.
 func contact_points() -> Array[Vector2]:
-	var points: Array[Vector2] = HULL_POINTS.duplicate()
+	var points: Array[Vector2] = _outline_contacts.duplicate()
 	if gear != null:
 		points.append_array(gear.contact_points())
 	return points
+
+
+## Vertices of the outline plus a point every CONTACT_STEP along each edge,
+## worked out once rather than per tick.
+func _build_contact_points() -> void:
+	_outline_contacts.clear()
+	var outline: PackedVector2Array = hull_outline
+	if outline.size() < 3:
+		return
+	for i: int in range(outline.size()):
+		var from: Vector2 = outline[i]
+		var to: Vector2 = outline[(i + 1) % outline.size()]
+		_outline_contacts.append(from)
+		# Ceil, not floor: the spacing has to come out at or under the step,
+		# and rounding down would leave the longest edges under-sampled --
+		# which is exactly where a spike would slip through.
+		var segments: int = maxi(1, ceili(from.distance_to(to) / CONTACT_STEP))
+		for step: int in range(1, segments):
+			_outline_contacts.append(from.lerp(to, float(step) / float(segments)))
+
+
+## The convex shape projectiles hit, built from the same outline the terrain
+## sampling uses. One source, so what a bullet hits and what touches the
+## ground can never drift apart.
+func _build_collision_shape() -> void:
+	var shape_node: CollisionShape2D = get_node_or_null("HullShape") as CollisionShape2D
+	if shape_node == null or hull_outline.size() < 3:
+		return
+	var convex: ConvexPolygonShape2D = ConvexPolygonShape2D.new()
+	convex.points = Geometry2D.convex_hull(hull_outline)
+	shape_node.shape = convex
+
+
+## How many solver passes this hull needs. More contacts couple more tightly,
+## so a bigger outline gets more work rather than a softer landing.
+func contact_iterations() -> int:
+	var points: int = maxi(_outline_contacts.size(), 1)
+	return clampi(
+		ceili(float(CONTACT_ITERATIONS) * float(points) / float(ITERATION_REFERENCE_POINTS)),
+		CONTACT_ITERATIONS,
+		CONTACT_ITERATIONS_MAX,
+	)
+
+
+## How deep the terrain probe should look for this hull. A larger, faster
+## ship buries itself further in one tick, and a fixed ceiling would saturate
+## and leave the correction quietly under-doing it.
+func penetration_limit() -> float:
+	return maxf(PlanetTerrain.MAX_PENETRATION, hull_extent() * 2.0)
+
+
+## Half the longest span of the outline: the ship's own idea of how big it is.
+func hull_extent() -> float:
+	var extent: float = 0.0
+	for point: Vector2 in hull_outline:
+		extent = maxf(extent, point.length())
+	return extent
 
 
 ## Decides whether a touchdown is a landing, and does it.

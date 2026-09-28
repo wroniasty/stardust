@@ -48,6 +48,22 @@ const MIRRORS: Array[Array] = [
 	[ShipControl.Command.CCW, ShipControl.Command.CW],
 ]
 
+## The outline guidelines from IDEAS.md section 6. Every one of them is a
+## limit on what may be drawn rather than a problem the solver has to cope
+## with: constraining the shapes is cheaper and far more predictable than a
+## solver clever enough for any of them.
+##
+## Perimeter caps the contact count -- at a 6 px step, 240 px is 40 points,
+## and the bench puts 6 points at 0.123 ms, so 40 costs about 0.8 ms of a
+## 16.6 ms frame. Vertices are capped because edge subdivision fills the rest
+## in anyway and more corners only means more edge cases. The thinnest detail
+## has to be at least two steps across or terrain sampling cannot see it, so
+## it does not belong in the outline at all.
+const MAX_PERIMETER: float = 240.0
+const MAX_VERTICES: int = 12
+const MIN_DETAIL: float = 12.0
+const MIN_LEG_TRACK: float = 12.0
+
 ## Engine condition at which the report starts saying so, and at which it
 ## stops being a warning and becomes a fault.
 const WORN: float = 0.85
@@ -104,6 +120,7 @@ static func of(ship: Ship) -> ConfigurationReport:
 
 	report._read_stats(ship)
 	report._read_damage(ship)
+	report._read_outline(ship)
 	report._find_faults()
 	return report
 
@@ -207,6 +224,47 @@ func _read_damage(ship: Ship) -> void:
 				Severity.FAULT if drift - nominal >= FAULT_DRIFT else Severity.WARN,
 				"damage makes %s push sideways at %.1f px/s2" % [_name(command), drift],
 			)
+
+
+## Checks the drawn outline against the rules that keep it cheap to simulate.
+##
+## Here rather than in Ship because these are design-time mistakes, and the
+## report is the one place that already exists to tell someone about a hull
+## that will behave badly before they fly it.
+func _read_outline(ship: Ship) -> void:
+	var outline: PackedVector2Array = ship.hull_outline
+	if outline.size() < 3:
+		_add(Severity.FAULT, "the hull outline is not a polygon")
+		return
+
+	var perimeter: float = 0.0
+	var shortest: float = INF
+	for i: int in range(outline.size()):
+		var edge: float = outline[i].distance_to(outline[(i + 1) % outline.size()])
+		perimeter += edge
+		shortest = minf(shortest, edge)
+
+	if perimeter > MAX_PERIMETER:
+		_add(Severity.WARN, "outline is %.0f px round, over the %.0f px budget" % [
+			perimeter, MAX_PERIMETER,
+		])
+	if outline.size() > MAX_VERTICES:
+		_add(Severity.WARN, "outline has %d corners, over %d" % [outline.size(), MAX_VERTICES])
+	if shortest < MIN_DETAIL:
+		_add(Severity.WARN, "thinnest outline detail is %.1f px, under %.0f: terrain sampling cannot see it" % [
+			shortest, MIN_DETAIL,
+		])
+
+	# Concavities belong to the drawing. The shape projectiles hit is the
+	# convex hull of this, so a dent in the outline is a dent nothing can
+	# ever shoot into.
+	if Geometry2D.convex_hull(outline).size() < outline.size():
+		_add(Severity.WARN, "outline is concave; the shot shape is its convex hull")
+
+	if ship.gear != null and ship.gear.track_width() < MIN_LEG_TRACK:
+		_add(Severity.WARN, "legs are %.0f px apart, under %.0f: a texel step reads as a cliff" % [
+			ship.gear.track_width(), MIN_LEG_TRACK,
+		])
 
 
 func _read_stats(ship: Ship) -> void:

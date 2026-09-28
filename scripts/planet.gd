@@ -243,8 +243,9 @@ func surface_normal_at(point: Vector2) -> Vector2:
 
 
 ## How far a world point sits inside rock, measured along `normal`.
-func penetration_at(point: Vector2, normal: Vector2) -> float:
-	return terrain.penetration_local(to_local(point), normal.rotated(-global_rotation))
+func penetration_at(point: Vector2, normal: Vector2, limit: float = -1.0) -> float:
+	var ceiling: float = limit if limit > 0.0 else PlanetTerrain.MAX_PENETRATION
+	return terrain.penetration_local(to_local(point), normal.rotated(-global_rotation), ceiling)
 
 
 ## Blows a hole in the crust. Returns true if any rock was removed.

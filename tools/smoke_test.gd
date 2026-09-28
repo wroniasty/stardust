@@ -411,7 +411,7 @@ func _find_ground(planet: Planet, angle: float) -> float:
 ## Worst penetration across the hull right now, for the sinking check.
 func _deepest_hull_penetration() -> float:
 	var deepest: float = 0.0
-	for hull_point: Vector2 in Ship.HULL_POINTS:
+	for hull_point: Vector2 in _ship.contact_points():
 		var world_point: Vector2 = _ship.global_transform * hull_point
 		if not _planet.is_solid_at(world_point):
 			continue
@@ -907,6 +907,7 @@ func _evaluate_phase() -> void:
 			_check_shot_mods()
 			_check_energy_balance()
 			_check_engine_failures()
+			_check_hull_outline(_planet)
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -2440,6 +2441,96 @@ func _count_dropouts(engine_data: EngineData, mount: EngineMount) -> int:
 	return dead
 
 
+## One outline, and everything physical derived from it. The failure this
+## guards against is the shape drifting apart: what a bullet hits, what
+## touches the ground and what the mass is worked out from all being slightly
+## different polygons.
+func _check_hull_outline(planet: Planet) -> void:
+	var ship: Ship = _spawn_ship()
+
+	var shape_node: CollisionShape2D = ship.get_node("HullShape") as CollisionShape2D
+	var convex: ConvexPolygonShape2D = shape_node.shape as ConvexPolygonShape2D
+	_expect(
+		convex != null and convex.points == Geometry2D.convex_hull(ship.hull_outline),
+		"the shape projectiles hit is built from the outline, not drawn a second time",
+	)
+
+	# Every contact point is on the outline, and none of them further apart
+	# than the step. That step is four terrain texels, which is the whole
+	# reason a spike cannot slip between two of them.
+	var contacts: Array[Vector2] = ship.contact_points()
+	_expect(contacts.size() > ship.hull_outline.size(), "edges are subdivided, not just cornered")
+	for i: int in range(ship.hull_outline.size()):
+		var from: Vector2 = ship.hull_outline[i]
+		var to: Vector2 = ship.hull_outline[(i + 1) % ship.hull_outline.size()]
+		var segments: int = maxi(1, ceili(from.distance_to(to) / Ship.CONTACT_STEP))
+		_expect(
+			from.distance_to(to) / float(segments) <= Ship.CONTACT_STEP + 0.001,
+			"edge %d is cut at or under the step" % i,
+		)
+
+	# Solver effort follows the outline rather than a number picked for a
+	# triangle, and the probe depth follows the hull's size.
+	_expect(
+		ship.contact_iterations() >= Ship.CONTACT_ITERATIONS,
+		"a subdivided hull gets at least as many solver passes as the old triangle (%d)" % [
+			ship.contact_iterations(),
+		],
+	)
+	var big: Ship = _spawn_ship()
+	big.hull_outline = PackedVector2Array([
+		Vector2(0, -40), Vector2(-28, 34), Vector2(28, 34),
+	])
+	big._build_contact_points()
+	_expect(
+		big.contact_iterations() > ship.contact_iterations(),
+		"a bigger hull gets more passes (%d against %d)" % [
+			big.contact_iterations(), ship.contact_iterations(),
+		],
+	)
+	_expect(
+		big.penetration_limit() > ship.penetration_limit(),
+		"and the terrain probe looks deeper for it (%.0f against %.0f px)" % [
+			big.penetration_limit(), ship.penetration_limit(),
+		],
+	)
+	big.queue_free()
+
+	# The guidelines, checked where a designer will see them.
+	_expect(
+		ship.configuration().worst() == ConfigurationReport.Severity.OK,
+		"the stock outline passes its own guidelines (%s)" % _findings_of(ship.configuration()),
+	)
+	var spindly: Ship = _spawn_ship()
+	spindly.hull_outline = PackedVector2Array([
+		Vector2(0, -12), Vector2(-2, -10), Vector2(-8, 10), Vector2(8, 10), Vector2(2, -10),
+	])
+	var complaint: String = _findings_of(spindly.configuration())
+	_expect(
+		complaint.contains("thinnest outline detail"),
+		"a sliver too thin for terrain sampling is called out (%s)" % complaint,
+	)
+	spindly.queue_free()
+
+	# And the point of all of it: a spike narrower than the old gaps must not
+	# pass between the contact points unnoticed.
+	var angle: float = 0.0
+	var ground: float = planet.terrain.surface_radius_at(angle)
+	var spike_top: Vector2 = Vector2.from_angle(angle) * (ground + Ship.CONTACT_STEP * 1.5)
+	var seen: int = 0
+	for point: Vector2 in contacts:
+		# Lay the hull flat across the spike, bottom edge just above the peak.
+		var at: Vector2 = spike_top + Vector2.from_angle(angle).orthogonal() * point.x
+		if planet.is_solid_at(at - Vector2.from_angle(angle) * Ship.CONTACT_STEP * 1.5):
+			seen += 1
+	_expect(
+		seen > 0,
+		"the contact set samples the ground under the whole hull, not only its corners",
+	)
+
+	ship.queue_free()
+
+
 func _check_configuration_report() -> void:
 	var ship: Ship = _spawn_ship()
 
@@ -2854,9 +2945,11 @@ func _check_gear(ship: Ship) -> void:
 		return
 
 	_expect(landing_gear.legs.size() >= 2, "the gear has %d legs" % landing_gear.legs.size())
+	# Counted rather than named: the outline decides how many there are now.
+	var bare: int = ship.contact_points().size()
 	_expect(landing_gear.is_stowed(), "the legs start stowed")
 	_expect(
-		ship.contact_points().size() == Ship.HULL_POINTS.size(),
+		ship.contact_points().size() == bare,
 		"stowed legs are not contact points",
 	)
 
@@ -2865,15 +2958,30 @@ func _check_gear(ship: Ship) -> void:
 	landing_gear.advance(landing_gear.deploy_time * 0.5)
 	_expect(not landing_gear.is_deployed(), "half-extended gear does not count as down")
 	_expect(
-		ship.contact_points().size() == Ship.HULL_POINTS.size(),
+		ship.contact_points().size() == bare,
 		"half-extended legs are not contact points either",
 	)
 
 	landing_gear.advance(landing_gear.deploy_time)
 	_expect(landing_gear.is_deployed(), "the legs reach full extension")
 	_expect(
-		ship.contact_points().size() == Ship.HULL_POINTS.size() + landing_gear.legs.size(),
+		ship.contact_points().size() == bare + landing_gear.legs.size(),
 		"deployed legs join the contact set",
+	)
+
+	# The outline is what decides the contact set now, and the step it is cut
+	# at is what stops a terrain spike slipping between two of them.
+	var widest: float = 0.0
+	for i: int in range(ship.hull_outline.size()):
+		var from: Vector2 = ship.hull_outline[i]
+		var to: Vector2 = ship.hull_outline[(i + 1) % ship.hull_outline.size()]
+		var segments: int = maxi(1, ceili(from.distance_to(to) / Ship.CONTACT_STEP))
+		widest = maxf(widest, from.distance_to(to) / float(segments))
+	_expect(
+		widest <= Ship.CONTACT_STEP + 0.001,
+		"no gap along the outline is wider than the contact step (%.2f of %.1f px)" % [
+			widest, Ship.CONTACT_STEP,
+		],
 	)
 
 # --- Plumbing ---

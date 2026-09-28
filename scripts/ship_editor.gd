@@ -429,7 +429,7 @@ func _row_rect(index: int, list: Rect2) -> Rect2:
 func _plan_placement(plan: Rect2) -> Callable:
 	var bounds: Rect2 = Rect2(Vector2.ZERO, Vector2.ZERO)
 	var first: bool = true
-	for point: Vector2 in _ship.hull_outline():
+	for point: Vector2 in _ship.hull_outline:
 		bounds = Rect2(point, Vector2.ZERO) if first else bounds.expand(point)
 		first = false
 	for mount: Node in _all_mounts():
@@ -505,7 +505,7 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 func _draw_plan(font: Font, rect: Rect2) -> void:
 	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "SCHEMAT", LABEL)
 
-	var hull: PackedVector2Array = _ship.hull_outline()
+	var hull: PackedVector2Array = _ship.hull_outline
 	var mounts: Array[Node] = _all_mounts()
 	if hull.size() < 3:
 		return

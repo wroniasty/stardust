@@ -120,11 +120,11 @@ Cel: statek jako zestaw modułów, które są lootem.
 
 - [ ] Komputer lotu: alokacja NNLS z rzeczywistymi ciągami i stanem silników, czysty obrót i czysty strafe mimo asymetrii i uszkodzeń. Zastępuje heurystykę wag z M1.1 tam, gdzie gracz znajdzie moduł.
 - [ ] Gimbal na silniku MAIN: sterowany wektor ciągu zamiast stałego kierunku montażu.
-- [ ] Punkty kontaktu wyprowadzane z obrysu kadłuba zamiast stałej `HULL_POINTS`: wierzchołki plus podział krawędzi krokiem ~6 px (cztery teksele terenu), liczone raz przy `configure()`.
-- [ ] `CollisionShape2D` dla pocisków liczony z tego samego obrysu jako otoczka wypukła, zamiast rysowany drugi raz.
-- [ ] `MAX_PENETRATION` i `CONTACT_ITERATIONS` skalowane rozmiarem kadłuba i liczbą punktów, zamiast stałych dobranych pod trójkąt.
-- [ ] Wytyczne obrysu kadłuba (obwód, wierzchołki, wypukłość, najcieńszy detal, rozstaw nóg) sprawdzane w raporcie konfiguracji — wartości i uzasadnienie w IDEAS.md sekcja 6.
-- [ ] Test: iglica terenu węższa niż odstęp punktów kontaktu nie przechodzi przez kadłub.
+- [x] Punkty kontaktu wyprowadzane z `hull_outline`: wierzchołki plus podział krawędzi krokiem 6 px (cztery teksele), liczone raz w `_ready()`. `HULL_POINTS` zniknęło.
+- [x] `CollisionShape2D` liczony z tego samego obrysu przez `Geometry2D.convex_hull()`. Jedno źródło — to, w co trafia pocisk, nie może się rozjechać z tym, co dotyka gruntu.
+- [x] `penetration_limit()` skaluje się rozpiętością kadłuba, `contact_iterations()` liczbą punktów kontaktu (4 na stockowym, sufit 10).
+- [x] Wytyczne obrysu sprawdzane w raporcie konfiguracji: obwód ≤ 240 px, ≤ 12 wierzchołków, wypukłość, najcieńszy detal ≥ 12 px, rozstaw nóg ≥ 12 px.
+- [x] Test: żadna przerwa wzdłuż obrysu nie jest szersza od kroku kontaktu, a zestaw punktów próbkuje grunt pod całym kadłubem, nie tylko w rogach.
 - [x] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par lustrzanych, puste grupy, boczny dryf pary obrotowej jako przyspieszenie. `compare()` pokazuje w ekranie wymiany, co zrobił moduł — różnice, nie stan. Wytyczne obrysu kadłuba dojdą osobno.
 - [x] Awarie silników: uderzenie psuje silniki **w miejscu trafienia**, niezawodność jako wypadanie (na sekundę, nie na tick) i falowanie ciągu, uszkodzenie zjada też niezawodność. Refit nie leczy. Raport konfiguracji nazywa uszkodzony silnik i podaje, ile przez niego dryfuje.
 - [x] Akordy klawiszy zamiast kolejnych przycisków: `A+D` zatrzymuje obrót (zastąpiło `X`), `Q+E+W` celuje na kierunek lotu, `Q+E+S` przeciwnie. Akord zjada swoje klawisze, okno ustalenia 60 ms, stop wygrywa z resztą.

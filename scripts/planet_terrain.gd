@@ -215,13 +215,19 @@ func normal_local(point: Vector2) -> Vector2:
 
 
 ## How far a point would have to travel along `normal` to leave the rock.
-func penetration_local(point: Vector2, normal: Vector2) -> float:
+##
+## `limit` is how far to keep marching before giving up. The default suits a
+## small hull; a bigger, faster ship buries itself deeper in one tick and
+## would saturate a fixed ceiling, after which positional correction quietly
+## under-corrects and the hull sinks (IDEAS.md section 6).
+func penetration_local(point: Vector2, normal: Vector2, limit: float = MAX_PENETRATION) -> float:
+	var ceiling: float = maxf(limit, PENETRATION_STEP)
 	var travelled: float = 0.0
-	while travelled < MAX_PENETRATION:
+	while travelled < ceiling:
 		travelled += PENETRATION_STEP
 		if not is_solid_local(point + normal * travelled):
 			return _refine_exit(point, normal, travelled - PENETRATION_STEP, travelled)
-	return MAX_PENETRATION
+	return ceiling
 
 
 ## Bisects between a known solid distance and a known empty one.
