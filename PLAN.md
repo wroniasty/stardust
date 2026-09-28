@@ -141,9 +141,9 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] Skrzynki z lootem na powierzchni planety, podnoszenie, wymiana modułu w locie (Tab, bez pauzy). Skrzynki stoją na półkach do lądowania, kolor z rzadkości.
 - [x] Energia: `GeneratorData` jako moduł w `GeneratorBay` (masa i warunek zmieszczenia jak przy silnikach), pula liczona w `_physics_process`, szyna kadłuba 40/15/1.5 gdy generatora nie ma.
 - [x] `energy_cost` faktycznie wydawany: strzał bez pełnego kosztu nie wychodzi, każdy wydatek resetuje timeout. Autocannon 6, siege slug 22 — obie na tej samej linii obrażeń na jednostkę energii.
-- [ ] `energy_cost` w tabelach lootu: afiksy `efficient` i `capacitor-fed`, wpis w `HIGHER_IS_BETTER` i w `LIMITS`. Generatory jako loot.
-- [ ] HUD energii: pasek z podziałką co koszt zamontowanej broni (pilot liczy strzały, nie procenty), widoczna różnica między „czeka na timeout" i „ładuje się", wyraźna odmowa strzału.
-- [ ] Statystyki statku liczone przy montażu: `stat_add` i `stat_mul` na modułach, agregat w raporcie konfiguracji z rozbiciem na moduły, nieznany klucz to `push_error`. Afiksy międzystatowe na silnikach (`dynamo`, `buffered`) — silnik, który podnosi recharge.
+- [x] `energy_cost` w tabelach lootu: afiksy `efficient` i `capacitor-fed`, wpisy w `HIGHER_IS_BETTER` i `LIMITS`. Generatory jako loot z własną tabelą (`deep`, `brisk`, `responsive`, `compact`).
+- [x] HUD energii: pasek z podziałką co koszt najtańszej broni, osobny kolor dla „czeka" i „ładuje się", czerwona ramka przy odmowie strzału (sygnał `shot_refused`).
+- [x] Statystyki statku liczone przy montażu: `stat_add`/`stat_mul` na wspólnej bazie `ModuleData`, agregat z rozbiciem na moduły w raporcie konfiguracji, nieznany klucz to `push_error`. Afiksy `dynamo` i `buffered` na silnikach.
 - [ ] Moduły broni: `mod_slots` na broni, `ShotModData` z `energy_multiplier > 1`, efekty pocisku jako dane (eksplozja przy kontakcie, podpalenie, przebicie), kolejność bez znaczenia. Test: każdy moduł w tabeli podnosi koszt energii.
 - [ ] Pomiar energii: sustained dps bazowych broni w granicach ±10%, burst różny co najmniej 1.5× — generator nie może spłaszczyć różnic między broniami do jednej liczby.
 

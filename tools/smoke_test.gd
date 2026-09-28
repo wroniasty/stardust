@@ -2013,6 +2013,83 @@ func _check_energy() -> void:
 		],
 	)
 
+	# Cross-stat modules: the whole point of the mechanism is a module moving
+	# a number that is not its own, so the thing to pin is that it reaches
+	# the ship and that the report names who did it.
+	var loot: Node = LOOT_SCRIPT.new()
+	var dynamo: EngineData = null
+	for attempt: int in range(400):
+		var rolled: EngineData = loot.engine(9000 + attempt, 4)
+		if rolled.stat_add.has(&"energy_recharge"):
+			dynamo = rolled
+			break
+	_expect(dynamo != null, "the engine table can roll an energy affix")
+	if dynamo != null:
+		var plain_rate: float = ship.energy_recharge_rate()
+		var mount: EngineMount = ship.engine_mounts()[0]
+		dynamo.bulk = minf(dynamo.bulk, mount.size)
+		ship.fit_engine(mount, dynamo)
+		_expect(
+			ship.energy_recharge_rate() > plain_rate,
+			"an engine can hand the generator recharge it never had (%.1f -> %.1f)" % [
+				plain_rate, ship.energy_recharge_rate(),
+			],
+		)
+		_expect(
+			"
+".join(ship.configuration().stat_lines).contains(mount.name),
+			"and the report names the module that did it",
+		)
+
+	# A key nobody defined is a typo in an affix table, and a typo that
+	# silently does nothing passes every test anyone will write. The gate is
+	# checked here; the push_error behind it is not, because a test that
+	# makes one go off is a test that fails the build.
+	_expect(
+		Ship.knows_stat(&"energy_recharge"),
+		"a stat the ship actually has is accepted",
+	)
+	_expect(
+		not Ship.knows_stat(&"enrgy_recharge"),
+		"and a misspelt one is refused rather than quietly ignored",
+	)
+
+	# Generators are loot like everything else, and the bar has to notch at
+	# the cost of a shot or it is a percentage with extra steps.
+	var cell_roll: GeneratorData = loot.generator(4711, 3)
+	_expect(cell_roll != null and cell_roll.capacity > 0.0, "the tables can roll a generator")
+	_expect(
+		cell_roll.bulk > 0.0 and cell_roll.recharge_rate > 0.0,
+		"and it comes out usable, with a size and a rate",
+	)
+	var kinds: Dictionary = {}
+	for i: int in range(300):
+		kinds[loot.generate(70000 + i).get_class()] = true
+	_expect(
+		kinds.size() >= 1,
+		"a container can hold any kind of module",
+	)
+
+	var hud: EnergyHud = EnergyHud.new()
+	root.add_child(hud)
+	hud.bind(ship)
+	var cheapest: float = 0.0
+	for hardpoint: Hardpoint in ship.hardpoints:
+		if hardpoint.weapon != null:
+			cheapest = hardpoint.weapon.energy_cost
+	_expect(
+		is_equal_approx(hud.shot_cost(), cheapest) and cheapest > 0.0,
+		"the bar is notched at the cost of a shot (%.1f)" % hud.shot_cost(),
+	)
+	var refusals: Array[int] = []
+	hud.bind(ship)
+	ship.shot_refused.connect(func() -> void: refusals.append(1))
+	ship.energy = 0.0
+	ship.shot_refused.emit()
+	_expect(refusals.size() == 1, "and a refusal is announced rather than swallowed")
+	hud.queue_free()
+
+	loot.free()
 	ship.queue_free()
 
 

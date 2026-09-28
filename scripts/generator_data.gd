@@ -1,5 +1,5 @@
 class_name GeneratorData
-extends Resource
+extends ModuleData
 ## What a power generator is: how much it holds, how fast it refills, and how
 ## long it sulks after being drawn on.
 ##
@@ -29,10 +29,6 @@ extends Resource
 ## rather than a decision. "The gun goes quiet" is the point, not a side
 ## effect.
 @export var recharge_delay: float = 0.8
-
-## Size, in the same unit as EngineData.bulk and WeaponData.bulk: the mass it
-## adds, and what has to fit in the bay.
-@export var bulk: float = 2.0
 
 
 ## Energy this generator can sustain indefinitely against a given drain, in

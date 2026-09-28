@@ -154,6 +154,10 @@ signal hold_changed(item: Resource)
 ## different questions and the editor redraws different panels for each.
 signal cargo_changed()
 
+## A shot the pool could not pay for. The HUD flashes; the sound comes with
+## VISUALS.
+signal shot_refused()
+
 ## The pilot threw a module overboard. The world turns it into a crate.
 signal jettisoned(item: Resource, rarity: int)
 
@@ -262,7 +266,7 @@ var cargo: Array[Dictionary] = []
 ## obvious find and the alternative is that `cargo_capacity` stays a constant
 ## every caller has to remember is not the whole story.
 func cargo_capacity() -> float:
-	var total: float = hull_cargo_capacity
+	var total: float = stat(&"cargo_capacity", hull_cargo_capacity)
 	if generator_bay != null and generator_bay.installed != null:
 		# A generator takes room in the hull, not only mass. Nothing else
 		# does yet.
@@ -274,6 +278,22 @@ func cargo_capacity() -> float:
 ## simply being carried. Less than one: machinery is packed into space that
 ## was never going to hold crates anyway.
 const CARGO_CROWDING: float = 0.5
+
+## Ship-wide numbers a module is allowed to change. A key outside this list
+## is a typo in an affix table, and a typo that silently does nothing passes
+## every test anyone will write -- so it is an error, loudly.
+const STATS: Array[StringName] = [
+	&"energy_capacity",
+	&"energy_recharge",
+	&"energy_delay",
+	&"cargo_capacity",
+]
+
+## key -> { "add": float, "mul": float }, and key -> the modules behind it.
+## Both recomputed at every refit and never per frame: a number worked out
+## each tick is a number the configuration report cannot show.
+var stats: Dictionary = {}
+var stat_sources: Dictionary = {}
 
 ## Energy in the pool, and how long since the last spend. Combat's clock:
 ## it refills itself, is never bought, and cannot be saved up
@@ -369,13 +389,8 @@ func take(item: Resource, rarity: int) -> bool:
 ## How big any module is, whichever kind it is. The one place that knows
 ## that both module Resources answer to the same field.
 static func module_bulk(item: Resource) -> float:
-	if item is EngineData:
-		return (item as EngineData).bulk
-	if item is WeaponData:
-		return (item as WeaponData).bulk
-	if item is GeneratorData:
-		return (item as GeneratorData).bulk
-	return 0.0
+	var module: ModuleData = item as ModuleData
+	return module.bulk if module != null else 0.0
 
 
 func cargo_used() -> float:
@@ -463,6 +478,7 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 		if mount != null and mount.installed != null:
 			engines.append(EngineInstance.new(mount.installed, mount))
 
+	_aggregate_stats()
 	_recompute_mass_properties()
 	control.rebuild(engines, center_of_mass, mass, inertia)
 	# Fitting a smaller generator must not leave the pool holding more than
@@ -615,8 +631,67 @@ func _physics_process(delta: float) -> void:
 		# out. Half a shot is unreadable and breaks every affix reckoned on
 		# damage (IDEAS.md section 14).
 		if not spend_energy(hardpoint.weapon.energy_cost):
+			# Announced, not silent. A trigger that does nothing and says
+			# nothing reads as a stuck key (IDEAS.md section 14).
+			shot_refused.emit()
 			continue
 		hardpoint.fire(linear_velocity, container, self)
+
+
+## Every module bolted to the hull, with the name to blame in a report.
+func fitted_modules() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for child: Node in get_children():
+		var mount: EngineMount = child as EngineMount
+		if mount != null and mount.installed != null:
+			out.append({"name": child.name, "module": mount.installed})
+		var hardpoint: Hardpoint = child as Hardpoint
+		if hardpoint != null and hardpoint.weapon != null:
+			out.append({"name": child.name, "module": hardpoint.weapon})
+		var bay: GeneratorBay = child as GeneratorBay
+		if bay != null and bay.installed != null:
+			out.append({"name": child.name, "module": bay.installed})
+	return out
+
+
+## A ship-wide number with every module's say in it: base, plus every
+## addition, then times every multiplier. Sums first, so a multiplier acts on
+## the whole ship rather than on whatever was fitted before it.
+func stat(key: StringName, base: float) -> float:
+	var entry: Dictionary = stats.get(key, {})
+	return (base + float(entry.get("add", 0.0))) * float(entry.get("mul", 1.0))
+
+
+func _aggregate_stats() -> void:
+	stats = {}
+	stat_sources = {}
+	for key: StringName in STATS:
+		stats[key] = {"add": 0.0, "mul": 1.0}
+		stat_sources[key] = []
+
+	for entry: Dictionary in fitted_modules():
+		var module: ModuleData = entry["module"]
+		for key: StringName in module.stat_add:
+			if _record_stat(key, entry["name"], "add", float(module.stat_add[key])):
+				stats[key]["add"] = float(stats[key]["add"]) + float(module.stat_add[key])
+		for key: StringName in module.stat_mul:
+			if _record_stat(key, entry["name"], "mul", float(module.stat_mul[key])):
+				stats[key]["mul"] = float(stats[key]["mul"]) * float(module.stat_mul[key])
+
+
+## Whether `key` is a stat modules may touch. Split out so the gate can be
+## checked without firing the error: a test that makes push_error go off is a
+## test that fails the build, since check.ps1 scans the run for errors.
+static func knows_stat(key: StringName) -> bool:
+	return STATS.has(key)
+
+
+func _record_stat(key: StringName, source: String, kind: String, value: float) -> bool:
+	if not knows_stat(key):
+		push_error("%s: module %s changes unknown stat '%s'" % [name, source, key])
+		return false
+	(stat_sources[key] as Array).append({"module": source, "kind": kind, "value": value})
+	return true
 
 
 ## The generator fitted, or null when running on the hull's own rail.
@@ -626,17 +701,21 @@ func generator() -> GeneratorData:
 
 func energy_capacity() -> float:
 	var fitted: GeneratorData = generator()
-	return fitted.capacity if fitted != null else HULL_RAIL_CAPACITY
+	return stat(&"energy_capacity", fitted.capacity if fitted != null else HULL_RAIL_CAPACITY)
 
 
 func energy_recharge_rate() -> float:
 	var fitted: GeneratorData = generator()
-	return fitted.recharge_rate if fitted != null else HULL_RAIL_RECHARGE
+	return stat(
+		&"energy_recharge", fitted.recharge_rate if fitted != null else HULL_RAIL_RECHARGE
+	)
 
 
 func energy_recharge_delay() -> float:
 	var fitted: GeneratorData = generator()
-	return fitted.recharge_delay if fitted != null else HULL_RAIL_DELAY
+	return maxf(stat(
+		&"energy_delay", fitted.recharge_delay if fitted != null else HULL_RAIL_DELAY
+	), 0.0)
 
 
 ## True while the pool is waiting out the silence rather than filling. The

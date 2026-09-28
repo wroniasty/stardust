@@ -35,6 +35,10 @@ const WEAPON_BASES: Array[String] = [
 	"res://resources/weapons/siege_slug.tres",
 ]
 
+const GENERATOR_BASES: Array[String] = [
+	"res://resources/generators/standard_cell.tres",
+]
+
 const ENGINE_BASES: Array[String] = [
 	"res://resources/engines/main_drive.tres",
 	"res://resources/engines/torque_jet.tres",
@@ -63,6 +67,14 @@ const WEAPON_AFFIXES: Array[Dictionary] = [
 		"cost_field": "damage", "cost": Vector2(0.80, 0.92),
 	},
 	{
+		"name": &"efficient", "field": "energy_cost", "factor": Vector2(0.65, 0.85),
+		"cost_field": "damage", "cost": Vector2(0.85, 0.95),
+	},
+	{
+		"name": &"capacitor-fed", "field": "rounds_per_second", "factor": Vector2(1.25, 1.55),
+		"cost_field": "energy_cost", "cost": Vector2(1.30, 1.70),
+	},
+	{
 		"name": &"hot-loaded", "field": "muzzle_speed", "factor": Vector2(1.15, 1.40),
 		"cost_field": "crater_radius", "cost": Vector2(0.75, 0.90),
 	},
@@ -88,6 +100,36 @@ const ENGINE_AFFIXES: Array[Dictionary] = [
 		"name": &"tuned", "field": "max_thrust", "factor": Vector2(1.08, 1.20),
 		"cost_field": "fuel_cost", "cost": Vector2(1.20, 1.60),
 	},
+	# The cross-stat pair. An engine has no business holding charge, which is
+	# exactly why finding one that does is a decision: a pilot who would
+	# rather shoot flies a slower ship (IDEAS.md section 14).
+	{
+		"name": &"dynamo", "stat_add": &"energy_recharge", "amount": Vector2(4.0, 10.0),
+		"cost_field": "max_thrust", "cost": Vector2(0.80, 0.92),
+	},
+	{
+		"name": &"buffered", "stat_add": &"energy_capacity", "amount": Vector2(12.0, 30.0),
+		"cost_field": "bulk", "cost": Vector2(1.15, 1.40),
+	},
+]
+
+## What a generator can roll. Capacity, rate and silence are the three knobs
+## and each affix moves one of them at the cost of another, so a found cell is
+## a different machine rather than a bigger number.
+const GENERATOR_AFFIXES: Array[Dictionary] = [
+	{
+		"name": &"deep", "field": "capacity", "factor": Vector2(1.20, 1.55),
+		"cost_field": "recharge_rate", "cost": Vector2(0.78, 0.92),
+	},
+	{
+		"name": &"brisk", "field": "recharge_rate", "factor": Vector2(1.15, 1.45),
+		"cost_field": "capacity", "cost": Vector2(0.75, 0.90),
+	},
+	{"name": &"responsive", "field": "recharge_delay", "factor": Vector2(0.55, 0.80)},
+	{
+		"name": &"compact", "field": "bulk", "factor": Vector2(0.60, 0.85),
+		"cost_field": "capacity", "cost": Vector2(0.80, 0.92),
+	},
 ]
 
 ## Which way is up for each field, so an affix cost can be checked for
@@ -103,6 +145,10 @@ const HIGHER_IS_BETTER: Dictionary = {
 	"reliability": true,
 	"bulk": false,
 	"spread_degrees": false,
+	"energy_cost": false,
+	"capacity": true,
+	"recharge_rate": true,
+	"recharge_delay": false,
 	"spool_time": false,
 	"fuel_cost": false,
 }
@@ -116,6 +162,10 @@ const LIMITS: Dictionary = {
 	"muzzle_speed": Vector2(50.0, 3000.0),
 	"range_px": Vector2(100.0, 20000.0),
 	"crater_radius": Vector2(2.0, 80.0),
+	"energy_cost": Vector2(0.5, 200.0),
+	"capacity": Vector2(10.0, 600.0),
+	"recharge_rate": Vector2(2.0, 200.0),
+	"recharge_delay": Vector2(0.1, 5.0),
 	"max_thrust": Vector2(1.0, 5000.0),
 	# Generous on purpose. An engine too big for the hull you are flying is a
 	# legitimate find rather than a bad roll -- it is loot for a bigger ship --
@@ -133,9 +183,15 @@ func generate(item_seed: int, rarity: int = ROLLED) -> Resource:
 	var rng: RandomNumberGenerator = _rng_for(item_seed)
 	# Drawn before anything else so that the kind of item a container holds is
 	# fixed by its seed, whatever the tables gain later.
-	if rng.randf() < 0.5:
+	# A ship carries many guns and engines and exactly one generator, so cells
+	# turn up least often. Drawn before anything else, as before, so the kind
+	# a container holds is fixed by its seed whatever the tables gain later.
+	var kind: float = rng.randf()
+	if kind < 0.45:
 		return _build_weapon(rng, rarity)
-	return _build_engine(rng, rarity)
+	if kind < 0.85:
+		return _build_engine(rng, rarity)
+	return _build_generator(rng, rarity)
 
 
 ## Rolls a weapon. `rarity` of ROLLED lets the seed decide.
@@ -146,6 +202,11 @@ func weapon(item_seed: int, rarity: int = ROLLED) -> WeaponData:
 ## Rolls an engine. `rarity` of ROLLED lets the seed decide.
 func engine(item_seed: int, rarity: int = ROLLED) -> EngineData:
 	return _build_engine(_rng_for(item_seed), rarity)
+
+
+## Rolls a generator. `rarity` of ROLLED lets the seed decide.
+func generator(item_seed: int, rarity: int = ROLLED) -> GeneratorData:
+	return _build_generator(_rng_for(item_seed), rarity)
 
 
 ## Picks a rarity from the weights.
@@ -194,6 +255,21 @@ func _build_engine(rng: RandomNumberGenerator, rarity: int) -> EngineData:
 	return item
 
 
+func _build_generator(rng: RandomNumberGenerator, rarity: int) -> GeneratorData:
+	var base: GeneratorData = load(
+		GENERATOR_BASES[rng.randi() % GENERATOR_BASES.size()]
+	) as GeneratorData
+	if base == null:
+		return null
+	var item: GeneratorData = base.duplicate() as GeneratorData
+	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	item.display_name = _name_for(item.display_name, _apply_affixes(
+		rng, item, GENERATOR_AFFIXES, rolled
+	))
+	_clamp_all(item)
+	return item
+
+
 ## Applies `count` distinct affixes from `table` to `item`, and returns their
 ## names in the order they were rolled.
 func _apply_affixes(
@@ -212,7 +288,19 @@ func _apply_affixes(
 		var affix: Dictionary = table[pool[choice]]
 		pool.remove_at(choice)
 
-		_scale(item, String(affix["field"]), affix["factor"] as Vector2, strength, rng)
+		if affix.has("stat_add"):
+			# Flat, not a multiplier: what it adds to is the ship's own base,
+			# and a multiplier here would be scaling a number this module has
+			# never seen.
+			var key: StringName = affix["stat_add"]
+			var span: Vector2 = affix["amount"] as Vector2
+			var module: ModuleData = item as ModuleData
+			module.stat_add = module.stat_add.duplicate()
+			module.stat_add[key] = (
+				float(module.stat_add.get(key, 0.0)) + rng.randf_range(span.x, span.y) * strength
+			)
+		else:
+			_scale(item, String(affix["field"]), affix["factor"] as Vector2, strength, rng)
 		if affix.has("cost_field"):
 			_scale(item, String(affix["cost_field"]), affix["cost"] as Vector2, strength, rng)
 		names.append(affix["name"] as StringName)

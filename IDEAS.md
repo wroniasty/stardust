@@ -1603,6 +1603,38 @@ własność kadłuba, a zamontowana maszyneria **wypiera część ładowni** —
 generator zabiera pół swojego gabarytu. Mniej niż całość, bo maszyneria pakuje
 się w miejsca, w których i tak nie stanęłaby skrzynka.
 
+### Realizacja (M2, druga warstwa)
+
+**Wspólna baza `ModuleData`.** `bulk`, `stat_add` i `stat_mul` powtarzały się
+w trzech plikach; teraz są w jednym, a `Ship.module_bulk()` to jedno rzutowanie
+zamiast trzech gałęzi. Pliki `.tres` nie wymagały zmian — właściwość z klasy
+bazowej ustawia się tak samo.
+
+**Agregat liczony przy montażu**, w tym samym miejscu, w którym przebudowują się
+grupy sterowania. `stat(klucz, baza)` zwraca `(baza + suma add) * iloczyn mul`,
+a `stat_sources` pamięta, który moduł co ruszył — raport konfiguracji wypisuje
+to z nazwą węzła, bo bonus, którego pilot nie widzi, jest losowością.
+
+Zmierzone: silnik z afiksem `dynamo` podnosi recharge z **40 na 54,6**, płacąc
+ciągiem. Statek zostaje wolniejszy, pilot strzela dłużej — to jest ta decyzja.
+
+**Nieznany klucz to błąd, ale test sprawdza bramkę, nie alarm.** `knows_stat()`
+jest osobno od `push_error`, bo test, który wywołuje `push_error`, jest testem
+wywalającym build — `check.ps1` skanuje przebieg pod kątem błędów. Sam
+`push_error` zostaje w produkcji.
+
+**Pasek energii** stoi na dole, nad pierścieniem skanera. Pierwsza wersja była
+10 px od dołu i szła dokładnie przez znaczniki skanera i ich odległości — dwa
+odczyty w tych samych pikselach to żaden odczyt. Podziałka jest co koszt
+**najtańszej** zamontowanej broni, nie pierwszej: inaczej kreski obiecywałyby
+mniej strzałów, niż statek naprawdę ma. Odmowa to czerwona podwójna ramka przez
+0,35 s — przy siedmiu pikselach wysokości sama zmiana koloru ginie w strzelaninie.
+
+Drobiazg wart zapamiętania: **GDScript nie zna `%g`** w operatorze formatowania
+i przy jego napotkaniu oddaje niezmieniony napis formatu. Raport przez chwilę
+wypisywał `energy_capacity %s %s%.3g` i wyglądało to jak niewypełniony szablon,
+a nie jak błąd.
+
 ### Jak się to składa
 
 Strzelanie do wyczerpania puli daje przepływ energii, który składa się jak opory

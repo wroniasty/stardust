@@ -54,6 +54,7 @@ var _landing_site: int = 0
 var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
 var _editor: ShipEditor = null
+var _energy: EnergyHud = null
 
 
 ## Radius of the crater the debug key blows in the crust.
@@ -69,6 +70,7 @@ func _ready() -> void:
 	_build_configurator()
 	_build_loadout()
 	_build_editor()
+	_build_energy_hud()
 	_build_scanner()
 	_spawn_crates()
 
@@ -88,6 +90,12 @@ func _build_editor() -> void:
 	_editor = ShipEditor.new()
 	add_child(_editor)
 	_editor.bind((player as Player).ship)
+
+
+func _build_energy_hud() -> void:
+	_energy = EnergyHud.new()
+	add_child(_energy)
+	_energy.bind((player as Player).ship)
 
 
 func _build_scanner() -> void:

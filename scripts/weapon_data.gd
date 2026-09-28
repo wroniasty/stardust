@@ -1,5 +1,5 @@
 class_name WeaponData
-extends Resource
+extends ModuleData
 ## What a weapon *is*, independent of the hardpoint it is bolted to.
 ##
 ## The same split as EngineData and EngineMount: this holds the numbers, the
@@ -67,11 +67,6 @@ enum Type {
 ## shoots, energy says how long (see IDEAS.md section 14).
 @export var energy_cost: float = 0.0
 
-## How big the weapon physically is, in the same unit as EngineData.bulk: the
-## mass it adds, and what it costs to carry in the hold. One unit across every
-## kind of module, or the cargo bay would need a table of conversions and the
-## pilot a second number to learn.
-@export var bulk: float = 1.0
 
 ## Names of the affixes rolled into the numbers above, for display only.
 @export var affixes: Array[StringName] = []

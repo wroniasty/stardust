@@ -68,6 +68,12 @@ var residual: Dictionary = {}
 ## { "severity": Severity, "text": String }, worst first.
 var findings: Array[Dictionary] = []
 
+## Ship-wide numbers a module moved, and which module moved them, as lines
+## ready to print. A bonus the pilot cannot see is randomness rather than a
+## decision, so this belongs to the mechanic and not to the UI
+## (IDEAS.md section 14).
+var stat_lines: PackedStringArray = PackedStringArray()
+
 
 static func of(ship: Ship) -> ConfigurationReport:
 	var report: ConfigurationReport = ConfigurationReport.new()
@@ -91,6 +97,7 @@ static func of(ship: Ship) -> ConfigurationReport:
 		report.members[command] = names
 		report.residual[command] = leftover.length()
 
+	report._read_stats(ship)
 	report._find_faults()
 	return report
 
@@ -115,6 +122,8 @@ func lines() -> PackedStringArray:
 		out.append("%-13s authority %8.1f  [%s]" % [
 			_name(command), float(authority[command]), ", ".join(names),
 		])
+	for line: String in stat_lines:
+		out.append(line)
 	for finding: Dictionary in findings:
 		out.append("%s: %s" % [Severity.keys()[int(finding["severity"])], finding["text"]])
 	return out
@@ -155,6 +164,24 @@ func compare(before: ConfigurationReport) -> PackedStringArray:
 		if not known.has(finding["text"]):
 			out.append("%s: %s" % [Severity.keys()[int(finding["severity"])], finding["text"]])
 	return out
+
+
+func _read_stats(ship: Ship) -> void:
+	for key: StringName in Ship.STATS:
+		var sources: Array = ship.stat_sources.get(key, [])
+		if sources.is_empty():
+			continue
+		var parts: PackedStringArray = PackedStringArray()
+		for source: Dictionary in sources:
+			# %+.2f and x%.2f, not %g: GDScript's format operator has no %g
+			# and hands the format string straight back when it meets one,
+			# which reads as a template nobody filled in.
+			var value: float = float(source["value"])
+			parts.append("%s %s" % [
+				source["module"],
+				("%+.2f" % value) if String(source["kind"]) == "add" else ("x%.2f" % value),
+			])
+		stat_lines.append("%-17s %s" % [key, ", ".join(parts)])
 
 
 func _find_faults() -> void:
