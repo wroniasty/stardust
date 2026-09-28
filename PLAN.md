@@ -139,8 +139,9 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] Skaner jako element HUD: trójkąty dla ciał niebieskich (kierunek, odległość do powierzchni, rozmiar ciała, wygaszenie poza polem grawitacyjnym) i romby dla lootu (kolor z rzadkości, osobny krótszy zasięg, znacznik także na ekranie). Zalążek — zasięgi stałe, w M5 własność modułu skanera.
 - [ ] Pozostałe typy broni: laser, dumb missile, homing missile, AoE, pulse.
 - [x] Skrzynki z lootem na powierzchni planety, podnoszenie, wymiana modułu w locie (Tab, bez pauzy). Skrzynki stoją na półkach do lądowania, kolor z rzadkości.
-- [ ] Energia: `GeneratorData` (pojemność, recharge, timeout, bulk) jako moduł, pula na statku liczona w `_physics_process`, minimalna szyna wbudowana w kadłub, gdy generatora nie ma (IDEAS.md sekcja 14).
-- [ ] `energy_cost` broni faktycznie wydawany: strzał bez pełnego kosztu nie wychodzi, każdy wydatek resetuje timeout. `energy_cost` wchodzi do tabel lootu (afiksy `efficient`, `capacitor-fed`), do `HIGHER_IS_BETTER` i do `LIMITS`.
+- [x] Energia: `GeneratorData` jako moduł w `GeneratorBay` (masa i warunek zmieszczenia jak przy silnikach), pula liczona w `_physics_process`, szyna kadłuba 40/15/1.5 gdy generatora nie ma.
+- [x] `energy_cost` faktycznie wydawany: strzał bez pełnego kosztu nie wychodzi, każdy wydatek resetuje timeout. Autocannon 6, siege slug 22 — obie na tej samej linii obrażeń na jednostkę energii.
+- [ ] `energy_cost` w tabelach lootu: afiksy `efficient` i `capacitor-fed`, wpis w `HIGHER_IS_BETTER` i w `LIMITS`. Generatory jako loot.
 - [ ] HUD energii: pasek z podziałką co koszt zamontowanej broni (pilot liczy strzały, nie procenty), widoczna różnica między „czeka na timeout" i „ładuje się", wyraźna odmowa strzału.
 - [ ] Statystyki statku liczone przy montażu: `stat_add` i `stat_mul` na modułach, agregat w raporcie konfiguracji z rozbiciem na moduły, nieznany klucz to `push_error`. Afiksy międzystatowe na silnikach (`dynamo`, `buffered`) — silnik, który podnosi recharge.
 - [ ] Moduły broni: `mod_slots` na broni, `ShotModData` z `energy_multiplier > 1`, efekty pocisku jako dane (eksplozja przy kontakcie, podpalenie, przebicie), kolejność bez znaczenia. Test: każdy moduł w tabeli podnosi koszt energii.
@@ -167,7 +168,7 @@ decyzja podjęta w locie. To jest druga połowa.
 - [x] Podgląd skutku przed montażem: wybranie gniazda pokazuje, co zrobi `ConfigurationReport.compare()`, zanim cokolwiek zostanie wkręcone. Silniki przez grupy sterowania, broń przez porównanie z tym, co już w gnieździe.
 - [x] Mysz: klikanie po liście i po kropkach schematu, obok klawiatury.
 - [x] Patrzeć można zawsze, zmieniać tylko na ziemi: ekran otwiera się wszędzie (planowanie refitu w drodze do domu jest sensowne), ale montaż wymaga wylądowania. Wyrzucanie za burtę zostaje dostępne w locie.
-- [ ] Pojemność cargo jako własność kadłuba/modułu, a nie stała.
+- [x] Pojemność cargo jako własność kadłuba (`hull_cargo_capacity`) minus to, co wypiera zamontowana maszyneria — generator zabiera pół swojego gabarytu z ładowni.
 
 Gotowe, gdy: da się znaleźć moduł, obejrzeć go obok tego, co już jest zamontowane, wsadzić w konkretne gniazdo i wyrzucić to, czego się nie chce — bez zgadywania, gdzie co pasuje.
 

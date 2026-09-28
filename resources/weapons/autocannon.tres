@@ -15,6 +15,6 @@ spread_degrees = 2.0
 range_px = 2400.0
 crater_radius = 14.0
 inherit_velocity = true
-energy_cost = 0.0
+energy_cost = 6.0
 bulk = 1.0
 affixes = Array[StringName]([])

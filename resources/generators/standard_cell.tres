@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GeneratorData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/generator_data.gd" id="1_generator"]
+
+[resource]
+script = ExtResource("1_generator")
+display_name = "standard cell"
+capacity = 100.0
+recharge_rate = 40.0
+recharge_delay = 0.8
+bulk = 2.0

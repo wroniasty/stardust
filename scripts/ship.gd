@@ -89,6 +89,15 @@ const GEAR_OVERLOAD_DAMAGE: float = 0.01
 ## Below this speed the brake stops the ship outright rather than chasing it.
 const BRAKE_EPS: float = 2.0
 
+## The pool a ship has with no generator fitted: capacity, units per second,
+## seconds of silence. Deliberately miserable. A ship whose generator was
+## swapped out for something that does not fit still shoots, just very badly
+## -- the same reason the hold refuses loot rather than losing it. A bad
+## module choice should be a poor one, not a state with no way out of it.
+const HULL_RAIL_CAPACITY: float = 40.0
+const HULL_RAIL_RECHARGE: float = 15.0
+const HULL_RAIL_DELAY: float = 1.5
+
 ## Below this speed there is no direction of travel to point at, so the
 ## heading assist does nothing rather than chasing numerical noise.
 const HEADING_MIN_SPEED: float = 8.0
@@ -239,9 +248,41 @@ var carried_rarity: int = 0
 ## stowed. Rarity rides alongside because no module Resource carries it.
 var cargo: Array[Dictionary] = []
 
-## Total bulk the bay can hold. A hull property for now; a bigger hold is the
-## obvious thing for a bigger hull to have.
-@export var cargo_capacity: float = 12.0
+## Total bulk the cargo bay can hold, before anything a module adds. A
+## property of the hull, set in the scene, because how much a ship can carry
+## is the first thing that distinguishes a hauler from a fighter.
+@export var hull_cargo_capacity: float = 12.0
+
+
+## What the bay actually holds, hull plus whatever the fitted modules
+## contribute. One place to ask, so the editor, the mass sum and the pickup
+## check can never disagree about how full the ship is.
+##
+## Nothing adds to it yet. The line exists because a cargo module is an
+## obvious find and the alternative is that `cargo_capacity` stays a constant
+## every caller has to remember is not the whole story.
+func cargo_capacity() -> float:
+	var total: float = hull_cargo_capacity
+	if generator_bay != null and generator_bay.installed != null:
+		# A generator takes room in the hull, not only mass. Nothing else
+		# does yet.
+		total -= generator_bay.installed.bulk * CARGO_CROWDING
+	return maxf(total, 0.0)
+
+
+## How much of a fitted module's bulk comes out of the cargo bay rather than
+## simply being carried. Less than one: machinery is packed into space that
+## was never going to hold crates anyway.
+const CARGO_CROWDING: float = 0.5
+
+## Energy in the pool, and how long since the last spend. Combat's clock:
+## it refills itself, is never bought, and cannot be saved up
+## (IDEAS.md section 14).
+var energy: float = 0.0
+var _since_spend: float = 0.0
+
+## The bay, if the hull has one. Found at ready like the other mounts.
+var generator_bay: GeneratorBay = null
 
 ## Where the cargo sits, in the ship's frame. Placed on the stock centre of
 ## mass on purpose: a bay anywhere else would make loading up a balance fault
@@ -266,6 +307,8 @@ func _ready() -> void:
 	for child: Node in get_children():
 		if child is Hardpoint:
 			hardpoints.append(child as Hardpoint)
+		elif child is GeneratorBay:
+			generator_bay = child as GeneratorBay
 		elif child is LandingGear:
 			gear = child as LandingGear
 	# Set once here rather than at every landing: it never changes, and writing
@@ -273,6 +316,10 @@ func _ready() -> void:
 	# refuses mid-flush.
 	freeze_mode = RigidBody2D.FREEZE_MODE_KINEMATIC
 	rebuild_control_groups()
+	# A ship starts charged. The rebuild above only clamps downwards, so
+	# without this a fresh hull would come out of the yard unable to fire.
+	energy = energy_capacity()
+	_since_spend = energy_recharge_delay()
 
 
 ## Every engine mount on the hull, fitted or empty.
@@ -326,6 +373,8 @@ static func module_bulk(item: Resource) -> float:
 		return (item as EngineData).bulk
 	if item is WeaponData:
 		return (item as WeaponData).bulk
+	if item is GeneratorData:
+		return (item as GeneratorData).bulk
 	return 0.0
 
 
@@ -337,7 +386,7 @@ func cargo_used() -> float:
 
 
 func cargo_free() -> float:
-	return maxf(cargo_capacity - cargo_used(), 0.0)
+	return maxf(cargo_capacity() - cargo_used(), 0.0)
 
 
 ## Moves what is in the hold into the bay. Fails, rather than overfilling,
@@ -416,6 +465,10 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 
 	_recompute_mass_properties()
 	control.rebuild(engines, center_of_mass, mass, inertia)
+	# Fitting a smaller generator must not leave the pool holding more than
+	# the new one can. Topping it up on a swap is the other way round and
+	# would make refitting a free reload.
+	energy = minf(energy, energy_capacity())
 
 	if verbose:
 		var report: PackedStringArray = configuration().lines()
@@ -449,6 +502,11 @@ func _recompute_mass_properties() -> void:
 	total_mass += load
 	weighted += CARGO_BAY * load
 
+	if generator_bay != null:
+		var bay_mass: float = generator_bay.module_mass()
+		total_mass += bay_mass
+		weighted += generator_bay.position * bay_mass
+
 	var centre: Vector2 = weighted / maxf(total_mass, 0.0001)
 
 	# Parallel axis theorem: the hull's own inertia about its centroid, shifted
@@ -457,6 +515,10 @@ func _recompute_mass_properties() -> void:
 	for engine: EngineInstance in engines:
 		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
 	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
+	if generator_bay != null:
+		total_inertia += generator_bay.module_mass() * generator_bay.position.distance_squared_to(
+			centre
+		)
 
 	mass = total_mass
 	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
@@ -542,11 +604,67 @@ func _physics_process(delta: float) -> void:
 		else:
 			_hold_landed_pose()
 
+	_recharge(delta)
+
 	var container: Node = projectile_container()
 	for hardpoint: Hardpoint in hardpoints:
 		hardpoint.tick(delta)
-		if fire_command:
-			hardpoint.fire(linear_velocity, container, self)
+		if not fire_command or not hardpoint.can_fire():
+			continue
+		# Charged before fired: a shot either comes out whole or does not come
+		# out. Half a shot is unreadable and breaks every affix reckoned on
+		# damage (IDEAS.md section 14).
+		if not spend_energy(hardpoint.weapon.energy_cost):
+			continue
+		hardpoint.fire(linear_velocity, container, self)
+
+
+## The generator fitted, or null when running on the hull's own rail.
+func generator() -> GeneratorData:
+	return generator_bay.installed if generator_bay != null else null
+
+
+func energy_capacity() -> float:
+	var fitted: GeneratorData = generator()
+	return fitted.capacity if fitted != null else HULL_RAIL_CAPACITY
+
+
+func energy_recharge_rate() -> float:
+	var fitted: GeneratorData = generator()
+	return fitted.recharge_rate if fitted != null else HULL_RAIL_RECHARGE
+
+
+func energy_recharge_delay() -> float:
+	var fitted: GeneratorData = generator()
+	return fitted.recharge_delay if fitted != null else HULL_RAIL_DELAY
+
+
+## True while the pool is waiting out the silence rather than filling. The
+## HUD needs the two apart: a bar that is stopped and a bar that is climbing
+## mean different things to a pilot deciding whether to hold the trigger.
+func energy_waiting() -> bool:
+	return _since_spend < energy_recharge_delay() and energy < energy_capacity()
+
+
+## Takes `cost` from the pool if all of it is there, and returns whether it
+## was. Every spend pushes the recharge back, which is what makes firing and
+## charging mutually exclusive.
+func spend_energy(cost: float) -> bool:
+	if cost <= 0.0:
+		return true
+	if energy < cost:
+		return false
+	energy -= cost
+	_since_spend = 0.0
+	return true
+
+
+func _recharge(delta: float) -> void:
+	var capacity: float = energy_capacity()
+	_since_spend += delta
+	if _since_spend < energy_recharge_delay():
+		return
+	energy = minf(energy + energy_recharge_rate() * delta, capacity)
 
 
 ## Where fired rounds are parented. Falls back to the ship's own parent so a
@@ -991,8 +1109,11 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 	commands.clear()
 	active_commands.clear()
 	kill_rotation_command = false
+	heading_command = ControlChords.Chord.NONE
 	brake_command = false
 	fire_command = false
+	energy = energy_capacity()
+	_since_spend = energy_recharge_delay()
 	for engine: EngineInstance in engines:
 		engine.throttle = 0.0
 		engine.target_throttle = 0.0

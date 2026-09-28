@@ -201,6 +201,9 @@ func _targets() -> Array[Node]:
 		for mount: EngineMount in _ship.engine_mounts():
 			if _ship.mount_accepts(mount, item as EngineData):
 				out.append(mount)
+	elif item is GeneratorData:
+		if _ship.generator_bay != null and _ship.generator_bay.fits(item as GeneratorData):
+			out.append(_ship.generator_bay)
 	return out
 
 
@@ -213,6 +216,8 @@ func _all_mounts() -> Array[Node]:
 		out.append(mount)
 	for mount: Hardpoint in _ship.hardpoints:
 		out.append(mount)
+	if _ship.generator_bay != null:
+		out.append(_ship.generator_bay)
 	return out
 
 
@@ -242,6 +247,10 @@ func _fit() -> void:
 		removed = (slot as Hardpoint).fit(item as WeaponData)
 	elif slot is EngineMount:
 		removed = _ship.fit_engine(slot as EngineMount, item as EngineData)
+	elif slot is GeneratorBay:
+		var bay: GeneratorBay = slot as GeneratorBay
+		removed = bay.installed
+		bay.installed = item as GeneratorData
 
 	# Whatever came out goes back to the bay, or to the hold when the bay is
 	# full. Never nowhere: a swap must always be reversible.
@@ -468,7 +477,7 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 	var y: float = rect.position.y + PAD + float(FONT_SIZE)
 	var x: float = rect.position.x + PAD
 	_text(font, Vector2(x, y), "ŁADOWNIA / CARGO   %.1f / %.1f" % [
-		_ship.cargo_used(), _ship.cargo_capacity,
+		_ship.cargo_used(), _ship.cargo_capacity(),
 	], LABEL)
 	y += ROW * 1.5
 
@@ -582,6 +591,8 @@ func _label(item: Resource) -> String:
 			EngineData.Type.keys()[int((item as EngineData).type)].to_lower(),
 			(item as EngineData).max_thrust,
 		]
+	if item is GeneratorData:
+		return (item as GeneratorData).display_name
 	return "moduł"
 
 
@@ -602,5 +613,13 @@ func _describe(item: Resource) -> PackedStringArray:
 		var engine: EngineData = item as EngineData
 		out.append("ciąg %.0f   rozruch %.2f s   niezawodność %.2f   paliwo %.2f" % [
 			engine.max_thrust, engine.spool_time, engine.reliability, engine.fuel_cost,
+		])
+	elif item is GeneratorData:
+		var cell: GeneratorData = item as GeneratorData
+		out.append("pojemność %.0f   ładowanie %.0f/s   cisza %.2f s   pułap %.0f/s" % [
+			cell.capacity,
+			cell.recharge_rate,
+			cell.recharge_delay,
+			cell.sustained_throughput(INF),
 		])
 	return out

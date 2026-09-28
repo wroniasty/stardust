@@ -153,6 +153,9 @@ var _impact_speed: float = 0.0
 var _muzzle_point: Vector2 = Vector2.ZERO
 var _target_point: Vector2 = Vector2.ZERO
 var _rounds_fired: int = 0
+
+## Energy in the pool when the weapon phase began firing.
+var _energy_at_fire: float = 0.0
 var _target_was_solid: bool = false
 var _round_container: Node = null
 var _failures: int = 0
@@ -550,6 +553,9 @@ func _begin_phase() -> void:
 			_muzzle_point = hardpoint.global_position
 			_target_was_solid = _planet.is_solid_at(_target_point)
 			_rounds_fired = 0
+			# Left charged: the rate check below measures rate of fire, and
+			# starving the pool here would have it measuring energy instead.
+			_energy_at_fire = _ship.energy
 			_round_container = _ship.projectile_container()
 			_round_container.child_entered_tree.connect(_on_round_spawned)
 			_ship.fire_command = true
@@ -867,6 +873,7 @@ func _evaluate_phase() -> void:
 			_check_pause_gate()
 			_check_camera(_planet)
 			_check_chords()
+			_check_energy()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1073,6 +1080,18 @@ func _evaluate_phase() -> void:
 			_expect(
 				not _planet.is_solid_at(_target_point),
 				"a round punched a hole through the ground it hit",
+			)
+			# The gate is on the real firing path, not only in a unit test:
+			# every round that came out paid for itself, and nothing came
+			# back in. Exact because each shot pushes the recharge back, so a
+			# gun that is firing is a generator that is not charging.
+			var cost: float = _ship.hardpoints[0].weapon.energy_cost
+			var spent: float = _energy_at_fire - _ship.energy
+			_expect(
+				absf(spent - float(_rounds_fired) * cost) < 0.01,
+				"every round came out of the pool and none of it came back (%.1f for %d at %.0f)" % [
+					spent, _rounds_fired, cost,
+				],
 			)
 
 
@@ -1504,7 +1523,7 @@ func _check_cargo() -> void:
 	_expect(Ship.module_bulk(loot.weapon(11, 0)) > 0.0, "a weapon has a bulk, like an engine")
 	_expect(ship.cargo_used() == 0.0, "a fresh bay is empty")
 	_expect(
-		is_equal_approx(ship.cargo_free(), ship.cargo_capacity),
+		is_equal_approx(ship.cargo_free(), ship.cargo_capacity()),
 		"and all of its capacity is free",
 	)
 
@@ -1882,6 +1901,119 @@ func _check_chords() -> void:
 		chords.active() == ControlChords.Chord.KILL_ROTATION,
 		"grabbing A and D means stop, whatever else the hands are doing",
 	)
+
+
+## Energy paces combat. The rule is four numbers and one sentence -- a spend
+## resets the clock, and after the delay the pool fills -- so what needs
+## pinning is the consequences of that sentence, which are what make the
+## trigger a decision rather than a tax.
+func _check_energy() -> void:
+	var ship: Ship = _spawn_ship()
+	var tick: float = 1.0 / 60.0
+
+	_expect(
+		is_equal_approx(ship.energy, ship.energy_capacity()) and ship.energy > 0.0,
+		"a ship comes out of the yard charged (%.0f)" % ship.energy,
+	)
+
+	_expect(ship.spend_energy(30.0), "a spend the pool can cover comes out of it")
+	_expect(is_equal_approx(ship.energy, ship.energy_capacity() - 30.0), "and only that much")
+	var left: float = ship.energy
+	_expect(not ship.spend_energy(1e6), "a spend it cannot cover is refused")
+	_expect(
+		is_equal_approx(ship.energy, left),
+		"and takes nothing: a shot comes out whole or not at all",
+	)
+
+	# Firing and charging are mutually exclusive, which is the whole design.
+	ship.spend_energy(10.0)
+	var after_spend: float = ship.energy
+	for step: int in range(int(ship.energy_recharge_delay() * 60.0) - 4):
+		ship._recharge(tick)
+	_expect(
+		is_equal_approx(ship.energy, after_spend),
+		"while the silence is still running the pool does not move",
+	)
+	_expect(ship.energy_waiting(), "and it reads as waiting rather than as filling")
+	for step: int in range(30):
+		ship._recharge(tick)
+	_expect(ship.energy > after_spend, "once the silence is over it fills")
+	_expect(not ship.energy_waiting(), "and stops reading as waiting")
+
+	# Every spend pushes the start back, so a gun that is firing is a
+	# generator that is not charging at all.
+	ship.energy = 50.0
+	for step: int in range(240):
+		ship.spend_energy(0.001)
+		ship._recharge(tick)
+	_expect(
+		ship.energy < 50.0,
+		"holding the trigger never lets it charge, however long (%.2f)" % ship.energy,
+	)
+
+	# A bad module choice is a poor ship, never a dead one.
+	var cell: GeneratorData = ship.generator_bay.installed
+	ship.generator_bay.installed = null
+	ship.rebuild_control_groups(false)
+	_expect(
+		is_equal_approx(ship.energy_capacity(), Ship.HULL_RAIL_CAPACITY),
+		"a ship with no generator falls back on the hull's own rail",
+	)
+	_expect(
+		ship.energy <= Ship.HULL_RAIL_CAPACITY,
+		"and the pool is clamped down to it rather than left overfull",
+	)
+	_expect(
+		Ship.HULL_RAIL_CAPACITY < cell.capacity
+		and Ship.HULL_RAIL_RECHARGE < cell.recharge_rate,
+		"the rail is worse than any real generator, which is the point of it",
+	)
+	var roomier: float = ship.cargo_capacity()
+	ship.generator_bay.installed = cell
+	ship.rebuild_control_groups(false)
+	_expect(
+		ship.cargo_capacity() < roomier,
+		"a generator takes room in the hold as well as mass (%.1f with, %.1f without)" % [
+			ship.cargo_capacity(), roomier,
+		],
+	)
+	_expect(
+		ship.cargo_capacity() > roomier - cell.bulk,
+		"but less room than its own bulk: machinery packs into space crates never could",
+	)
+
+	# The ceiling belongs to the timeout, not to the recharge rate: a cell
+	# rated 40 a second cannot actually deliver 40 (IDEAS.md section 14).
+	var ceiling: float = cell.sustained_throughput(INF)
+	_expect(
+		ceiling < cell.recharge_rate * 0.8,
+		"the sustained ceiling is the silence, not the rating (%.1f against %.0f)" % [
+			ceiling, cell.recharge_rate,
+		],
+	)
+	_expect(
+		cell.sustained_throughput(5.0) < 5.0,
+		"and a gentle drain is never more than the drain itself",
+	)
+
+	# Base weapons deliberately sit on one line of damage per unit of energy.
+	# Energy is not allowed to pick a winner quietly: the guns differ in
+	# character, not in efficiency.
+	var per_energy: Array[float] = []
+	for path: String in ["res://resources/weapons/autocannon.tres",
+			"res://resources/weapons/siege_slug.tres"]:
+		var gun: WeaponData = load(path) as WeaponData
+		_expect(gun.energy_cost > 0.0, "%s costs energy to fire" % gun.display_name)
+		per_energy.append(gun.damage / maxf(gun.energy_cost, 0.0001))
+	var spread: float = absf(per_energy[0] - per_energy[1]) / maxf(per_energy[0], 0.0001)
+	_expect(
+		spread < 0.10,
+		"the base weapons are within a tenth on damage per unit of energy (%.4f, %.4f)" % [
+			per_energy[0], per_energy[1],
+		],
+	)
+
+	ship.queue_free()
 
 
 func _check_configuration_report() -> void:

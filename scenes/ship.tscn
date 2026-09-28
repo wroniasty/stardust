@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="PackedScene" path="res://scenes/engine_mount.tscn" id="2_mount"]
+[ext_resource type="Script" path="res://scripts/generator_bay.gd" id="13_generator_bay"]
+[ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="14_cell"]
 [ext_resource type="Script" path="res://scripts/hardpoint.gd" id="3_hardpoint"]
 [ext_resource type="Resource" path="res://resources/weapons/autocannon.tres" id="12_autocannon"]
 [ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
@@ -85,6 +87,11 @@ position = Vector2(0, -12)
 rotation = 3.1415927
 thrust_direction = Vector2(0, -1)
 installed = ExtResource("10_retro")
+
+[node name="GeneratorBay" type="Node2D" parent="."]
+position = Vector2(0, 1.75)
+script = ExtResource("13_generator_bay")
+installed = ExtResource("14_cell")
 
 [node name="NoseHardpoint" type="Node2D" parent="."]
 position = Vector2(0, -14)

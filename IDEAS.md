@@ -1570,6 +1570,39 @@ sam, co przy ładowni odmawiającej przyjęcia lootu zamiast go gubić (sekcja 4
 zła wymiana modułu ma być kiepskim wyborem, a nie stanem, z którego nie ma
 wyjścia.
 
+### Realizacja (M2, pierwsza warstwa)
+
+`GeneratorData` siedzi w `GeneratorBay` — węźle o tym samym kształcie co
+`EngineMount`: slot to dziura w kadłubie i nic nie waży, a to, co w nim
+siedzi, jest masą i musi się zmieścić. Wnęka stoi **na środku masy pustego
+statku**, tak jak luk cargo, więc cięższy generator czuć jako ociężałość, a
+nie jako usterkę wyważenia w raporcie.
+
+Zmierzone: statek fabryczny 14,6 → **16,6 kg** po wstawieniu ogniwa o
+gabarycie 2,0, środek masy bez zmian.
+
+Trzy rzeczy potwierdzone testem, bo wszystkie trzy są konsekwencjami tego
+jednego zdania o zerowaniu licznika:
+
+- **Pełny strzał albo żaden.** Odmowa nie zabiera nic z puli.
+- **Trzymanie spustu nigdy nie pozwala się ładować**, choćby nie wiem jak
+  długo — sprawdzone czterema sekundami ognia o drenażu bliskim zeru.
+- **Pułap to cisza, nie rating.** Ogniwo 100/40/0,8 daje **30,3 j/s**, nie 40.
+
+Wydatek jest na **prawdziwej ścieżce strzału**, nie tylko w teście
+jednostkowym: faza broni sprawdza, że seria czterech pocisków zabrała
+dokładnie 24 jednostki i że nic nie wróciło. Usunięcie bramki z pętli ognia
+wywala tę asercję.
+
+**Obie bazowe bronie wyszły na 0,0133 i 0,0136 obrażeń na jednostkę energii** —
+to jest niezmiennik pilnowany testem z tolerancją 10%, dokładnie tak jak koszty
+afiksów. Energia nie ma po cichu wskazywać zwycięzcy.
+
+Przy okazji pojemność cargo przestała być stałą: `hull_cargo_capacity` to
+własność kadłuba, a zamontowana maszyneria **wypiera część ładowni** —
+generator zabiera pół swojego gabarytu. Mniej niż całość, bo maszyneria pakuje
+się w miejsca, w których i tak nie stanęłaby skrzynka.
+
 ### Jak się to składa
 
 Strzelanie do wyczerpania puli daje przepływ energii, który składa się jak opory
