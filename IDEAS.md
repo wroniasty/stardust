@@ -174,6 +174,49 @@ razy słabszego od wiatru nauczyłoby go tylko ignorować raport. Dwie różne
 robotę, dwa różne progi — i gdyby raport miał próg testu, byłby bezużyteczny,
 a gdyby test miał próg raportu, nie złapałby niczego.
 
+### Awarie silników
+
+Trzy rzeczy, wszystkie po to, żeby uszkodzony silnik **zmieniał sposób
+latania**, a nie tylko odejmował liczbę.
+
+- **Uderzenie psuje to, w co trafiło.** Solver kontaktów i tak zna najgłębszy
+  punkt styku, więc zapamiętuje go we frame'ie statku i obrażenia rozchodzą
+  się stamtąd z zasięgiem 16 px (mniej więcej szerokość kadłuba). Lądowanie na
+  dyszy jest innym błędem niż lądowanie na dziobie. Mnożnik 1,6 wobec obrażeń
+  kadłuba: maszyneria jest kruchsza od konstrukcji, a statek, który zawsze
+  ginie przed swoimi silnikami, nie ma modelu uszkodzeń wartego nazwy.
+- **Niezawodność jako wypadanie**, liczone **na sekundę, nie na tick** —
+  inaczej częstotliwość fizyki decydowałaby, jak zepsuty jest statek. Każdy
+  silnik ma własny RNG zasiany nazwą mountu: wspólna losowość kazałaby
+  wszystkim dyszom wypaść w tym samym ticku, co czyta się jak zacięcie gry, a
+  nie jak awaria jednej maszyny. Ten sam statek psuje się dwa razy tak samo,
+  więc zgłoszenie błędu da się odtworzyć.
+- **Falowanie ciągu**, deterministyczna sinusoida z fazą na silnik, **nigdy
+  powyżej nominału**. Ciąg, który czasem przekracza zadany, byłby premią w
+  przebraniu awarii.
+
+**Uszkodzenie zjada też niezawodność**: `reliability * lerp(0.35, 1, health)`.
+Rozwalony silnik przy idealnej tabliczce jest wciąż w 35% niezawodny — nie w
+zerze, bo silnik, który nigdy nie odpala, to silnik nieobecny, a ciekawa awaria
+to ta, która odpala *czasami*.
+
+**Znaleziony błąd: refit leczył wszystko.** `rebuild_control_groups()` wyrzuca i
+odtwarza każdy `EngineInstance`, więc przykręcenie czegokolwiek gdziekolwiek po
+cichu naprawiało całą resztę — darmowy warsztat w ekranie wymiany. Kondycja jest
+teraz przenoszona przez przebudowę, po nazwie mountu i tylko gdy siedzi w nim
+ten sam silnik. Silnik przełożony do innego gniazda wstaje zdrowy — jedyny
+przypadek, który to gubi; nazwijmy to czasem na stole.
+
+Znalazł to test, który trzymał nieaktualną referencję po przebudowie i pokazał
+wynik 0,600 tam, gdzie spodziewałem się 1,0.
+
+**Raport konfiguracji musiał dostać osobne oczy na kondycję.** Jego własna siła
+resztkowa liczona jest z ciągu nominalnego (bo grupy tak są budowane), więc
+uszkodzenie nie ruszało w niej nic. Raport liczy teraz drugą resztkę, ważoną
+`health`, i wypisuje **tylko nadwyżkę ponad nominalną** — inaczej obwiniałby
+uszkodzenie za asymetrię, która była tam wcześniej. Zmierzone na statku z dyszą
+na 60%: `damage makes CW push sideways at 3.9 px/s2`.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne

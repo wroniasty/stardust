@@ -65,6 +65,13 @@ const TOUCHDOWN_TICKS: int = 180
 ## Descent forced on the overspeed test, well past what the legs absorb.
 const HARD_DESCENT: float = 120.0
 
+## The state a ship has to be able to get down in: engines at two thirds and
+## plainly unreliable. Not wrecked -- a ship that cannot land at all is a
+## death sentence with extra steps, and the point of the damage model is that
+## a bad landing is survivable and awkward.
+const DAMAGED_LANDING_HEALTH: float = 0.65
+const DAMAGED_LANDING_RELIABILITY: float = 0.5
+
 ## Spin forced on the planet for the carry test, and how long to watch.
 const TEST_SPIN: float = 0.02
 const RIDE_TICKS: int = 120
@@ -97,7 +104,7 @@ const DEATH_TICKS: int = 900
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
 	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
-	PLATEAU, GEAR, LANDING_GOOD, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
+	PLATEAU, GEAR, LANDING_GOOD, LANDING_DAMAGED, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
 
 var _phase: int = Phase.FIELD
@@ -154,6 +161,10 @@ var _muzzle_point: Vector2 = Vector2.ZERO
 var _target_point: Vector2 = Vector2.ZERO
 var _rounds_fired: int = 0
 
+## The range of thrust actually delivered during the damaged approach.
+var _damaged_output_low: float = 1.0
+var _damaged_output_high: float = 0.0
+
 ## Energy in the pool when the weapon phase began firing.
 var _energy_at_fire: float = 0.0
 var _target_was_solid: bool = false
@@ -174,6 +185,12 @@ func _physics_process(delta: float) -> bool:
 
 	_ticks += 1
 	_elapsed += delta
+	if _phase == Phase.LANDING_DAMAGED and _ship != null:
+		for engine: EngineInstance in _ship.engines:
+			if engine.target_throttle <= 0.0:
+				continue
+			_damaged_output_low = minf(_damaged_output_low, engine.effective_output())
+			_damaged_output_high = maxf(_damaged_output_high, engine.effective_output())
 	if _phase == Phase.ORBIT or _phase == Phase.ELLIPSE:
 		var radius: float = _ship.global_position.distance_to(_planet.global_position)
 		_orbit_min = minf(_orbit_min, radius)
@@ -427,7 +444,7 @@ func _phase_ticks() -> int:
 			return LANDING_TICKS
 		Phase.PLATEAU, Phase.GEAR:
 			return 1
-		Phase.LANDING_GOOD, Phase.LANDING_FAST, Phase.LANDING_STEEP:
+		Phase.LANDING_GOOD, Phase.LANDING_DAMAGED, Phase.LANDING_FAST, Phase.LANDING_STEEP:
 			return TOUCHDOWN_TICKS
 		Phase.LANDED_RIDE:
 			return RIDE_TICKS
@@ -609,6 +626,19 @@ func _begin_phase() -> void:
 		Phase.LANDING_GOOD:
 			_flat_angle = _find_angle(_planet, true, _ship.gear.track_width())
 			_place_for_touchdown(_flat_angle, 0.0)
+		Phase.LANDING_DAMAGED:
+			# The same approach as the good one, flown on a hull whose engines
+			# are half dead and unreliable. Hard is not something a test can
+			# assert; that it is still possible is.
+			_flat_angle = _find_angle(_planet, true, _ship.gear.track_width())
+			_place_for_touchdown(_flat_angle, 0.0)
+			for engine: EngineInstance in _ship.engines:
+				engine.health = DAMAGED_LANDING_HEALTH
+				var flaky: EngineData = engine.data.duplicate() as EngineData
+				flaky.reliability = DAMAGED_LANDING_RELIABILITY
+				engine.data = flaky
+			_damaged_output_low = 1.0
+			_damaged_output_high = 0.0
 		Phase.LANDING_FAST:
 			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), HARD_DESCENT)
 		Phase.LANDING_STEEP:
@@ -876,6 +906,7 @@ func _evaluate_phase() -> void:
 			_check_energy()
 			_check_shot_mods()
 			_check_energy_balance()
+			_check_engine_failures()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -896,6 +927,15 @@ func _evaluate_phase() -> void:
 				"the ship rests on the surface, neither sunk nor hovering (%.1f px above ground)" % [
 					resting - ground,
 				],
+			)
+		Phase.LANDING_DAMAGED:
+			_expect(
+				_first_touchdown == "landed",
+				"a crippled ship can still be put down gently (got %s)" % _describe_touchdown(),
+			)
+			_expect(
+				_ship.worst_engine_health() < 1.0,
+				"and it really was crippled while doing it (%.2f)" % _ship.worst_engine_health(),
 			)
 		Phase.LANDING_FAST:
 			# Judged on the first touchdown, not the final state: a ship waved
@@ -2249,6 +2289,155 @@ func _check_energy_balance() -> void:
 			minigun_sustained, minigun_burst,
 		],
 	)
+
+
+## Engine failures. The three the plan asks for -- efficiency lost to
+## collisions, unreliability as cut-outs, and thrust that surges -- and the
+## rule that holds them together: nothing here rebalances the control groups,
+## so a half-dead engine makes the ship fly crooked instead of being quietly
+## compensated for.
+func _check_engine_failures() -> void:
+	var ship: Ship = _spawn_ship()
+	var nose: EngineInstance = null
+	var tail: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == "NoseLeftTorque":
+			nose = engine
+		if engine.mount.name == "TailLeftTorque":
+			tail = engine
+	_expect(nose != null and tail != null, "the test ship has the engines this check needs")
+
+	# A hit near one end breaks what was there, and leaves the other end alone.
+	ship.damage_engines_near(nose.mount.position, 0.25)
+	_expect(nose.health < 1.0, "an impact costs the engine it landed on (%.2f)" % nose.health)
+	_expect(
+		is_equal_approx(tail.health, 1.0),
+		"and leaves one at the other end of the hull untouched (%.2f)" % tail.health,
+	)
+
+	# The crooked-ship rule, which is the reason the damage model exists.
+	var before: float = ship.control.authority_of(ShipControl.Command.CW)
+	var hurt: float = nose.health
+	ship.rebuild_control_groups(false)
+	# A rebuild remakes every EngineInstance, so the old handles are stale.
+	# Finding that out the hard way is what turned up the bug below.
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == "NoseLeftTorque":
+			nose = engine
+		if engine.mount.name == "TailLeftTorque":
+			tail = engine
+	_expect(
+		is_equal_approx(nose.health, hurt),
+		"a refit is not a repair: damage survives the rebuild (%.2f)" % nose.health,
+	)
+	_expect(
+		is_equal_approx(ship.control.authority_of(ShipControl.Command.CW), before),
+		"damage never rebalances the groups: a broken engine is not compensated for",
+	)
+	_expect(
+		nose.current_force().length() < nose.nominal_force().length(),
+		"but it really does deliver less than it is rated for",
+	)
+
+	# Damage eats into dependability as well as into output.
+	_expect(
+		nose.current_reliability() < tail.current_reliability(),
+		"a damaged engine is less dependable too (%.2f against %.2f)" % [
+			nose.current_reliability(), tail.current_reliability(),
+		],
+	)
+
+	# The report is where damage becomes legible. Its own residual is built
+	# from nominal thrust, so without looking at condition separately it
+	# would have nothing to say about the very thing the pilot needs told.
+	var hurt_report: String = _findings_of(ship.configuration())
+	_expect(
+		hurt_report.contains("NoseLeftTorque"),
+		"the report names the engine that is hurt (%s)" % hurt_report,
+	)
+	_expect(
+		hurt_report.contains("push sideways"),
+		"and says that the damage is what makes the ship fly crooked",
+	)
+
+	ship.repair_engines()
+	_expect(
+		is_equal_approx(ship.worst_engine_health(), 1.0),
+		"and the repair key puts all of it back",
+	)
+	_expect(
+		ship.configuration().worst() == ConfigurationReport.Severity.OK,
+		"after which the report is clean again (%s)" % _findings_of(ship.configuration()),
+	)
+
+	# Cut-outs: counted over time rather than asserted on one tick, because
+	# the whole point is that they are occasional.
+	var flaky: EngineData = nose.data.duplicate() as EngineData
+	flaky.reliability = 0.35
+	nose.data = flaky
+	nose.target_throttle = 1.0
+	var dead_ticks: int = 0
+	var seen_surge: bool = false
+	var peak: float = 0.0
+	for step: int in range(1800):
+		nose.advance(1.0 / 60.0)
+		var out: float = nose.effective_output()
+		if out <= 0.0:
+			dead_ticks += 1
+			continue
+		peak = maxf(peak, out)
+		if out < 0.99:
+			seen_surge = true
+	_expect(
+		dead_ticks > 0,
+		"an unreliable engine cuts out sometimes (%d ticks of 1800)" % dead_ticks,
+	)
+	_expect(
+		dead_ticks < 900,
+		"but not most of the time: a fault that is always on is a missing engine (%d)" % dead_ticks,
+	)
+	_expect(seen_surge, "and its thrust surges rather than holding steady")
+	# Never above what was asked for: a fault that sometimes overshoots is a
+	# bonus in a fault's clothing. The peak falls a whisker short of 1.0
+	# because a 7 Hz surge sampled 60 times a second never lands exactly on
+	# its own crest -- that is sampling, not the model.
+	_expect(
+		peak <= 1.0 and peak > 0.95,
+		"the surge tops out at full thrust and never passes it (%.3f)" % peak,
+	)
+
+	# A reliable engine does none of that, or the fault would just be noise.
+	var solid: EngineData = tail.data.duplicate() as EngineData
+	solid.reliability = 1.0
+	tail.data = solid
+	tail.target_throttle = 1.0
+	var steady: bool = true
+	for step: int in range(600):
+		tail.advance(1.0 / 60.0)
+		if not is_equal_approx(tail.effective_output(), tail.throttle):
+			steady = false
+	_expect(steady, "a sound engine delivers exactly what it was asked for, every tick")
+
+	# Reproducible: the same ship misbehaves the same way twice, so a bug
+	# report about a fault can be followed.
+	var first_run: int = _count_dropouts(flaky, nose.mount)
+	_expect(
+		first_run == _count_dropouts(flaky, nose.mount),
+		"the same engine on the same mount fails the same way twice (%d)" % first_run,
+	)
+
+	ship.queue_free()
+
+
+func _count_dropouts(engine_data: EngineData, mount: EngineMount) -> int:
+	var instance: EngineInstance = EngineInstance.new(engine_data, mount)
+	instance.target_throttle = 1.0
+	var dead: int = 0
+	for step: int in range(900):
+		instance.advance(1.0 / 60.0)
+		if instance.is_dropped_out():
+			dead += 1
+	return dead
 
 
 func _check_configuration_report() -> void:

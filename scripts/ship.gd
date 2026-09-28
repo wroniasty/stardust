@@ -472,11 +472,27 @@ func configuration() -> ConfigurationReport:
 ## deliberately left out of the group maths so a broken engine shows up as a
 ## crooked ship rather than being quietly compensated for.
 func rebuild_control_groups(verbose: bool = true) -> void:
+	# Condition survives the rebuild. An EngineInstance is a pairing the ship
+	# throws away and remakes on every refit, so without this, bolting on any
+	# module anywhere would quietly repair every engine on the hull -- a free
+	# repair bench in the swap screen.
+	#
+	# Carried by mount, and only while the same engine is still in it. An
+	# engine moved to another socket comes up fresh, which is the one case
+	# this gets wrong; call it bench time.
+	var carried: Dictionary = {}
+	for engine: EngineInstance in engines:
+		carried[engine.mount.name] = {"data": engine.data, "health": engine.health}
+
 	engines.clear()
 	for child: Node in get_children():
 		var mount: EngineMount = child as EngineMount
 		if mount != null and mount.installed != null:
-			engines.append(EngineInstance.new(mount.installed, mount))
+			var instance: EngineInstance = EngineInstance.new(mount.installed, mount)
+			var previous: Dictionary = carried.get(mount.name, {})
+			if previous.get("data") == mount.installed:
+				instance.health = float(previous["health"])
+			engines.append(instance)
 
 	_aggregate_stats()
 	_recompute_mass_properties()
@@ -837,6 +853,9 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 	var normals: Array[Vector2] = []
 	var deepest: float = 0.0
 	var deepest_normal: Vector2 = Vector2.ZERO
+	## Where the worst of it landed, in the ship's own frame. Kept so the
+	## damage can fall on the engines that were actually there.
+	var deepest_local: Vector2 = Vector2.ZERO
 
 	# Before the impulses, while the approach speed and attitude are still the
 	# ones the pilot flew rather than ones the first bounce produced.
@@ -857,6 +876,7 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 		if depth > deepest:
 			deepest = depth
 			deepest_normal = point_normal
+			deepest_local = local_points[i]
 
 	_terrain_contacts = points.size()
 	if _terrain_contacts == 0:
@@ -878,6 +898,9 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 		var damage: float = (impact_speed - damage_speed_threshold) * damage_per_speed
 		hull_impact.emit(impact_speed, damage)
 		take_damage(damage, "impact")
+		# The engines nearest where it struck take it. Landing on a jet is
+		# supposed to be a different mistake from landing on the nose.
+		damage_engines_near(deepest_local, damage)
 
 
 ## Solves the contacts with sequential impulses and returns the hardest
@@ -1012,6 +1035,8 @@ func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
 		var damage: float = excess * GEAR_OVERLOAD_DAMAGE
 		hull_impact.emit(descent, damage)
 		take_damage(damage, "gear")
+		# Straight down through the legs, so it is the tail end that suffers.
+		damage_engines_near(_gear_point(), damage)
 		return false
 
 	# Attitude is judged on the first leg to touch, not once they all have.
@@ -1146,6 +1171,58 @@ func take_off(state: PhysicsDirectBodyState2D = null) -> void:
 	flight_mode_changed.emit(flight_mode)
 
 
+## How far from an impact an engine still feels it, in the ship's own frame.
+## About the width of the hull: a hit is local, but not to the pixel.
+const ENGINE_DAMAGE_RADIUS: float = 16.0
+
+## Engine health lost per point of hull damage, at the point of impact. Above
+## one on purpose -- machinery is more fragile than structure, and a ship
+## that always dies before its engines do has no damage model worth the name.
+const ENGINE_DAMAGE_SHARE: float = 1.6
+
+
+## Hurts the engines around `point` (in the ship's frame) in proportion to
+## how close they are to it.
+##
+## Nothing here rebuilds the control groups. That is the whole design: the
+## groups are built from nominal thrust, so a half-dead engine is not
+## compensated for and the ship flies crooked until the pilot finds a flight
+## computer that will do the compensating (IDEAS.md section 3).
+func damage_engines_near(point: Vector2, severity: float) -> void:
+	if severity <= 0.0:
+		return
+	for engine: EngineInstance in engines:
+		var reach: float = engine.mount.position.distance_to(point) / ENGINE_DAMAGE_RADIUS
+		if reach >= 1.0:
+			continue
+		engine.health = clampf(
+			engine.health - severity * ENGINE_DAMAGE_SHARE * (1.0 - reach), 0.0, 1.0
+		)
+
+
+## Where the legs meet the ground, in the ship's frame -- the gear node if
+## the hull has one, the bottom of the hull otherwise.
+func _gear_point() -> Vector2:
+	if gear != null:
+		return gear.position
+	return Vector2(0.0, 10.0)
+
+
+## Puts every engine back into new condition. The repair key for now; a bench
+## at a station later.
+func repair_engines() -> void:
+	for engine: EngineInstance in engines:
+		engine.health = 1.0
+
+
+## The worst-off engine, for the HUD and the configuration report.
+func worst_engine_health() -> float:
+	var worst: float = 1.0
+	for engine: EngineInstance in engines:
+		worst = minf(worst, engine.health)
+	return worst
+
+
 ## Takes damage from any source. The single door in, so that every way of
 ## hurting the ship shares the death path rather than each inventing its own.
 ## `cause` is not used yet. It is here because M2 wants damage to fall on the
@@ -1195,6 +1272,7 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 	fire_command = false
 	energy = energy_capacity()
 	_since_spend = energy_recharge_delay()
+	repair_engines()
 	for engine: EngineInstance in engines:
 		engine.throttle = 0.0
 		engine.target_throttle = 0.0

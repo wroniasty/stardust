@@ -48,6 +48,11 @@ const MIRRORS: Array[Array] = [
 	[ShipControl.Command.CCW, ShipControl.Command.CW],
 ]
 
+## Engine condition at which the report starts saying so, and at which it
+## stops being a warning and becomes a fault.
+const WORN: float = 0.85
+const CRIPPLED: float = 0.50
+
 ## Relative authority change below this is not worth reporting after a swap.
 const NOTABLE_CHANGE: float = 0.05
 
@@ -98,6 +103,7 @@ static func of(ship: Ship) -> ConfigurationReport:
 		report.residual[command] = leftover.length()
 
 	report._read_stats(ship)
+	report._read_damage(ship)
 	report._find_faults()
 	return report
 
@@ -164,6 +170,43 @@ func compare(before: ConfigurationReport) -> PackedStringArray:
 		if not known.has(finding["text"]):
 			out.append("%s: %s" % [Severity.keys()[int(finding["severity"])], finding["text"]])
 	return out
+
+
+## Condition, and what it is doing to the handling.
+##
+## The control groups are built from nominal thrust on purpose, so a damaged
+## engine leaves the numbers above untouched -- which is exactly why the
+## report has to look at it separately. Otherwise the one thing the pilot
+## most needs told is the one thing the report cannot see.
+func _read_damage(ship: Ship) -> void:
+	for engine: EngineInstance in ship.engines:
+		if engine.health >= WORN:
+			continue
+		_add(
+			Severity.FAULT if engine.health < CRIPPLED else Severity.WARN,
+			"%s is at %.0f%% and %.0f%% dependable" % [
+				engine.mount.name, engine.health * 100.0, engine.current_reliability() * 100.0,
+			],
+		)
+
+	# What the damage actually costs in flight: a rotation pair whose halves
+	# no longer match pushes the ship sideways, and the groups will not
+	# notice because they were never told about health.
+	for command: ShipControl.Command in [ShipControl.Command.CCW, ShipControl.Command.CW]:
+		var leftover: Vector2 = Vector2.ZERO
+		var group: Array = ship.control.groups.get(command, [])
+		for member: Dictionary in group:
+			var engine: EngineInstance = member["engine"]
+			leftover += engine.nominal_force() * float(member["weight"]) * engine.health
+		var drift: float = leftover.length() / maxf(ship.mass, 0.0001)
+		# Only the extra caused by damage: the nominal residual is already
+		# reported above and blaming it twice names the wrong culprit.
+		var nominal: float = float(residual.get(command, 0.0)) / maxf(ship.mass, 0.0001)
+		if drift - nominal >= WARN_DRIFT:
+			_add(
+				Severity.FAULT if drift - nominal >= FAULT_DRIFT else Severity.WARN,
+				"damage makes %s push sideways at %.1f px/s2" % [_name(command), drift],
+			)
 
 
 func _read_stats(ship: Ship) -> void:

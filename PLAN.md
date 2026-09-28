@@ -126,12 +126,12 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [ ] Wytyczne obrysu kadłuba (obwód, wierzchołki, wypukłość, najcieńszy detal, rozstaw nóg) sprawdzane w raporcie konfiguracji — wartości i uzasadnienie w IDEAS.md sekcja 6.
 - [ ] Test: iglica terenu węższa niż odstęp punktów kontaktu nie przechodzi przez kadłub.
 - [x] Raport konfiguracji przy montażu: autorytet w każdą stronę, asymetria par lustrzanych, puste grupy, boczny dryf pary obrotowej jako przyspieszenie. `compare()` pokazuje w ekranie wymiany, co zrobił moduł — różnice, nie stan. Wytyczne obrysu kadłuba dojdą osobno.
-- [ ] Awarie silników: spadek sprawności od zderzeń, niezawodność jako dropout i oscylacja ciągu.
+- [x] Awarie silników: uderzenie psuje silniki **w miejscu trafienia**, niezawodność jako wypadanie (na sekundę, nie na tick) i falowanie ciągu, uszkodzenie zjada też niezawodność. Refit nie leczy. Raport konfiguracji nazywa uszkodzony silnik i podaje, ile przez niego dryfuje.
 - [x] Akordy klawiszy zamiast kolejnych przycisków: `A+D` zatrzymuje obrót (zastąpiło `X`), `Q+E+W` celuje na kierunek lotu, `Q+E+S` przeciwnie. Akord zjada swoje klawisze, okno ustalenia 60 ms, stop wygrywa z resztą.
-- [ ] Lądowanie z uszkodzonymi silnikami: asymetria, oscylacje, sprawdzenie, że jest trudno, ale możliwe.
+- [x] Lądowanie z uszkodzonymi silnikami: faza testu sadza statek z silnikami na 65% i niezawodnością 0,5 — da się wylądować.
 - [ ] Podwozie jako moduł (tolerancja nachylenia, próg prędkości) i moduły asystujące (auto-poziomowanie, hold wysokości, cyrkularyzacja, komputer deorbitu).
 - [ ] Auto-orbit jako opcjonalna funkcja komputera lotu: część komputerów ją ma, część nie. Załącza się w polu grawitacyjnym i poza atmosferą, sam wchodzi na orbitę (IDEAS.md sekcja 8).
-- [ ] Zużycie w czasie, naprawa (na razie klawisz debug).
+- [x] Naprawa na klawiszu debug (`R`). Zużycie w czasie zostaje — dziś silniki psują się tylko od uderzeń.
 - [ ] Silniki manewrowe i hamujące, statek z pełnym zestawem vs statek minimalny.
 - [x] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, afiksy. Hardpoint to montaż z listą dopuszczalnych typów, `fit()` oddaje poprzednią broń.
 - [x] `LootGenerator`: tabele rzadkości, afiksy, generacja broni i silników. Pięć poziomów rzadkości, 0..4 afiksy, siła jako wykładnik; każdy przedmiot z jawnego seeda.

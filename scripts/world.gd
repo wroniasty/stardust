@@ -272,6 +272,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("debug_damage_engine") and ship != null:
 		_damage_engine(ship, "NoseLeftTorque")
 
+	if event.is_action_pressed("debug_repair") and ship != null:
+		ship.repair_engines()
+		print("debug: engines repaired")
+
 
 func _damage_engine(ship: Ship, mount_name: String) -> void:
 	for engine: EngineInstance in ship.engines:
