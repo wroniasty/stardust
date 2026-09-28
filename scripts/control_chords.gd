@@ -14,6 +14,14 @@ extends RefCounted
 ##     Q + E + S      point back along it
 ##     Q + E + D      hold a circular orbit
 ##     Q + E + A      keep the nose level with the horizon
+##     W + S + A      hold this height
+##     W + S + D      bring the orbit down into the air
+##
+## W and S cancel each other exactly as Q and E do, so they are a second free
+## modifier and the fourth key picks the function again. Keys that are read
+## as a press rather than a hold -- the landing gear toggle -- cannot be part
+## of a chord: the press is handled outside the suppression and would fire
+## anyway.
 ##
 ## Q and E together are the modifier and the fourth key picks the function,
 ## which is why this scales: the flight computer has a long list of things it
@@ -26,7 +34,8 @@ extends RefCounted
 ## Deliberately free of Input: the caller passes the held actions, so the
 ## behaviour can be driven in a test without a keyboard.
 
-enum Chord { NONE, KILL_ROTATION, PROGRADE, RETROGRADE, AUTO_ORBIT, AUTO_LEVEL }
+enum Chord { NONE, KILL_ROTATION, PROGRADE, RETROGRADE, AUTO_ORBIT, AUTO_LEVEL,
+	ALTITUDE_HOLD, DEORBIT }
 
 ## How long every key of a chord must be held together before it engages.
 ##
@@ -59,6 +68,14 @@ const CHORDS: Array[Dictionary] = [
 	{
 		"chord": Chord.AUTO_LEVEL,
 		"keys": [&"strafe_left", &"strafe_right", &"rotate_left"],
+	},
+	{
+		"chord": Chord.ALTITUDE_HOLD,
+		"keys": [&"thrust_forward", &"thrust_reverse", &"rotate_left"],
+	},
+	{
+		"chord": Chord.DEORBIT,
+		"keys": [&"thrust_forward", &"thrust_reverse", &"rotate_right"],
 	},
 ]
 

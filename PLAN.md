@@ -130,10 +130,10 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] Akordy klawiszy zamiast kolejnych przycisków: `A+D` zatrzymuje obrót (zastąpiło `X`), `Q+E+W` celuje na kierunek lotu, `Q+E+S` przeciwnie. Akord zjada swoje klawisze, okno ustalenia 60 ms, stop wygrywa z resztą.
 - [x] Lądowanie z uszkodzonymi silnikami: faza testu sadza statek z silnikami na 65% i niezawodnością 0,5 — da się wylądować.
 - [x] Podwozie jako moduł (`GearData`): progi prędkości, przechyłu i nachylenia z części, geometria stóp zostaje na kadłubie. Asysty auto-poziom i auto-orbita siedzą na komputerze lotu.
-- [ ] Pozostałe asysty: hold wysokości i komputer deorbitu.
+- [x] Pozostałe asysty: hold wysokości (`W+S+A`, tłumiony prędkością wznoszenia, bo sama wysokość to sprężyna bez tłumienia) i komputer deorbitu (`W+S+D`, pali retrograde aż periapsis wejdzie w atmosferę i przestaje).
 - [x] Auto-orbit jako opcjonalna funkcja komputera (`Q+E+D`): obraca dziób na wektor korekty, potem pali. Elipsa 32% schodzi do 1,1% rozrzutu. Komputer bez tej funkcji odmawia. Auto-poziom na `Q+E+A`.
 - [x] Naprawa na klawiszu debug (`R`). Zużycie w czasie zostaje — dziś silniki psują się tylko od uderzeń.
-- [ ] Silniki manewrowe i hamujące, statek z pełnym zestawem vs statek minimalny.
+- [x] Silniki manewrowe (`maneuver_pod`), hamujące (`braking_bell`) i sterowany (`gimballed_drive`) jako loot. Test porównuje pełny zestaw z minimalnym: rozebrany kadłub jest lżejszy, leci tak samo do przodu i nie umie nic innego — raport nazywa każdy utracony kierunek.
 - [x] Broń jako Resource: typ, obrażenia, kadencja, rozrzut, zasięg, afiksy. Hardpoint to montaż z listą dopuszczalnych typów, `fit()` oddaje poprzednią broń.
 - [x] `LootGenerator`: tabele rzadkości, afiksy, generacja broni i silników. Pięć poziomów rzadkości, 0..4 afiksy, siła jako wykładnik; każdy przedmiot z jawnego seeda.
 - [x] `EngineData.bulk`: gabaryt silnika jako jego masa i zarazem warunek zmieszczenia się w slocie (`bulk <= size`). Typy zostają otwarte; ceną za dziwne dopasowanie jest fizyka, nie tabelka.
@@ -146,10 +146,12 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] HUD energii: pasek z podziałką co koszt najtańszej broni, osobny kolor dla „czeka" i „ładuje się", czerwona ramka przy odmowie strzału (sygnał `shot_refused`).
 - [x] Statystyki statku liczone przy montażu: `stat_add`/`stat_mul` na wspólnej bazie `ModuleData`, agregat z rozbiciem na moduły w raporcie konfiguracji, nieznany klucz to `push_error`. Afiksy `dynamo` i `buffered` na silnikach.
 - [x] Moduły broni: `mod_slots` (z rzadkości), `ShotModData` z `energy_multiplier > 1`, liczby wynikowe cache'owane przy zmianie modułów. Efekty jako dane czytane przy spawnie: `PIERCE` i `BLAST` zaimplementowane, `INCENDIARY` zadeklarowane i czeka na obrażenia w czasie.
-- [ ] Moduły broni jako loot i wpinanie ich w edytorze — dziś katalog istnieje i działa, ale nie da się go znaleźć ani wpiąć z poziomu gry.
+- [x] Moduły broni, komputery i podwozia wypadają jako loot i wpinają się w edytorze. Schemat pokazuje zajętość gniazd broni (`NoseHardpoint 1/3`).
 - [x] Pomiar energii: sustained bazowych broni 0,179 i 0,174 (±3%), każda sustainuje mniej niż burstuje, minigun 0,40 burst przy 0,20 sustained. Liczby z IDEAS sekcja 14 zgadzają się z zasobami.
 
 Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, uszkodzony silnik zmienia sposób latania, a spust ma swój koszt — seria się kończy i trzeba zdecydować, kiedy przestać strzelać.
+
+**M2 zamknięty.** Wszystkie pozycje odhaczone, 433 asercje.
 
 
 ---

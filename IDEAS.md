@@ -174,6 +174,33 @@ razy słabszego od wiatru nauczyłoby go tylko ignorować raport. Dwie różne
 robotę, dwa różne progi — i gdyby raport miał próg testu, byłby bezużyteczny,
 a gdyby test miał próg raportu, nie złapałby niczego.
 
+### Asysty na akordach: dwa modyfikatory, sześć funkcji
+
+`Q`+`E` i `W`+`S` to dwie pary, które się znoszą, więc obie są wolnymi
+modyfikatorami, a czwarty klawisz wybiera funkcję:
+
+| akord | funkcja |
+|---|---|
+| `Q+E+W` / `Q+E+S` | dziób na kierunek lotu / przeciwnie |
+| `Q+E+D` / `Q+E+A` | auto-orbita / auto-poziom |
+| `W+S+A` / `W+S+D` | hold wysokości / deorbit |
+
+Sześć funkcji komputera lotu bez ani jednego nowego klawisza.
+
+**Klawisz czytany jako naciśnięcie, nie jako trzymanie, nie może być częścią
+akordu.** Pierwsza wersja deorbitu siedziała na `Q+E+G`, a `toggle_gear`
+obsługiwany jest przez `is_action_just_pressed` poza tłumieniem akordu — więc
+podwozie wyskakiwałoby przy każdym deorbicie.
+
+**Hold wysokości jest tłumiony prędkością wznoszenia.** Sama wysokość to
+sprężyna, a sprężyna bez tłumienia oscyluje w nieskończoność; asysta musi też
+trzymać przeciw grawitacji, inaczej całą siłę zużywa na odkrywanie, że statek
+spada.
+
+**Deorbit przestaje, gdy periapsis wejdzie w atmosferę.** Obniżanie dalej
+zamienia zejście w uderzenie, a to jest dokładnie ta arytmetyka, która jest
+nudna i łatwa do przestrzelenia ręcznie.
+
 ### Awarie silników
 
 Trzy rzeczy, wszystkie po to, żeby uszkodzony silnik **zmieniał sposób

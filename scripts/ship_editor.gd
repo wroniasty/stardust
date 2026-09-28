@@ -210,6 +210,12 @@ func _targets() -> Array[Node]:
 	elif item is GearData:
 		if _ship.gear != null:
 			out.append(_ship.gear)
+	elif item is ShotModData:
+		# A mod goes into a gun, not into a socket on the hull, so the
+		# targets are the weapons with a slot free rather than the mounts.
+		for mount: Hardpoint in _ship.hardpoints:
+			if mount.weapon != null and mount.mods.size() < mount.weapon.mod_slots:
+				out.append(mount)
 	return out
 
 
@@ -253,7 +259,14 @@ func _fit() -> void:
 		_ship.cargo.remove_at(_pick - (1 if _ship.carried != null else 0))
 
 	var removed: Resource = null
-	if slot is Hardpoint:
+	if slot is Hardpoint and item is ShotModData:
+		# Plugging a mod in is not a swap -- nothing comes back out -- so it
+		# takes the item and leaves `removed` null.
+		if not (slot as Hardpoint).add_mod(item as ShotModData):
+			_ship.take(item, 0)
+			_notice = "nie ma wolnego gniazda w tej broni"
+			return
+	elif slot is Hardpoint:
 		removed = (slot as Hardpoint).fit(item as WeaponData)
 	elif slot is EngineMount:
 		removed = _ship.fit_engine(slot as EngineMount, item as EngineData)
@@ -556,10 +569,14 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 		# place the pilot cannot ask about.
 		# Names go outward, away from the hull. Inward they meet in the middle
 		# and the two halves of every mirrored pair print over each other.
+		var caption: String = mount.name
+		var gun: Hardpoint = mount as Hardpoint
+		if gun != null and gun.weapon != null and gun.weapon.mod_slots > 0:
+			caption = "%s %d/%d" % [mount.name, gun.mods.size(), gun.weapon.mod_slots]
 		var label: Vector2 = at + Vector2(DOT + 3.0, float(FONT_SIZE) * 0.4)
 		if at.x < origin.x - 0.5:
-			label.x = at.x - DOT - 3.0 - _width(font, mount.name)
-		_text(font, label, mount.name, colour)
+			label.x = at.x - DOT - 3.0 - _width(font, caption)
+		_text(font, label, caption, colour)
 
 
 func _draw_info(font: Font, rect: Rect2) -> void:
@@ -615,6 +632,8 @@ func _label(item: Resource) -> String:
 		return (item as FlightComputerData).display_name
 	if item is GearData:
 		return (item as GearData).display_name
+	if item is ShotModData:
+		return (item as ShotModData).display_name
 	return "moduł"
 
 
@@ -635,6 +654,12 @@ func _describe(item: Resource) -> PackedStringArray:
 		var engine: EngineData = item as EngineData
 		out.append("ciąg %.0f   rozruch %.2f s   niezawodność %.2f   paliwo %.2f" % [
 			engine.max_thrust, engine.spool_time, engine.reliability, engine.fuel_cost,
+		])
+	elif item is ShotModData:
+		var mod: ShotModData = item as ShotModData
+		out.append("koszt strzału x%.2f   efekt: %s" % [
+			mod.energy_multiplier,
+			ShotModData.Effect.keys()[int(mod.effect)].to_lower(),
 		])
 	elif item is GearData:
 		var legs: GearData = item as GearData

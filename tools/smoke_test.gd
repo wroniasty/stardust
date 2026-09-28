@@ -965,6 +965,7 @@ func _evaluate_phase() -> void:
 			_check_gimbal()
 			_check_gear_module()
 			_check_weapon_types(_planet)
+			_check_ship_fitouts()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -2005,6 +2006,18 @@ func _check_chords() -> void:
 	chords.update(down.call([&"strafe_left", &"strafe_right", &"thrust_reverse"]), 1.0)
 	_expect(chords.active() == ControlChords.Chord.RETROGRADE, "Q+E+S points back along it")
 
+	for pair: Array in [
+		[ControlChords.Chord.ALTITUDE_HOLD, [&"thrust_forward", &"thrust_reverse", &"rotate_left"]],
+		[ControlChords.Chord.DEORBIT, [&"thrust_forward", &"thrust_reverse", &"rotate_right"]],
+	]:
+		chords.update(down.call(pair[1]), 1.0)
+		_expect(
+			chords.active() == pair[0],
+			"%s has its own chord on the second modifier" % ControlChords.Chord.keys()[
+				int(pair[0])
+			],
+		)
+
 	# Stopping is the panic gesture and must win whatever else is held.
 	chords.update(down.call([
 		&"strafe_left", &"strafe_right", &"thrust_forward", &"rotate_left", &"rotate_right",
@@ -2895,6 +2908,84 @@ func _check_weapon_types(planet: Planet) -> void:
 	)
 
 	ship.queue_free()
+
+
+## A full set of engines against a bare one. The point of building the
+## control groups from geometry is that this comparison needs no special
+## case: strip the manoeuvring and braking engines off a hull and it is
+## still flyable, just worse in the directions those engines served.
+func _check_ship_fitouts() -> void:
+	var full: Ship = _spawn_ship()
+	var full_report: ConfigurationReport = full.configuration()
+
+	# The minimal ship: main drive only, everything else unbolted. A hull
+	# that can go forward and nothing else.
+	var minimal: Ship = _spawn_ship()
+	for mount: EngineMount in minimal.engine_mounts():
+		if mount.name != "MainDrive":
+			mount.installed = null
+	minimal.rebuild_control_groups(false)
+	var minimal_report: ConfigurationReport = minimal.configuration()
+
+	_expect(
+		minimal.mass < full.mass,
+		"a stripped hull is lighter (%.1f against %.1f kg)" % [minimal.mass, full.mass],
+	)
+	_expect(
+		minimal_report.worst() == ConfigurationReport.Severity.FAULT,
+		"and the report calls it out rather than letting it fly quietly broken",
+	)
+	_expect(
+		_findings_of(minimal_report).contains("no CW authority")
+		or _findings_of(minimal_report).contains("no CCW authority"),
+		"naming the directions it has lost (%s)" % _findings_of(minimal_report),
+	)
+	_expect(
+		full_report.worst() == ConfigurationReport.Severity.OK,
+		"while the full fitout is clean",
+	)
+	for command: ShipControl.Command in [
+		ShipControl.Command.STRAFE_LEFT, ShipControl.Command.CW, ShipControl.Command.BACK
+	]:
+		_expect(
+			full.control.authority_of(command) > minimal.control.authority_of(command),
+			"%s is better with the full set (%.0f against %.0f)" % [
+				full.control.command_name(command),
+				full.control.authority_of(command),
+				minimal.control.authority_of(command),
+			],
+		)
+	_expect(
+		is_equal_approx(
+			full.control.authority_of(ShipControl.Command.FORWARD),
+			minimal.control.authority_of(ShipControl.Command.FORWARD),
+		),
+		"and going forwards is the one thing the bare hull does just as well",
+	)
+
+	# The parts that make the difference are things the pilot can find.
+	var pod: EngineData = load("res://resources/engines/maneuver_pod.tres") as EngineData
+	var bell: EngineData = load("res://resources/engines/braking_bell.tres") as EngineData
+	var steered: EngineData = load("res://resources/engines/gimballed_drive.tres") as EngineData
+	_expect(
+		pod.type == EngineData.Type.THRUSTER and pod.bulk < bell.bulk,
+		"a manoeuvre pod is small and answers at once",
+	)
+	_expect(
+		bell.max_thrust > pod.max_thrust * 2.0,
+		"a braking bell is built to stop things (%.0f N)" % bell.max_thrust,
+	)
+	_expect(
+		steered.gimbal_range > 0.0 and steered.max_thrust < load(
+			"res://resources/engines/main_drive.tres"
+		).max_thrust,
+		"and a steerable drive pays thrust for the gimbal (%.0f N, %.0f deg)" % [
+			steered.max_thrust, rad_to_deg(steered.gimbal_range),
+		],
+	)
+
+	minimal.queue_free()
+	full.queue_free()
 
 
 func _check_configuration_report() -> void:

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EngineData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/engine_data.gd" id="1_engine_data"]
+
+[resource]
+script = ExtResource("1_engine_data")
+type = 0
+max_thrust = 700.0
+bulk = 2.0
+spool_time = 0.35
+reliability = 0.95
+fuel_cost = 0.7

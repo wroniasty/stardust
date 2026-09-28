@@ -142,6 +142,15 @@ const AUTO_ORBIT_EPS: float = 1.5
 ## ship somewhere it did not want to go and lengthens the job.
 const AUTO_ORBIT_ALIGNMENT: float = 0.92
 
+## Altitude hold: how hard it pulls back to the height it was given, and how
+## hard it fights the climb rate. Without the second the ship porpoises --
+## height alone is an undamped spring.
+const ALTITUDE_HOLD_GAIN: float = 0.9
+const ALTITUDE_HOLD_DAMP: float = 2.2
+
+## Below this there is no orbit to lower.
+const DEORBIT_MIN_SPEED: float = 20.0
+
 ## Heating. The hull warms with the power the air is dissipating, which for
 ## the linear damping the shells apply goes as density times speed squared.
 ## Tying it to the same quantity that does the braking is what stops the heat
@@ -238,6 +247,13 @@ var brake_command: bool = false
 ## the computer in the bay does not offer them.
 var auto_orbit_command: bool = false
 var auto_level_command: bool = false
+var altitude_hold_command: bool = false
+var deorbit_command: bool = false
+
+## The height altitude hold was engaged at. Captured on engage rather than
+## tracked, so the assist holds where the pilot decided rather than drifting
+## with wherever the ship has got to.
+var _held_altitude: float = -1.0
 
 ## Which way the heading assist is pointing the nose, if at all. Set from the
 ## Q+E+W and Q+E+S chords, and left here for an AI to drive the same way.
@@ -1481,6 +1497,8 @@ func read_player_input(delta: float) -> void:
 	kill_rotation_command = chord == ControlChords.Chord.KILL_ROTATION
 	auto_orbit_command = chord == ControlChords.Chord.AUTO_ORBIT
 	auto_level_command = chord == ControlChords.Chord.AUTO_LEVEL
+	altitude_hold_command = chord == ControlChords.Chord.ALTITUDE_HOLD
+	deorbit_command = chord == ControlChords.Chord.DEORBIT
 	# Only the two pointing chords drive the heading assist; the rest mean
 	# something else entirely and would have it chasing the velocity while
 	# another assist steered.
@@ -1510,6 +1528,12 @@ func _resolve_commands(state: PhysicsDirectBodyState2D) -> void:
 		_apply_auto_orbit(state)
 	if auto_level_command:
 		_apply_auto_level(state)
+	if altitude_hold_command:
+		_apply_altitude_hold(state)
+	else:
+		_held_altitude = -1.0
+	if deorbit_command:
+		_apply_deorbit(state)
 	if brake_command:
 		_apply_brake(state)
 
@@ -1686,6 +1710,62 @@ func _apply_auto_orbit_probe() -> void:
 	var change: Vector2 = tangent * sqrt(planet.gravitational_parameter() / radius) - linear_velocity
 	if change.length() > AUTO_ORBIT_EPS:
 		active_commands[ShipControl.Command.FORWARD] = 1.0
+
+
+## Holds the height it was engaged at, pushing radially against gravity.
+##
+## Thrust against weight, damped by the climb rate, or the ship porpoises:
+## height alone is a spring, and a spring with no damping oscillates for
+## ever. This is the assist a pilot wants while reading the ground for
+## somewhere to put down.
+func _apply_altitude_hold(state: PhysicsDirectBodyState2D) -> void:
+	var box: FlightComputerData = computer()
+	if box == null or not box.has_altitude_hold:
+		return
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+
+	var up: Vector2 = (state.transform.origin - planet.global_position).normalized()
+	var height: float = planet.altitude_at(state.transform.origin)
+	if _held_altitude < 0.0:
+		_held_altitude = height
+
+	var climb: float = state.linear_velocity.dot(up)
+	var wanted: float = (_held_altitude - height) * ALTITUDE_HOLD_GAIN - climb * ALTITUDE_HOLD_DAMP
+	# Hold against gravity as well as correcting, or the assist spends its
+	# whole effort discovering that the ship is falling.
+	var hold: float = -_gravity.dot(up)
+	push_along(state, up * (wanted + hold) * mass / maxf(mass, 0.0001))
+
+
+## Lowers the low point of the orbit until it touches the air, and stops.
+##
+## Retrograde at apoapsis is the cheap way down, and the sum that says how
+## much is dull enough to be worth automating and easy enough to get wrong by
+## hand. Stops as soon as the periapsis is inside the atmosphere: dropping it
+## further only turns a descent into an impact.
+func _apply_deorbit(state: PhysicsDirectBodyState2D) -> void:
+	var box: FlightComputerData = computer()
+	if box == null or not box.has_deorbit:
+		return
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+
+	var extremes: Vector2 = planet.orbit_extremes(state.transform.origin, state.linear_velocity)
+	if extremes.x <= planet.atmosphere_radius():
+		return
+
+	var travel: Vector2 = state.linear_velocity
+	if travel.length() < DEORBIT_MIN_SPEED:
+		return
+	# Straight against the direction of travel: the burn that lowers the far
+	# side of the orbit and nothing else.
+	point_nose_along(state, -travel)
+	var nose: Vector2 = FORWARD.rotated(state.transform.get_rotation())
+	if nose.dot(-travel.normalized()) > AUTO_ORBIT_ALIGNMENT:
+		push_along(state, -travel.normalized() * travel.length())
 
 
 ## Holds the nose level with the horizon, so a descent is flown feet-first.

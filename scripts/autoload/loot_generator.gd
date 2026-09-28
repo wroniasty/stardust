@@ -49,6 +49,9 @@ const ENGINE_BASES: Array[String] = [
 	"res://resources/engines/torque_jet.tres",
 	"res://resources/engines/maneuver_thruster.tres",
 	"res://resources/engines/retro_thruster.tres",
+	"res://resources/engines/maneuver_pod.tres",
+	"res://resources/engines/braking_bell.tres",
+	"res://resources/engines/gimballed_drive.tres",
 ]
 
 ## An affix is a named multiplier on one field, optionally paid for with a
@@ -100,6 +103,10 @@ const ENGINE_AFFIXES: Array[Dictionary] = [
 	},
 	{"name": &"responsive", "field": "spool_time", "factor": Vector2(0.45, 0.75)},
 	{"name": &"hardened", "field": "reliability", "factor": Vector2(1.05, 1.20)},
+	{
+		"name": &"steerable", "field": "gimbal_range", "factor": Vector2(1.30, 1.80),
+		"cost_field": "max_thrust", "cost": Vector2(0.85, 0.95),
+	},
 	{"name": &"frugal", "field": "fuel_cost", "factor": Vector2(0.50, 0.80)},
 	{
 		"name": &"compact", "field": "bulk", "factor": Vector2(0.65, 0.85),
@@ -199,6 +206,8 @@ const LIMITS: Dictionary = {
 	"recharge_rate": Vector2(2.0, 200.0),
 	"recharge_delay": Vector2(0.1, 5.0),
 	"max_thrust": Vector2(1.0, 5000.0),
+	"gimbal_range": Vector2(0.0, 0.6),
+	"gimbal_rate": Vector2(0.2, 12.0),
 	# Generous on purpose. An engine too big for the hull you are flying is a
 	# legitimate find rather than a bad roll -- it is loot for a bigger ship --
 	# so the ceiling belongs to the machine, not to the stock hull's largest
@@ -219,11 +228,15 @@ func generate(item_seed: int, rarity: int = ROLLED) -> Resource:
 	# turn up least often. Drawn before anything else, as before, so the kind
 	# a container holds is fixed by its seed whatever the tables gain later.
 	var kind: float = rng.randf()
-	if kind < 0.45:
+	if kind < 0.38:
 		return _build_weapon(rng, rarity)
-	if kind < 0.85:
+	if kind < 0.70:
 		return _build_engine(rng, rarity)
-	return _build_generator(rng, rarity)
+	if kind < 0.82:
+		return _build_generator(rng, rarity)
+	if kind < 0.90:
+		return computer(rng.randi(), rarity)
+	return shot_mod(rng.randi() % SHOT_MODS.size())
 
 
 ## Rolls a weapon. `rarity` of ROLLED lets the seed decide.

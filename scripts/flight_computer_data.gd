@@ -30,6 +30,15 @@ enum Allocation {
 ## Keeps the nose level with the horizon on approach.
 @export var has_auto_level: bool = false
 
+## Holds whatever height it was engaged at, trading thrust against gravity.
+## The assist a pilot wants while reading the ground for somewhere to land.
+@export var has_altitude_hold: bool = false
+
+## Brings the low point of the orbit down into the air, and no further. A
+## deorbit is the one manoeuvre where overshooting is expensive and the
+## arithmetic is dull, which is exactly what a computer is for.
+@export var has_deorbit: bool = false
+
 ## Constant draw while any assist is engaged, in energy per second.
 ##
 ## Subtracted from the recharge rate rather than resetting the silence: an
