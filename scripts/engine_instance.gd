@@ -39,6 +39,13 @@ var _surge_phase: float = 0.0
 ## as a fault in one machine.
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
+## Where the nozzle is aimed, in radians off the mount's direction. Only
+## ever non-zero on an engine with a gimbal.
+var gimbal: float = 0.0
+
+## Where the pilot's demand wants it aimed. Slewed towards, not snapped to.
+var target_gimbal: float = 0.0
+
 ## Current throttle after the type's response curve, 0..1.
 var throttle: float = 0.0
 
@@ -105,6 +112,11 @@ func _surge_factor() -> float:
 ## rather than a full burn.
 func advance(delta: float) -> void:
 	_advance_faults(delta)
+	if data.gimbal_range > 0.0:
+		var wanted: float = clampf(target_gimbal, -data.gimbal_range, data.gimbal_range)
+		gimbal = move_toward(gimbal, wanted, data.gimbal_rate * delta)
+	else:
+		gimbal = 0.0
 	match data.type:
 		EngineData.Type.MAIN:
 			throttle = move_toward(
@@ -121,9 +133,14 @@ func advance(delta: float) -> void:
 			throttle = clampf(target_throttle, 0.0, 1.0)
 
 
+## Which way this engine is actually pushing, with the nozzle where it is.
+func thrust_direction() -> Vector2:
+	return mount.force_direction().rotated(gimbal)
+
+
 ## Force in the ship's local frame at the current throttle.
 func current_force() -> Vector2:
-	return mount.force_direction() * data.max_thrust * effective_output()
+	return thrust_direction() * data.max_thrust * effective_output()
 
 
 ## Force in the ship's local frame at full throttle, ignoring health.
@@ -133,6 +150,9 @@ func current_force() -> Vector2:
 ## thruster would be silently compensated for, and the whole point of the
 ## damage model is that a half-dead engine makes the ship fly crooked. The
 ## compensating flight computer is an M2 module the player has to find.
+## Undeflected on purpose as well as undamaged: the groups describe what the
+## hull is, and where a steerable nozzle happens to be pointing this tick is
+## not that.
 func nominal_force() -> Vector2:
 	return mount.force_direction() * data.max_thrust
 

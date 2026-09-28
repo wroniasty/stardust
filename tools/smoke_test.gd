@@ -676,7 +676,7 @@ func _begin_phase() -> void:
 			# ground steeper than the gear tolerates is luck, but arriving at a
 			# bad attitude is always available and exercises the same refusal.
 			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), 0.0)
-			_ship.global_rotation += _ship.gear.max_tilt * 2.5
+			_ship.global_rotation += _ship.gear.tilt_limit() * 2.5
 		Phase.LANDED_RIDE:
 			_place_for_touchdown(_find_angle(_planet, true, _ship.gear.track_width()), 0.0)
 			_took_off = false
@@ -962,6 +962,8 @@ func _evaluate_phase() -> void:
 			_check_engine_failures()
 			_check_hull_outline(_planet)
 			_check_allocator()
+			_check_gimbal()
+			_check_gear_module()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -1014,7 +1016,7 @@ func _evaluate_phase() -> void:
 			_expect(
 				_first_touchdown == "tilt" or _first_touchdown == "slope",
 				"arriving at %.0f deg off level is refused (got %s)" % [
-					rad_to_deg(_ship.gear.max_tilt * 2.5), _describe_touchdown(),
+					rad_to_deg(_ship.gear.tilt_limit() * 2.5), _describe_touchdown(),
 				],
 			)
 			_expect(
@@ -1390,7 +1392,7 @@ func _check_landing_sites(planet: Planet) -> void:
 	)
 
 	var probe: Ship = _spawn_ship()
-	var tolerance: float = probe.gear.max_slope
+	var tolerance: float = probe.gear.slope_limit()
 	var steepest: float = 0.0
 	for angle: float in sites:
 		var point: Vector2 = planet.polar_to_world(angle, planet.surface_radius)
@@ -2677,6 +2679,119 @@ func _check_allocator() -> void:
 	)
 
 
+## A gimbal lets the thrust that is already there be aimed, instead of a
+## second set of jets being fitted to fight it. The sign is the part worth
+## pinning: a nose engine and a tail engine have to steer opposite ways for
+## the same turn, and getting that backwards would make the gimbal cancel
+## the very rotation it is meant to help.
+func _check_gimbal() -> void:
+	var ship: Ship = _spawn_ship()
+	var main: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == "MainDrive":
+			main = engine
+	_expect(main != null, "the test hull has a main drive")
+
+	var gimballed: EngineData = main.data.duplicate() as EngineData
+	gimballed.gimbal_range = deg_to_rad(12.0)
+	main.data = gimballed
+
+	_expect(is_zero_approx(main.gimbal), "a nozzle starts straight")
+	# Held open, not poked: advance() spools the throttle towards its target
+	# every tick, so setting the throttle once and then stepping would leave
+	# nothing coming out of the nozzle to measure.
+	main.target_throttle = 1.0
+	ship.active_commands = {ShipControl.Command.CW: 1.0}
+	ship._aim_gimbals()
+	for step: int in range(60):
+		main.advance(1.0 / 60.0)
+	_expect(
+		absf(main.gimbal) > deg_to_rad(10.0),
+		"asking for a turn swings it over (%.1f deg)" % rad_to_deg(main.gimbal),
+	)
+
+	# The test that matters: the deflected thrust has to add torque the way
+	# the turn wanted, not against it.
+	var arm: Vector2 = main.mount.position - ship.center_of_mass
+	var torque: float = arm.cross(main.current_force())
+	_expect(
+		torque > 0.0,
+		"and the deflected thrust helps the turn rather than fighting it (%.0f N px)" % torque,
+	)
+
+	ship.active_commands = {ShipControl.Command.CCW: 1.0}
+	ship._aim_gimbals()
+	for step: int in range(60):
+		main.advance(1.0 / 60.0)
+	_expect(
+		arm.cross(main.current_force()) < 0.0,
+		"and the other way round for the other direction",
+	)
+
+	ship.active_commands = {}
+	ship._aim_gimbals()
+	for step: int in range(60):
+		main.advance(1.0 / 60.0)
+	_expect(is_zero_approx(main.gimbal), "letting go centres it again")
+
+	# An engine bolted straight never moves, whatever is asked.
+	var fixed: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == "StrafeLeftThruster":
+			fixed = engine
+	ship.active_commands = {ShipControl.Command.CW: 1.0}
+	ship._aim_gimbals()
+	fixed.advance(1.0)
+	_expect(is_zero_approx(fixed.gimbal), "an engine with no gimbal stays bolted straight")
+
+	ship.queue_free()
+
+
+## Landing gear is a module too, so a hull can be refitted for the kind of
+## ground it works over. The tolerances have to come from the part, and they
+## have to be read rather than copied: a copy is a second source of truth,
+## and the landing check has already been wrong once for reading the wrong
+## frame.
+func _check_gear_module() -> void:
+	var ship: Ship = _spawn_ship()
+	var legs: LandingGear = ship.gear
+	_expect(legs != null, "the stock hull has legs")
+
+	var bare_limit: float = legs.vertical_limit()
+	var heavy: GearData = GearData.new()
+	heavy.max_vertical_speed = bare_limit * 2.0
+	heavy.max_lateral_speed = legs.lateral_limit() * 2.0
+	heavy.bulk = 1.5
+	var light_mass: float = ship.mass
+
+	legs.installed = heavy
+	ship.rebuild_control_groups(false)
+	_expect(
+		is_equal_approx(legs.vertical_limit(), bare_limit * 2.0),
+		"fitted legs set what the ship will survive (%.0f px/s)" % legs.vertical_limit(),
+	)
+	_expect(
+		ship.mass > light_mass,
+		"and they weigh something (%.1f against %.1f kg)" % [ship.mass, light_mass],
+	)
+
+	# Geometry stays with the hull: swapping legs must not move the feet out
+	# from under the contact solver.
+	var feet: Array[Vector2] = legs.contact_points()
+	legs.installed = null
+	ship.rebuild_control_groups(false)
+	_expect(
+		legs.contact_points() == feet,
+		"but where the feet are belongs to the hull, not to the part",
+	)
+	_expect(
+		is_equal_approx(legs.vertical_limit(), bare_limit),
+		"and a hull with no legs fitted falls back on what it manages bare",
+	)
+
+	ship.queue_free()
+
+
 func _check_configuration_report() -> void:
 	var ship: Ship = _spawn_ship()
 
@@ -3030,7 +3145,7 @@ func _check_plateaus(planet: Planet) -> void:
 	_expect(planet.plateau_count > 0, "the planet levels %d landing shelves" % planet.plateau_count)
 
 	var probe: Ship = _spawn_ship()
-	var tolerance: float = probe.gear.max_slope
+	var tolerance: float = probe.gear.slope_limit()
 	var flat_enough: int = 0
 	var samples: int = 720
 	for i: int in range(samples):
@@ -3101,14 +3216,14 @@ func _check_gear(ship: Ship) -> void:
 
 	# Half-open gear must not count, or the deploy timer would be decorative.
 	landing_gear.set_deployed(true)
-	landing_gear.advance(landing_gear.deploy_time * 0.5)
+	landing_gear.advance(landing_gear.extend_time() * 0.5)
 	_expect(not landing_gear.is_deployed(), "half-extended gear does not count as down")
 	_expect(
 		ship.contact_points().size() == bare,
 		"half-extended legs are not contact points either",
 	)
 
-	landing_gear.advance(landing_gear.deploy_time)
+	landing_gear.advance(landing_gear.extend_time())
 	_expect(landing_gear.is_deployed(), "the legs reach full extension")
 	_expect(
 		ship.contact_points().size() == bare + landing_gear.legs.size(),

@@ -585,7 +585,7 @@ func _recompute_mass_properties() -> void:
 	total_mass += load
 	weighted += CARGO_BAY * load
 
-	for bay: Node2D in [generator_bay, computer_bay]:
+	for bay: Node2D in [generator_bay, computer_bay, gear]:
 		if bay == null:
 			continue
 		var bay_mass: float = bay.call("module_mass")
@@ -600,7 +600,7 @@ func _recompute_mass_properties() -> void:
 	for engine: EngineInstance in engines:
 		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
 	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
-	for bay: Node2D in [generator_bay, computer_bay]:
+	for bay: Node2D in [generator_bay, computer_bay, gear]:
 		if bay != null:
 			total_inertia += float(bay.call("module_mass")) * bay.position.distance_squared_to(
 				centre
@@ -675,7 +675,7 @@ func _physics_process(delta: float) -> void:
 		# Deployed legs only bite in air. Scaling by density rather than
 		# switching on a boolean keeps the speed brake worthless in vacuum,
 		# where a drag penalty would be nonsense.
-		linear_damp = gear.deployed_drag * gear.extension * air_density
+		linear_damp = gear.drag() * gear.extension * air_density
 
 	if flight_mode == FlightMode.LANDED:
 		if _wants_translation(commands) or brake_command:
@@ -719,6 +719,9 @@ func fitted_modules() -> Array[Dictionary]:
 		var box: ComputerBay = child as ComputerBay
 		if box != null and box.installed != null:
 			out.append({"name": child.name, "module": box.installed})
+		var legs: LandingGear = child as LandingGear
+		if legs != null and legs.installed != null:
+			out.append({"name": child.name, "module": legs.installed})
 	return out
 
 
@@ -846,6 +849,8 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	# physics server, so the falloff can be ours (see IDEAS.md section 5).
 	_gravity = gravity_acceleration_at(state.transform.origin)
 	state.apply_central_force(_gravity * mass)
+
+	_aim_gimbals()
 
 	var body_rotation: float = state.transform.get_rotation()
 	for engine: EngineInstance in engines:
@@ -1138,8 +1143,8 @@ func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
 	var descent: float = -relative.dot(up)
 	var lateral: float = absf(relative.dot(up.orthogonal()))
 
-	var over_descent: float = descent - gear.max_vertical_speed
-	var over_lateral: float = lateral - gear.max_lateral_speed
+	var over_descent: float = descent - gear.vertical_limit()
+	var over_lateral: float = lateral - gear.lateral_limit()
 	if over_descent > 0.0 or over_lateral > 0.0:
 		_reject_landing("speed")
 		# Not binary: the legs take the overshoot as damage and the ship stays
@@ -1159,7 +1164,7 @@ func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
 	# check dead code. Refusing early also gives the pilot a reason instead of
 	# an unexplained tumble.
 	var ship_up: Vector2 = FORWARD.rotated(state.transform.get_rotation())
-	if absf(ship_up.angle_to(normal)) > gear.max_tilt:
+	if absf(ship_up.angle_to(normal)) > gear.tilt_limit():
 		_reject_landing("tilt")
 		return false
 
@@ -1170,7 +1175,7 @@ func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
 	# Measured across the legs, which is the ground they actually have to stand
 	# on. A shorter span is no good here: over 12 px on a 1.5 px texel grid a
 	# single step between texels reads as a cliff.
-	if absf(slope) > gear.max_slope:
+	if absf(slope) > gear.slope_limit():
 		_reject_landing("slope")
 		return false
 
@@ -1686,6 +1691,40 @@ func _apply_auto_level(state: PhysicsDirectBodyState2D) -> void:
 	if planet == null:
 		return
 	point_nose_along(state, state.transform.origin - planet.global_position)
+
+
+## Points every steerable nozzle so its thrust helps the turn being asked
+## for.
+##
+## Deflection is proportional to the rotation demand and always the way that
+## adds torque about the centre of mass, which depends on which side of it
+## the engine sits -- a tail engine and a nose engine steer opposite ways for
+## the same turn. Worked out from the arm rather than declared per mount, so
+## moving an engine cannot leave the sign behind.
+func _aim_gimbals() -> void:
+	var turn: float = (
+		float(active_commands.get(ShipControl.Command.CW, 0.0))
+		- float(active_commands.get(ShipControl.Command.CCW, 0.0))
+	)
+	for engine: EngineInstance in engines:
+		if engine.data.gimbal_range <= 0.0:
+			continue
+		if is_zero_approx(turn):
+			engine.target_gimbal = 0.0
+			continue
+		var arm: Vector2 = engine.mount.position - center_of_mass
+		# Which way to steer, derived rather than declared per mount so that
+		# moving an engine cannot leave a stale sign behind.
+		#
+		# Godot's rotated(a) is v - a * v.orthogonal() for small a, so a
+		# deflection of g adds a torque of -T * g * arm.cross(d.orthogonal()).
+		# Written as the cross the other way round, because the version with
+		# a leading minus is the one I got backwards first time and the test
+		# caught it.
+		var sense: float = signf(engine.mount.force_direction().orthogonal().cross(arm))
+		if is_zero_approx(sense):
+			sense = 1.0
+		engine.target_gimbal = clampf(turn, -1.0, 1.0) * engine.data.gimbal_range * sense
 
 
 ## Kills linear velocity by pushing against it, one axis at a time.

@@ -28,6 +28,19 @@ enum Type {
 ## ignore it.
 @export var spool_time: float = 0.6
 
+## How far the nozzle can be steered off the mount's own direction, in
+## radians each way. Zero means it is bolted straight, which is every engine
+## but a gimballed main drive.
+##
+## A gimbal is what lets one big engine do the work of a torque pair: the
+## thrust that is already there gets aimed, instead of a second set of jets
+## being fitted to fight it (IDEAS.md section 3).
+@export var gimbal_range: float = 0.0
+
+## How fast the nozzle swings, in radians per second. Slow enough that a
+## gimbal is a heavy rudder rather than an instant one.
+@export var gimbal_rate: float = 3.0
+
 ## Chance of behaving, 0..1. Stored now, simulated in M2 as dropouts and
 ## oscillating thrust.
 @export_range(0.0, 1.0) var reliability: float = 1.0

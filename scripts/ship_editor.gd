@@ -207,6 +207,9 @@ func _targets() -> Array[Node]:
 	elif item is FlightComputerData:
 		if _ship.computer_bay != null and _ship.computer_bay.fits(item as FlightComputerData):
 			out.append(_ship.computer_bay)
+	elif item is GearData:
+		if _ship.gear != null:
+			out.append(_ship.gear)
 	return out
 
 
@@ -223,6 +226,8 @@ func _all_mounts() -> Array[Node]:
 		out.append(_ship.generator_bay)
 	if _ship.computer_bay != null:
 		out.append(_ship.computer_bay)
+	if _ship.gear != null:
+		out.append(_ship.gear)
 	return out
 
 
@@ -260,6 +265,10 @@ func _fit() -> void:
 		var box: ComputerBay = slot as ComputerBay
 		removed = box.installed
 		box.installed = item as FlightComputerData
+	elif slot is LandingGear:
+		var legs: LandingGear = slot as LandingGear
+		removed = legs.installed
+		legs.installed = item as GearData
 
 	# Whatever came out goes back to the bay, or to the hold when the bay is
 	# full. Never nowhere: a swap must always be reversible.
@@ -604,6 +613,8 @@ func _label(item: Resource) -> String:
 		return (item as GeneratorData).display_name
 	if item is FlightComputerData:
 		return (item as FlightComputerData).display_name
+	if item is GearData:
+		return (item as GearData).display_name
 	return "moduł"
 
 
@@ -624,6 +635,14 @@ func _describe(item: Resource) -> PackedStringArray:
 		var engine: EngineData = item as EngineData
 		out.append("ciąg %.0f   rozruch %.2f s   niezawodność %.2f   paliwo %.2f" % [
 			engine.max_thrust, engine.spool_time, engine.reliability, engine.fuel_cost,
+		])
+	elif item is GearData:
+		var legs: GearData = item as GearData
+		out.append("opada %.0f px/s   w bok %.0f px/s   przechył %.0f st   nachylenie %.0f st" % [
+			legs.max_vertical_speed,
+			legs.max_lateral_speed,
+			rad_to_deg(legs.max_tilt),
+			rad_to_deg(legs.max_slope),
 		])
 	elif item is FlightComputerData:
 		var box: FlightComputerData = item as FlightComputerData
