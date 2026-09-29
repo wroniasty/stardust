@@ -116,7 +116,7 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 - [ ] Wydech zależny od typu silnika (MAIN ciągły, TORQUE impulsowy — modulacja delta-sigma jest już w kodzie i powinna być widoczna).
 - [ ] Poświata od `hull_heat`, od ledwie widocznej do białej.
 - [ ] Ślady uszkodzeń od `hull_integrity`, uszkodzony silnik widocznie kuleje.
-- [ ] Podwozie jako rysowana geometria, nie tylko punkty kontaktu.
+- [x] Podwozie jako rysowana geometria, nie tylko punkty kontaktu. Zastrzał wychodzi z obrysu kadłuba (liczony co rysowanie, więc trzyma się kadłuba przerobionego w narzędziu kreatywnym), stopka leży płasko w miejscu, w którym solver naprawdę dotknie. W trakcie wysuwania przygaszona — podwozie w połowie drogi nie może czytać się jako podwozie, na którym da się wylądować.
 
 ### V3: Zderzenia, kopanie, kurz
 
@@ -130,7 +130,7 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 
 - [x] Ręczne obracanie kamery strzałkami i `H` — „planeta na dole" na jedno naciśnięcie. Ta sama odpowiedź co niżej, tylko pytana jednorazowo zamiast liczona co klatkę.
 - [x] Starfield obraca się z widokiem (`view_rotation` w shaderze). Obrót liczony wokół środka wyznaczonego z `SCREEN_PIXEL_SIZE`, nie podanego ze skryptu — `FRAGCOORD` jest w pikselach bufora, a `get_visible_rect()` przy rozciąganiu `canvas_items` zwraca bazowe 640x360, więc podany środek był o połowę za mały.
-- [ ] Obracająca się kamera przy podejściu, automatycznie: promień w górę ekranu, ciągła waga z wysokości, wygładzanie wbudowane w `Camera2D`. Ręczna wersja i naprawa starfieldu są już zrobione, zostaje sama waga z wysokości.
+- [x] Obracająca się kamera przy podejściu, automatycznie: promień w górę ekranu, ciągła waga z wysokości, wygładzanie wbudowane w `Camera2D`. Bramka to **podwozie i wysokość poniżej 300 px nad terenem** — dwa warunki mówiące co innego: podwozie to deklaracja zamiaru lądowania, wysokość to postęp tego zamiaru. Strzałka w ręce pilota wygrywa z blokadą na tę klatkę.
 - [ ] Smugi i rozmycie przy dużej prędkości w powietrzu.
 - [ ] Widoczne wejście w atmosferę: jonizacja przed dziobem narastająca z `hull_heat`.
 - [ ] Smugi kondensacyjne przerobione na zależne od gęstości powietrza, nie od samej prędkości.

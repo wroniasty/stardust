@@ -41,9 +41,6 @@ func scar_terrain() -> void:
 	var planet: Planet = Planet.nearest(get_tree(), global_position)
 	if planet == null:
 		return
-	var altitude: float = (
-		global_position.distance_to(planet.global_position)
-		- planet.surface_radius_at(global_position)
-	)
+	var altitude: float = planet.height_above_terrain(global_position)
 	if altitude <= crater_reach:
 		planet.carve(global_position, crater_radius)

@@ -51,8 +51,7 @@ func _process(_delta: float) -> void:
 		return
 
 	var up: Vector2 = (_ship.global_position - planet.global_position).normalized()
-	var ground: float = planet.surface_radius_at(_ship.global_position)
-	var altitude: float = _ship.global_position.distance_to(planet.global_position) - ground
+	var altitude: float = planet.height_above_terrain(_ship.global_position)
 
 	# Relative to the ground, which moves on a spinning planet: the same
 	# quantity the landing check uses, so the HUD cannot disagree with it.

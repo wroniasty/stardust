@@ -33,6 +33,16 @@ const DEFAULT_LEVEL: int = 1
 ## instead of jumping.
 @export var rotation_response: float = 8.0
 
+## Height above the ground at which the approach starts taking the view over,
+## and how fast it closes the remaining angle once it has all the weight.
+##
+## The rate is under the camera's own rotation smoothing, so what is felt is
+## the two in series -- deliberately slower than a press of H, because this
+## turn was not asked for and a view that snaps on its own is a view that
+## startles.
+const LOCK_ALTITUDE: float = 300.0
+const LOCK_RATE: float = 2.5
+
 ## Speed at which the camera has pulled all the way back, in pixels per second.
 @export var reference_speed: float = 400.0
 
@@ -88,6 +98,11 @@ func _physics_process(delta: float) -> void:
 	var turn: float = Input.get_axis(&"camera_rotate_left", &"camera_rotate_right")
 	if not is_zero_approx(turn):
 		rotation += turn * rotate_rate * delta
+	else:
+		# The pilot's hand outranks the approach. Not a mode to leave and
+		# re-enter, just a frame the lock sits out: let go of the arrow and
+		# it goes back to pulling.
+		hold_planet_down(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -135,6 +150,42 @@ func _level_target() -> float:
 	# The same expression the landing code uses to stand a ship on its feet,
 	# so "up" means one thing in this game.
 	return up.angle() + PI * 0.5
+
+
+## How much of the view the approach has taken over, 0 to 1.
+##
+## Two conditions, saying different things. **The gear is the pilot declaring
+## an intention to land** -- flying low over a ridge with the legs up is not
+## an approach, and a camera that rolled every time the ground came close
+## would be seasick. **The altitude is how far along that intention is**, so
+## the weight is continuous rather than a switch: at three hundred the lock
+## barely leans on the view, on short finals it holds it.
+##
+## Measured against the terrain, not the nominal radius, because that is the
+## altitude the pilot is reading off the landing panel while deciding.
+func lock_weight() -> float:
+	var ship: Ship = _target as Ship
+	if ship == null or ship.gear == null or not ship.gear.is_deployed():
+		return 0.0
+	var planet: Planet = Planet.nearest(get_tree(), ship.global_position)
+	if planet == null:
+		return 0.0
+	return clampf(
+		inverse_lerp(LOCK_ALTITUDE, 0.0, planet.height_above_terrain(ship.global_position)),
+		0.0,
+		1.0,
+	)
+
+
+## Turns the view towards "planet down" by however much the approach has
+## earned this frame. Public so the test can step it without a physics tick.
+func hold_planet_down(delta: float) -> void:
+	var weight: float = lock_weight()
+	if weight <= 0.0:
+		return
+	rotation += angle_difference(rotation, _level_target()) * clampf(
+		weight * LOCK_RATE * delta, 0.0, 1.0
+	)
 
 
 ## Retargets the camera, e.g. after a respawn.

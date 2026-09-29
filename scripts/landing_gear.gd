@@ -46,6 +46,14 @@ signal deployment_changed(deployed: bool)
 ## Seconds for the legs to travel. Nothing counts as deployed until they finish.
 @export var deploy_time: float = 0.5
 
+## How the legs are drawn. A strut out to the contact point and a pad lying
+## across it: the pad is the part that reads at this scale, and it is drawn
+## where the solver will actually touch, so what the pilot lines up with is
+## what the ground meets.
+const STRUT: Color = Color(0.62, 0.67, 0.75)
+const STRUT_WIDTH: float = 1.0
+const PAD_HALF_WIDTH: float = 2.5
+
 ## 0 while stowed, 1 while fully out.
 var extension: float = 0.0
 
@@ -71,10 +79,68 @@ func is_moving() -> bool:
 
 func advance(delta: float) -> void:
 	var was_deployed: bool = is_deployed()
+	var was: float = extension
 	var rate: float = delta / maxf(extend_time(), 0.001)
 	extension = clampf(extension + (rate if _wanted else -rate), 0.0, 1.0)
+	if not is_equal_approx(extension, was):
+		queue_redraw()
 	if is_deployed() != was_deployed:
 		deployment_changed.emit(is_deployed())
+
+
+## Pulls the legs in with no travel, for a respawn.
+##
+## A method rather than two lines at the call site, because setting
+## `extension` from outside skips the redraw and leaves a dead ship's legs
+## drawn under a live one.
+func stow_instantly() -> void:
+	_wanted = false
+	extension = 0.0
+	queue_redraw()
+
+
+func _draw() -> void:
+	if extension <= 0.0:
+		return
+	# Dimmer while travelling. Half-open gear must not read as gear you could
+	# land on -- which is precisely what contact_points() refuses to hand out
+	# until the timer finishes.
+	var colour: Color = STRUT
+	colour.a = lerpf(0.4, 1.0, extension)
+	for leg: Vector2 in legs:
+		# Drawn in this node's own frame. The legs are quoted in the ship's,
+		# and the two coincide only while the gear sits at the hull origin.
+		var hip: Vector2 = leg_root(leg) - position
+		var foot: Vector2 = hip.lerp(leg - position, extension)
+		draw_line(hip, foot, colour, STRUT_WIDTH)
+		# The pad lies flat across the ship's own down, not square to the
+		# strut: it is the part that meets the ground, and a ship standing
+		# on its feet has the ground square to it.
+		var across: Vector2 = Vector2.RIGHT * PAD_HALF_WIDTH
+		draw_line(foot - across, foot + across, colour, STRUT_WIDTH)
+
+
+## Where a leg meets the hull, in the ship's frame.
+##
+## Found on the outline rather than stored beside the leg, so legs stay
+## attached to a hull the creative tool reshaped under them. A second copy of
+## the hull's corners would go stale the first time somebody moved one.
+func leg_root(leg: Vector2) -> Vector2:
+	var ship: Ship = get_parent() as Ship
+	if ship == null or ship.hull_outline.size() < 2:
+		return leg * 0.5
+	var outline: PackedVector2Array = ship.hull_outline
+	var best: Vector2 = outline[0]
+	var nearest: float = INF
+	for i: int in range(outline.size()):
+		var on_edge: Vector2 = Geometry2D.get_closest_point_to_segment(
+			leg, outline[i], outline[(i + 1) % outline.size()]
+		)
+		var distance: float = leg.distance_squared_to(on_edge)
+		if distance < nearest:
+			nearest = distance
+			best = on_edge
+	return best
 
 
 ## Leg positions in the ship's local frame, or nothing while stowed.

@@ -2008,6 +2008,64 @@ func _check_camera(planet: Planet) -> void:
 	)
 	sky.queue_free()
 
+	# The approach lock. Two conditions that say different things: the gear
+	# is an intention to land, the altitude is how far along it is.
+	ship.global_position = planet.global_position + Vector2(planet.surface_radius + 100.0, 0.0)
+	ship.gear.stow_instantly()
+	_expect(
+		is_zero_approx(camera.lock_weight()),
+		"low over the ground with the legs up is not an approach",
+	)
+
+	ship.gear.set_deployed(true)
+	ship.gear.advance(ship.gear.extend_time() * 2.0)
+	_expect(ship.gear.is_deployed(), "the legs are down for the rest of this")
+
+	var high: Vector2 = Vector2(
+		planet.surface_radius_at(ship.global_position) + ShipCamera.LOCK_ALTITUDE + 50.0, 0.0
+	)
+	ship.global_position = planet.global_position + high
+	_expect(
+		is_zero_approx(camera.lock_weight()),
+		"gear down above %.0f px is still flying, not landing" % ShipCamera.LOCK_ALTITUDE,
+	)
+
+	# Continuous, not a switch: the weight has to grow on the way down, or
+	# the view would snap the moment the threshold was crossed.
+	var weights: Array[float] = []
+	for height: float in [290.0, 200.0, 100.0, 10.0]:
+		ship.global_position = planet.global_position + Vector2(
+			planet.surface_radius_at(ship.global_position) + height, 0.0
+		)
+		weights.append(camera.lock_weight())
+	var climbing: bool = true
+	for i: int in range(1, weights.size()):
+		climbing = climbing and weights[i] > weights[i - 1]
+	_expect(
+		climbing and weights[0] < 0.1 and weights[weights.size() - 1] > 0.9,
+		"the lock leans harder the lower it gets (%s)" % [weights],
+	)
+
+	# And it actually turns the view, without being asked and without a key.
+	camera.rotation = 2.0
+	for step: int in range(240):
+		camera.hold_planet_down(1.0 / 60.0)
+	var below: Vector2 = (planet.global_position - ship.global_position).rotated(-camera.rotation)
+	_expect(
+		below.normalized().dot(Vector2.DOWN) > 0.99,
+		"on short finals the planet ends up at the bottom of the screen by itself",
+	)
+
+	# Nothing happens when the gate is shut, whatever the camera is pointing
+	# at: the pilot's framing is theirs until an approach earns it.
+	ship.gear.stow_instantly()
+	camera.rotation = 2.0
+	camera.hold_planet_down(1.0)
+	_expect(
+		is_equal_approx(camera.rotation, 2.0),
+		"with the legs up the camera leaves the pilot's framing alone",
+	)
+
 	camera.queue_free()
 	ship.queue_free()
 
@@ -3965,6 +4023,34 @@ func _check_gear(ship: Ship) -> void:
 		"no gap along the outline is wider than the contact step (%.2f of %.1f px)" % [
 			widest, Ship.CONTACT_STEP,
 		],
+	)
+
+	# The drawn leg starts on the hull and ends where the solver touches.
+	# Read off the outline every time rather than stored, so a hull the
+	# creative tool reshaped does not leave the legs hanging in space.
+	for leg: Vector2 in landing_gear.legs:
+		var root_point: Vector2 = landing_gear.leg_root(leg)
+		var on_hull: float = INF
+		for i: int in range(ship.hull_outline.size()):
+			on_hull = minf(on_hull, root_point.distance_to(Geometry2D.get_closest_point_to_segment(
+				root_point,
+				ship.hull_outline[i],
+				ship.hull_outline[(i + 1) % ship.hull_outline.size()],
+			)))
+		_expect(on_hull < 0.001, "leg %s is rooted on the hull outline" % leg)
+		_expect(
+			root_point.distance_to(leg) < Vector2.ZERO.distance_to(leg),
+			"and rooted nearer its foot than the hull's centre is",
+		)
+
+	var stretched: PackedVector2Array = PackedVector2Array()
+	for point: Vector2 in ship.hull_outline:
+		stretched.append(point + Vector2(0.0, 6.0) if point.y > 0.0 else point)
+	var was: Vector2 = landing_gear.leg_root(landing_gear.legs[0])
+	ship.hull_outline = stretched
+	_expect(
+		not landing_gear.leg_root(landing_gear.legs[0]).is_equal_approx(was),
+		"a hull stretched under the legs moves where they are rooted",
 	)
 
 # --- Plumbing ---

@@ -1314,9 +1314,7 @@ func ground_under_legs(planet: Planet, from: Transform2D) -> Array[float]:
 		return clearances
 	for leg: Vector2 in gear.legs:
 		var leg_point: Vector2 = from * leg
-		clearances.append(
-			leg_point.distance_to(planet.global_position) - planet.surface_radius_at(leg_point)
-		)
+		clearances.append(planet.height_above_terrain(leg_point))
 	return clearances
 
 
@@ -1517,8 +1515,7 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 		engine.target_throttle = 0.0
 		engine.mount.set_exhaust(0.0)
 	if gear != null:
-		gear.set_deployed(false)
-		gear.extension = 0.0
+		gear.stow_instantly()
 
 	flight_mode = FlightMode.PHYSICAL
 	_landed_planet = null

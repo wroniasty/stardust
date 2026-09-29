@@ -754,6 +754,35 @@ nieprawda, bo spacja jest węższa od litery, którą zastępuje, i kolumna
 wartości wychodzi poszarpana. Font stoi obok formatów, które go zakładają,
 żeby ekran nie mógł wziąć karty i po cichu zgubić tego, co czyni ją czytelną.
 
+### Kamera podejścia: dlaczego dwa warunki, a nie jeden
+
+Blokada „planeta na dole" włącza się sama, kiedy **podwozie jest wysunięte
+i wysokość nad terenem spada poniżej 300 px**. Dwa warunki, bo mówią co
+innego.
+
+**Podwozie to deklaracja zamiaru.** Sama wysokość nie wystarcza: przelot nisko
+nad grzbietem to nie podejście, a kamera, która przechylałaby się przy każdej
+mijanej górze, jest chorobą morską. Pilot ma już klawisz, którym mówi „ląduję"
+— to ten sam klawisz.
+
+**Wysokość to postęp tego zamiaru**, więc waga jest ciągła, nie przełącznikiem:
+przy trzystu ledwie napiera na widok, na krótkiej prostej trzyma go. Liczona
+względem **terenu**, nie promienia nominalnego — to jest ta wysokość, którą
+pilot czyta z panelu lądowania, podejmując decyzję.
+
+Ręka pilota wygrywa: dopóki strzałka jest wciśnięta, blokada pauzuje na tę
+klatkę. To nie jest tryb, z którego się wychodzi i do którego wraca — puszczasz
+strzałkę, blokada znowu ciągnie.
+
+Tempo (`LOCK_RATE`) siedzi pod własnym wygładzaniem `Camera2D`, więc czuć
+szereg dwóch — celowo wolniej niż naciśnięcie `H`, bo o ten obrót nikt nie
+prosił, a widok, który sam skacze, to widok, który płoszy.
+
+Przy okazji `Planet.height_above_terrain()` dostało nazwę: trzy miejsca
+rozpisywały tę samą różnicę ręcznie, co jest trzema okazjami do zmierzenia
+nie tego, co trzeba. `altitude_at()` (promień nominalny) zostaje dla orbit,
+gdzie góry są szumem na liczbie rzędu tysięcy.
+
 ### Celowanie: co należy do broni, a co do gniazda
 
 Pytanie „zakres obrotu na hardpoincie czy na broni" ma odpowiedź **oba**, bo to

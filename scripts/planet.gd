@@ -230,6 +230,19 @@ func altitude_at(point: Vector2) -> float:
 	return global_position.distance_to(point) - surface_radius
 
 
+## Height above the ground actually under a point, negative inside rock.
+##
+## Different from altitude_at(), and the difference is which question is
+## being asked. Against the nominal radius is the orbital answer, where the
+## mountains are noise on a number in the thousands. Against the terrain is
+## the close-in answer, where the mountains are the entire subject: the
+## landing readout, the approach camera, a shell that has to know whether it
+## went off in the dirt. Three places spelled this out by hand before it had
+## a name, which is three chances to measure the wrong one.
+func height_above_terrain(point: Vector2) -> float:
+	return global_position.distance_to(point) - surface_radius_at(point)
+
+
 ## True if a world point is inside rock.
 func is_solid_at(point: Vector2) -> bool:
 	return terrain.is_solid_local(to_local(point))
