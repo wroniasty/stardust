@@ -117,9 +117,6 @@ const MIN_LEGS_DOWN: int = 2
 ## caused, and a level touchdown on flat ground came out 32 degrees off.
 const LEG_CONTACT_REACH: float = 5.0
 
-## Damage per px/s of touchdown speed above what the gear can absorb.
-const GEAR_OVERLOAD_DAMAGE: float = 0.01
-
 ## Below this speed the brake stops the ship outright rather than chasing it.
 const BRAKE_EPS: float = 2.0
 
@@ -225,9 +222,29 @@ signal jettisoned(item: Resource, rarity: int)
 ## impulse at each contact, which is what stops a landed ship sliding downhill.
 @export_range(0.0, 2.0) var terrain_friction: float = 0.7
 
-## Impacts slower than this are free. Above it, damage grows with the excess.
+## Impacts slower than this are free: a hull is built to be bumped.
 @export var damage_speed_threshold: float = 60.0
-@export var damage_per_speed: float = 0.004
+
+## Excess over the tolerance that writes the hull off outright, in px/s.
+## Squared in between, so a tap is a tap and a crash is a crash.
+##
+## The linear model this replaces made every arrival the same kind of event,
+## only more so, and it charged the legs at two and a half times the hull's
+## rate on top of a threshold fifteen px/s lower. A landing a shade too fast
+## therefore cost more than flying into a hillside -- which is exactly
+## backwards, because absorbing that is what legs are for.
+@export var hull_writeoff_excess: float = 100.0
+
+## The same, for an impact the legs took. Far wider: past their rated speed
+## the legs bend instead of the hull breaking, and the pilot gets a bounce
+## and a bill rather than a funeral.
+@export var gear_writeoff_excess: float = 260.0
+
+## How much a sideways scrape counts towards an impact, against a square-on
+## hit at the same speed. Without it the damage model read only the normal
+## component, so flying into a slope at two hundred px/s was a graze: most of
+## that speed goes along the rock, and along the rock was free.
+@export_range(0.0, 1.0) var scrape_share: float = 0.5
 
 var engines: Array[EngineInstance] = []
 var hardpoints: Array[Hardpoint] = []
@@ -288,8 +305,9 @@ var aim_point: Vector2 = Vector2.ZERO
 ## Hull condition, 1.0 intact and 0.0 destroyed.
 ##
 ## On the same 0..1 scale as hull_heat and engine health, which is what makes
-## the existing damage numbers work unchanged: a 100 px/s scrape costs 0.16, a
-## 200 px/s crash costs 0.56, and anything past about 310 px/s is fatal outright.
+## the numbers read as fractions of a ship: flying into rock at 105 px/s costs
+## about a fifth of the hull, 130 px/s about half, and 160 px/s is fatal
+## outright. The same speeds taken on the legs cost 0.06, 0.11 and 0.19.
 var hull_integrity: float = 1.0
 
 ## Total damage taken since the last respawn, for the readout.
@@ -1072,10 +1090,16 @@ func _resolve_terrain(state: PhysicsDirectBodyState2D) -> void:
 		body_transform.origin += deepest_normal * ((deepest - PENETRATION_SLOP) * PENETRATION_CORRECTION)
 		state.transform = body_transform
 
-	if impact_speed > damage_speed_threshold:
-		var damage: float = (impact_speed - damage_speed_threshold) * damage_per_speed
+	# Whether the legs took it decides what it costs, and it is charged
+	# once. The overspeed landing used to be billed twice for one arrival --
+	# by the gear check for refusing the landing, and by this line for the
+	# contact that followed in the same tick -- which is most of how a
+	# touchdown a shade too fast came to cost more than a crash.
+	var on_legs: bool = gear != null and gear.contact_points().has(deepest_local)
+	var damage: float = impact_damage(impact_speed, on_legs)
+	if damage > 0.0:
 		hull_impact.emit(impact_speed, damage)
-		take_damage(damage, "impact")
+		take_damage(damage, "gear" if on_legs else "impact")
 		# The engines nearest where it struck take it. Landing on a jet is
 		# supposed to be a different mistake from landing on the nose.
 		damage_engines_near(deepest_local, damage)
@@ -1113,7 +1137,13 @@ func _apply_contact_impulses(
 			if closing >= 0.0:
 				continue
 			if iteration == 0:
-				hardest = maxf(hardest, -closing)
+				# Not the closing speed alone. Flying into a hillside is
+				# mostly a scrape -- the normal takes a fraction of the
+				# speed and the rest goes along the rock -- so reading only
+				# the normal component called a two hundred px/s crash a
+				# graze.
+				var scrape: float = absf(relative.dot(Vector2(-normal.y, normal.x)))
+				hardest = maxf(hardest, -closing + scrape_share * scrape)
 
 			var normal_arm: float = arm.cross(normal)
 			var normal_mass: float = inverse_mass + normal_arm * normal_arm * inverse_inertia
@@ -1263,15 +1293,11 @@ func _try_land(state: PhysicsDirectBodyState2D, planet: Planet) -> bool:
 	var over_descent: float = descent - gear.vertical_limit()
 	var over_lateral: float = lateral - gear.lateral_limit()
 	if over_descent > 0.0 or over_lateral > 0.0:
+		# Refused, and nothing more. Not binary either: the ship is still in
+		# the air's hands and the legs are about to hit the rock, which is
+		# where the damage is worked out -- once, by whatever actually
+		# touched. Charging here as well made one arrival two accidents.
 		_reject_landing("speed")
-		# Not binary: the legs take the overshoot as damage and the ship stays
-		# in the air's hands, rather than the landing simply not happening.
-		var excess: float = maxf(over_descent, 0.0) + maxf(over_lateral, 0.0)
-		var damage: float = excess * GEAR_OVERLOAD_DAMAGE
-		hull_impact.emit(descent, damage)
-		take_damage(damage, "gear")
-		# Straight down through the legs, so it is the tail end that suffers.
-		damage_engines_near(_gear_point(), damage)
 		return false
 
 	# Attitude is judged on the first leg to touch, not once they all have.
@@ -1458,6 +1484,34 @@ func worst_engine_health() -> float:
 	for engine: EngineInstance in engines:
 		worst = minf(worst, engine.health)
 	return worst
+
+
+## What an impact at this speed costs, as a fraction of the hull.
+##
+## Two tolerances and two curves, because the legs exist to change the
+## answer. Below the tolerance it is free; above it the cost is the square
+## of how far over, so the difference between a heavy landing and a crash is
+## a difference in kind and not just in degree.
+##
+## Public because the shape of this curve is a design decision and belongs
+## in a test that can read it, not in a number someone has to re-derive from
+## a crash.
+func impact_damage(speed: float, on_legs: bool) -> float:
+	var tolerance: float = damage_speed_threshold
+	var writeoff: float = hull_writeoff_excess
+	if on_legs and gear != null:
+		# Never below the bare hull's. Legs rated for 45 px/s under a hull
+		# that shrugs off 60 would otherwise make touching down on the feet
+		# worse than belly-flopping, and legs that make things worse are not
+		# legs. Their rating decides whether the landing is *accepted*; here
+		# it can only raise the bar, never lower it.
+		tolerance = maxf(damage_speed_threshold, gear.vertical_limit())
+		writeoff = gear_writeoff_excess
+	var excess: float = speed - tolerance
+	if excess <= 0.0 or writeoff <= 0.0:
+		return 0.0
+	var over: float = excess / writeoff
+	return minf(over * over, 1.0)
 
 
 ## Takes damage from any source. The single door in, so that every way of

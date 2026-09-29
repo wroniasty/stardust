@@ -983,6 +983,7 @@ func _evaluate_phase() -> void:
 			_check_weather(_planet)
 		Phase.GEAR:
 			_check_gear(_ship)
+			_check_damage_model(_ship)
 		Phase.LANDING_GOOD:
 			_expect(_first_touchdown == "landed", "a gentle touchdown on a shelf with the legs out is a landing")
 			_expect(_ship.freeze, "a landed ship is frozen rather than still being solved")
@@ -1017,6 +1018,15 @@ func _evaluate_phase() -> void:
 			_expect(
 				_ship.accumulated_damage > 0.0,
 				"overspeed costs damage rather than simply failing (%.3f)" % _ship.accumulated_damage,
+			)
+			# Charged once, by whatever touched. Billing the refusal as well
+			# as the contact it caused is how arriving at 120 px/s on the
+			# legs came to cost more than a crash.
+			_expect(
+				_ship.accumulated_damage < 0.25,
+				"and being waved off at %.0f px/s is a bounce and a bill, not a wreck (%.3f)" % [
+					HARD_DESCENT, _ship.accumulated_damage,
+				],
 			)
 		Phase.LANDING_STEEP:
 			# Either refusal is correct and which one trips first is geometry:
@@ -3977,6 +3987,66 @@ func _check_hull(ship: Ship) -> void:
 	# respawn once per hit.
 	ship.take_damage(0.5, "test")
 	_expect(deaths.size() == 1, "a wreck cannot die twice")
+
+
+## What an arrival costs. The shape of the curve is the design decision, so
+## the test reads the curve rather than one crash's number.
+func _check_damage_model(ship: Ship) -> void:
+	var limit: float = ship.gear.vertical_limit()
+	_expect(
+		ship.impact_damage(300.0, true) < ship.impact_damage(300.0, false),
+		"the legs buy something at speed (%.2f against %.2f)" % [
+			ship.impact_damage(300.0, true), ship.impact_damage(300.0, false),
+		],
+	)
+
+	_expect(
+		is_zero_approx(ship.impact_damage(ship.damage_speed_threshold - 1.0, false))
+		and is_zero_approx(ship.impact_damage(limit - 1.0, true)),
+		"under the tolerance an arrival is free, on the legs or on the hull",
+	)
+
+	# The property the old model had backwards, and the whole reason legs are
+	# bolted to a ship: whatever the speed, taking it on the legs is never
+	# worse than taking it on the hull.
+	var legs_never_worse: bool = true
+	var hull_climbs: bool = true
+	var legs_climb: bool = true
+	var last_hull: float = -1.0
+	var last_legs: float = -1.0
+	for speed: float in [40.0, 60.0, 80.0, 105.0, 130.0, 160.0, 200.0, 300.0, 500.0]:
+		var on_hull: float = ship.impact_damage(speed, false)
+		var on_legs: float = ship.impact_damage(speed, true)
+		legs_never_worse = legs_never_worse and on_legs <= on_hull + 0.0001
+		hull_climbs = hull_climbs and on_hull >= last_hull
+		legs_climb = legs_climb and on_legs >= last_legs
+		last_hull = on_hull
+		last_legs = on_legs
+		_expect(
+			on_hull <= 1.0 and on_legs <= 1.0,
+			"at %.0f px/s nothing costs more than a whole ship (%.2f / %.2f)" % [
+				speed, on_hull, on_legs,
+			],
+		)
+	_expect(legs_never_worse, "taking an impact on the legs is never worse than on the hull")
+	_expect(hull_climbs and legs_climb, "and faster never costs less")
+
+	# The two complaints this model was rewritten for, as numbers.
+	_expect(
+		is_zero_approx(ship.impact_damage(limit + 5.0, true)),
+		"a touchdown a shade over the legs' rating is refused, not punished",
+	)
+	var shade_over: float = ship.impact_damage(ship.damage_speed_threshold + 15.0, true)
+	_expect(
+		shade_over > 0.0 and shade_over < 0.02,
+		"and arriving hard enough to hurt is a scratch (%.3f)" % shade_over,
+	)
+	_expect(
+		ship.impact_damage(150.0, false) > 0.5,
+		"and flying into rock at 150 px/s is most of a ship (%.2f)" % [
+			ship.impact_damage(150.0, false),
+		],
+	)
 
 
 func _check_gear(ship: Ship) -> void:

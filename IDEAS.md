@@ -1300,8 +1300,48 @@ Nachylenie: wysokość terenu próbkowana pod każdą nogą w układzie biegunow
 ### Porażka
 
 Nie binarnie:
-- nadwyżka prędkości = obrażenia proporcjonalne do nadwyżki, głównie podwozie i silniki dolne,
+- nadwyżka prędkości = odmowa lądowania; **rachunek wystawia dopiero kontakt**, który po niej następuje (patrz niżej),
 - przekroczenie nachylenia lub kąta = przewrócenie: tryb fizyki punktów kontaktu (każda noga to punkt z siłą podparcia i tarciem, nie wchodzi w teren), statek toczy się w dół zbocza i obija, silniki dostają, gracz może ratować ciągiem.
+
+### Model uszkodzeń: jedno zdarzenie, jeden rachunek
+
+Zgłoszone z gry: lądowanie na podwoziu **odrobinę** za szybko kosztowało 70%
+kadłuba albo śmierć, a rozpędzona kolizja z gruntem 18%. Dokładnie na odwrót
+niż powinno, i z trzech niezależnych powodów.
+
+**Podwójne obciążenie.** Odrzucone lądowanie płaciło dwa razy za jedno
+przybycie: raz w kontroli podwozia (za samą odmowę), raz w kontakcie, który
+nastąpił w tym samym ticku. Przy 120 px/s to było 0,75 + 0,24 — czyli zgon.
+Teraz kontrola podwozia tylko odmawia, a liczy to, co naprawdę dotknęło.
+
+**Nogi były droższe od kadłuba.** Stawka podwozia (0,01 na px/s) była 2,5 raza
+wyższa od kadłubowej (0,004), przy progu niższym o 15 px/s. Absorbowanie tego
+jest jedynym powodem, dla którego nogi istnieją. Teraz **tolerancja nóg nigdy
+nie schodzi poniżej kadłubowej** (`max(próg_kadłuba, limit_podwozia)`) — ich
+stat decyduje o tym, czy lądowanie zostanie *przyjęte*, a w obrażeniach może
+tylko podnieść poprzeczkę, nigdy jej obniżyć.
+
+**Krzywa liniowa i tylko składowa normalna.** Liniowa robiła z każdego
+przybycia to samo zdarzenie, tylko bardziej — a śmierć wypadała przy 310 px/s,
+czyli powyżej prędkości ucieczki. Teraz koszt to **kwadrat nadwyżki** nad
+tolerancją, z odpisem całego kadłuba przy 100 px/s nadwyżki (kadłub) i 260
+(nogi). Do tego lot w zbocze jest **głównie ślizgiem**: składowa normalna
+bierze ułamek prędkości, reszta idzie wzdłuż skały, więc model czytający samą
+normalną nazywał katastrofę muśnięciem. Styczna liczy się z wagą 0,5.
+
+Zmierzone po zmianie (ten sam seed, ta sama planeta):
+
+| co | prędkość | przed | po |
+|---|---|---|---|
+| na nogach, odrobinę za szybko | 70 px/s | ~29% | **0,3%** |
+| na nogach, twardo | 120 px/s | ~99% (zgon) | **4,3%** |
+| na brzuchu, podwozie schowane | 120 px/s | 24% | **30%** |
+| płasko w zbocze | 120 px/s | ~18% | **63%** |
+| płasko w zbocze | 160 px/s | ~28% | **72%** |
+
+Ślizg po skale nalicza się co tick kontaktu, więc długie tarcie o zbocze boli
+bardziej niż jedno uderzenie — i tak ma być: każde odbicie to osobne
+uderzenie, a statek koziołkujący po górze powinien się rozpadać.
 
 ### Stan "wylądowany"
 
