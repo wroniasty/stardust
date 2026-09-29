@@ -48,6 +48,38 @@ func rarity_color() -> Color:
 ## table of conversions and a pilot no second number to learn.
 @export var bulk: float = 1.0
 
+## One line of an information card: a label, the number behind it, how to
+## print it, and which way is up.
+##
+## `better` is +1 when more is better, -1 when less is, 0 when it is just a
+## fact. That last field is the whole reason these are rows rather than a
+## formatted string: a comparison cannot colour a difference it cannot tell
+## the direction of, and "spread 1.0 against 2.0" is an improvement while
+## "bulk 1.0 against 2.0" is a different kind of one.
+static func row(
+	label: String, value: float, digits: int, better: int, suffix: String = ""
+) -> Dictionary:
+	return {
+		"label": label, "value": value, "digits": digits, "better": better, "suffix": suffix,
+	}
+
+
+## What this module is, as rows. Overridden by each kind; the base answers
+## with what every module has.
+##
+## On the resource rather than in the screen that draws it, so a card, a
+## comparison and a future tooltip all read the same numbers and none of
+## them can quietly disagree about what a weapon is.
+func stat_rows() -> Array[Dictionary]:
+	return [row("gabaryt", bulk, 2, -1)]
+
+
+## A short line of prose under the numbers. Blank unless a kind has
+## something worth saying that a number cannot.
+func blurb() -> String:
+	return ""
+
+
 ## Flat additions and multipliers on ship-wide stats, keyed by name.
 ##
 ## Two dictionaries rather than one with a rule about which keys add. "You add

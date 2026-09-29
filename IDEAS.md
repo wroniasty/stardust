@@ -714,6 +714,32 @@ rzędzie i tańsze klawiatury potrafią zgubić trzeci (ghosting). Jeśli okaże
 się to realnym problemem, akord da się przenieść na klawisze rozrzucone po
 klawiaturze bez zmiany niczego poza tabelą w `ControlChords`.
 
+### Karty modułów: dlaczego wiersze, a nie akapit
+
+Ekrany trzymały po jednym formacie na rodzaj modułu — czytelnym i
+nieporównywalnym. **Karta, która jest akapitem, da się przeczytać, ale nie da
+się jej odjąć od drugiej karty.**
+
+`ModuleData.stat_rows()` zwraca wiersze: etykieta, wartość, dokładność i
+**kierunek**. Ten ostatni jest całym powodem, dla którego to są wiersze:
+porównanie nie umie pokolorować różnicy, której znaku nie zna. Mniejszy
+rozrzut to poprawa, mniejszy zasięg nie, a obie zmiany mają minus z przodu.
+
+Na zasobie, nie w ekranie, który je rysuje — żeby karta, porównanie i
+przyszły dymek czytały te same liczby i żadne z nich nie mogło po cichu
+twierdzić czegoś innego o tym, czym jest broń.
+
+Przy wymianie obie karty stoją **obok siebie**, bo porównanie, między którym
+trzeba przewijać, to dwa odczyty wzięte w różnych chwilach. Jednoliniowy
+werdykt zniknął dla broni: karta mówi to samo dokładniej, a dwa podsumowania
+tej samej wymiany to jedno za dużo do sprawdzania.
+
+Layout musiał ustąpić treści: najdłuższa karta w grze to legendarna rakieta,
+siedemnaście wierszy, i przy starym podziale 0,72/0,28 ostatnie z nich
+wjeżdżały na podpowiedzi klawiszy — akurat te liczby, na których podejmuje się
+decyzję. Panel kart dostał 0,56 wysokości i twardą podłogę, o którą rysowanie
+się zatrzymuje.
+
 ### Celowanie: co należy do broni, a co do gniazda
 
 Pytanie „zakres obrotu na hardpoincie czy na broni" ma odpowiedź **oba**, bo to

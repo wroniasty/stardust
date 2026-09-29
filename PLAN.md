@@ -174,6 +174,21 @@ Cel: strzela się tam, gdzie się patrzy, a kursor mówi, czy to coś da.
 - [x] Własny kadłub nie jest przeszkodą: amunicja przelatuje przez własny statek. Pocisk jest **martwy, dopóki nie wyjdzie poza obrys** tego, kto go wystrzelił — nie przez stały czas, bo to zakład o rozmiar kadłuba; przy 150 px/s przez 72-pikselowy kadłub stara łaska 0,2 s kończyła się w połowie drogi. Raz opuszczony obrys uzbraja na stałe, więc pocisk, który wróci dookoła planety, trafia.
 - [ ] Ewentualnie: teren między działkiem a celem. Kursor melduje wtedy zielony, choć pocisk trafi w zbocze — ale trafienie w zbocze jest prawdziwym skutkiem (robi krater), więc to raczej wygoda niż kłamstwo. Koszt: raycast na działko na klatkę.
 
+
+---
+
+## M2.3: Karty informacyjne modułów
+
+Cel: kliknąć w rzecz i zobaczyć, z czego się składa — a przy wymianie zobaczyć różnicę, nie dwa osobne odczyty.
+
+- [x] `ModuleData.stat_rows()` — moduł mówi, z jakich liczb się składa, a nie jak się nazywa jego opis. Wiersz to etykieta, wartość, dokładność i **kierunek** (`better`: +1 / −1 / 0). Kierunek jest po to, żeby porównanie mogło pokolorować różnicę: mniejszy rozrzut to poprawa, mniejszy zasięg nie.
+- [x] Nadpisane w każdym rodzaju modułu, plus `blurb()` na jedno zdanie, którego liczba nie powie.
+- [x] Karta w edytorze: nazwa, rzadkość, zdanie, wiersze. Kliknięcie zamontowanego modułu na schemacie pokazuje jego kartę, nawet z pustą ładownią.
+- [x] Przy wymianie **dwie karty obok siebie**, a w lewej różnica przy każdym wierszu (`dps +0.364 lepiej`, `energia +10.7 gorzej`). Porównanie, między którym trzeba przewijać, to dwa odczyty wzięte w różnych chwilach.
+- [x] Jednoliniowy werdykt zniknął dla broni — karta mówi to samo dokładniej. Został dla silników, bo tam liczy się wpływ na cały statek, którego karta nie zna.
+- [ ] Ładniejsza oprawa: ramki, ikony, kolor wiersza wg kierunku zmiany zamiast słowa „lepiej / gorzej".
+- [ ] Ta sama karta w szybkiej wymianie na Tab — dziś ma własny, uboższy opis.
+
 ---
 
 ## MAUX1: Edytor statku (prototyp)

@@ -74,6 +74,11 @@ var _slot: int = 0
 ## Last line of feedback, from a fit, a stow or a refusal.
 var _notice: String = ""
 
+## A fitted module the pilot clicked to read, when nothing carried would go
+## there. Cleared the moment something is selected in the list: two things
+## claiming the card at once is one too many.
+var _inspecting: Resource = null
+
 ## What fitting the selected module into the highlighted slot would do,
 ## worked out by fitting it, measuring, and putting things back. Cached
 ## against the selection rather than recomputed every frame: the answer only
@@ -356,22 +361,10 @@ func _verdict() -> PackedStringArray:
 		return out
 	var slot: Node = targets[posmod(_slot, targets.size())]
 
+	# Nothing for a gun. The card beside it already gives every number and
+	# its difference, and a second, coarser summary of the same swap is one
+	# reading too many to cross-check.
 	if slot is Hardpoint:
-		var fitted: WeaponData = (slot as Hardpoint).weapon
-		var candidate: WeaponData = picked["item"] as WeaponData
-		if fitted == null:
-			out.append("%s: pusty" % slot.name)
-		elif candidate != null:
-			out.append("%s: %s  dps %.2f -> %.2f   rozrzut %.1f -> %.1f   krater %.0f -> %.0f" % [
-				slot.name,
-				fitted.display_name,
-				fitted.damage_per_second(),
-				candidate.damage_per_second(),
-				fitted.spread_degrees,
-				candidate.spread_degrees,
-				fitted.crater_radius,
-				candidate.crater_radius,
-			])
 		return out
 
 	out.append("%s: %s" % [
@@ -470,8 +463,13 @@ func click_at(at: Vector2) -> bool:
 		var index: int = targets.find(mount)
 		if index >= 0:
 			_slot = index
+		elif _fitted_in(mount) != null:
+			# Nothing carried goes here, but there is something in it worth
+			# reading. Clicking a module should show that module.
+			_inspecting = _fitted_in(mount)
+			_notice = ""
 		else:
-			_notice = "%s nie przyjmie tego modułu" % mount.name
+			_notice = "%s jest puste" % mount.name
 		return true
 	return false
 
@@ -482,11 +480,15 @@ func click_at(at: Vector2) -> bool:
 ## made mouse input untestable and wrong before the first frame.
 func _panels() -> Dictionary:
 	var view: Vector2 = _canvas.size
-	var list: Rect2 = Rect2(6.0, 6.0, view.x * 0.34, view.y * 0.72)
+	# Under half to the list and the schematic, the rest to the cards. The
+	# longest card in the game is a legendary missile at seventeen rows, and
+	# at 0.72 the last of them ran off the bottom into the key hints -- the
+	# numbers a swap is decided on were the ones that did not fit.
+	var list: Rect2 = Rect2(6.0, 6.0, view.x * 0.34, view.y * 0.44)
 	return {
 		"view": view,
 		"list": list,
-		"plan": Rect2(list.end.x + 6.0, 6.0, view.x - list.end.x - 12.0, view.y * 0.72),
+		"plan": Rect2(list.end.x + 6.0, 6.0, view.x - list.end.x - 12.0, view.y * 0.44),
 		"info": Rect2(6.0, list.end.y + 6.0, view.x - 12.0, view.y - list.end.y - 12.0),
 	}
 
@@ -653,23 +655,51 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	var picked: Dictionary = _selected()
 
 	if picked.is_empty():
-		_text(font, Vector2(x, y), "nic nie wybrano", LABEL)
-		_text(font, Vector2(x, y + ROW * 2.0), _keys(), LABEL)
+		if _inspecting != null:
+			for line: String in _card(_inspecting, null):
+				_text(font, Vector2(x, y), line, TEXT)
+				y += ROW
+		else:
+			_text(font, Vector2(x, y), "nic nie wybrano — kliknij gniazdo albo przedmiot", LABEL)
+		_text(font, Vector2(x, rect.end.y - PAD), _keys(), LABEL)
 		return
+	_inspecting = null
 
 	var item: Resource = picked["item"]
-	for line: String in _describe(item):
+	var replacing: Resource = _fitted_in(_highlighted())
+	# Stopped short of the key hints rather than drawn over them. A card
+	# longer than the panel is a card whose last rows are unreadable either
+	# way; at least this way the hints stay legible.
+	var floor_y: float = rect.end.y - PAD - ROW
+	for line: String in _card(item, replacing):
+		if y > floor_y:
+			break
 		_text(font, Vector2(x, y), line, TEXT)
 		y += ROW
 
-	# What the swap would do, before anything is committed. The reason to
-	# come to this screen rather than press Tab and find out.
+	# What it would replace, beside it rather than under it: a swap is a
+	# comparison, and one you have to scroll between is two readings taken a
+	# moment apart.
+	if replacing != null:
+		var beside: float = rect.position.x + rect.size.x * 0.48
+		var at: float = rect.position.y + PAD + float(FONT_SIZE)
+		_text(font, Vector2(beside, at), "-- zamontowane teraz --", LABEL)
+		for line: String in _card(replacing, null):
+			at += ROW
+			if at > floor_y:
+				break
+			_text(font, Vector2(beside, at), line, IDLE_MOUNT)
+
+	# What the swap would do to the ship as a whole, which the card cannot
+	# say: where an engine goes decides what it does.
 	y += ROW * 0.4
 	for line: String in _verdict():
+		if y > floor_y:
+			break
 		_text(font, Vector2(x, y), line.left(96), FIT)
 		y += ROW
 
-	if not _notice.is_empty():
+	if not _notice.is_empty() and y <= floor_y:
 		_text(font, Vector2(x, y), _notice.left(96), WARN)
 
 	var state: String = "NA ZIEMI — montaż dostępny" if can_refit() else "W LOCIE — montaż po wylądowaniu"
@@ -705,60 +735,69 @@ func _label(item: Resource) -> String:
 	return "moduł"
 
 
+## What is fitted in a mount, whichever kind of mount it is.
+func _fitted_in(slot: Node) -> Resource:
+	if slot is Hardpoint:
+		return (slot as Hardpoint).weapon
+	if slot is EngineMount:
+		return (slot as EngineMount).installed
+	if slot is GeneratorBay:
+		return (slot as GeneratorBay).installed
+	if slot is ComputerBay:
+		return (slot as ComputerBay).installed
+	if slot is LandingGear:
+		return (slot as LandingGear).installed
+	return null
+
+
+## One module as a card: what it is, how good the roll was, a line of prose,
+## and its numbers.
+##
+## Built from the module's own stat_rows() rather than a format string per
+## kind, which is what lets two of them be compared. A card that is a
+## paragraph can be read; it cannot be subtracted from another card.
 func _describe(item: Resource) -> PackedStringArray:
+	return _card(item, null)
+
+
+## `against` is what the module would replace. When it is there, every row
+## carries the difference too, signed the way the pilot cares about: a
+## smaller spread reads as better even though the number went down.
+func _card(item: Resource, against: Resource) -> PackedStringArray:
 	var out: PackedStringArray = PackedStringArray()
 	var module: ModuleData = item as ModuleData
-	out.append("%s   %s   gabaryt %.2f" % [
-		_label(item),
-		"" if module == null else module.rarity_name(),
-		Ship.module_bulk(item),
-	])
-	if item is WeaponData:
-		var weapon: WeaponData = item as WeaponData
-		out.append("obrażenia %.2f x %.1f/s = %.2f dps   rozrzut %.1f st   zasięg %.0f   krater %.0f" % [
-			weapon.damage,
-			weapon.rounds_per_second,
-			weapon.damage_per_second(),
-			weapon.spread_degrees,
-			weapon.range_px,
-			weapon.crater_radius,
-		])
-	elif item is EngineData:
-		var engine: EngineData = item as EngineData
-		out.append("ciąg %.0f   rozruch %.2f s   niezawodność %.2f   paliwo %.2f" % [
-			engine.max_thrust, engine.spool_time, engine.reliability, engine.fuel_cost,
-		])
-	elif item is ShotModData:
-		var mod: ShotModData = item as ShotModData
-		out.append("koszt strzału x%.2f   efekt: %s" % [
-			mod.energy_multiplier,
-			ShotModData.Effect.keys()[int(mod.effect)].to_lower(),
-		])
-	elif item is GearData:
-		var legs: GearData = item as GearData
-		out.append("opada %.0f px/s   w bok %.0f px/s   przechył %.0f st   nachylenie %.0f st" % [
-			legs.max_vertical_speed,
-			legs.max_lateral_speed,
-			rad_to_deg(legs.max_tilt),
-			rad_to_deg(legs.max_slope),
-		])
-	elif item is FlightComputerData:
-		var box: FlightComputerData = item as FlightComputerData
-		var has: PackedStringArray = PackedStringArray()
-		if box.allocation == FlightComputerData.Allocation.NNLS:
-			has.append("rozdział ciągu")
-		if box.has_auto_level:
-			has.append("auto-poziom")
-		if box.has_auto_orbit:
-			has.append("auto-orbita")
-		out.append("funkcje: %s" % (", ".join(has) if not has.is_empty() else "żadne"))
-		out.append("pobór %.1f/s" % box.idle_draw)
-	elif item is GeneratorData:
-		var cell: GeneratorData = item as GeneratorData
-		out.append("pojemność %.0f   ładowanie %.0f/s   cisza %.2f s   pułap %.0f/s" % [
-			cell.capacity,
-			cell.recharge_rate,
-			cell.recharge_delay,
-			cell.sustained_throughput(INF),
-		])
+	if module == null:
+		out.append("nieznany moduł")
+		return out
+
+	out.append("%s   %s" % [_label(item), module.rarity_name()])
+	var prose: String = module.blurb()
+	if not prose.is_empty():
+		out.append(prose)
+
+	var other: Dictionary = {}
+	var older: ModuleData = against as ModuleData
+	if older != null:
+		for row: Dictionary in older.stat_rows():
+			other[row["label"]] = row
+
+	for row: Dictionary in module.stat_rows():
+		out.append(_stat_line(row, other.get(row["label"], {})))
 	return out
+
+
+## A row, and how it differs from the same row on the module it replaces.
+func _stat_line(row: Dictionary, was: Dictionary) -> String:
+	var digits: int = int(row["digits"])
+	var text: String = "%-13s %8.*f%s" % [row["label"], digits, float(row["value"]), row["suffix"]]
+	if was.is_empty():
+		return text
+	var change: float = float(row["value"]) - float(was["value"])
+	if absf(change) < pow(10.0, -float(digits)) * 0.5:
+		return text + "   ="
+	# Marked by whether it is an improvement, not by whether it went up:
+	# less spread and less bulk are both wins with a minus in front.
+	var good: bool = change * float(row["better"]) > 0.0
+	return "%s  %s%.*f %s" % [
+		text, "+" if change > 0.0 else "", digits, change, "lepiej" if good else "gorzej",
+	]

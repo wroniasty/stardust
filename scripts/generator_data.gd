@@ -42,3 +42,17 @@ func sustained_throughput(drain: float) -> float:
 	if drain <= 0.0 or recharge_rate <= 0.0 or capacity <= 0.0:
 		return 0.0
 	return 1.0 / (1.0 / drain + 1.0 / recharge_rate + recharge_delay / capacity)
+
+
+func stat_rows() -> Array[Dictionary]:
+	return [
+		row("pojemność", capacity, 0, 1),
+		row("ładowanie", recharge_rate, 0, 1, "/s"),
+		row("cisza", recharge_delay, 2, -1, " s"),
+		row("pułap", sustained_throughput(INF), 1, 1, "/s"),
+		row("gabaryt", bulk, 2, -1),
+	]
+
+
+func blurb() -> String:
+	return "cisza liczona od ostatniego wydatku, nie od serii"

@@ -974,6 +974,7 @@ func _evaluate_phase() -> void:
 			_check_creative_tool()
 			_check_rarity_travels()
 			_check_aiming()
+			_check_stat_cards()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -3410,6 +3411,88 @@ func _check_aiming() -> void:
 	slow.queue_free()
 	big.queue_free()
 	ship.queue_free()
+
+
+## A module has to be able to say what it is made of, in a form two of them
+## can be subtracted from each other.
+##
+## The screens used to hold a format string per kind, which reads fine and
+## cannot be compared: a card that is a paragraph can be read but not
+## subtracted. Rows carry the direction too, because a comparison cannot
+## colour a difference it does not know the sign of -- less spread is better,
+## less range is not.
+func _check_stat_cards() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	var kinds: Array[ModuleData] = [
+		loot.weapon(3001, 2), loot.engine(3002, 2), loot.generator(3003, 2),
+		loot.computer(3004, 3), loot.shot_mod(0),
+	]
+	for module: ModuleData in kinds:
+		var rows: Array[Dictionary] = module.stat_rows()
+		_expect(not rows.is_empty(), "%s has something to say about itself" % module.get_class())
+		for row: Dictionary in rows:
+			_expect(
+				not String(row["label"]).is_empty() and int(row["digits"]) >= 0,
+				"every row of a %s is printable" % module.get_class(),
+			)
+			_expect(
+				int(row["better"]) >= -1 and int(row["better"]) <= 1,
+				"and says which way is up (%s)" % row["label"],
+			)
+
+	# The directions have to be right, or a comparison misleads in exactly
+	# the cases it exists for.
+	var gun: WeaponData = load("res://resources/weapons/autocannon.tres") as WeaponData
+	var direction: Dictionary = {}
+	for row: Dictionary in gun.stat_rows():
+		direction[row["label"]] = int(row["better"])
+	_expect(direction.get("dps", 0) > 0, "more damage per second is better")
+	_expect(direction.get("rozrzut", 0) < 0, "more spread is not")
+	_expect(direction.get("energia", 0) < 0, "nor is a dearer shot")
+	_expect(direction.get("gabaryt", 0) < 0, "nor a bulkier gun")
+
+	# Every kind of mount can say what is in it, which is what the card
+	# compares against.
+	var ship: Ship = _spawn_ship()
+	var editor: ShipEditor = ShipEditor.new()
+	root.add_child(editor)
+	editor.bind(ship)
+	_expect(
+		editor._fitted_in(ship.hardpoints[0]) == ship.hardpoints[0].weapon,
+		"a hardpoint reports its gun",
+	)
+	_expect(
+		editor._fitted_in(ship.engine_mounts()[0]) == ship.engine_mounts()[0].installed,
+		"an engine mount reports its engine",
+	)
+	_expect(
+		editor._fitted_in(ship.generator_bay) == ship.generator_bay.installed,
+		"and the generator bay its cell",
+	)
+
+	# And the comparison says which way each number went.
+	var better: WeaponData = gun.duplicate() as WeaponData
+	better.damage = gun.damage * 2.0
+	better.spread_degrees = gun.spread_degrees * 0.5
+	var compared: String = "
+".join(editor._card(better, gun))
+	_expect(compared.contains("lepiej"), "a straight upgrade reads as better")
+	var worse: WeaponData = gun.duplicate() as WeaponData
+	worse.spread_degrees = gun.spread_degrees * 2.0
+	_expect(
+		"
+".join(editor._card(worse, gun)).contains("gorzej"),
+		"and more spread reads as worse, though the number went up",
+	)
+	_expect(
+		"
+".join(editor._card(gun, gun)).contains("="),
+		"while the same gun against itself is all equals",
+	)
+
+	editor.queue_free()
+	ship.queue_free()
+	loot.free()
 
 
 func _check_configuration_report() -> void:

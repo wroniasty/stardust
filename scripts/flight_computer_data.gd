@@ -45,3 +45,19 @@ enum Allocation {
 ## assist should shorten bursts, not forbid shooting. On the HUD it shows as
 ## a bar that fills more slowly, not as a second bar (IDEAS.md section 14).
 @export var idle_draw: float = 0.0
+
+
+func stat_rows() -> Array[Dictionary]:
+	return [
+		row("rozdział ciągu", 1.0 if allocation == Allocation.NNLS else 0.0, 0, 1),
+		row("auto-poziom", 1.0 if has_auto_level else 0.0, 0, 1),
+		row("auto-orbita", 1.0 if has_auto_orbit else 0.0, 0, 1),
+		row("hold wysokości", 1.0 if has_altitude_hold else 0.0, 0, 1),
+		row("deorbit", 1.0 if has_deorbit else 0.0, 0, 1),
+		row("pobór", idle_draw, 1, -1, "/s"),
+		row("gabaryt", bulk, 2, -1),
+	]
+
+
+func blurb() -> String:
+	return "funkcje są tym, co kupuje rzadkość, nie większe liczby"

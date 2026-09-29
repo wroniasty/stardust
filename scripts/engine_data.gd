@@ -53,3 +53,25 @@ enum Type {
 ## Throttle change per second while spooling. MAIN only.
 func spool_rate() -> float:
 	return 1.0 / maxf(spool_time, 0.001)
+
+
+func stat_rows() -> Array[Dictionary]:
+	var rows: Array[Dictionary] = [
+		row("ciąg", max_thrust, 0, 1),
+		row("rozruch", spool_time, 2, -1, " s"),
+		row("niezawodność", reliability, 2, 1),
+		row("paliwo", fuel_cost, 2, -1, "/s"),
+		row("gabaryt", bulk, 2, -1),
+	]
+	if gimbal_range > 0.0:
+		rows.append(row("gimbal", rad_to_deg(gimbal_range), 0, 1, " st"))
+		rows.append(row("wychylanie", rad_to_deg(gimbal_rate), 0, 1, " st/s"))
+	return rows
+
+
+func blurb() -> String:
+	return "%s — %s" % [
+		Type.keys()[int(type)].to_lower(),
+		"przepustnica z rozruchem" if type == Type.MAIN
+		else ("impulsowy, 0 albo 1" if type == Type.TORQUE else "natychmiastowy"),
+	]
