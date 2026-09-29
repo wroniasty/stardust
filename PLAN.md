@@ -187,7 +187,9 @@ Cel: kliknąć w rzecz i zobaczyć, z czego się składa — a przy wymianie zob
 - [x] Przy wymianie **dwie karty obok siebie**, a w lewej różnica przy każdym wierszu (`dps +0.364 lepiej`, `energia +10.7 gorzej`). Porównanie, między którym trzeba przewijać, to dwa odczyty wzięte w różnych chwilach.
 - [x] Jednoliniowy werdykt zniknął dla broni — karta mówi to samo dokładniej. Został dla silników, bo tam liczy się wpływ na cały statek, którego karta nie zna.
 - [ ] Ładniejsza oprawa: ramki, ikony, kolor wiersza wg kierunku zmiany zamiast słowa „lepiej / gorzej".
-- [ ] Ta sama karta w szybkiej wymianie na Tab — dziś ma własny, uboższy opis.
+- [x] Ta sama karta w szybkiej wymianie na Tab. Karta mieszka na `ModuleData`, nie w ekranie, który ją rysuje — dwa ekrany formatujące własną to dwie rzeczy po cichu niezgodne co do tego, czym jest broń.
+- [x] Karty pisze się czcionką o stałej szerokości (`ModuleData.card_font()`). Wiersz dopycha spacjami, a w czcionce proporcjonalnej to po prostu nieprawda: kolumny liczb nie dawały się czytać w dół.
+- [x] Wiersz, który nie mieści się w panelu edytora, jest liczony i zgłoszony przy podpowiedziach klawiszy. Karta bez ostatniej linii wygląda dokładnie jak karta, która się tam kończy.
 
 ---
 

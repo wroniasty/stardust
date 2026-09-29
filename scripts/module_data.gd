@@ -80,6 +80,80 @@ func blurb() -> String:
 	return ""
 
 
+## What to call this module. Most kinds carry a display_name; an engine is
+## named after what it is, because what it is for comes from where it is
+## mounted.
+func title() -> String:
+	if "display_name" in self:
+		return String(get("display_name"))
+	return "moduł"
+
+
+## The whole information card: what it is, how good the roll was, a line of
+## prose, and every number with its difference from what it would replace.
+##
+## Here rather than in a screen, so the quick swap and the editor read the
+## same card. Two screens each formatting their own would be two things
+## quietly disagreeing about what a weapon is, which is the problem the rows
+## above were introduced to end.
+func card_lines(against: ModuleData = null) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	out.append("%s   %s" % [title(), rarity_name()])
+	var prose: String = blurb()
+	if not prose.is_empty():
+		out.append(prose)
+
+	var other: Dictionary = {}
+	if against != null:
+		for row: Dictionary in against.stat_rows():
+			other[row["label"]] = row
+
+	for row: Dictionary in stat_rows():
+		out.append(_stat_line(row, other.get(row["label"], {})))
+	return out
+
+
+## The font a card is written for.
+##
+## The lines above pad with spaces -- "%-13s %8.2f" puts the labels and the
+## numbers in columns, and in a proportional font that is simply false: the
+## spaces are narrower than the letters they are standing in for, so the
+## numbers come out ragged and a column of values cannot be read down. Either
+## the padding goes or the font is fixed-width, and a card is a table.
+##
+## Next to the format strings that assume it, so a screen cannot pick up the
+## card and quietly drop the thing that makes it legible. Cached because a
+## SystemFont asks the OS to resolve the family.
+static var _card_font: Font = null
+
+
+static func card_font() -> Font:
+	if _card_font == null:
+		var mono: SystemFont = SystemFont.new()
+		mono.font_names = PackedStringArray(
+			["Consolas", "Courier New", "DejaVu Sans Mono", "monospace"]
+		)
+		_card_font = mono
+	return _card_font
+
+
+## A row, and how it differs from the same row on the module it replaces.
+func _stat_line(row: Dictionary, was: Dictionary) -> String:
+	var digits: int = int(row["digits"])
+	var text: String = "%-13s %8.*f%s" % [row["label"], digits, float(row["value"]), row["suffix"]]
+	if was.is_empty():
+		return text
+	var change: float = float(row["value"]) - float(was["value"])
+	if absf(change) < pow(10.0, -float(digits)) * 0.5:
+		return text + "   ="
+	# Marked by whether it is an improvement, not by whether it went up:
+	# less spread and less bulk are both wins with a minus in front.
+	var good: bool = change * float(row["better"]) > 0.0
+	return "%s  %s%.*f %s" % [
+		text, "+" if change > 0.0 else "", digits, change, "lepiej" if good else "gorzej",
+	]
+
+
 ## Flat additions and multipliers on ship-wide stats, keyed by name.
 ##
 ## Two dictionaries rather than one with a rule about which keys add. "You add

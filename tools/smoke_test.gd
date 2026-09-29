@@ -3490,6 +3490,25 @@ func _check_stat_cards() -> void:
 		"while the same gun against itself is all equals",
 	)
 
+	# And the quick swap shows the same card, from the same place. Two
+	# screens formatting their own is the thing stat_rows() exists to stop.
+	var quick: LoadoutScreen = LoadoutScreen.new()
+	root.add_child(quick)
+	quick.bind(ship)
+	ship.take(better)
+	quick.announce_pickup()
+	var shown: String = quick.panel_text()
+	for row: Dictionary in better.stat_rows():
+		_expect(
+			shown.contains(String(row["label"])),
+			"the quick swap lists %s, like the editor does" % row["label"],
+		)
+	_expect(
+		shown.contains("lepiej") or shown.contains("gorzej") or shown.contains("="),
+		"and carries the comparison, which is the part worth reading in flight",
+	)
+	quick.queue_free()
+
 	editor.queue_free()
 	ship.queue_free()
 	loot.free()

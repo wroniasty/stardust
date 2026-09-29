@@ -11,6 +11,8 @@ extends CanvasLayer
 ## One carried module, one highlighted slot, one key to fit. Everything else
 ## about loadouts is M5's business.
 
+## A floor, not a width: the panel takes whatever the longest card line needs,
+## and this only keeps an empty hold from collapsing to a sliver.
 const PANEL_WIDTH: float = 210.0
 const FONT_SIZE: int = 8
 const SCREEN_MARGIN: int = 6
@@ -120,6 +122,7 @@ func _build_ui() -> void:
 
 	_text = Label.new()
 	_text.add_theme_constant_override("line_spacing", 0)
+	_text.add_theme_font_override("font", ModuleData.card_font())
 	_panel.add_child(_text)
 
 
@@ -194,11 +197,20 @@ func _redraw() -> void:
 		_text.add_theme_color_override("font_color", DIM)
 		return
 
-	lines.append("")
-	for line: String in _describe(_ship.carried):
-		lines.append(line)
-
 	var slots: Array = _slots()
+
+	# The same card the editor shows, against whatever it would replace.
+	# Two screens formatting their own would be two things disagreeing about
+	# what a weapon is, and in flight the difference is the only part worth
+	# reading anyway.
+	var replacing: ModuleData = null
+	if not slots.is_empty():
+		replacing = _fitted_in(slots[posmod(_cursor, slots.size())])
+	lines.append("")
+	var carried: ModuleData = _ship.carried as ModuleData
+	if carried != null:
+		for line: String in carried.card_lines(replacing):
+			lines.append(line)
 	lines.append("")
 	if slots.is_empty():
 		for line: String in _why_nothing_fits():
@@ -253,40 +265,22 @@ func _why_nothing_fits() -> PackedStringArray:
 	return lines
 
 
-## What is already in a slot, so a swap is a comparison rather than a leap.
-func _fitted_label(slot: Node) -> String:
+## What is fitted in a slot, so a swap is a comparison rather than a leap.
+func _fitted_in(slot: Node) -> ModuleData:
 	if slot is Hardpoint:
-		var weapon: WeaponData = (slot as Hardpoint).weapon
-		return "pusty" if weapon == null else weapon.display_name
+		return (slot as Hardpoint).weapon
 	if slot is EngineMount:
-		var engine: EngineData = (slot as EngineMount).installed
-		if engine == null:
-			return "pusty"
-		return "%s %.0f  %.2f/%.2f" % [
-			EngineData.Type.keys()[int(engine.type)].to_lower(),
-			engine.max_thrust,
-			engine.bulk,
-			(slot as EngineMount).size,
-		]
-	return "?"
+		return (slot as EngineMount).installed
+	if slot is GeneratorBay:
+		return (slot as GeneratorBay).installed
+	if slot is ComputerBay:
+		return (slot as ComputerBay).installed
+	if slot is LandingGear:
+		return (slot as LandingGear).installed
+	return null
 
 
-func _describe(item: Resource) -> PackedStringArray:
-	var lines: PackedStringArray = PackedStringArray()
-	if item is WeaponData:
-		var weapon: WeaponData = item as WeaponData
-		lines.append(weapon.display_name)
-		lines.append("obrażenia %.2f x %.1f/s = %.2f dps" % [
-			weapon.damage, weapon.rounds_per_second, weapon.damage_per_second(),
-		])
-		lines.append("rozrzut %.1f st   zasięg %.0f" % [weapon.spread_degrees, weapon.range_px])
-		lines.append("krater %.0f   prędkość %.0f" % [weapon.crater_radius, weapon.muzzle_speed])
-	elif item is EngineData:
-		var engine: EngineData = item as EngineData
-		lines.append("%s engine" % EngineData.Type.keys()[int(engine.type)].to_lower())
-		lines.append("ciąg %.0f   rozruch %.2f s" % [engine.max_thrust, engine.spool_time])
-		lines.append("gabaryt %.2f" % engine.bulk)
-		lines.append("niezawodność %.2f   paliwo %.2f" % [engine.reliability, engine.fuel_cost])
-	else:
-		lines.append("nieznany moduł")
-	return lines
+## A one-line summary of what is in a slot, for the slot list.
+func _fitted_label(slot: Node) -> String:
+	var fitted: ModuleData = _fitted_in(slot)
+	return "pusty" if fitted == null else fitted.title()

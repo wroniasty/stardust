@@ -527,7 +527,9 @@ func _plan_placement(plan: Rect2) -> Callable:
 
 
 func _draw_editor() -> void:
-	var font: Font = _canvas.get_theme_default_font()
+	# Fixed-width throughout: every panel here is a padded column list, and
+	# the card in the info panel is the same one the quick swap draws.
+	var font: Font = ModuleData.card_font()
 	if font == null or _ship == null:
 		return
 	var panels: Dictionary = _panels()
@@ -671,9 +673,11 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	# longer than the panel is a card whose last rows are unreadable either
 	# way; at least this way the hints stay legible.
 	var floor_y: float = rect.end.y - PAD - ROW
+	var dropped: int = 0
 	for line: String in _card(item, replacing):
 		if y > floor_y:
-			break
+			dropped += 1
+			continue
 		_text(font, Vector2(x, y), line, TEXT)
 		y += ROW
 
@@ -695,7 +699,8 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	y += ROW * 0.4
 	for line: String in _verdict():
 		if y > floor_y:
-			break
+			dropped += 1
+			continue
 		_text(font, Vector2(x, y), line.left(96), FIT)
 		y += ROW
 
@@ -709,7 +714,13 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 		state,
 		FIT if can_refit() else WARN,
 	)
-	_text(font, Vector2(x, rect.end.y - PAD), _keys(), LABEL)
+	# A row that will not fit is dropped, but never quietly: a card missing
+	# its last line looks exactly like a card that ends there, and the pilot
+	# would be deciding a swap on numbers they were not told about.
+	var hints: String = _keys()
+	if dropped > 0:
+		hints += "   (+%d wierszy poza panelem)" % dropped
+	_text(font, Vector2(x, rect.end.y - PAD), hints, LABEL)
 
 
 func _keys() -> String:
@@ -717,22 +728,8 @@ func _keys() -> String:
 
 
 func _label(item: Resource) -> String:
-	if item is WeaponData:
-		return (item as WeaponData).display_name
-	if item is EngineData:
-		return "%s engine %.0f" % [
-			EngineData.Type.keys()[int((item as EngineData).type)].to_lower(),
-			(item as EngineData).max_thrust,
-		]
-	if item is GeneratorData:
-		return (item as GeneratorData).display_name
-	if item is FlightComputerData:
-		return (item as FlightComputerData).display_name
-	if item is GearData:
-		return (item as GearData).display_name
-	if item is ShotModData:
-		return (item as ShotModData).display_name
-	return "moduł"
+	var module: ModuleData = item as ModuleData
+	return "moduł" if module == null else module.title()
 
 
 ## What is fitted in a mount, whichever kind of mount it is.
@@ -750,54 +747,11 @@ func _fitted_in(slot: Node) -> Resource:
 	return null
 
 
-## One module as a card: what it is, how good the roll was, a line of prose,
-## and its numbers.
-##
-## Built from the module's own stat_rows() rather than a format string per
-## kind, which is what lets two of them be compared. A card that is a
-## paragraph can be read; it cannot be subtracted from another card.
-func _describe(item: Resource) -> PackedStringArray:
-	return _card(item, null)
-
-
-## `against` is what the module would replace. When it is there, every row
-## carries the difference too, signed the way the pilot cares about: a
-## smaller spread reads as better even though the number went down.
+## The card for a module, from the module itself. `against` is what it would
+## replace, which puts the difference on every row.
 func _card(item: Resource, against: Resource) -> PackedStringArray:
-	var out: PackedStringArray = PackedStringArray()
 	var module: ModuleData = item as ModuleData
 	if module == null:
-		out.append("nieznany moduł")
-		return out
+		return PackedStringArray(["nieznany moduł"])
+	return module.card_lines(against as ModuleData)
 
-	out.append("%s   %s" % [_label(item), module.rarity_name()])
-	var prose: String = module.blurb()
-	if not prose.is_empty():
-		out.append(prose)
-
-	var other: Dictionary = {}
-	var older: ModuleData = against as ModuleData
-	if older != null:
-		for row: Dictionary in older.stat_rows():
-			other[row["label"]] = row
-
-	for row: Dictionary in module.stat_rows():
-		out.append(_stat_line(row, other.get(row["label"], {})))
-	return out
-
-
-## A row, and how it differs from the same row on the module it replaces.
-func _stat_line(row: Dictionary, was: Dictionary) -> String:
-	var digits: int = int(row["digits"])
-	var text: String = "%-13s %8.*f%s" % [row["label"], digits, float(row["value"]), row["suffix"]]
-	if was.is_empty():
-		return text
-	var change: float = float(row["value"]) - float(was["value"])
-	if absf(change) < pow(10.0, -float(digits)) * 0.5:
-		return text + "   ="
-	# Marked by whether it is an improvement, not by whether it went up:
-	# less spread and less bulk are both wins with a minus in front.
-	var good: bool = change * float(row["better"]) > 0.0
-	return "%s  %s%.*f %s" % [
-		text, "+" if change > 0.0 else "", digits, change, "lepiej" if good else "gorzej",
-	]

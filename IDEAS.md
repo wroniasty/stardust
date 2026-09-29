@@ -738,7 +738,21 @@ Layout musiał ustąpić treści: najdłuższa karta w grze to legendarna rakiet
 siedemnaście wierszy, i przy starym podziale 0,72/0,28 ostatnie z nich
 wjeżdżały na podpowiedzi klawiszy — akurat te liczby, na których podejmuje się
 decyzję. Panel kart dostał 0,56 wysokości i twardą podłogę, o którą rysowanie
-się zatrzymuje.
+się zatrzymuje. Wiersze, które i tak nie wejdą, są **policzone i zgłoszone**
+przy podpowiedziach klawiszy: karta bez ostatniej linii wygląda dokładnie jak
+karta, która się w tym miejscu kończy, i pilot decydowałby wymianę na
+liczbach, o których nikt mu nie powiedział.
+
+Cała karta — nie tylko wiersze — mieszka na `ModuleData.card_lines()`, więc
+szybka wymiana na Tab i edytor rysują to samo. Różnica między nimi jest w
+tym, *ile* się mieści, nie w tym, *co* piszą.
+
+Karta jest tabelą, więc pisze się ją czcionką o stałej szerokości
+(`ModuleData.card_font()`). Wiersz dopycha etykietę spacjami do trzynastu
+znaków i prawuje liczbę w ośmiu — w czcionce proporcjonalnej to po prostu
+nieprawda, bo spacja jest węższa od litery, którą zastępuje, i kolumna
+wartości wychodzi poszarpana. Font stoi obok formatów, które go zakładają,
+żeby ekran nie mógł wziąć karty i po cichu zgubić tego, co czyni ją czytelną.
 
 ### Celowanie: co należy do broni, a co do gniazda
 

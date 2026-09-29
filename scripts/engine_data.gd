@@ -69,6 +69,12 @@ func stat_rows() -> Array[Dictionary]:
 	return rows
 
 
+## An engine has no name of its own: what it is called comes from its type,
+## because what it is for comes from where it is mounted.
+func title() -> String:
+	return "%s engine %.0f" % [Type.keys()[int(type)].to_lower(), max_thrust]
+
+
 func blurb() -> String:
 	return "%s — %s" % [
 		Type.keys()[int(type)].to_lower(),
