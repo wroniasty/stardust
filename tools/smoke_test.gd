@@ -1783,6 +1783,42 @@ func _check_editor() -> void:
 	)
 	_expect(mount.installed != stronger, "the candidate is not left bolted in")
 
+	# Slots are boxes on the schematic, and a box has to be somewhere a
+	# click can find it. The internal bays sit within a few pixels of each
+	# other on the hull, so they are fanned apart for drawing -- which is
+	# only safe while the click uses the same picture.
+	#
+	# Laid out at the size the game draws at. Headless hands the canvas
+	# whatever the window happens to be -- 640x640 here -- and at nearly
+	# twice the height the schematic has room the game has not: the bays
+	# separate on their own and the test would be passing on a layout
+	# nobody ever sees.
+	editor._canvas.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	editor._canvas.size = Vector2(
+		float(ProjectSettings.get_setting("display/window/size/viewport_width")),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height")),
+	)
+	var plan: Rect2 = editor.plan_rect()
+	var where: Dictionary = editor.slot_positions(plan)
+	var boxes: Array[Rect2] = []
+	var separated: bool = true
+	var inside: bool = true
+	for slot: Node in where:
+		var box: Rect2 = editor.slot_rect(where[slot])
+		for other: Rect2 in boxes:
+			separated = separated and not box.intersects(other)
+		boxes.append(box)
+		inside = inside and plan.encloses(box)
+	_expect(separated, "no two slots are drawn on top of each other (%d slots)" % boxes.size())
+	_expect(inside, "and none of them is drawn outside the schematic")
+
+	for slot: Node in where:
+		editor.click_at(where[slot])
+		_expect(
+			editor.named_slot() == slot,
+			"a click where %s is drawn names %s" % [slot.name, slot.name],
+		)
+
 	# Looking is free, changing is not: the landing pad is what gates a refit.
 	_expect(not editor.can_refit(), "a ship in flight may not be refitted here")
 	editor._fit()

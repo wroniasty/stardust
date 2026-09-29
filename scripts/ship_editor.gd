@@ -55,10 +55,18 @@ const AIM_STEP: float = deg_to_rad(5.0)
 ## How long the arc wedge is drawn on the schematic, in panel pixels.
 const ARC_LENGTH: float = 16.0
 
-## Radius of a mount dot on the schematic, and the extra a highlighted one
-## gets so it reads as a target rather than as a slightly bigger dot.
-const DOT: float = 2.5
-const DOT_PICKED: float = 4.5
+## Side of a slot on the schematic, and of the ring drawn round the chosen
+## one so it reads as a target rather than as a slightly bigger slot.
+##
+## A slot is a box rather than a dot because a dot can only say "here".
+## A box has an inside, and the inside can say what kind of socket this is
+## and whether anything is in it -- which is what the pilot came to the
+## schematic to find out, and what used to take a line of text each.
+const SLOT: float = 11.0
+const SLOT_RING: float = 15.0
+
+## How much of the box the glyph inside it takes.
+const GLYPH: float = 3.2
 
 var _ship: Ship = null
 var _canvas: Control = null
@@ -78,6 +86,11 @@ var _notice: String = ""
 ## there. Cleared the moment something is selected in the list: two things
 ## claiming the card at once is one too many.
 var _inspecting: Resource = null
+
+## The slot whose name is on the schematic, put there by a click. The boxes
+## say what kind and whether occupied without being read; the name is the
+## part a pilot asks for, so it waits to be asked.
+var _named: Node = null
 
 ## What fitting the selected module into the highlighted slot would do,
 ## worked out by fitting it, measuring, and putting things back. Cached
@@ -455,11 +468,13 @@ func click_at(at: Vector2) -> bool:
 			_slot = 0
 			return true
 
-	var place: Callable = _plan_placement(panels["plan"])
+	var where: Dictionary = slot_positions(panels["plan"])
 	var targets: Array[Node] = _targets()
 	for mount: Node in _all_mounts():
-		if at.distance_to(place.call((mount as Node2D).position)) > DOT_PICKED + 2.0:
+		if not slot_rect(where[mount], SLOT_RING).has_point(at):
 			continue
+		# Clicking a slot is how its name is asked for now.
+		_named = mount
 		var index: int = targets.find(mount)
 		if index >= 0:
 			_slot = index
@@ -516,9 +531,14 @@ func _plan_placement(plan: Rect2) -> Callable:
 		bounds = bounds.expand((mount as Node2D).position)
 	bounds = bounds.grow(2.0)
 
-	# Generous horizontal padding: every dot prints its name beside it, and
-	# the names are wider than the ship is.
-	var room: Vector2 = plan.size - Vector2(plan.size.x * 0.52, PAD * 4.0 + float(FONT_SIZE))
+	# Room for the slot boxes and the traverse arcs standing off the hull,
+	# and for the one caption a click puts up. It used to reserve over half
+	# the width because every mount printed its name beside it; with the
+	# names gone the ship gets the panel, which is what makes a slot big
+	# enough to draw anything inside.
+	var room: Vector2 = plan.size - Vector2(
+		plan.size.x * 0.18 + SLOT_RING * 2.0, PAD * 4.0 + float(FONT_SIZE) + SLOT_RING
+	)
 	var scale: float = minf(room.x / bounds.size.x, room.y / bounds.size.y)
 	var origin: Vector2 = plan.position + Vector2(plan.size.x * 0.5, plan.size.y * 0.55)
 	var centre: Vector2 = bounds.get_center()
@@ -594,6 +614,7 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 		return
 
 	var place: Callable = _plan_placement(rect)
+	var where: Dictionary = slot_positions(rect)
 	var origin: Vector2 = rect.position + Vector2(rect.size.x * 0.5, rect.size.y * 0.55)
 
 	var outline: PackedVector2Array = PackedVector2Array()
@@ -610,28 +631,201 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 		chosen = targets[_slot]
 
 	for mount: Node in mounts:
-		var at: Vector2 = place.call((mount as Node2D).position)
+		var at: Vector2 = where[mount]
 		var fits: bool = targets.has(mount)
 		var colour: Color = PICK if mount == chosen else (FIT if fits else IDLE_MOUNT)
-		if mount == chosen:
-			_canvas.draw_arc(at, DOT_PICKED, 0.0, TAU, 12, colour, 1.0)
-		_canvas.draw_circle(at, DOT, colour)
-		# Every mount is named, not only the ones that fit: the schematic is
-		# the map of where anything could go, and a dot with no name is a
-		# place the pilot cannot ask about.
-		# Names go outward, away from the hull. Inward they meet in the middle
-		# and the two halves of every mirrored pair print over each other.
-		var caption: String = mount.name
 		var gun: Hardpoint = mount as Hardpoint
 		if gun != null:
-			caption = "%s %s" % [mount.name, "L" if gun.trigger == 0 else "P"]
-			if gun.weapon != null and gun.weapon.mod_slots > 0:
-				caption += " %d/%d" % [gun.mods.size(), gun.weapon.mod_slots]
 			_draw_arc_for(gun, at)
-		var label: Vector2 = at + Vector2(DOT + 3.0, float(FONT_SIZE) * 0.4)
-		if at.x < origin.x - 0.5:
-			label.x = at.x - DOT - 3.0 - _width(font, caption)
-		_text(font, label, caption, colour)
+		_draw_slot(at, mount, colour, mount == chosen)
+
+	# One name at a time, where a name used to hang off every mount. Eleven
+	# captions on a schematic this size is a wall of text the eye has to
+	# read before it can find anything; the boxes say kind and occupancy
+	# without being read at all, and the name is what a click is for.
+	#
+	# The arrow-chosen slot is named too, or stepping through targets with
+	# the keyboard would be stepping blind.
+	for mount: Node in [chosen, _named]:
+		if mount == null or not mounts.has(mount):
+			continue
+		_draw_slot_caption(font, where[mount], mount, origin, rect)
+		if mount == _named:
+			break
+
+
+## The full name of one slot, hung outward so it clears the hull.
+##
+## Clamped into the panel rather than given a margin to live in: the ship is
+## drawn as large as the panel allows now, so a caption near the edge has to
+## give way to the edge instead of the ship giving way to the caption.
+func _draw_slot_caption(font: Font, at: Vector2, mount: Node, origin: Vector2, rect: Rect2) -> void:
+	var caption: String = mount.name
+	var gun: Hardpoint = mount as Hardpoint
+	if gun != null:
+		caption = "%s %s" % [mount.name, "L" if gun.trigger == 0 else "P"]
+		if gun.weapon != null and gun.weapon.mod_slots > 0:
+			caption += " %d/%d" % [gun.mods.size(), gun.weapon.mod_slots]
+	var width: float = _width(font, caption)
+	var label: Vector2 = at + Vector2(SLOT_RING * 0.5 + 2.0, float(FONT_SIZE) * 0.4)
+	if at.x < origin.x - 0.5:
+		label.x = at.x - SLOT_RING * 0.5 - 2.0 - width
+	label.x = clampf(label.x, rect.position.x + PAD, rect.end.x - PAD - width)
+	_text(font, label, caption, PICK)
+
+
+## One slot: a box that says what kind of socket it is and what is in it.
+##
+## Four things at once, and none of them written down. The border is whether
+## this is somewhere the carried module could go. The fill is whether
+## anything is in it, in the colour of how good that thing is. The glyph is
+## what kind of socket it is. The ring is which one the arrows are on.
+func _draw_slot(at: Vector2, mount: Node, colour: Color, chosen: bool) -> void:
+	var box: Rect2 = slot_rect(at)
+	var fitted: ModuleData = _fitted_in(mount) as ModuleData
+	if fitted != null:
+		# Rarity, not a generic "occupied" grey: a legendary drive and a
+		# common one are the same shape and a different decision.
+		_canvas.draw_rect(box, Color(fitted.rarity_color(), 0.35), true)
+	if chosen:
+		_canvas.draw_rect(slot_rect(at, SLOT_RING), colour, false, 1.0)
+	_canvas.draw_rect(box, colour, false, 1.0)
+	_draw_slot_glyph(at, mount, colour if fitted != null else Color(colour, 0.5))
+
+
+## The glyph for a kind of socket. Silhouettes rather than letters, because
+## at eleven pixels a letter is three pixels of stem and every letter looks
+## like every other one.
+func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
+	var engine: EngineMount = mount as EngineMount
+	if engine != null:
+		# An arrow along the force, not the plume: the question an editor is
+		# asked is which way this pushes the ship. Taken from the mount's own
+		# accessor, because the convention for folding in the node's rotation
+		# should live in one place and this is not it.
+		var along: Vector2 = engine.force_direction()
+		if along.is_zero_approx():
+			along = Vector2.DOWN
+		var across: Vector2 = along.orthogonal() * GLYPH * 0.8
+		_canvas.draw_colored_polygon(PackedVector2Array([
+			at + along * GLYPH, at - along * GLYPH + across, at - along * GLYPH - across,
+		]), colour)
+		return
+	var gun: Hardpoint = mount as Hardpoint
+	if gun != null:
+		_draw_weapon_glyph(at, gun.weapon, colour)
+		return
+	if mount is GeneratorBay:
+		# Cell plates, long and short, the way a battery is drawn.
+		for row: Array in [[-1.0, 1.0], [0.0, 0.5], [1.0, 1.0]]:
+			var half: float = GLYPH * float(row[1])
+			var y: float = at.y + float(row[0]) * GLYPH * 0.7
+			_canvas.draw_line(Vector2(at.x - half, y), Vector2(at.x + half, y), colour, 1.0)
+		return
+	if mount is ComputerBay:
+		# A chip: a die with legs down both sides.
+		_canvas.draw_rect(Rect2(at - Vector2(GLYPH, GLYPH) * 0.7, Vector2(GLYPH, GLYPH) * 1.4),
+			colour, false, 1.0)
+		for side: float in [-1.0, 1.0]:
+			for step: float in [-0.5, 0.5]:
+				var y: float = at.y + step * GLYPH
+				_canvas.draw_line(
+					Vector2(at.x + side * GLYPH * 0.7, y),
+					Vector2(at.x + side * GLYPH * 1.3, y),
+					colour,
+					1.0,
+				)
+		return
+	if mount is LandingGear:
+		# A strut on a pad, the same shape the legs are drawn on the hull.
+		_canvas.draw_line(at - Vector2(0.0, GLYPH), at + Vector2(0.0, GLYPH), colour, 1.0)
+		_canvas.draw_line(
+			at + Vector2(-GLYPH, GLYPH), at + Vector2(GLYPH, GLYPH), colour, 1.0
+		)
+
+
+## What a gun mount has in it, or that it has nothing.
+##
+## Three families rather than the six types, because at eleven pixels the
+## difference between a pulse gun and an autocannon is not drawable -- and
+## it is not the question either. What a pilot reads off a schematic is
+## whether that mount throws something, burns something or launches
+## something, and the card answers the rest.
+func _draw_weapon_glyph(at: Vector2, weapon: WeaponData, colour: Color) -> void:
+	if weapon == null:
+		# An empty socket, deliberately not a sight: nothing here aims.
+		_canvas.draw_arc(at, GLYPH * 0.75, 0.0, TAU, 10, colour, 1.0)
+		return
+	if weapon.is_beam():
+		# One unbroken line, which is what a beam is.
+		_canvas.draw_line(
+			at - Vector2(0.0, GLYPH * 1.3), at + Vector2(0.0, GLYPH * 1.3), colour, 1.0
+		)
+		return
+	if weapon.is_missile():
+		# A dart on its tail.
+		_canvas.draw_colored_polygon(PackedVector2Array([
+			at + Vector2(0.0, -GLYPH), at + Vector2(GLYPH * 0.7, GLYPH * 0.2),
+			at + Vector2(-GLYPH * 0.7, GLYPH * 0.2),
+		]), colour)
+		_canvas.draw_line(
+			at + Vector2(0.0, GLYPH * 0.2), at + Vector2(0.0, GLYPH), colour, 1.0
+		)
+		return
+	# A crosshair for anything that throws a round: what a gun is for, rather
+	# than what it looks like.
+	_canvas.draw_line(at - Vector2(GLYPH, 0.0), at + Vector2(GLYPH, 0.0), colour, 1.0)
+	_canvas.draw_line(at - Vector2(0.0, GLYPH), at + Vector2(0.0, GLYPH), colour, 1.0)
+
+
+## The box a slot occupies on the schematic. Public because the click test
+## and the drawing must agree about it, and the way to make sure they do is
+## to have one of them.
+func slot_rect(at: Vector2, side: float = SLOT) -> Rect2:
+	return Rect2(at - Vector2(side, side) * 0.5, Vector2(side, side))
+
+
+## The slot whose name a click put on the schematic, if any. Public so the
+## test can read the visible consequence of a click rather than infer it.
+func named_slot() -> Node:
+	return _named
+
+
+## The schematic's panel. Public so a click can be aimed at a slot without
+## the caller reproducing the layout.
+func plan_rect() -> Rect2:
+	return _panels()["plan"]
+
+
+## Where every slot is drawn, keyed by the mount. Public for the same reason
+## as slot_rect: the click and the picture have to be the same picture.
+##
+## The internal bays -- generator, computer, gear -- sit within a few pixels
+## of each other on the hull, because they are volumes inside it rather than
+## points on it. Drawn at their true positions their boxes overlap into an
+## unreadable and unclickable heap, so they are fanned downward here. On the
+## schematic only: the nodes themselves carry mass, and moving one to tidy a
+## drawing would move the centre of mass.
+func slot_positions(plan: Rect2) -> Dictionary:
+	var place: Callable = _plan_placement(plan)
+	var out: Dictionary = {}
+	var taken: Array[Vector2] = []
+	for mount: Node in _all_mounts():
+		var at: Vector2 = place.call((mount as Node2D).position)
+		var guard: int = 0
+		while guard < 24 and _collides(at, taken):
+			at.y += SLOT * 0.6
+			guard += 1
+		taken.append(at)
+		out[mount] = at
+	return out
+
+
+func _collides(at: Vector2, taken: Array[Vector2]) -> bool:
+	for other: Vector2 in taken:
+		if slot_rect(at).intersects(slot_rect(other)):
+			return true
+	return false
 
 
 ## The wedge a gun can cover, from its rest direction. A number in a panel
@@ -641,14 +835,29 @@ func _draw_arc_for(gun: Hardpoint, at: Vector2) -> void:
 	var arc: float = gun.traverse()
 	var rest: float = gun.rotation - PI * 0.5
 	var colour: Color = Color(FIT, 0.35) if gun.trigger == 0 else Color(PICK, 0.35)
+	# Standing off the box rather than starting at its centre. Drawn from the
+	# centre, the two edge lines cross the slot and meet on the glyph, which
+	# left the mount showing an arc and no longer showing what was in it.
+	var inner: float = SLOT * 0.75
+	var outer: float = inner + ARC_LENGTH
 	if arc <= 0.0:
 		# A fixed gun still shows which way it looks, as one line: the
 		# absence of an arc is information too.
-		_canvas.draw_line(at, at + Vector2.from_angle(rest) * ARC_LENGTH, colour, 1.0)
+		_canvas.draw_line(
+			at + Vector2.from_angle(rest) * inner,
+			at + Vector2.from_angle(rest) * outer,
+			colour,
+			1.0,
+		)
 		return
-	_canvas.draw_arc(at, ARC_LENGTH, rest - arc, rest + arc, 16, colour, 1.0)
+	_canvas.draw_arc(at, outer, rest - arc, rest + arc, 16, colour, 1.0)
 	for edge: float in [rest - arc, rest + arc]:
-		_canvas.draw_line(at, at + Vector2.from_angle(edge) * ARC_LENGTH, colour, 1.0)
+		_canvas.draw_line(
+			at + Vector2.from_angle(edge) * inner,
+			at + Vector2.from_angle(edge) * outer,
+			colour,
+			1.0,
+		)
 
 
 func _draw_info(font: Font, rect: Rect2) -> void:

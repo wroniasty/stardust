@@ -754,6 +754,42 @@ nieprawda, bo spacja jest węższa od litery, którą zastępuje, i kolumna
 wartości wychodzi poszarpana. Font stoi obok formatów, które go zakładają,
 żeby ekran nie mógł wziąć karty i po cichu zgubić tego, co czyni ją czytelną.
 
+### Schemat statku: boks zamiast kropki
+
+Kropka umie powiedzieć tylko „tutaj". Cała reszta musiała iść w podpis obok,
+więc schemat stockowego kadłuba niósł jedenaście napisów — ścianę tekstu,
+którą trzeba przeczytać, zanim się cokolwiek znajdzie.
+
+Boks ma wnętrze, a wnętrze może mówić. Cztery rzeczy naraz, żadna napisana:
+
+- **ramka** — czy niesiony moduł tu wejdzie (i która jest wybrana strzałkami),
+- **wypełnienie** — czy coś siedzi, w kolorze rzadkości tego czegoś; legendarny
+  silnik i pospolity mają ten sam kształt i są inną decyzją,
+- **glif** — jakie to gniazdo: strzałka wzdłuż **siły** (nie pióropusza — edytor
+  pyta „w którą stronę to pcha"), celownik, ogniwo, układ scalony, noga,
+- **glif w hardpoincie** — *co* jest zamontowane: ○ puste, + działo, | wiązka,
+  ↑ rakieta. Trzy rodziny zamiast sześciu typów, bo przy jedenastu pikselach
+  różnica między pulsem a działkiem jest nierysowalna, i nie o to się pyta.
+
+Nazwa wraca na kliknięcie — i dla gniazda wybranego strzałkami, bo inaczej
+chodzenie po celach klawiaturą byłoby chodzeniem po ciemku.
+
+Dwie rzeczy wyszły dopiero przy rysowaniu. **Łuk przemiatania szedł od środka
+gniazda**, więc jego dwie krawędzie przecinały boks i spotykały się na glifie:
+mount pokazywał łuk i przestawał pokazywać, co ma w środku. Łuk zaczyna się
+teraz za boksem. **Wewnętrzne zatoki** (generator, komputer, podwozie) siedzą w
+odległości 1,75 i 2 px na kadłubie, bo są objętościami w środku, nie punktami
+na nim — przy skali schematu to 6 px na boks o boku 11. Rozsuwane są przy
+rysowaniu, w dół, i to jest rozsunięcie **tylko na schemacie**: węzły niosą
+masę, więc przesunięcie jednego dla porządku na obrazku przesunęłoby środek
+masy. Rysowanie i klikanie czytają tę samą, już rozsuniętą pozycję — inaczej
+kliknięcie trafiałoby w sąsiada, co test pokazuje, gdy się rozsuwanie wyłączy.
+
+Test ustawia płótno na rozmiar, w jakim gra naprawdę rysuje. Headless daje
+płótnu rozmiar okna (640x640), a przy prawie dwa razy większej wysokości
+zatoki rozchodzą się same i test przechodziłby na układzie, którego nikt nie
+ogląda.
+
 ### Kamera podejścia: dlaczego dwa warunki, a nie jeden
 
 Blokada „planeta na dole" włącza się sama, kiedy **podwozie jest wysunięte
