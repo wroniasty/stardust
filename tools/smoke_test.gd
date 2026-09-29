@@ -973,6 +973,7 @@ func _evaluate_phase() -> void:
 			_check_ship_fitouts()
 			_check_creative_tool()
 			_check_rarity_travels()
+			_check_aiming()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -3243,6 +3244,124 @@ func _check_rarity_travels() -> void:
 
 	crate.queue_free()
 	loot.free()
+	ship.queue_free()
+
+
+## Mouse aiming: guns swing towards where the pilot is pointing, within the
+## arc the hull and the gun agree on, and only the ones that can actually hit
+## are allowed to fire.
+func _check_aiming() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.use_player_input = false
+	ship.global_position = Vector2.ZERO
+	ship.global_rotation = 0.0
+	var mount: Hardpoint = ship.hardpoints[0]
+
+	var gun: WeaponData = mount.weapon.duplicate() as WeaponData
+	gun.traverse_range = deg_to_rad(40.0)
+	gun.traverse_rate = deg_to_rad(120.0)
+	gun.range_px = 1000.0
+	mount.fit(gun)
+	mount.traverse_limit = PI
+
+	# The arc is the smaller of what the gun can do and what the hull allows.
+	_expect(
+		is_equal_approx(mount.traverse(), gun.traverse_range),
+		"an open mount gives the gun its full ring (%.0f deg)" % rad_to_deg(mount.traverse()),
+	)
+	mount.traverse_limit = deg_to_rad(15.0)
+	_expect(
+		is_equal_approx(mount.traverse(), deg_to_rad(15.0)),
+		"a recessed mount clips it to what the hull allows (%.0f deg)" % [
+			rad_to_deg(mount.traverse()),
+		],
+	)
+	mount.traverse_limit = PI
+
+	# Straight ahead is on target from the start; off to the side is not, but
+	# gets there.
+	var nose: Vector2 = Ship.FORWARD.rotated(ship.global_rotation)
+	_expect(
+		mount.aim_state(mount.global_position + nose * 400.0) == Hardpoint.Aim.ON_TARGET,
+		"a gun already pointing at the cursor says fire",
+	)
+
+	var beside: Vector2 = mount.global_position + nose.rotated(deg_to_rad(25.0)) * 400.0
+	_expect(
+		mount.aim_state(beside) == Hardpoint.Aim.TURNING,
+		"one that could get there says it is turning",
+	)
+	for step: int in range(60):
+		mount.aim_at(beside, 1.0 / 60.0)
+	_expect(
+		mount.aim_state(beside) == Hardpoint.Aim.ON_TARGET,
+		"and it arrives (%.1f deg off rest)" % rad_to_deg(mount.facing),
+	)
+
+	var behind: Vector2 = mount.global_position - nose * 400.0
+	_expect(
+		mount.aim_state(behind) == Hardpoint.Aim.BLOCKED,
+		"a target outside the arc is refused, not chased",
+	)
+	_expect(
+		mount.aim_state(mount.global_position + nose * (gun.range_px + 200.0))
+			== Hardpoint.Aim.BLOCKED,
+		"and so is one out of range: a green cursor on an unreachable target is a lie",
+	)
+
+	# A homing round is always worth firing and never precisely aimed.
+	var seeker: WeaponData = load("res://resources/weapons/seeker.tres") as WeaponData
+	mount.fit(seeker)
+	_expect(
+		mount.aim_state(mount.global_position + nose * 400.0) == Hardpoint.Aim.TURNING,
+		"a seeker never reads as locked on, because it can always come round",
+	)
+	mount.fit(gun)
+
+	# The trigger fires the guns that bear, not every gun wired to it.
+	ship.energy = 1000.0
+	mount.trigger = 0
+	mount.facing = 0.0
+	ship.aim_point = behind
+	ship.fire_command = true
+	var container: Node = ship.projectile_container()
+	var before: int = container.get_child_count()
+	for step: int in range(30):
+		ship._physics_process(1.0 / 60.0)
+	_expect(
+		container.get_child_count() == before,
+		"holding the trigger with nothing able to bear fires nothing",
+	)
+
+	ship.aim_point = mount.global_position + nose * 400.0
+	for step: int in range(30):
+		ship._physics_process(1.0 / 60.0)
+	_expect(
+		container.get_child_count() > before,
+		"and fires as soon as something can (%d rounds)" % [
+			container.get_child_count() - before,
+		],
+	)
+	ship.fire_command = false
+
+	# Triggers are groups: a mount answers to one of them and the cursor
+	# reports per trigger.
+	_expect(ship.has_trigger(0), "the stock hull has something on the primary")
+	mount.trigger = 1
+	_expect(
+		not ship.has_trigger(0) and ship.has_trigger(1),
+		"moving a mount to the other trigger moves it entirely",
+	)
+	mount.trigger = 0
+
+	_expect(
+		AimHud.state_color(Hardpoint.Aim.ON_TARGET) != AimHud.state_color(Hardpoint.Aim.TURNING)
+		and AimHud.state_color(Hardpoint.Aim.TURNING) != AimHud.state_color(Hardpoint.Aim.BLOCKED),
+		"the three cursor states are three different colours",
+	)
+
+	for round_node: Node in container.get_children():
+		round_node.queue_free()
 	ship.queue_free()
 
 

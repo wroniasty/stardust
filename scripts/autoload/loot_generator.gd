@@ -77,6 +77,14 @@ const WEAPON_AFFIXES: Array[Dictionary] = [
 	{"name": &"precise", "field": "spread_degrees", "factor": Vector2(0.40, 0.70)},
 	{"name": &"long", "field": "range_px", "factor": Vector2(1.25, 1.60)},
 	{
+		"name": &"turreted", "field": "traverse_range", "factor": Vector2(1.35, 1.90),
+		"cost_field": "rounds_per_second", "cost": Vector2(0.80, 0.92),
+	},
+	{
+		"name": &"quick-slewing", "field": "traverse_rate", "factor": Vector2(1.30, 1.80),
+		"cost_field": "damage", "cost": Vector2(0.86, 0.95),
+	},
+	{
 		"name": &"wide", "field": "blast_radius", "factor": Vector2(1.25, 1.65),
 		"cost_field": "damage", "cost": Vector2(0.82, 0.94),
 	},
@@ -183,6 +191,8 @@ const HIGHER_IS_BETTER: Dictionary = {
 	"rounds_per_second": true,
 	"muzzle_speed": true,
 	"range_px": true,
+	"traverse_range": true,
+	"traverse_rate": true,
 	"crater_radius": true,
 	"max_thrust": true,
 	"reliability": true,
@@ -205,6 +215,8 @@ const LIMITS: Dictionary = {
 	"muzzle_speed": Vector2(50.0, 3000.0),
 	"range_px": Vector2(100.0, 20000.0),
 	"crater_radius": Vector2(2.0, 80.0),
+	"traverse_range": Vector2(0.0, 3.14),
+	"traverse_rate": Vector2(0.2, 12.0),
 	"blast_radius": Vector2(0.0, 160.0),
 	"missile_thrust": Vector2(0.0, 2000.0),
 	"missile_turn_rate": Vector2(0.0, 8.0),

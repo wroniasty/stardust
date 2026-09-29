@@ -86,6 +86,22 @@ func is_beam() -> bool:
 @export var mod_slots: int = 0
 
 
+## How far this weapon's own ring can turn off its mount, in radians each
+## way, and how fast the motor swings it.
+##
+## On the weapon and not on the hardpoint, for the same reason a gimbal is on
+## EngineData: the ring and its motor are part of the machine. A fixed gun is
+## zero here whatever it is bolted to, and a turret keeps its sweep when it
+## is moved to another mount.
+##
+## The hull has its own say -- see Hardpoint.traverse_limit -- and the arc
+## that actually applies is the smaller of the two. Same shape as bulk
+## against a slot's size: what the module can do, against what the hull
+## allows (IDEAS.md section 4).
+@export var traverse_range: float = 0.0
+@export var traverse_rate: float = 3.0
+
+
 ## Acceleration after launch, px/s^2, and how fast the round can turn to
 ## follow something, radians per second. Missiles only; a coasting round
 ## ignores both.

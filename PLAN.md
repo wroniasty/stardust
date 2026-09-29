@@ -155,6 +155,24 @@ Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, u
 **M2 zamknięty.** Wszystkie pozycje odhaczone, 433 asercje.
 
 
+
+---
+
+## M2.2: Celowanie myszką
+
+Cel: strzela się tam, gdzie się patrzy, a kursor mówi, czy to coś da.
+
+- [x] **Zakres obrotu: broń i hardpoint, bo znaczą co innego.** `WeaponData.traverse_range` i `traverse_rate` to pierścień i silnik samej broni — jadą z nią przy przenoszeniu, tak jak gimbal jedzie z silnikiem. `Hardpoint.traverse_limit` to ile pozwala kadłub: działko we wnęce kończy miejsce, zanim skończy je własny pierścień. Obowiązuje **mniejszy z dwóch** — ten sam kształt co `bulk <= size`.
+- [x] Kierunek spoczynkowy gniazda ustawiany w edytorze (`,` / `.`), bo gdzie działko siedzi, należy do kadłuba, nie do broni.
+- [x] `Ship.aim_point` w świecie, brany z myszy przez canvas transform — celowanie przeżywa obrót i zoom kamery.
+- [x] Działka podążają za kursorem niezależnie od spustu. Wieżyczka, która zaczyna się obracać dopiero przy strzale, nigdy nie celuje tam, gdzie trzeba.
+- [x] Kursor w trzech stanach: szary (nie da się), bursztynowy (da się, jeszcze się obraca), zielony (strzelaj). Kolor z **najlepszego** działka na spuście — pytanie brzmi „czy naciśnięcie coś da". Pocisk samonaprowadzający jest zawsze bursztynowy. Poza zasięgiem to szary, bo zielony kursor na nieosiągalnym celu kłamie.
+- [x] Dwa spusty: lewy i prawy przycisk myszy, `Hardpoint.trigger` przypisuje gniazdo, `G` w edytorze przełącza. Naciśnięcie spustu odpala te działka, które **mogą trafić**, nie wszystkie do niego podpięte.
+- [x] Łuk rysowany na schemacie w edytorze, z kolorem spustu. Działko na sztywno pokazuje pojedynczą kreskę — brak łuku też jest informacją.
+- [x] `traverse_range` i `traverse_rate` w tabelach lootu, z afiksami `turreted` (szerszy łuk za kadencję) i `quick-slewing` (szybszy obrót za obrażenia).
+- [ ] Wybór celu dla pocisków naprowadzanych z pozycji kursora, a nie „najbliższy statek": dziś seeker bierze najbliższego, nie tego, na którego pokazujesz.
+- [ ] Przeszkody: działko celujące przez własny kadłub albo przez teren nadal melduje zielony.
+
 ---
 
 ## MAUX1: Edytor statku (prototyp)

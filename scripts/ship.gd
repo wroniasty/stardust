@@ -271,8 +271,19 @@ var heading_command: ControlChords.Chord = ControlChords.Chord.NONE
 ## Reads the chorded commands off the held keys.
 var chords: ControlChords = ControlChords.new()
 
-## Held-down trigger. Read by the weapons every physics tick.
+## Held-down triggers, one per group. Read by the weapons every physics
+## tick. Index 0 is the primary, 1 the secondary; a mount says which it
+## answers to.
 var fire_command: bool = false
+var fire_secondary_command: bool = false
+
+## Where the guns are pointing, in world space. Set from the mouse by a
+## pilot and from a target by an AI, so both drive the same machinery.
+##
+## Guns aim at a point rather than at a thing: a point is what a mouse gives,
+## it is what a target's position amounts to anyway, and it is the only one
+## of the two that can be aimed at empty space.
+var aim_point: Vector2 = Vector2.ZERO
 
 ## Hull condition, 1.0 intact and 0.0 destroyed.
 ##
@@ -730,7 +741,12 @@ func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid
 func _physics_process(delta: float) -> void:
 	if use_player_input:
 		read_player_input(delta)
+		# Through the canvas transform, so aiming survives the camera being
+		# zoomed or turned -- the same reason the scanner takes a transform
+		# rather than working in world angles.
+		aim_point = get_global_mouse_position()
 		fire_command = Input.is_action_pressed("ship_fire")
+		fire_secondary_command = Input.is_action_pressed("ship_fire_secondary")
 		if Input.is_action_just_pressed("toggle_gear") and gear != null:
 			gear.set_deployed(not gear.is_deployed() and not gear.is_moving())
 
@@ -752,7 +768,17 @@ func _physics_process(delta: float) -> void:
 	var container: Node = projectile_container()
 	for hardpoint: Hardpoint in hardpoints:
 		hardpoint.tick(delta)
-		if not fire_command or not hardpoint.can_fire():
+		# Guns follow the cursor whether or not the trigger is down. A turret
+		# that only starts turning when you shoot is a turret that is never
+		# pointing at anything when you want it.
+		hardpoint.aim_at(aim_point, delta)
+
+		if not _trigger_held(hardpoint.trigger) or not hardpoint.can_fire():
+			continue
+		# Only the guns that can actually hit. Three mounts on one trigger is
+		# three chances that one of them bears, not three rounds into the
+		# hull of your own ship.
+		if hardpoint.aim_state(aim_point) != Hardpoint.Aim.ON_TARGET:
 			continue
 		# Charged before fired: a shot either comes out whole or does not come
 		# out. Half a shot is unreadable and breaks every affix reckoned on
@@ -885,6 +911,33 @@ func _recharge(delta: float) -> void:
 	if _since_spend < energy_recharge_delay():
 		return
 	energy = minf(energy + energy_recharge_rate() * delta, capacity)
+
+
+## Whether the trigger a mount answers to is being pulled.
+func _trigger_held(trigger: int) -> bool:
+	return fire_secondary_command if trigger == 1 else fire_command
+
+
+## The best any gun on `trigger` could do about the point being aimed at,
+## which is what the cursor shows. Best rather than worst: the question a
+## pilot is asking is "will pulling this do anything", and one gun that can
+## bear is a yes.
+func aim_state(trigger: int) -> Hardpoint.Aim:
+	var best: Hardpoint.Aim = Hardpoint.Aim.BLOCKED
+	for hardpoint: Hardpoint in hardpoints:
+		if hardpoint.trigger != trigger:
+			continue
+		best = maxi(best, hardpoint.aim_state(aim_point)) as Hardpoint.Aim
+	return best
+
+
+## Whether any gun answers to this trigger at all, so the cursor can leave
+## out a half nothing is wired to.
+func has_trigger(trigger: int) -> bool:
+	for hardpoint: Hardpoint in hardpoints:
+		if hardpoint.trigger == trigger:
+			return true
+	return false
 
 
 ## Where fired rounds are parented. Falls back to the ship's own parent so a

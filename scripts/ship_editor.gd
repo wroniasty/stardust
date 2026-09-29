@@ -47,6 +47,14 @@ const FONT_SIZE: int = 8
 const ROW: float = 10.0
 const PAD: float = 5.0
 
+## How far one press swings a hardpoint's rest direction. Five degrees: fine
+## enough to place a gun deliberately, coarse enough that pointing one across
+## the ship is not a hundred presses.
+const AIM_STEP: float = deg_to_rad(5.0)
+
+## How long the arc wedge is drawn on the schematic, in panel pixels.
+const ARC_LENGTH: float = 16.0
+
 ## Radius of a mount dot on the schematic, and the extra a highlighted one
 ## gets so it reads as a target rather than as a slightly bigger dot.
 const DOT: float = 2.5
@@ -152,6 +160,12 @@ func _input(event: InputEvent) -> void:
 		_jettison()
 	elif event.is_action_pressed(&"editor_stow"):
 		_stow()
+	elif event.is_action_pressed(&"editor_aim_ccw"):
+		_turn_mount(-AIM_STEP)
+	elif event.is_action_pressed(&"editor_aim_cw"):
+		_turn_mount(AIM_STEP)
+	elif event.is_action_pressed(&"editor_trigger"):
+		_swap_trigger()
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -366,6 +380,39 @@ func _verdict() -> PackedStringArray:
 	return out
 
 
+## Swings the highlighted hardpoint's rest direction.
+##
+## Where a gun sits belongs to the hull, not to the gun, so it is set here
+## and never rolled with the weapon.
+func _turn_mount(by: float) -> void:
+	var slot: Hardpoint = _highlighted() as Hardpoint
+	if slot == null:
+		_notice = "obrót ustawia się na gnieździe broni"
+		return
+	slot.rotation = wrapf(slot.rotation + by, -PI, PI)
+	_notice = "%s celuje %.0f st od dziobu" % [slot.name, rad_to_deg(slot.rotation)]
+
+
+## Moves the highlighted hardpoint to the other trigger.
+func _swap_trigger() -> void:
+	var slot: Hardpoint = _highlighted() as Hardpoint
+	if slot == null:
+		_notice = "spust przypisuje się do gniazda broni"
+		return
+	slot.trigger = 1 - slot.trigger
+	_notice = "%s na %s spust" % [slot.name, "lewy" if slot.trigger == 0 else "prawy"]
+
+
+## The mount the slot cursor is on, whatever kind it is. Falls back to the
+## whole schematic so a mount can still be adjusted with an empty hold.
+func _highlighted() -> Node:
+	var targets: Array[Node] = _targets()
+	if not targets.is_empty():
+		return targets[posmod(_slot, targets.size())]
+	var mounts: Array[Node] = _all_mounts()
+	return null if mounts.is_empty() else mounts[posmod(_slot, mounts.size())]
+
+
 func _stow() -> void:
 	var picked: Dictionary = _selected()
 	if picked.is_empty() or not bool(picked["held"]):
@@ -572,12 +619,32 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 		# and the two halves of every mirrored pair print over each other.
 		var caption: String = mount.name
 		var gun: Hardpoint = mount as Hardpoint
-		if gun != null and gun.weapon != null and gun.weapon.mod_slots > 0:
-			caption = "%s %d/%d" % [mount.name, gun.mods.size(), gun.weapon.mod_slots]
+		if gun != null:
+			caption = "%s %s" % [mount.name, "L" if gun.trigger == 0 else "P"]
+			if gun.weapon != null and gun.weapon.mod_slots > 0:
+				caption += " %d/%d" % [gun.mods.size(), gun.weapon.mod_slots]
+			_draw_arc_for(gun, at)
 		var label: Vector2 = at + Vector2(DOT + 3.0, float(FONT_SIZE) * 0.4)
 		if at.x < origin.x - 0.5:
 			label.x = at.x - DOT - 3.0 - _width(font, caption)
 		_text(font, label, caption, colour)
+
+
+## The wedge a gun can cover, from its rest direction. A number in a panel
+## does not tell a pilot whether the nose gun reaches behind the wing; a
+## wedge on the schematic does.
+func _draw_arc_for(gun: Hardpoint, at: Vector2) -> void:
+	var arc: float = gun.traverse()
+	var rest: float = gun.rotation - PI * 0.5
+	var colour: Color = Color(FIT, 0.35) if gun.trigger == 0 else Color(PICK, 0.35)
+	if arc <= 0.0:
+		# A fixed gun still shows which way it looks, as one line: the
+		# absence of an arc is information too.
+		_canvas.draw_line(at, at + Vector2.from_angle(rest) * ARC_LENGTH, colour, 1.0)
+		return
+	_canvas.draw_arc(at, ARC_LENGTH, rest - arc, rest + arc, 16, colour, 1.0)
+	for edge: float in [rest - arc, rest + arc]:
+		_canvas.draw_line(at, at + Vector2.from_angle(edge) * ARC_LENGTH, colour, 1.0)
 
 
 func _draw_info(font: Font, rect: Rect2) -> void:
@@ -616,7 +683,7 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 
 
 func _keys() -> String:
-	return "strzałki / myszka: wybór    F: montuj    S: schowaj    Backspace: za burtę    Esc: zamknij"
+	return "strzałki: wybór   F: montuj   S: schowaj   , .: obrót   G: spust   Bksp: za burtę"
 
 
 func _label(item: Resource) -> String:

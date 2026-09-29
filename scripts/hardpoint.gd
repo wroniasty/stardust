@@ -24,6 +24,35 @@ const MUZZLE_DIRECTION: Vector2 = Vector2.UP
 ## general purpose mount is; a missile rack lists what it can hold.
 @export var accepts: Array[WeaponData.Type] = []
 
+## How far the hull lets a gun here swing, in radians each way from where the
+## node points.
+##
+## A hull constraint, not a weapon one: a gun sunk into a recess runs out of
+## room before its own ring does. The arc that applies is the smaller of this
+## and the weapon's traverse_range, so a turret in a tight recess is a turret
+## with a narrow field and a fixed gun on an open ring is still fixed.
+@export var traverse_limit: float = PI
+
+## Which trigger fires this mount. Several mounts may share one, and each
+## still has to be able to bear on its own -- pulling a trigger fires the
+## guns that can hit, not every gun wired to it.
+@export var trigger: int = 0
+
+## How far the gun is currently swung off the mount, in radians.
+var facing: float = 0.0
+
+## How close to aimed counts as aimed. About a degree: tighter than the
+## tightest spread any weapon rolls, so the cursor never says "on target" for
+## a shot that will obviously miss.
+const ON_TARGET_EPS: float = 0.02
+
+## Whether a shot from here would land where the pilot is pointing.
+enum Aim {
+	BLOCKED, ## Outside the arc, or out of range: nothing to be done.
+	TURNING, ## Could get there, is not there yet.
+	ON_TARGET, ## Fire.
+}
+
 ## Mods plugged into this weapon, at most `weapon.mod_slots` of them.
 var mods: Array[ShotModData] = []
 
@@ -38,6 +67,71 @@ var _cooldown: float = 0.0
 ## Advances the cooldown. Driven by the ship so the order is deterministic.
 func tick(delta: float) -> void:
 	_cooldown = maxf(0.0, _cooldown - delta)
+
+
+## The arc this mount actually has: the gun's own ring against what the hull
+## allows. The smaller wins, which is the same rule as bulk against a slot.
+func traverse() -> float:
+	if weapon == null:
+		return 0.0
+	return minf(effective().traverse_range, traverse_limit)
+
+
+## Where the gun is pointing right now, in world space.
+func muzzle_direction() -> Vector2:
+	return MUZZLE_DIRECTION.rotated(global_rotation + facing)
+
+
+## The angle this mount would have to swing to to point at `point`, measured
+## from its rest direction, before any limit is applied.
+func wanted_facing(point: Vector2) -> float:
+	var to_target: Vector2 = point - global_position
+	if to_target.is_zero_approx():
+		return facing
+	return angle_difference(
+		global_rotation, to_target.angle() - MUZZLE_DIRECTION.angle()
+	)
+
+
+## Swings the gun towards `point` at its own rate, within its own arc.
+func aim_at(point: Vector2, delta: float) -> void:
+	var arc: float = traverse()
+	if arc <= 0.0:
+		facing = 0.0
+		return
+	var wanted: float = clampf(wanted_facing(point), -arc, arc)
+	var rate: float = effective().traverse_rate
+	facing = move_toward(facing, wanted, maxf(rate, 0.0) * delta)
+
+
+## What the cursor should say about this mount.
+##
+## A homing round is never more than TURNING and never less: it can come back
+## round onto anything, so it is always worth firing and never precisely
+## aimed. Out of range counts as blocked, because a green cursor over a
+## target a round cannot reach is a lie.
+func aim_state(point: Vector2) -> Aim:
+	if weapon == null or not can_fire_ignoring_cooldown():
+		return Aim.BLOCKED
+	var firing: WeaponData = effective()
+	if global_position.distance_to(point) > firing.range_px:
+		return Aim.BLOCKED
+	if firing.type == WeaponData.Type.HOMING_MISSILE:
+		return Aim.TURNING
+	var wanted: float = wanted_facing(point)
+	if absf(wanted) > traverse() + ON_TARGET_EPS:
+		return Aim.BLOCKED
+	if absf(wanted - facing) > ON_TARGET_EPS:
+		return Aim.TURNING
+	return Aim.ON_TARGET
+
+
+## Everything can_fire() asks except the cooldown, which the cursor must not
+## flicker on: a gun between shots is still a gun that can bear.
+func can_fire_ignoring_cooldown() -> bool:
+	if weapon == null:
+		return false
+	return weapon.is_beam() or weapon.projectile_scene != null
 
 
 func can_fire() -> bool:
@@ -158,7 +252,7 @@ func fire(carrier_velocity: Vector2, container: Node, shooter: Node = null) -> P
 	_cooldown = 1.0 / maxf(firing.rounds_per_second, 0.001)
 
 	var spread: float = deg_to_rad(firing.spread_degrees)
-	var aim: float = global_rotation + randf_range(-spread * 0.5, spread * 0.5)
+	var aim: float = global_rotation + facing + randf_range(-spread * 0.5, spread * 0.5)
 	var direction: Vector2 = MUZZLE_DIRECTION.rotated(aim)
 
 	if firing.is_beam():

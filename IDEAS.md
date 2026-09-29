@@ -714,6 +714,44 @@ rzędzie i tańsze klawiatury potrafią zgubić trzeci (ghosting). Jeśli okaże
 się to realnym problemem, akord da się przenieść na klawisze rozrzucone po
 klawiaturze bez zmiany niczego poza tabelą w `ControlChords`.
 
+### Celowanie: co należy do broni, a co do gniazda
+
+Pytanie „zakres obrotu na hardpoincie czy na broni" ma odpowiedź **oba**, bo to
+dwie różne wielkości, a projekt ma już na to wzorzec.
+
+- **`WeaponData.traverse_range` i `traverse_rate`** — pierścień i silnik samej
+  broni. Na broni z tego samego powodu, dla którego gimbal siedzi na
+  `EngineData`: to część maszyny. Działko na sztywno ma tu zero, gdziekolwiek
+  je przykręcić, a wieżyczka zabiera swój łuk ze sobą.
+- **`Hardpoint.traverse_limit`** — ile pozwala kadłub. Działko wpuszczone we
+  wnękę kończy miejsce, zanim skończy je własny pierścień. To fakt o kadłubie,
+  nie o broni.
+
+Obowiązuje **mniejszy z dwóch**, czyli dokładnie ten sam kształt co `bulk <=
+size`: co moduł potrafi, wobec tego, na co pozwala gniazdo. Szybkość obrotu
+jest wyłącznie broni — kadłub nie sprawia, że silnik wieżyczki kręci szybciej.
+
+Kierunek spoczynkowy jest z kolei czysto gniazda i ustawia się go w edytorze:
+gdzie działko siedzi, należy do kadłuba.
+
+**Kursor pokazuje najlepsze, nie najgorsze.** Przy trzech działkach na jednym
+spuście pytanie pilota brzmi „czy naciśnięcie teraz coś da", więc jedno działko,
+które trafi, to odpowiedź „tak". Spust odpala potem **tylko te, które mogą
+trafić** — trzy gniazda na jednym spuście to trzy szanse, że któreś bierze, a
+nie trzy pociski we własny kadłub.
+
+Dwa rozstrzygnięcia, które nie są oczywiste:
+
+- **Poza zasięgiem to szary, nie zielony.** Zielony kursor na celu, do którego
+  pocisk nie doleci, jest kłamstwem.
+- **Pocisk samonaprowadzający nigdy nie melduje „zielony"** i nigdy „szary" —
+  zawsze bursztynowy, bo może zawrócić na wszystko, więc zawsze warto go
+  wystrzelić i nigdy nie jest dokładnie wycelowany.
+
+Działka podążają za kursorem **niezależnie od spustu**. Wieżyczka, która
+zaczyna obrót dopiero przy strzale, nigdy nie celuje tam, gdzie trzeba, w
+chwili, w której trzeba.
+
 ## 5. Struktura wszechświata
 
 Galaktyka składa się z systemów. System ma gwiazdę, planety, opcjonalnie stacje i pola asteroid. Planety mogą mieć księżyce. Stacje kosmiczne orbitują wokół planet albo stoją w deep space.
