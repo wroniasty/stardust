@@ -36,6 +36,22 @@ static func release(who: Object, tree: SceneTree) -> void:
 	_apply(tree)
 
 
+## Closes every other screen that is holding a pause, then claims it.
+##
+## Two paused panels stacked on each other is a trap. Both are modal, the
+## upper one takes every click, and the lower one looks exactly like a panel
+## that has stopped accepting the mouse -- which is a bug report nobody can
+## act on, because the panel is fine and the thing on top of it is invisible
+## where it matters.
+static func hold_exclusive(who: Object, tree: SceneTree) -> void:
+	for holder: Object in _holders.duplicate():
+		if holder == who or not is_instance_valid(holder):
+			continue
+		if holder.has_method("close"):
+			holder.call("close")
+	hold(who, tree)
+
+
 static func held() -> bool:
 	_forget_freed()
 	return not _holders.is_empty()

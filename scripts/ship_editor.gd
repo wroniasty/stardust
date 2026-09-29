@@ -107,7 +107,7 @@ func toggle() -> void:
 	_slot = 0
 	_notice = ""
 	_canvas.show()
-	PauseGate.hold(self, get_tree())
+	PauseGate.hold_exclusive(self, get_tree())
 
 
 func close() -> void:

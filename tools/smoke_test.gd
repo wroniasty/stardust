@@ -958,6 +958,7 @@ func _evaluate_phase() -> void:
 			_check_cargo()
 			_check_editor()
 			_check_pause_gate()
+			_check_panels_release_the_mouse()
 			_check_camera(_planet)
 			_check_chords()
 			_check_energy()
@@ -1851,6 +1852,20 @@ func _check_pause_gate() -> void:
 	var survived: bool = paused
 	editor.close()
 	var released: bool = paused
+
+	# One modal at a time. Two paused panels stacked is a trap: both are
+	# modal, the upper one takes every click, and the lower one looks like a
+	# panel that has stopped accepting the mouse.
+	var sandbox: CreativeTool = CreativeTool.new()
+	root.add_child(sandbox)
+	editor.toggle()
+	_expect(editor.is_open(), "the editor is open to begin with")
+	sandbox.toggle()
+	_expect(sandbox.is_open(), "opening the sandbox opens it")
+	_expect(not editor.is_open(), "and shuts the editor rather than stacking on it")
+	_expect(paused, "the game stays paused across the handover")
+	sandbox.close()
+	sandbox.queue_free()
 
 	_expect(opened, "opening the editor pauses the game")
 	_expect(survived, "and another screen's own guard does not undo that pause")
@@ -3058,6 +3073,52 @@ func _check_creative_tool() -> void:
 	)
 
 	ship.queue_free()
+
+
+## A panel that is shut must consume nothing.
+##
+## Every one of these is built as a full-rect MarginContainer holding a small
+## panel, and closing them hid the panel but left the container. A
+## MarginContainer is chrome with no pixels of its own, but Control defaults
+## to MOUSE_FILTER_STOP, so each of them was quietly swallowing every click
+## on the whole screen. It went unnoticed while the topmost one was the
+## configurator itself -- adding the sandbox above it took the mouse away
+## from the configurator, which is how it surfaced.
+##
+## The same shape as the pause bug: a tool that is closed but still sitting
+## on the screen.
+func _check_panels_release_the_mouse() -> void:
+	var panels: Array[CanvasLayer] = [
+		CreativeTool.new(), PlanetConfigurator.new(), LoadoutScreen.new(), ShipEditor.new(),
+	]
+	for panel: CanvasLayer in panels:
+		root.add_child(panel)
+
+	for panel: CanvasLayer in panels:
+		var greedy: PackedStringArray = PackedStringArray()
+		_collect_greedy_controls(panel, greedy)
+		_expect(
+			greedy.is_empty(),
+			"a closed %s takes no clicks (greedy: %s)" % [
+				panel.get_class() if panel.get_script() == null else
+					(panel.get_script() as GDScript).get_global_name(),
+				", ".join(greedy),
+			],
+		)
+		panel.queue_free()
+
+
+## Visible Controls in `node` that would consume a click. A hidden one cannot
+## be clicked, so only what is still on screen counts.
+func _collect_greedy_controls(node: Node, into: PackedStringArray) -> void:
+	var control: Control = node as Control
+	if control != null:
+		if not control.visible:
+			return
+		if control.mouse_filter == Control.MOUSE_FILTER_STOP:
+			into.append(control.get_class())
+	for child: Node in node.get_children():
+		_collect_greedy_controls(child, into)
 
 
 func _check_configuration_report() -> void:

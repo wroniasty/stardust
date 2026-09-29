@@ -90,6 +90,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _build_ui() -> void:
 	var margin: MarginContainer = MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Transparent to the mouse. A MarginContainer is chrome with no pixels of
+	# its own, but Control defaults to MOUSE_FILTER_STOP, so a full-rect one
+	# swallows every click on the whole screen -- including clicks meant for
+	# a panel on a lower CanvasLayer, and including while its own panel is
+	# hidden. Children are still picked normally; only this node steps out of
+	# the way.
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side: String in ["left", "top", "right", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, SCREEN_MARGIN)
 	add_child(margin)

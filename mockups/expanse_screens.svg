@@ -1,0 +1,102 @@
+<svg viewBox="0 0 660 812" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="300"><title>HUD lotu i plot nawigacyjny gry stardust w stylistyce serialu The Expanse</title><desc>Dwie makiety ekranu 640x360. HUD lotu: brak paneli i ramek, informacje wiszą na cienkich liniach włosowych. Nagłówkiem są ciąg w g i pozostały budżet delta-v, obok odliczanie do końca palenia, w prawym górnym rogu okrągły plot kontaktów z wektorami, na dole cienkie łuki wskaźników i stos odczytów nawigacyjnych bez obwódek. Plot nawigacyjny: koncentryczne pierścienie, orbita bieżąca ciągła, planowany transfer kreskowany z dwoma węzłami palenia opisanymi kosztem delta-v, po prawej cienki stos danych, u dołu zakładki podkreślone linią zamiast wypełnionych bloków.</desc>
+<defs>
+<clipPath id="view"><rect x="0" y="0" width="640" height="360"/></clipPath>
+<clipPath id="plot"><rect x="0" y="0" width="640" height="360"/></clipPath>
+</defs>
+<rect x="0" y="0" width="660" height="812" fill="#0A0A0C"/>
+
+<text x="10" y="16" font-size="11" fill="#78899C" font-family="ui-monospace, monospace">G — THE EXPANSE: zero ramek, wszystko na liniach włosowych. Nagłówkiem jest ciąg w g i budżet delta-v.</text>
+<g transform="translate(10,24)">
+<rect x="0" y="0" width="640" height="360" fill="#04070A"/>
+<g clip-path="url(#view)">
+<g fill="#4A6570" opacity="0.8"><rect x="66" y="40" width="1" height="1"/><rect x="152" y="74" width="1" height="1"/><rect x="238" y="34" width="1" height="1"/><rect x="326" y="96" width="1" height="1"/><rect x="418" y="52" width="1" height="1"/><rect x="498" y="88" width="1" height="1"/><rect x="576" y="42" width="1" height="1"/><rect x="118" y="132" width="1" height="1"/><rect x="286" y="146" width="1" height="1"/><rect x="452" y="128" width="1" height="1"/></g>
+<circle cx="320" cy="1060" r="800" fill="#0A1218"/>
+<path d="M0 262 L90 258 L180 266 L270 260 L360 268 L450 258 L540 264 L640 258" fill="none" stroke="#2B4450" stroke-width="1"/>
+<g stroke="#62D9E8" stroke-width="1" fill="none" opacity="0.9"><path d="M210 186 L288 185"/><path d="M352 184 L430 183"/><circle cx="320" cy="185" r="4"/></g>
+<g stroke="#62D9E8" stroke-width="1" fill="none"><path d="M320 185 L344 150"/><path d="M344 150 L339 156"/><path d="M344 150 L337 149"/></g>
+<text x="350" y="148" font-size="7" fill="#62D9E8" letter-spacing="1.2">THRUST</text>
+<g stroke="#52D98A" stroke-width="1" fill="none"><path d="M296 262 L288 262 L288 256"/><path d="M344 262 L352 262 L352 256"/></g>
+<text x="320" y="252" font-size="7" fill="#52D98A" text-anchor="middle" letter-spacing="1.4">SHELF 04</text>
+<g fill="#E8F2F4"><path d="M317 180 L320 172 L323 180 Z"/></g>
+</g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M8 8 L8 22"/><path d="M8 8 L22 8"/><path d="M632 8 L632 22"/><path d="M632 8 L618 8"/><path d="M8 352 L8 338"/><path d="M8 352 L22 352"/><path d="M632 352 L632 338"/><path d="M632 352 L618 352"/></g>
+<text x="20" y="28" font-size="7" fill="#4A6570" letter-spacing="1.8">THRUST</text>
+<text x="20" y="48" font-size="19" fill="#E8F2F4" font-family="ui-monospace, monospace">0.62</text>
+<text x="70" y="48" font-size="9" fill="#62D9E8" letter-spacing="1">g</text>
+<g><rect x="20" y="54" width="120" height="2" fill="#16242C"/><rect x="20" y="54" width="74" height="2" fill="#62D9E8"/></g>
+<text x="20" y="76" font-size="7" fill="#4A6570" letter-spacing="1.8">&#916;v REMAINING</text>
+<text x="20" y="94" font-size="15" fill="#E8F2F4" font-family="ui-monospace, monospace">4 820</text>
+<text x="76" y="94" font-size="8" fill="#4A6570" letter-spacing="1">m/s</text>
+<g><rect x="20" y="100" width="120" height="2" fill="#16242C"/><rect x="20" y="100" width="82" height="2" fill="#E8F2F4"/><rect x="20" y="100" width="24" height="2" fill="#FF9440"/></g>
+<text x="20" y="114" font-size="7" fill="#FF9440" letter-spacing="1.2">RESERVE 980 · LANDING</text>
+<path d="M20 128 L140 128" stroke="#1E2C34" stroke-width="1"/>
+<text x="20" y="144" font-size="7" fill="#4A6570" letter-spacing="1.8">BURN REMAINING</text>
+<text x="20" y="162" font-size="13" fill="#62D9E8" font-family="ui-monospace, monospace">00:48</text>
+<g stroke-width="1" fill="none"><path d="M96 166 A 18 18 0 0 1 132 166" stroke="#16242C"/><path d="M96 166 A 18 18 0 0 1 116 149" stroke="#62D9E8"/></g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M20 210 L20 320"/><path d="M20 216 L26 216"/><path d="M20 232 L24 232"/><path d="M20 248 L26 248"/><path d="M20 264 L24 264"/><path d="M20 280 L26 280"/><path d="M20 296 L24 296"/><path d="M20 312 L26 312"/></g>
+<g font-size="7" fill="#4A6570" font-family="ui-monospace, monospace"><text x="30" y="219">3000</text><text x="30" y="251">2000</text><text x="30" y="283">1000</text><text x="30" y="315">0</text></g>
+<path d="M14 266 L20 263 L20 269 Z" fill="#62D9E8"/>
+<g stroke="#1E2C34" stroke-width="1"><path d="M508 44 L616 44"/><path d="M520 44 L520 40"/><path d="M544 44 L544 38"/><path d="M568 44 L568 40"/><path d="M592 44 L592 38"/></g>
+<text x="544" y="34" font-size="7" fill="#4A6570" text-anchor="middle" letter-spacing="1.2">015</text>
+<g stroke="#1E2C34" stroke-width="1" fill="none"><circle cx="562" cy="112" r="18"/><circle cx="562" cy="112" r="34"/><circle cx="562" cy="112" r="50"/></g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M562 58 L562 64"/><path d="M562 160 L562 154"/><path d="M508 112 L514 112"/><path d="M616 112 L610 112"/></g>
+<rect x="561" y="111" width="2" height="2" fill="#E8F2F4"/>
+<g><rect x="588" y="92" width="3" height="3" fill="#FF9440"/><path d="M589 92 L580 82" stroke="#FF9440" stroke-width="1"/></g>
+<text x="596" y="88" font-size="7" fill="#FF9440" font-family="ui-monospace, monospace">620</text>
+<g fill="#4A6570"><rect x="534" y="140" width="2" height="2"/><rect x="524" y="96" width="2" height="2"/></g>
+<path d="M512 80 A 64 64 0 0 1 612 80" fill="none" stroke="#2B4450" stroke-width="1"/>
+<text x="508" y="176" font-size="7" fill="#4A6570" letter-spacing="1.8">CONTACTS  1 HOSTILE  2 CRATE</text>
+<path d="M508 190 L632 190" stroke="#1E2C34" stroke-width="1"/>
+<g font-size="7" letter-spacing="1.8" fill="#4A6570"><text x="508" y="212">ALTITUDE</text><text x="508" y="234">VERTICAL</text><text x="508" y="256">SLOPE</text><text x="508" y="278">GEAR</text></g>
+<g font-size="11" font-family="ui-monospace, monospace" text-anchor="end"><text x="632" y="213" fill="#E8F2F4">1412</text><text x="632" y="235" fill="#FF9440">-28.4</text><text x="632" y="257" fill="#E8F2F4">6.2</text><text x="632" y="279" fill="#52D98A">DOWN</text></g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M508 218 L632 218"/><path d="M508 240 L632 240"/><path d="M508 262 L632 262"/></g>
+<g stroke-width="1" fill="none"><path d="M24 344 A 14 14 0 0 1 52 344" stroke="#16242C"/><path d="M24 344 A 14 14 0 0 1 32 332" stroke="#62D9E8"/></g>
+<text x="38" y="342" font-size="7" fill="#4A6570" text-anchor="middle" letter-spacing="1">RCTR</text>
+<g stroke-width="1" fill="none"><path d="M76 344 A 14 14 0 0 1 104 344" stroke="#16242C"/><path d="M76 344 A 14 14 0 0 1 90 330" stroke="#FF9440"/></g>
+<text x="90" y="342" font-size="7" fill="#4A6570" text-anchor="middle" letter-spacing="1">HEAT</text>
+<g stroke-width="1" fill="none"><path d="M128 344 A 14 14 0 0 1 156 344" stroke="#16242C"/><path d="M128 344 A 14 14 0 0 1 152 336" stroke="#E8F2F4"/></g>
+<text x="142" y="342" font-size="7" fill="#4A6570" text-anchor="middle" letter-spacing="1">HULL</text>
+<text x="180" y="348" font-size="7" fill="#4A6570" letter-spacing="1.8">KEPLER-9b  ·  LANDING  ·  47634.4</text>
+</g>
+
+<text x="10" y="404" font-size="11" fill="#78899C" font-family="ui-monospace, monospace">H — EXPANSE, plot nawigacyjny: transfer z węzłami palenia, każdy wyceniony w delta-v. Zakładka podkreślona, nie wypełniona.</text>
+<g transform="translate(10,412)">
+<rect x="0" y="0" width="640" height="360" fill="#04070A"/>
+<g clip-path="url(#plot)">
+<g stroke="#12202A" stroke-width="1" fill="none"><circle cx="250" cy="188" r="40"/><circle cx="250" cy="188" r="76"/><circle cx="250" cy="188" r="112"/><circle cx="250" cy="188" r="148"/></g>
+<g stroke="#12202A" stroke-width="1"><path d="M250 30 L250 346"/><path d="M92 188 L408 188"/></g>
+<circle cx="250" cy="188" r="16" fill="#0E1A22"/><circle cx="250" cy="188" r="16" fill="none" stroke="#2B4450" stroke-width="1"/>
+<text x="250" y="214" font-size="7" fill="#4A6570" text-anchor="middle" letter-spacing="1.6">KEPLER-9b</text>
+<circle cx="250" cy="188" r="76" fill="none" stroke="#62D9E8" stroke-width="1"/>
+<rect x="324" y="186" width="3" height="3" fill="#E8F2F4"/>
+<text x="334" y="190" font-size="7" fill="#E8F2F4" letter-spacing="1.4">ROCI</text>
+<path d="M250 188 m0 -112 a112 112 0 0 1 106 76" fill="none" stroke="#FF9440" stroke-width="1" stroke-dasharray="3 3"/>
+<path d="M326 188 A 76 112 0 0 0 250 76" fill="none" stroke="#FF9440" stroke-width="1" stroke-dasharray="3 3"/>
+<circle cx="326" cy="188" r="4" fill="none" stroke="#FF9440" stroke-width="1"/><rect x="325" y="187" width="2" height="2" fill="#FF9440"/>
+<circle cx="250" cy="76" r="4" fill="none" stroke="#FF9440" stroke-width="1"/><rect x="249" y="75" width="2" height="2" fill="#FF9440"/>
+<text x="336" y="204" font-size="7" fill="#FF9440" letter-spacing="1.2">BURN 1  &#916;v 240</text>
+<text x="260" y="70" font-size="7" fill="#FF9440" letter-spacing="1.2">BURN 2  &#916;v 180</text>
+<g fill="#4A6570"><rect x="176" y="124" width="2" height="2"/><rect x="300" y="272" width="2" height="2"/></g>
+<text x="184" y="126" font-size="7" fill="#4A6570" font-family="ui-monospace, monospace">crate</text>
+<g stroke="#1E2C34" stroke-width="1"><path d="M20 330 L100 330"/><path d="M20 326 L20 334"/><path d="M100 326 L100 334"/></g>
+<text x="108" y="333" font-size="7" fill="#4A6570" font-family="ui-monospace, monospace">2 Mm</text>
+</g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M8 8 L8 22"/><path d="M8 8 L22 8"/><path d="M632 8 L632 22"/><path d="M632 8 L618 8"/></g>
+<text x="20" y="28" font-size="7" fill="#4A6570" letter-spacing="2">NAV PLOT  ·  KEPLER-9b  ·  SEED 481203</text>
+<path d="M452 34 L452 300" stroke="#1E2C34" stroke-width="1"/>
+<text x="470" y="52" font-size="7" fill="#4A6570" letter-spacing="1.8">TRANSFER TO</text>
+<text x="470" y="70" font-size="13" fill="#E8F2F4" letter-spacing="1">SHELF 04</text>
+<path d="M470 82 L632 82" stroke="#1E2C34" stroke-width="1"/>
+<g font-size="7" letter-spacing="1.8" fill="#4A6570"><text x="470" y="102">&#916;v TOTAL</text><text x="470" y="124">ETA</text><text x="470" y="146">PERIAPSIS</text><text x="470" y="168">ARRIVAL V</text></g>
+<g font-size="11" font-family="ui-monospace, monospace" text-anchor="end"><text x="632" y="103" fill="#FF9440">420</text><text x="632" y="125" fill="#E8F2F4">04:12</text><text x="632" y="147" fill="#E8F2F4">318</text><text x="632" y="169" fill="#52D98A">-8.4</text></g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M470 108 L632 108"/><path d="M470 130 L632 130"/><path d="M470 152 L632 152"/></g>
+<text x="470" y="192" font-size="7" fill="#4A6570" letter-spacing="1.8">BUDGET AFTER BURN</text>
+<g><rect x="470" y="200" width="162" height="2" fill="#16242C"/><rect x="470" y="200" width="98" height="2" fill="#E8F2F4"/><rect x="470" y="200" width="32" height="2" fill="#FF9440"/></g>
+<text x="470" y="216" font-size="7" fill="#4A6570" font-family="ui-monospace, monospace">4 400 m/s  ·  reserve intact</text>
+<path d="M470 232 L632 232" stroke="#1E2C34" stroke-width="1"/>
+<g font-size="7" letter-spacing="1.6"><text x="470" y="250" fill="#4A6570">CONTACTS</text><text x="470" y="266" fill="#FF9440">RAIDER  620  closing</text><text x="470" y="280" fill="#4A6570">CRATE   1.2k  static</text><text x="470" y="294" fill="#4A6570">CRATE   4.8k  static</text></g>
+<g stroke="#1E2C34" stroke-width="1"><path d="M20 332 L632 332"/></g>
+<g font-size="7" letter-spacing="2"><text x="20" y="350" fill="#E8F2F4">PLOT</text><text x="110" y="350" fill="#4A6570">SYSTEM</text><text x="210" y="350" fill="#4A6570">GALAXY</text><text x="310" y="350" fill="#4A6570">CONTACTS</text><text x="632" y="350" fill="#4A6570" text-anchor="end">ENTER  COMMIT BURN</text></g>
+<rect x="20" y="338" width="30" height="1" fill="#62D9E8"/>
+</g>
+</svg>
