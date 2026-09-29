@@ -2415,7 +2415,12 @@ func _check_engine_failures() -> void:
 	_expect(nose != null and tail != null, "the test ship has the engines this check needs")
 
 	# A hit near one end breaks what was there, and leaves the other end alone.
-	ship.damage_engines_near(nose.mount.position, 0.25)
+	# 0.7 of hull damage, which at the current share leaves the engine at
+	# 0.65 -- clearly past the threshold the report complains about. The
+	# number moved when the penalty was softened; it is written against
+	# WORN rather than against a remembered outcome.
+	ship.damage_engines_near(nose.mount.position, (1.0 - ConfigurationReport.WORN + 0.2)
+		/ Ship.ENGINE_DAMAGE_SHARE)
 	_expect(nose.health < 1.0, "an impact costs the engine it landed on (%.2f)" % nose.health)
 	_expect(
 		is_equal_approx(tail.health, 1.0),
@@ -2486,18 +2491,29 @@ func _check_engine_failures() -> void:
 	var dead_ticks: int = 0
 	var seen_surge: bool = false
 	var peak: float = 0.0
+	var trough: float = 1.0
 	for step: int in range(1800):
 		nose.advance(1.0 / 60.0)
 		var out: float = nose.effective_output()
-		if out <= 0.0:
+		peak = maxf(peak, out)
+		trough = minf(trough, out)
+		if nose.is_dropped_out():
 			dead_ticks += 1
 			continue
-		peak = maxf(peak, out)
 		if out < 0.99:
 			seen_surge = true
 	_expect(
 		dead_ticks > 0,
 		"an unreliable engine cuts out sometimes (%d ticks of 1800)" % dead_ticks,
+	)
+	# A cut-out is a dip now, not a silence. Damage changes how a ship flies;
+	# it does not take the ship away, and a penalty that stops the game being
+	# played is not difficulty.
+	_expect(
+		trough >= EngineInstance.MIN_OUTPUT_SHARE - 0.001,
+		"and never drops below the floor, cut-outs included (%.3f of %.2f)" % [
+			trough, EngineInstance.MIN_OUTPUT_SHARE,
+		],
 	)
 	_expect(
 		dead_ticks < 900,
@@ -2524,6 +2540,27 @@ func _check_engine_failures() -> void:
 		if not is_equal_approx(tail.effective_output(), tail.throttle):
 			steady = false
 	_expect(steady, "a sound engine delivers exactly what it was asked for, every tick")
+
+	# The floor holds at every condition, not only at the one measured above.
+	var lowest: float = 1.0
+	for health: float in [1.0, 0.8, 0.5, 0.2, 0.0]:
+		nose.health = health
+		nose.target_throttle = 1.0
+		for step: int in range(600):
+			nose.advance(1.0 / 60.0)
+			nose.throttle = 1.0
+			lowest = minf(lowest, nose.effective_output())
+		_expect(
+			nose.condition_factor() >= EngineInstance.MIN_OUTPUT_SHARE - 0.001,
+			"at %.0f%% health the engine still holds %.0f%% of its rating" % [
+				health * 100.0, nose.condition_factor() * 100.0,
+			],
+		)
+	_expect(
+		lowest >= EngineInstance.MIN_OUTPUT_SHARE - 0.001,
+		"and nothing anywhere in that range went under the floor (%.3f)" % lowest,
+	)
+	nose.health = 1.0
 
 	# Reproducible: the same ship misbehaves the same way twice, so a bug
 	# report about a fault can be followed.

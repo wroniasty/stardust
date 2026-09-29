@@ -222,10 +222,41 @@ latania**, a nie tylko odejmował liczbę.
   powyżej nominału**. Ciąg, który czasem przekracza zadany, byłby premią w
   przebraniu awarii.
 
-**Uszkodzenie zjada też niezawodność**: `reliability * lerp(0.35, 1, health)`.
-Rozwalony silnik przy idealnej tabliczce jest wciąż w 35% niezawodny — nie w
+**Uszkodzenie zjada też niezawodność**: `reliability * lerp(0.7, 1, health)`.
+Rozwalony silnik przy idealnej tabliczce jest wciąż w 70% niezawodny — nie w
 zerze, bo silnik, który nigdy nie odpala, to silnik nieobecny, a ciekawa awaria
 to ta, która odpala *czasami*.
+
+### Strojenie: kara ma zmieniać lot, nie odbierać statek
+
+Pierwsze wartości były za ostre i to było widać dopiero w graniu. Zmierzone przy
+starym strojeniu: przy zdrowiu 0,65 silnik oddawał średnio **0,563** mocy, a z
+tych 43,7 punktu straty **35 szło z samego mnożnika `× health`** — wypadanie i
+falowanie razem dawały 8,6. Czyli pokrętło, po które sięga się odruchowo
+(`RUINED_RELIABILITY`), rusza mniejszą część problemu.
+
+Prawdziwym winowajcą było **tempo psucia**: przy `ENGINE_DAMAGE_SHARE = 1.6`
+jedno twarde lądowanie przy 120 px/s zabierało najbliższy silnik do 62% zdrowia,
+czyli ~53% ciągu. Jeden błąd wart pół silnika.
+
+Po zmianie — share 0,5, ruined reliability 0,7, i **podłoga ciągu na 70%**:
+
+| zdrowie | średni ciąg | najgorszy tick |
+|---|---|---|
+| 1,00 | 1,000 | 1,000 |
+| 0,65 | 0,866 | 0,700 |
+| 0,20 | 0,722 | 0,700 |
+| 0,00 | 0,700 | 0,700 |
+
+**Wypadnięcie jest teraz zapadnięciem, nie ciszą.** Podłoga obejmuje też
+dropouty: silnik nigdy nie milknie, tylko siada do 70%. Niezmiennik, dla którego
+model uszkodzeń istnieje, przeżywa — 70% z jednej strony wobec 100% z drugiej to
+nadal krzywy statek.
+
+Podłoga wymusiła jedno uporządkowanie: **`condition_factor()` jest jedynym
+miejscem, które zna krzywę zdrowie → ciąg**. Alokator NNLS i raport konfiguracji
+mnożyły wcześniej przez surowe `health` i po dodaniu podłogi planowałyby przeciw
+silnikowi, który nie istnieje.
 
 **Znaleziony błąd: refit leczył wszystko.** `rebuild_control_groups()` wyrzuca i
 odtwarza każdy `EngineInstance`, więc przykręcenie czegokolwiek gdziekolwiek po

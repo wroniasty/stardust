@@ -1337,10 +1337,14 @@ func take_off(state: PhysicsDirectBodyState2D = null) -> void:
 ## About the width of the hull: a hit is local, but not to the pixel.
 const ENGINE_DAMAGE_RADIUS: float = 16.0
 
-## Engine health lost per point of hull damage, at the point of impact. Above
-## one on purpose -- machinery is more fragile than structure, and a ship
-## that always dies before its engines do has no damage model worth the name.
-const ENGINE_DAMAGE_SHARE: float = 1.6
+## Engine health lost per point of hull damage, at the point of impact.
+##
+## Was 1.6, on the argument that machinery is more fragile than structure.
+## True, and too much: a 120 px/s arrival took the nearest engine to 62%
+## health, and one mistake should not cost half an engine. At 0.5 the same
+## arrival leaves it at 88% and the penalty is felt without ending the
+## flight.
+const ENGINE_DAMAGE_SHARE: float = 0.5
 
 
 ## Hurts the engines around `point` (in the ship's frame) in proportion to

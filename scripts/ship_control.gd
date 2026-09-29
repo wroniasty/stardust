@@ -194,7 +194,7 @@ func _allocate(engines: Array[EngineInstance], commands: Dictionary) -> void:
 	# weights.
 	var live: Array[Vector3] = []
 	for i: int in range(engines.size()):
-		live.append(columns[i] * engines[i].health)
+		live.append(columns[i] * engines[i].condition_factor())
 
 	var throttles: PackedFloat32Array = ThrustAllocator.solve(live, demand)
 	for i: int in range(engines.size()):

@@ -214,7 +214,7 @@ func _read_damage(ship: Ship) -> void:
 		var group: Array = ship.control.groups.get(command, [])
 		for member: Dictionary in group:
 			var engine: EngineInstance = member["engine"]
-			leftover += engine.nominal_force() * float(member["weight"]) * engine.health
+			leftover += engine.nominal_force() * float(member["weight"]) * engine.condition_factor()
 		var drift: float = leftover.length() / maxf(ship.mass, 0.0001)
 		# Only the extra caused by damage: the nominal residual is already
 		# reported above and blaming it twice names the wrong culprit.

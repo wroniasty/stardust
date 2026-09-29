@@ -16,7 +16,21 @@ var health: float = 1.0
 ## How reliable an engine at zero health is, as a share of its rating. Not
 ## zero: a wrecked engine that simply never fires is a missing engine, and
 ## the interesting failure is the one that fires *sometimes*.
-const RUINED_RELIABILITY: float = 0.35
+const RUINED_RELIABILITY: float = 0.7
+
+## The least an engine will ever deliver of what its throttle asked for, at
+## any condition and including mid-cut-out.
+##
+## A floor rather than a curve down to nothing, because the thing damage is
+## for is changing how a ship flies, not taking the ship away. Measured at
+## the old tuning, a single hard arrival left the nearest engine giving 53%
+## and the ship was no longer worth flying; punishment that stops the game
+## being played is not difficulty.
+##
+## The asymmetry that makes a damaged ship fly crooked survives: 70% on one
+## side against 100% on the other is still lopsided, which is the property
+## the damage model exists for (IDEAS.md section 3).
+const MIN_OUTPUT_SHARE: float = 0.7
 
 ## Expected cut-outs per second at zero reliability, and how long one lasts.
 ## Per second rather than per tick, or the physics rate would decide how
@@ -65,6 +79,16 @@ func _init(engine_data: EngineData, engine_mount: EngineMount) -> void:
 
 ## How likely this engine is to behave right now, 0..1. The rating, pulled
 ## down by whatever damage it has taken.
+## What share of its rated thrust this engine can hold right now.
+##
+## The one place the health-to-thrust mapping lives. Anything planning a burn
+## -- the allocator, the configuration report -- has to reason with the same
+## curve the nozzle actually follows, or it is planning against an engine
+## that does not exist.
+func condition_factor() -> float:
+	return lerpf(MIN_OUTPUT_SHARE, 1.0, health)
+
+
 func current_reliability() -> float:
 	return clampf(data.reliability * lerpf(RUINED_RELIABILITY, 1.0, health), 0.0, 1.0)
 
@@ -80,10 +104,16 @@ func is_dropped_out() -> bool:
 ## whether it is behaving. The middle one is why a damaged ship flies crooked
 ## -- the control groups were built from nominal thrust and do not know about
 ## any of this.
+##
+## All of it floored at MIN_OUTPUT_SHARE, cut-outs included. A cut-out is a
+## dip rather than a silence now: audible in the handling, survivable in the
+## flying.
 func effective_output() -> float:
-	if is_dropped_out():
+	if throttle <= 0.0:
 		return 0.0
-	return throttle * health * _surge_factor()
+	if is_dropped_out():
+		return throttle * MIN_OUTPUT_SHARE
+	return throttle * maxf(condition_factor() * _surge_factor(), MIN_OUTPUT_SHARE)
 
 
 ## The surge, never above one. An unreliable engine reads as struggling to
