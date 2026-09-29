@@ -748,6 +748,14 @@ Dwa rozstrzygnięcia, które nie są oczywiste:
   zawsze bursztynowy, bo może zawrócić na wszystko, więc zawsze warto go
   wystrzelić i nigdy nie jest dokładnie wycelowany.
 
+**Własny kadłub nie jest przeszkodą.** Celowanie w poprzek statku to
+normalna rzecz do zrobienia wieżyczką, więc amunicja przez własny kadłub
+przelatuje. Pocisk jest martwy, **dopóki nie wyjdzie poza obrys** tego, kto go
+wystrzelił — nie przez stały czas, bo stały czas jest zakładem o rozmiar
+kadłuba, a sandbox potrafi teraz zbudować taki, przez który wolna rakieta leci
+pół sekundy. Raz opuszczony obrys uzbraja na stałe, więc pocisk wracający
+dookoła planety trafia; wejście z powrotem w kadłub to już wina pilota.
+
 Działka podążają za kursorem **niezależnie od spustu**. Wieżyczka, która
 zaczyna obrót dopiero przy strzale, nigdy nie celuje tam, gdzie trzeba, w
 chwili, w której trzeba.

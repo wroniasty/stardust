@@ -3360,8 +3360,55 @@ func _check_aiming() -> void:
 		"the three cursor states are three different colours",
 	)
 
+	# Our own rounds pass through our own hull. Aiming across the ship is a
+	# legitimate thing to do with a turret, so a round is inert until it is
+	# clear of the ship that fired it -- and the clearance is the hull's own
+	# size, because a fixed grace period is a bet on how big ships are.
 	for round_node: Node in container.get_children():
 		round_node.queue_free()
+	var big: Ship = _spawn_ship()
+	big.hull_outline = PackedVector2Array([
+		Vector2(0, -40), Vector2(-28, 34), Vector2(28, 34),
+	])
+	big._build_contact_points()
+	big._build_collision_shape()
+	big.rebuild_control_groups(false)
+	big.global_position = Vector2(20000.0, 0.0)
+
+	var slow: Projectile = (load("res://scenes/projectile.tscn") as PackedScene).instantiate()
+	root.add_child(slow)
+	slow.shooter = big
+	slow.damage = 0.5
+	slow.velocity = Vector2(150.0, 0.0)
+	slow.global_position = big.global_position - Vector2(30.0, 0.0)
+	var hull_before: float = big.hull_integrity
+	# Long past the old fixed grace, and still inside the hull.
+	for step: int in range(24):
+		slow._physics_process(1.0 / 60.0)
+		slow._on_body_entered(big)
+	_expect(
+		is_equal_approx(big.hull_integrity, hull_before),
+		"a round crossing its own hull does not hurt the ship that fired it",
+	)
+	_expect(
+		not slow._armed,
+		"because it is not live until it is clear, however long that takes",
+	)
+
+	# But one that has been clear is live for good, so a shot that comes
+	# back round still counts.
+	slow.global_position = big.global_position + Vector2(400.0, 0.0)
+	slow._physics_process(1.0 / 60.0)
+	_expect(slow._armed, "leaving arms it")
+	slow.global_position = big.global_position
+	slow._on_body_entered(big)
+	_expect(
+		big.hull_integrity < hull_before,
+		"and a round that comes home armed does hit (%.2f)" % big.hull_integrity,
+	)
+
+	slow.queue_free()
+	big.queue_free()
 	ship.queue_free()
 
 

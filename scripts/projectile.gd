@@ -29,12 +29,30 @@ signal impacted(point: Vector2, damage: float)
 ## hits to kill a healthy ship.
 @export var damage: float = 0.08
 
-## Seconds before the round will hit the ship that fired it.
+## Seconds before the round will hit the ship that fired it, as a floor.
 ##
-## Not a blanket exemption: the muzzle sits inside the firing hull's own contact
-## radius, so without a moment's grace every shot would kill the shooter, but a
-## round that loops back around a planet later absolutely should.
+## Not a blanket exemption: the muzzle sits inside the firing hull's own
+## contact radius, so without a moment's grace every shot would kill the
+## shooter -- but a round that loops back around a planet later absolutely
+## should hit.
+##
+## A time alone is not enough now that guns turn and hulls vary. A turret
+## firing backwards sends its round the length of the ship, and a slow
+## missile crossing a large hull takes longer than any fixed grace: at
+## 150 px/s across a 72 px hull that is half a second against this 0.2.
+## So the real rule is below -- the time only covers the case where the
+## shooter has gone.
 @export var arming_time: float = 0.2
+
+## Extra clearance past the hull before a round is live, in pixels.
+const ARMING_CLEARANCE: float = 4.0
+
+## Whether this round has ever been clear of the ship that fired it.
+##
+## Once, not currently: a round that has left is armed for good, so one that
+## loops back around a planet comes home live. Being inside the hull again
+## later is the shooter's own doing.
+var _armed: bool = false
 
 ## Radius of the hole punched in the crust on impact.
 @export var crater_radius: float = 14.0
@@ -70,6 +88,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_age += delta
+	_check_armed()
 	if _age >= lifetime:
 		queue_free()
 		return
@@ -104,7 +123,7 @@ func _on_body_entered(body: Node2D) -> void:
 	var ship: Ship = body as Ship
 	if ship == null:
 		return
-	if ship == shooter and _age < arming_time:
+	if ship == shooter and not _armed:
 		return
 	ship.take_damage(damage, "projectile")
 	_impact(global_position)
@@ -148,3 +167,16 @@ func _blast(point: Vector2) -> void:
 			ship.global_position.distance_to(point) / maxf(blast_radius, 0.0001), 0.0, 1.0
 		)
 		ship.take_damage(damage * lerpf(1.0, BLAST_EDGE_SHARE, reach), "blast")
+
+
+## Arms the round once it is clear of the hull that fired it, or once the
+## grace has run out with no shooter left to ask.
+func _check_armed() -> void:
+	if _armed:
+		return
+	var firing_ship: Ship = shooter as Ship
+	if firing_ship == null or not is_instance_valid(firing_ship):
+		_armed = _age >= arming_time
+		return
+	var clear: float = firing_ship.hull_extent() + ARMING_CLEARANCE
+	_armed = global_position.distance_to(firing_ship.global_position) > clear
