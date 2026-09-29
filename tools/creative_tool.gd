@@ -294,10 +294,10 @@ func _on_spawn() -> void:
 		return
 	# Into the hold if it is free, into cargo otherwise: the tool should not
 	# make the pilot juggle to accept what it just made.
-	if _ship.carried == null and _ship.take(item, LOOT.Rarity.RARE):
+	if _ship.carried == null and _ship.take(item):
 		_say("do ładowni: %s" % _name_of(item))
 	elif Ship.module_bulk(item) <= _ship.cargo_free():
-		_ship.cargo.append({"item": item, "rarity": int(LOOT.Rarity.RARE)})
+		_ship.cargo.append({"item": item, "rarity": _grade(item)})
 		_ship.rebuild_control_groups(false)
 		_ship.cargo_changed.emit()
 		_say("do cargo: %s" % _name_of(item))
@@ -318,7 +318,7 @@ func _on_fill() -> void:
 		if item == null or Ship.module_bulk(item) > _ship.cargo_free():
 			_seed_spin.value = int(_seed_spin.value) + 1
 			continue
-		_ship.cargo.append({"item": item, "rarity": int(LOOT.Rarity.RARE)})
+		_ship.cargo.append({"item": item, "rarity": _grade(item)})
 		_seed_spin.value = int(_seed_spin.value) + 1
 		added += 1
 	_ship.rebuild_control_groups(false)
@@ -419,8 +419,18 @@ func _refresh() -> void:
 	_report.text = "\n".join(lines)
 
 
+## Name plus grade, because "do ładowni: main engine" says nothing about
+## whether the thing that just appeared is the legendary one that was asked
+## for.
 func _name_of(item: Resource) -> String:
+	var module: ModuleData = item as ModuleData
+	var grade: String = "" if module == null else " [%s]" % module.rarity_name()
 	for property: String in ["display_name"]:
 		if property in item:
-			return String(item.get(property))
-	return "moduł"
+			return String(item.get(property)) + grade
+	return "moduł" + grade
+
+
+func _grade(item: Resource) -> int:
+	var module: ModuleData = item as ModuleData
+	return module.rarity if module != null else 0

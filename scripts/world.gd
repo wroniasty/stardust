@@ -171,7 +171,7 @@ func _on_crate_touched(crate: LootCrate, body: Node) -> void:
 	var ship: Ship = body as Ship
 	if ship == null or crate.item == null:
 		return
-	if not ship.take(crate.item, crate.rarity):
+	if not ship.take(crate.item):
 		# A full hold is the pilot's problem to solve, not a reason to destroy
 		# what they flew into.
 		return

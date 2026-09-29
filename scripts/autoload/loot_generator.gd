@@ -33,7 +33,9 @@ const RARITY_AFFIXES: Array[int] = [0, 1, 2, 3, 4]
 ## as legendary needs the ones that do to land hard.
 const RARITY_STRENGTH: Array[float] = [1.0, 1.15, 1.45, 1.8, 2.3]
 
-const RARITY_NAMES: Array[String] = ["common", "uncommon", "rare", "epic", "legendary"]
+## The one list, on ModuleData, where the colours are too. Two lists of
+## rarity names would drift the first time one of them gained an entry.
+const RARITY_NAMES: Array[String] = ModuleData.RARITY_NAMES
 
 const WEAPON_BASES: Array[String] = [
 	"res://resources/weapons/autocannon.tres",
@@ -266,6 +268,7 @@ func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
 	var rng: RandomNumberGenerator = _rng_for(item_seed)
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	var box: FlightComputerData = FlightComputerData.new()
+	box.rarity = rolled
 	box.allocation = (
 		FlightComputerData.Allocation.NNLS if rolled >= Rarity.UNCOMMON
 		else FlightComputerData.Allocation.HEURISTIC
@@ -332,6 +335,7 @@ func _build_weapon(rng: RandomNumberGenerator, rarity: int) -> WeaponData:
 		return null
 	var item: WeaponData = base.duplicate() as WeaponData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	item.rarity = rolled
 	item.affixes = _apply_affixes(rng, item, WEAPON_AFFIXES, rolled)
 	# Rarity buys room for decisions, not just bigger numbers.
 	item.mod_slots = mini(rolled, 3)
@@ -348,6 +352,7 @@ func _build_engine(rng: RandomNumberGenerator, rarity: int) -> EngineData:
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	# EngineData has no name of its own: what an engine is called comes from
 	# its type, because its purpose comes from where it is mounted.
+	item.rarity = rolled
 	_apply_affixes(rng, item, ENGINE_AFFIXES, rolled)
 	_clamp_all(item)
 	return item
@@ -361,6 +366,7 @@ func _build_generator(rng: RandomNumberGenerator, rarity: int) -> GeneratorData:
 		return null
 	var item: GeneratorData = base.duplicate() as GeneratorData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	item.rarity = rolled
 	item.display_name = _name_for(item.display_name, _apply_affixes(
 		rng, item, GENERATOR_AFFIXES, rolled
 	))

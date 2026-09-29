@@ -9,6 +9,40 @@ extends Resource
 ## slower ship. That is what stops loot being a shopping list of the same
 ## number going up (IDEAS.md section 14).
 
+## Rarity names and the colour each one is painted in, dullest to brightest.
+## The colour is the only thing readable from orbit, and at 640x360 the pale
+## grey of a common find and the near-white of an uncommon one have to be
+## told apart as an eight-pixel dot.
+const RARITY_NAMES: Array[String] = ["common", "uncommon", "rare", "epic", "legendary"]
+const RARITY_COLORS: Array[Color] = [
+	Color(0.55, 0.57, 0.60), ## pale grey
+	Color(0.85, 0.89, 0.94), ## silver
+	Color(0.35, 0.62, 1.00), ## blue
+	Color(0.72, 0.42, 1.00), ## purple
+	Color(1.00, 0.80, 0.28), ## gold
+]
+
+## How good the roll that made this module was, 0..4.
+##
+## On the module rather than travelling beside it. It used to ride alongside,
+## on the argument that rarity is a fact about the roll and not about the
+## machine -- true, and it cost more than it was worth: the crate, the hold,
+## the cargo bay and the editor each carried their own copy, and the sandbox
+## quietly stamped every find it made as rare because one of those copies was
+## a hard-coded constant. When there was no shared base class the argument
+## had nowhere to go; ModuleData is that base now.
+@export var rarity: int = 0
+
+
+## What this module's roll is called, and the colour it is painted.
+func rarity_name() -> String:
+	return RARITY_NAMES[clampi(rarity, 0, RARITY_NAMES.size() - 1)]
+
+
+func rarity_color() -> Color:
+	return RARITY_COLORS[clampi(rarity, 0, RARITY_COLORS.size() - 1)]
+
+
 ## How big the module physically is: the mass it adds, and what has to fit in
 ## the slot. One unit across every kind of module, so a cargo bay needs no
 ## table of conversions and a pilot no second number to learn.

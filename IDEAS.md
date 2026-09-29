@@ -530,6 +530,20 @@ decyzje o jej kształcie:
   ciągną w tę samą stronę, zamiast kazać pilotowi siadać na klifie. Skrzynka
   jest dzieckiem planety, więc jeździ z gruntem i nie wymaga liczenia niczego
   co klatkę.
+- **Rzadkość jedzie na module, nie obok niego.** Pierwotnie szła osobno, z
+  argumentem „rzadkość to fakt o losowaniu, nie o maszynie" — prawdziwym i
+  kosztownym: skrzynka, ładownia, cargo i edytor trzymały każde własną kopię,
+  a sandbox stemplował każde znalezisko jako `rare`, bo jedna z tych kopii była
+  zahardkodowaną stałą. Argument nie miał gdzie mieszkać, dopóki nie było
+  wspólnej klasy bazowej; `ModuleData` jest nią teraz, więc `rarity` siedzi tam
+  razem z nazwami i kolorami.
+
+  Kolory (`ModuleData.RARITY_COLORS`): common `#8c9199` blado szary,
+  uncommon `#d9e3f0` srebrny, rare `#599eff` niebieski, epic `#b86bff`
+  fioletowy, legendary `#ffcc47` złoty. Sąsiednie stopnie muszą się dać
+  odróżnić na ośmiopikselowej kropce i to jest pilnowane testem — najciaśniejsza
+  para (rare/epic) ma 0,57 rozjazdu przy progu 0,35.
+
 - **Skrzynka trzyma wylosowany przedmiot, nie obietnicę losowania.** Seed jest
   wydawany przy budowie świata, więc ta sama planeta zawsze oferuje te same
   znaleziska w tych samych miejscach. Rzadkość jedzie obok przedmiotu, bo ani

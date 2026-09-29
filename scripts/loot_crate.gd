@@ -21,21 +21,14 @@ signal touched(crate: LootCrate, body: Node)
 ## reason: the day crates stop hanging off planets, one line changes.
 const LOOT_GROUP: StringName = &"loot"
 
-## What is inside, and how good it is. Rarity travels alongside the item
-## because neither WeaponData nor EngineData carries it: rarity is a fact
-## about the roll, not about the module.
+## What is inside. Rarity comes off the module itself now, so a crate
+## cannot be painted a different colour from the thing in it.
 var item: Resource = null
-var rarity: int = 0
 
-## Colour per rarity, dullest to brightest. The only thing a pilot can read
-## from orbit is how interesting the box is.
-const RARITY_COLORS: Array[Color] = [
-	Color(0.62, 0.64, 0.66),
-	Color(0.45, 0.85, 0.50),
-	Color(0.40, 0.65, 1.00),
-	Color(0.75, 0.45, 1.00),
-	Color(1.00, 0.70, 0.25),
-]
+## The one list, on ModuleData. Kept here as a name because the scanner and
+## the editor already say LootCrate.RARITY_COLORS and there is no reason for
+## them to care where it moved to.
+const RARITY_COLORS: Array[Color] = ModuleData.RARITY_COLORS
 
 ## Seconds before the crate will answer a ship at all. A jettisoned module
 ## is dropped by a ship that is still sitting on top of it, and without this
@@ -55,11 +48,27 @@ func _ready() -> void:
 
 ## Fills the crate. Called by whoever placed it, before it enters the tree or
 ## right after.
-func hold(new_item: Resource, new_rarity: int) -> void:
+func hold(new_item: Resource, new_rarity: int = -1) -> void:
 	item = new_item
-	rarity = new_rarity
+	# Told, or asked. A caller that knows better may still say so; one that
+	# just found the thing does not have to remember to.
+	if new_rarity >= 0 and new_item is ModuleData:
+		(new_item as ModuleData).rarity = new_rarity
 	if is_node_ready():
 		_paint()
+
+
+## How good what is inside is, or the dullest grade when there is nothing.
+## The colour this crate is painted, which is the one thing readable from
+## orbit. Exposed so a test can check the crate and the grade agree rather
+## than re-deriving the lookup and agreeing with itself.
+func rarity_color_of() -> Color:
+	return RARITY_COLORS[clampi(rarity(), 0, RARITY_COLORS.size() - 1)]
+
+
+func rarity() -> int:
+	var module: ModuleData = item as ModuleData
+	return module.rarity if module != null else 0
 
 
 ## What the pilot is told they have found.
@@ -76,7 +85,7 @@ func label() -> String:
 func _paint() -> void:
 	if _body == null:
 		return
-	var colour: Color = RARITY_COLORS[clampi(rarity, 0, RARITY_COLORS.size() - 1)]
+	var colour: Color = RARITY_COLORS[clampi(rarity(), 0, RARITY_COLORS.size() - 1)]
 	_body.color = colour
 	_glow.color = Color(colour.r, colour.g, colour.b, 0.25)
 

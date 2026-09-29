@@ -305,7 +305,14 @@ var last_landing_rejection: String = ""
 ## not an inventory: a full hold has to be dealt with before the next find,
 ## which keeps the loadout screen to a single decision (IDEAS.md section 4).
 var carried: Resource = null
-var carried_rarity: int = 0
+
+
+## How good the thing in the hold is. Read off the module rather than stored,
+## so it cannot disagree with what is actually being carried.
+var carried_rarity: int:
+	get:
+		var module: ModuleData = carried as ModuleData
+		return module.rarity if module != null else 0
 
 ## The cargo bay: things stowed for later, measured in the same bulk unit as
 ## everything else. Not slots -- a capacity -- so "can I take this" is a
@@ -458,11 +465,14 @@ func fit_engine(mount: EngineMount, data: EngineData) -> EngineData:
 
 ## Takes a loose module into the hold. Returns false when the hold is full,
 ## which is the caller's cue to tell the pilot rather than to lose the item.
-func take(item: Resource, rarity: int) -> bool:
+func take(item: Resource, rarity: int = -1) -> bool:
 	if carried != null or item == null:
 		return false
+	# A caller that knows better may still say so, but nothing has to
+	# remember to: the module carries its own grade.
+	if rarity >= 0 and item is ModuleData:
+		(item as ModuleData).rarity = rarity
 	carried = item
-	carried_rarity = rarity
 	hold_changed.emit(carried)
 	return true
 
@@ -494,7 +504,6 @@ func stow() -> bool:
 		return false
 	cargo.append({"item": carried, "rarity": carried_rarity})
 	carried = null
-	carried_rarity = 0
 	rebuild_control_groups(false)
 	hold_changed.emit(null)
 	cargo_changed.emit()
@@ -508,7 +517,6 @@ func retrieve(index: int) -> bool:
 	var entry: Dictionary = cargo[index]
 	cargo.remove_at(index)
 	carried = entry["item"]
-	carried_rarity = int(entry["rarity"])
 	rebuild_control_groups(false)
 	hold_changed.emit(carried)
 	cargo_changed.emit()
@@ -533,7 +541,6 @@ func jettison() -> Resource:
 func release() -> Resource:
 	var item: Resource = carried
 	carried = null
-	carried_rarity = 0
 	hold_changed.emit(null)
 	return item
 

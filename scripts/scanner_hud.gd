@@ -202,7 +202,7 @@ func loot_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 			"at": centre + _on_ring(offset, extent) if off_screen else screen_point,
 			"direction": offset.normalized() if off_screen else Vector2.ZERO,
 			"distance": distance,
-			"rarity": crate.rarity,
+			"rarity": crate.rarity(),
 			"on_ring": off_screen,
 		})
 

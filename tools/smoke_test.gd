@@ -972,6 +972,7 @@ func _evaluate_phase() -> void:
 			_check_weapon_types(_planet)
 			_check_ship_fitouts()
 			_check_creative_tool()
+			_check_rarity_travels()
 			_check_scanner(_planet)
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
@@ -3187,6 +3188,62 @@ func _collect_greedy_controls(node: Node, into: PackedStringArray) -> void:
 			into.append(control.get_class())
 	for child: Node in node.get_children():
 		_collect_greedy_controls(child, into)
+
+
+## A found module has to know how good it is, everywhere it goes.
+##
+## Rarity used to travel beside the item, and four places kept their own
+## copy: the crate, the hold, the cargo bay and the editor. The sandbox
+## stamped every find as rare because one of those copies was a hard-coded
+## constant, which is exactly the failure a value with four homes invites.
+func _check_rarity_travels() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	var ship: Ship = _spawn_ship()
+
+	for grade: int in range(ModuleData.RARITY_NAMES.size()):
+		var engine: EngineData = loot.engine(8800 + grade, grade)
+		_expect(
+			engine.rarity == grade,
+			"a %s roll comes back knowing it is %s" % [
+				ModuleData.RARITY_NAMES[grade], engine.rarity_name(),
+			],
+		)
+
+	# Through the hold, the bay and back out, without being told again.
+	var found: WeaponData = loot.weapon(8899, ModuleData.RARITY_NAMES.size() - 1)
+	_expect(found.rarity == 4, "a legendary weapon is stamped legendary")
+	ship.take(found)
+	_expect(ship.carried_rarity == 4, "the hold reports it without being told")
+	ship.stow()
+	ship.retrieve(0)
+	_expect(ship.carried_rarity == 4, "and it survives a trip through cargo")
+
+	# And into a crate, which is where the colour comes from.
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	root.add_child(crate)
+	crate.hold(ship.release())
+	_expect(crate.rarity() == 4, "a crate made from it is legendary too")
+	_expect(
+		crate.rarity_color_of() == ModuleData.RARITY_COLORS[4],
+		"and painted the colour that grade is painted",
+	)
+
+	# The grades have to be told apart on screen, which is the whole job of
+	# the colour. Neighbours are the hard case.
+	for i: int in range(ModuleData.RARITY_COLORS.size() - 1):
+		var a: Color = ModuleData.RARITY_COLORS[i]
+		var b: Color = ModuleData.RARITY_COLORS[i + 1]
+		var apart: float = absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b)
+		_expect(
+			apart > 0.35,
+			"%s and %s are told apart at a glance (%.2f)" % [
+				ModuleData.RARITY_NAMES[i], ModuleData.RARITY_NAMES[i + 1], apart,
+			],
+		)
+
+	crate.queue_free()
+	loot.free()
+	ship.queue_free()
 
 
 func _check_configuration_report() -> void:

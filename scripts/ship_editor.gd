@@ -520,9 +520,10 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 	for i: int in range(items.size()):
 		var entry: Dictionary = items[i]
 		var item: Resource = entry["item"]
-		var colour: Color = LootCrate.RARITY_COLORS[
-			clampi(int(entry["rarity"]), 0, LootCrate.RARITY_COLORS.size() - 1)
-		]
+		var module: ModuleData = item as ModuleData
+		var colour: Color = (
+			ModuleData.RARITY_COLORS[0] if module == null else module.rarity_color()
+		)
 		if i == _pick:
 			_canvas.draw_rect(_row_rect(i, rect), Color(PICK, 0.18))
 		_text(font, Vector2(x, y), "%s %-22s %4.1f" % [
@@ -639,7 +640,12 @@ func _label(item: Resource) -> String:
 
 func _describe(item: Resource) -> PackedStringArray:
 	var out: PackedStringArray = PackedStringArray()
-	out.append("%s   gabaryt %.2f" % [_label(item), Ship.module_bulk(item)])
+	var module: ModuleData = item as ModuleData
+	out.append("%s   %s   gabaryt %.2f" % [
+		_label(item),
+		"" if module == null else module.rarity_name(),
+		Ship.module_bulk(item),
+	])
 	if item is WeaponData:
 		var weapon: WeaponData = item as WeaponData
 		out.append("obrażenia %.2f x %.1f/s = %.2f dps   rozrzut %.1f st   zasięg %.0f   krater %.0f" % [
