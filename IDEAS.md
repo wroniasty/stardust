@@ -1849,6 +1849,49 @@ i przy jego napotkaniu oddaje niezmieniony napis formatu. Raport przez chwilę
 wypisywał `energy_capacity %s %s%.3g` i wyglądało to jak niewypełniony szablon,
 a nie jak błąd.
 
+### Strojenie: ładunek i rzadkość
+
+Dwa pomiary, które wyszły źle i zostały poprawione.
+
+**Ładunek zamieniał statek w cegłę.** Przy przeliczniku 1:1 pełna ładownia
+(11 gabarytów) dokładała **75% masy i zabierała 43% przyspieszenia** — noszenie
+czegokolwiek było odmową, nie decyzją. Ładunek waży teraz **0,35 na gabaryt**,
+czyli pełna ładownia kosztuje 19% przyspieszenia.
+
+Zamontowane moduły zachowują pełną masę i to jest celowe: montaż jest wymianą,
+więc zmiana netto jest mała, a środek masy stoi tam, gdzie stoi, właśnie przez
+te konkretne gabaryty. Warunek `com = 1.75` wymusza zresztą sztywną relację
+`masa_kadłuba = 6 × przelicznik_modułów`, więc samo zmniejszenie masy modułów
+nie zmieniłoby proporcji kadłub:moduły (41:59) — przeskalowałoby cały statek.
+Żeby ruszyć tę proporcję, trzeba przesunąć mounty, a to osobna decyzja.
+
+Budżet „nie-cegła" jest teraz testem: pełna ładownia ma kosztować więcej niż 5%
+i mniej niż 30% przyspieszenia.
+
+**Rzadkość podnosiła rozrzut, nie średnią.** Wykładnik `RARITY_STRENGTH`
+stosował się i do zysku, i do ceny afiksu, więc legendary miał *droższe* koszty
+tak samo jak większe zyski. Zmierzone na 1500 losowaniach, każde porównane z
+własną bazą (ten sam seed, rzadkość common — baza jest wtedy dosłownie tym
+samym przedmiotem bez afiksów):
+
+| rzadkość | średnia | mediana | najlepszy | gorszych od bazy |
+|---|---|---|---|---|
+| common | ×1,00 | ×1,00 | ×1,00 | 0% |
+| uncommon | ×1,06 | ×1,00 | ×1,71 | 29% |
+| rare | ×1,18 | ×1,03 | ×2,97 | 36% |
+| epic | ×1,43 | ×1,28 | ×4,91 | 29% |
+| legendary | ×1,94 | ×1,67 | ×8,29 | 19% |
+
+Wykładnik stosuje się teraz **tylko do nazwanego zysku**; cena idzie po
+wylosowanej wartości. „Bardziej skrajny, nie jednostajnie lepszy" zostaje —
+jedna piąta legendarnych silników nadal ma mniejszy ciąg od bazy, bo zapłaciły
+za coś innego — ale skrajność krąży teraz wokół **wyższej** średniej, a nie tej
+samej.
+
+Metodologiczna uwaga warta zapamiętania: pierwszy pomiar porównywał każde
+losowanie z **jedną** bazą, podczas gdy generator losuje z siedmiu. Dysza
+obrotowa wychodziła wtedy jako „×0,18 ciągu" i średnie były bez sensu.
+
 ### Jak się to składa
 
 Strzelanie do wyczerpania puli daje przepływ energii, który składa się jak opory

@@ -1659,9 +1659,40 @@ func _check_cargo() -> void:
 		"the bay is measured in bulk, not in slots (%.1f)" % ship.cargo_used(),
 	)
 	_expect(
-		ship.mass > light + 3.9,
-		"cargo is mass: the ship went from %.1f to %.1f" % [light, ship.mass],
+		absf((ship.mass - light) - 4.0 * Ship.CARGO_MASS_PER_BULK) < 0.01,
+		"cargo is mass, at the payload rate: %.1f to %.1f kg for 4 of bulk" % [light, ship.mass],
 	)
+
+	# And the other half of that: felt, but never crippling. At one-to-one a
+	# full hold added 75% to the ship and took 43% of its acceleration, so
+	# carrying anything at all was a refusal rather than a decision.
+	# Measured from a genuinely empty hold, or the baseline already carries
+	# the load it is supposed to be compared against.
+	ship.cargo.clear()
+	ship.rebuild_control_groups(false)
+	var empty_accel: float = ship.control.authority_of(
+		ShipControl.Command.FORWARD
+	) / ship.mass
+	var stuffing: EngineData = heavy.duplicate() as EngineData
+	stuffing.bulk = ship.cargo_capacity()
+	ship.cargo.append({"item": stuffing, "rarity": 0})
+	ship.rebuild_control_groups(false)
+	var laden_accel: float = ship.control.authority_of(
+		ShipControl.Command.FORWARD
+	) / ship.mass
+	var cost: float = 1.0 - laden_accel / empty_accel
+	_expect(
+		cost > 0.05,
+		"a full hold is felt (%.0f%% of the acceleration)" % [cost * 100.0],
+	)
+	_expect(
+		cost < 0.30,
+		"but never turns the ship into a brick (%.0f%%, budget 30%%)" % [cost * 100.0],
+	)
+	ship.cargo.clear()
+	ship.rebuild_control_groups(false)
+	ship.take(heavy, 0)
+	ship.stow()
 
 	# And the capacity is the constraint, not a suggestion.
 	var enormous: EngineData = loot.engine(4243, 0)

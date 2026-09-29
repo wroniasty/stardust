@@ -22,11 +22,16 @@ const RARITY_WEIGHTS: Array[float] = [55.0, 27.0, 13.0, 4.0, 1.0]
 ## How many affixes each rarity rolls.
 const RARITY_AFFIXES: Array[int] = [0, 1, 2, 3, 4]
 
-## Exponent applied to every affix factor. Exponent rather than a linear
-## scale, because a factor below 1 scaled linearly crosses zero and produces
-## items with negative rate of fire; raising it to a power stays on the right
-## side of zero however strong the rarity gets.
-const RARITY_STRENGTH: Array[float] = [1.0, 1.0, 1.25, 1.5, 1.8]
+## Exponent applied to an affix's named benefit. Exponent rather than a
+## linear scale, because a factor below 1 scaled linearly crosses zero and
+## produces items with negative rate of fire; raising it to a power stays on
+## the right side of zero however strong the rarity gets.
+##
+## Applied to the benefit only -- see _apply_affixes. Raised at the top end,
+## because four affixes on a legendary are drawn from a table of seven and
+## most of them do not touch the headline number, so a legendary that reads
+## as legendary needs the ones that do to land hard.
+const RARITY_STRENGTH: Array[float] = [1.0, 1.15, 1.45, 1.8, 2.3]
 
 const RARITY_NAMES: Array[String] = ["common", "uncommon", "rare", "epic", "legendary"]
 
@@ -395,7 +400,16 @@ func _apply_affixes(
 		else:
 			_scale(item, String(affix["field"]), affix["factor"] as Vector2, strength, rng)
 		if affix.has("cost_field"):
-			_scale(item, String(affix["cost_field"]), affix["cost"] as Vector2, strength, rng)
+			# The cost is rolled at face value, never raised to the rarity
+			# exponent. Amplifying both sides made rarity mean "more extreme
+			# in both directions", and measured over 600 rolls that came out
+			# as a legendary engine averaging 0.82 of its base thrust and
+			# bottoming out at 0.08 -- loot that is on average a downgrade
+			# and occasionally a brick.
+			#
+			# Extreme is still the aim, but around a higher mean: the named
+			# benefit scales with rarity, the price stays what it says.
+			_scale(item, String(affix["cost_field"]), affix["cost"] as Vector2, 1.0, rng)
 		names.append(affix["name"] as StringName)
 
 	return names

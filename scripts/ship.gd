@@ -381,6 +381,11 @@ var _outline_contacts: Array[Vector2] = []
 ## sluggishness, not as a warning.
 const CARGO_BAY: Vector2 = Vector2(0.0, 1.75)
 
+## Mass a unit of stowed bulk adds, against a fitted module's one-for-one.
+## Cargo capacity is a measure of room, and a hold is built to carry what
+## fits in it.
+const CARGO_MASS_PER_BULK: float = 0.35
+
 
 var _landed_planet: Planet = null
 var _landed_angle: float = 0.0
@@ -611,9 +616,17 @@ func _recompute_mass_properties() -> void:
 		total_mass += module
 		weighted += engine.mount.position * module
 
-	# Cargo is mass like anything else. A hold full of engines is a slower
-	# ship, which is the price of hoarding and the reason to choose.
-	var load: float = cargo_used()
+	# Cargo is mass, but not at the rate a bolted-in module is. Measured at
+	# one-to-one, a full hold added 75% to the ship and took 43% of its
+	# acceleration: carrying anything at all turned it into a brick and the
+	# hold might as well not have existed. At this rate a full hold costs
+	# about a fifth of the acceleration, which is a decision rather than a
+	# refusal.
+	#
+	# Fitted modules keep their full mass. Fitting is a swap, so the net
+	# change is small, and the centre of mass sits where it does because of
+	# those exact figures (IDEAS.md section 3).
+	var load: float = cargo_used() * CARGO_MASS_PER_BULK
 	total_mass += load
 	weighted += CARGO_BAY * load
 
