@@ -976,6 +976,8 @@ func _evaluate_phase() -> void:
 			_check_aiming()
 			_check_stat_cards()
 			_check_scanner(_planet)
+			_check_crate_physics(_planet)
+			_check_ejection()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -3302,6 +3304,128 @@ func _collect_greedy_controls(node: Node, into: PackedStringArray) -> void:
 ## copy: the crate, the hold, the cargo bay and the editor. The sandbox
 ## stamped every find as rare because one of those copies was a hard-coded
 ## constant, which is exactly the failure a value with four homes invites.
+## A crate that has been thrown. It has to come down, it has to stop, and
+## at no point may it be inside the rock.
+func _check_crate_physics(planet: Planet) -> void:
+	var scene: PackedScene = load(CRATE_SCENE) as PackedScene
+
+	# Dropped from a height with a sideways shove: falls, never enters rock,
+	# and ends up standing on the ground rather than hovering or buried.
+	var crate: LootCrate = scene.instantiate() as LootCrate
+	planet.add_child(crate)
+	var angle: float = 0.0
+	var up: Vector2 = Vector2.from_angle(angle)
+	var start: Vector2 = planet.global_position + up * (
+		planet.terrain.surface_radius_at(angle) + 300.0
+	)
+	crate.eject(start, up.orthogonal() * 30.0)
+	var deepest: float = INF
+	var settled_after: int = -1
+	for tick: int in range(900):
+		crate._physics_process(1.0 / 60.0)
+		deepest = minf(deepest, planet.height_above_terrain(crate.global_position))
+		if not crate.loose and settled_after < 0:
+			settled_after = tick
+	_expect(
+		deepest > LootCrate.RADIUS - 1.0,
+		"a falling crate never gets inside the rock (closest %.2f px of %.1f)" % [
+			deepest, LootCrate.RADIUS,
+		],
+	)
+	_expect(settled_after >= 0, "and it stops, rather than skating for ever")
+	_expect(
+		absf(planet.height_above_terrain(crate.global_position) - LootCrate.RADIUS) < 1.0,
+		"and comes to rest standing on the ground (%.2f px of %.1f)" % [
+			planet.height_above_terrain(crate.global_position), LootCrate.RADIUS,
+		],
+	)
+
+	# Settled means settled: a crate lying on a turning planet is carried by
+	# it, and is not being solved to get there.
+	var was: float = planet.to_local(crate.global_position).angle()
+	for tick: int in range(120):
+		crate._physics_process(1.0 / 60.0)
+	_expect(
+		absf(angle_difference(planet.to_local(crate.global_position).angle(), was)) < 0.001
+		and not crate.loose,
+		"a settled crate rides the ground it is lying on",
+	)
+
+	# Carving the shelf out from under it puts it back in the air's hands.
+	planet.carve(crate.global_position - crate.global_position.direction_to(
+		planet.global_position
+	) * -40.0, 60.0)
+	crate._physics_process(1.0 / 60.0)
+	_expect(crate.loose, "and starts falling again when the ground under it goes")
+	crate.queue_free()
+
+	# Straight down, far faster than anything in the game. Contact is
+	# measured radially rather than by sampling one point for rock, so
+	# arriving fast makes the crate deeper in the first contact tick and
+	# never lets it through.
+	var bullet: LootCrate = scene.instantiate() as LootCrate
+	planet.add_child(bullet)
+	bullet.eject(
+		planet.global_position + up * (planet.terrain.surface_radius_at(angle) + 200.0),
+		-up * 1200.0,
+	)
+	var lowest: float = INF
+	for tick: int in range(600):
+		bullet._physics_process(1.0 / 60.0)
+		lowest = minf(lowest, planet.height_above_terrain(bullet.global_position))
+	_expect(
+		lowest > LootCrate.RADIUS - 1.0,
+		"a crate arriving at 1200 px/s does not pass through the ground (%.2f px of %.1f)" % [
+			lowest, LootCrate.RADIUS,
+		],
+	)
+	bullet.queue_free()
+
+
+## What throwing something overboard does to it.
+func _check_ejection() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.global_position = Vector2(4000.0, -9000.0)
+	ship.global_rotation = 0.7
+	ship.linear_velocity = Vector2(120.0, -45.0)
+
+	var shove: Vector2 = ship.eject_velocity() - ship.linear_velocity
+	_expect(
+		is_equal_approx(shove.length(), Ship.EJECT_SPEED),
+		"an ejected module gets a %.0f px/s shove on top of the ship's own speed" % [
+			Ship.EJECT_SPEED,
+		],
+	)
+	# Aft, which is where the doors are. Measured in the ship's frame so the
+	# claim survives the ship being pointed anywhere.
+	_expect(
+		ship.to_local(ship.global_position + shove).normalized().dot(Vector2.DOWN) > 0.999,
+		"and it goes out of the back, not through the nose",
+	)
+	_expect(
+		ship.eject_point().distance_to(ship.to_global(Ship.CARGO_BAY)) < 0.001,
+		"out of the cargo bay, which is where the module was",
+	)
+
+	# The whole point: it leaves. Flown, with the ship coasting alongside.
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	root.add_child(crate)
+	crate.eject(ship.eject_point(), ship.eject_velocity())
+	var opened: float = crate.global_position.distance_to(ship.global_position)
+	for tick: int in range(60):
+		crate._physics_process(1.0 / 60.0)
+		ship.global_position += ship.linear_velocity / 60.0
+	var gap: float = crate.global_position.distance_to(ship.global_position)
+	_expect(
+		gap > opened + ship.hull_extent(),
+		"a second later it is clear of the hull (%.0f px, hull %.0f)" % [
+			gap, ship.hull_extent(),
+		],
+	)
+	crate.queue_free()
+	ship.queue_free()
+
+
 func _check_rarity_travels() -> void:
 	var loot: Node = LOOT_SCRIPT.new()
 	var ship: Ship = _spawn_ship()

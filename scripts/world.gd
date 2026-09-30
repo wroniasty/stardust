@@ -18,9 +18,10 @@ const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
 ## down on a cliff (IDEAS.md section 4).
 const CRATES_PER_PLANET: int = 4
 
-## How far above the ground a crate floats, so it is not half buried in the
-## texels it stands on.
-const CRATE_CLEARANCE: float = 10.0
+## Crates are placed standing on the shelf, not hovering over it. Anything
+## more and they spend their first second falling the difference, which is
+## work done to arrive where they were already put.
+const CRATE_CLEARANCE: float = LootCrate.RADIUS
 
 ## How long a jettisoned crate ignores the ship that dropped it. Long enough
 ## to fly clear at a crawl, short enough that coming straight back for it is
@@ -143,7 +144,10 @@ func _on_jettisoned(item: Resource, rarity: int) -> void:
 	crate.touched.connect(_on_crate_touched)
 	var host: Node = planet if planet != null else self
 	host.add_child(crate)
-	crate.global_position = ship.global_position
+	# Out of the bay and aft, carrying the ship's own velocity. Parented
+	# first, because eject() speaks world coordinates and a node outside the
+	# tree has none.
+	crate.eject(ship.eject_point(), ship.eject_velocity())
 	print("jettisoned: %s" % crate.label())
 
 

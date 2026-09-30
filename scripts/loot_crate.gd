@@ -30,6 +30,44 @@ var item: Resource = null
 ## them to care where it moved to.
 const RARITY_COLORS: Array[Color] = ModuleData.RARITY_COLORS
 
+## Half the crate's body. The body polygon is twelve pixels across, so
+## anything that touches rock six pixels from the centre has touched it.
+const RADIUS: float = 6.0
+
+## How much of the closing speed the ground gives back, and how much of the
+## sideways slide it takes away. A crate is a box, not a ball: it should hop
+## once and stop, not roll down the mountain.
+const BOUNCE: float = 0.25
+const FRICTION: float = 0.55
+
+## Relative speed below which a crate in contact stops being simulated and
+## becomes part of the ground it is lying on.
+const SETTLE_SPEED: float = 9.0
+
+## Clearance at which a settled crate notices the ground has gone and starts
+## falling again. Terrain gets carved by explosions, and a crate left hanging
+## over a fresh crater is a box standing in mid-air.
+const DISLODGE: float = 2.0
+
+## How hard the air holds a crate back, as a fraction of its speed through
+## the air per second at full density.
+##
+## Not the ship's drag shells: those are engine damping on a RigidBody2D and
+## a crate integrates itself. The point is only that a crate dropped from
+## height flutters down instead of arriving like a shell -- at a surface
+## gravity around 30 px/s^2 this settles it at some sixty px/s.
+const AIR_DRAG: float = 0.5
+
+## How the crate is moving, in world space. Meaningful only while loose.
+var velocity: Vector2 = Vector2.ZERO
+
+## Whether the crate is being integrated.
+##
+## A crate the world builder put on a shelf is already where it belongs, and
+## running a solver on a box that is not going anywhere is a solver spent on
+## nothing. Ejecting one makes it loose; touching down settles it again.
+var loose: bool = false
+
 ## Seconds before the crate will answer a ship at all. A jettisoned module
 ## is dropped by a ship that is still sitting on top of it, and without this
 ## the pilot picks it straight back up in the same frame -- which turns
@@ -106,3 +144,102 @@ func _on_body_entered(body: Node2D) -> void:
 	if grace > 0.0:
 		return
 	touched.emit(self, body)
+
+
+## Throws the crate, in world space. Whoever ejected it decides where it
+## goes; the crate only knows how to fall once it is on its way.
+func eject(from: Vector2, with_velocity: Vector2) -> void:
+	global_position = from
+	velocity = with_velocity
+	loose = true
+
+
+## One step, no substepping.
+##
+## A crate cannot fall through the ground because contact is measured
+## radially -- how far the crate is above the ground beneath it -- rather
+## than by asking whether this particular point is inside rock. To miss the
+## crust that way it would have to cross all two hundred-odd pixels of it
+## between two frames, which is thirteen thousand px/s. Substeps were
+## written first and measured second: at 1200 px/s they bought two tenths of
+## a pixel of penetration, and code that buys that is code to delete.
+##
+## The bound worth knowing: a crate flying sideways faster than the terrain
+## sampling is fine, could still pass over a spire narrower than one step.
+## Nothing in the game throws a crate anywhere near hard enough.
+func _physics_process(delta: float) -> void:
+	var planet: Planet = Planet.nearest(get_tree(), global_position)
+	if not loose:
+		_watch_for_a_hole(planet)
+		return
+	velocity += _gravity_at(global_position) * delta
+	if planet != null:
+		var air: float = planet.air_density_at(global_position)
+		if air > 0.0:
+			# Towards the air's own speed, not towards a standstill: the
+			# atmosphere turns with the planet it belongs to.
+			var through: Vector2 = velocity - planet.surface_velocity_at(global_position)
+			velocity -= through * minf(AIR_DRAG * air * delta, 1.0)
+	global_position += velocity * delta
+	if planet != null:
+		_resolve_ground(planet)
+
+
+## Sums every gravity source that reaches the crate, the same way a ship
+## does. A crate thrown in deep space keeps going, which is correct.
+func _gravity_at(point: Vector2) -> Vector2:
+	var total: Vector2 = Vector2.ZERO
+	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
+		var planet: Planet = source as Planet
+		if planet != null:
+			total += planet.gravity_at(point)
+	return total
+
+
+func _resolve_ground(planet: Planet) -> void:
+	var clearance: float = planet.height_above_terrain(global_position) - RADIUS
+	if clearance >= 0.0:
+		return
+	var normal: Vector2 = planet.surface_normal_at(global_position)
+	if normal.is_zero_approx():
+		normal = (global_position - planet.global_position).normalized()
+	# Out of the rock first, speeds second. The other order leaves the crate
+	# a frame inside the ground, and a frame inside the ground reads as a
+	# crate that sank.
+	global_position -= normal * clearance
+
+	# Measured against the ground, not against the world. The rock is moving
+	# on a planet that turns, and a crate brought to a standstill in world
+	# space is a crate the ground slides out from under -- the same mistake
+	# the ship's contact solver was fixed for (IDEAS.md section 7).
+	var ground: Vector2 = planet.surface_velocity_at(global_position)
+	var relative: Vector2 = velocity - ground
+	var into: float = relative.dot(normal)
+	if into < 0.0:
+		relative -= normal * into * (1.0 + BOUNCE)
+	relative -= (relative - normal * relative.dot(normal)) * FRICTION
+	velocity = ground + relative
+	if relative.length() < SETTLE_SPEED:
+		_settle(planet)
+
+
+## Lays the crate on the ground and stops solving it. Standing up as well as
+## standing still: a crate on a slope should look like it is on the slope.
+func _settle(planet: Planet) -> void:
+	loose = false
+	velocity = Vector2.ZERO
+	var up: Vector2 = (global_position - planet.global_position).normalized()
+	if up.is_zero_approx():
+		return
+	global_position = planet.global_position + up * (
+		planet.surface_radius_at(global_position) + RADIUS
+	)
+	global_rotation = up.angle() + PI * 0.5
+
+
+## A settled crate is part of the ground until the ground stops being there.
+func _watch_for_a_hole(planet: Planet) -> void:
+	if planet == null:
+		return
+	if planet.height_above_terrain(global_position) - RADIUS > DISLODGE:
+		loose = true

@@ -556,6 +556,16 @@ func retrieve(index: int) -> bool:
 ## turns it back into a crate in the world is the world's business, and a
 ## jettison that annihilates the cargo is not a tactical decision, it is
 ## tidying up.
+## How fast a jettisoned module leaves the ship, relative to the ship.
+##
+## Enough to be clear of the hull long before the crate will answer a pilot
+## again: the hull is some twenty-five px long and the crate is deaf for two
+## seconds, so at this speed it is eighty px astern by the time it can be
+## picked back up. Throwing something overboard has to be a decision that
+## takes effect, not a module that follows the ship around.
+const EJECT_SPEED: float = 40.0
+
+
 func jettison() -> Resource:
 	if carried == null:
 		return null
@@ -564,6 +574,23 @@ func jettison() -> Resource:
 	release()
 	jettisoned.emit(item, rarity)
 	return item
+
+
+## Where a jettisoned module leaves the hull: the cargo bay itself, in world
+## space. Asked of the ship rather than worked out by the world, because
+## where the bay is is a fact about the ship.
+func eject_point() -> Vector2:
+	return to_global(CARGO_BAY)
+
+
+## And how fast, in world space.
+##
+## The ship's own velocity plus a shove out of the doors, which face aft. A
+## module let go at speed keeps the speed -- what "ejected" means is the
+## difference between the two, and it is the difference that has to clear
+## the hull.
+func eject_velocity() -> Vector2:
+	return linear_velocity + transform.basis_xform(Vector2.DOWN).normalized() * EJECT_SPEED
 
 
 ## Empties the hold and returns what was in it.

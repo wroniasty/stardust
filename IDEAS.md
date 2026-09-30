@@ -754,6 +754,45 @@ nieprawda, bo spacja jest węższa od litery, którą zastępuje, i kolumna
 wartości wychodzi poszarpana. Font stoi obok formatów, które go zakładają,
 żeby ekran nie mógł wziąć karty i po cichu zgubić tego, co czyni ją czytelną.
 
+### Skrzynki: dlaczego własna całka, a nie RigidBody2D
+
+Skrzynka jest `Area2D` i musi nią zostać — podniesienie to wejście statku w
+obszar. Fizyka doszła obok, jako własna całka w `_physics_process`, z trzech
+powodów, z których każdy sam by wystarczył:
+
+- **Teren nie ma collidera.** Jest bitmapą próbkowaną w kodzie; statek liczy
+  kontakt sam (sekcja 7) i skrzynka musi tak samo.
+- **Grawitacja jest własna.** Pole 1/r² sumowane z grupy `gravity_sources`,
+  nie `gravity_scale`.
+- **Skrzynka jest dzieckiem planety**, żeby jeździć z obracającym się
+  gruntem. Rigid body pod obracającym się rodzicem to dwa silniki kłócące się
+  o tę samą transformację.
+
+Rozwiązanie kontaktu jest wersją tego ze statku dla jednego punktu bez
+bezwładności: wypchnięcie ze skały **przed** poprawką prędkości (odwrotna
+kolejność zostawia skrzynkę klatkę w ziemi, co czyta się jako zapadnięcie),
+prędkość mierzona **względem gruntu** (`surface_velocity_at`), odbicie 0,25 i
+tarcie 0,55 — skrzynka to pudło, ma podskoczyć raz i stanąć, a nie toczyć się
+z góry.
+
+**Osiadła kontra luźna.** Skrzynka postawiona przez generator świata jest już
+tam, gdzie ma być, więc nie jest całkowana wcale. Wyrzucenie robi ją luźną,
+przyziemienie osadza z powrotem — i osadzenie ustawia ją *na* gruncie i *do
+pionu*, bo skrzynka na zboczu ma wyglądać, jakby leżała na zboczu. Osiadła
+pilnuje tylko jednej rzeczy: czy grunt pod nią nadal istnieje. Eksplozje
+kopią teren, a skrzynka wisząca nad świeżym kraterem to pudło stojące w
+powietrzu.
+
+**Czego nie ma: podkroku.** Napisałem substepping „żeby szybka skrzynka nie
+przeskoczyła gruntu", a potem to zmierzyłem: przy 1200 px/s kupował
+**dwie dziesiąte piksela** penetracji. Kontakt jest mierzony promieniowo —
+ile skrzynka ma nad gruntem *pod sobą* — a nie pytaniem „czy ten punkt jest w
+skale", więc żeby minąć skorupę, trzeba by przelecieć jej ponad dwieście
+pikseli między klatkami, czyli 13 000 px/s. Kod, który kupuje dwie dziesiąte
+piksela, to kod do skasowania. Granica warta zapisania: lot **bokiem** nad
+iglicą węższą niż jeden krok dalej by ją minął; nic w grze nie rzuca skrzynką
+choćby blisko tak mocno.
+
 ### Schemat statku: boks zamiast kropki
 
 Kropka umie powiedzieć tylko „tutaj". Cała reszta musiała iść w podpis obok,
