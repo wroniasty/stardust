@@ -32,6 +32,12 @@ enum OrbitState {
 ## Planets register here so ships can find them without a scene path.
 const GRAVITY_GROUP: StringName = &"gravity_sources"
 
+## Emitted when rock is actually removed, so anything resting on the ground
+## can hear that it moved instead of asking every frame whether it did.
+## Terrain is carved a few times a minute and read sixty times a second;
+## the difference is the whole reason this is a signal.
+signal carved(point: Vector2, radius: float)
+
 ## Concentric drag shells, from the top of the atmosphere down. Each entry is
 ## (fraction of the atmosphere height, fraction of the full drag). The top
 ## shell barely bites, which is what makes aerobraking a slow burn rather than
@@ -263,7 +269,10 @@ func penetration_at(point: Vector2, normal: Vector2, limit: float = -1.0) -> flo
 
 ## Blows a hole in the crust. Returns true if any rock was removed.
 func carve(point: Vector2, radius: float) -> bool:
-	return terrain.carve_local(to_local(point), radius)
+	if not terrain.carve_local(to_local(point), radius):
+		return false
+	carved.emit(point, radius)
+	return true
 
 
 ## Speed of a circular orbit at `radius`, in pixels per second.

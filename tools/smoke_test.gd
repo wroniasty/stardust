@@ -3351,12 +3351,24 @@ func _check_crate_physics(planet: Planet) -> void:
 		"a settled crate rides the ground it is lying on",
 	)
 
-	# Carving the shelf out from under it puts it back in the air's hands.
+	# A settled crate is not simulated at all. That is the claim the whole
+	# settled/loose split is for, so it is worth pinning rather than
+	# trusting: the engine must not be calling it.
+	_expect(
+		not crate.is_physics_processing(),
+		"a settled crate is not being solved at all",
+	)
+
+	# Carving the shelf out from under it puts it back in the air's hands --
+	# told by the ground, not noticed by polling it, so it happens on the
+	# carve itself and not on some later tick.
 	planet.carve(crate.global_position - crate.global_position.direction_to(
 		planet.global_position
 	) * -40.0, 60.0)
-	crate._physics_process(1.0 / 60.0)
-	_expect(crate.loose, "and starts falling again when the ground under it goes")
+	_expect(
+		crate.loose and crate.is_physics_processing(),
+		"and wakes the moment the ground under it is blown away",
+	)
 	crate.queue_free()
 
 	# Straight down, far faster than anything in the game. Contact is

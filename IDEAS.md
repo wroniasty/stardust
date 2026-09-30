@@ -793,6 +793,26 @@ piksela, to kod do skasowania. Granica warta zapisania: lot **bokiem** nad
 iglicą węższą niż jeden krok dalej by ją minął; nic w grze nie rzuca skrzynką
 choćby blisko tak mocno.
 
+**Ile to kosztuje.** Zmierzone, bo pytanie padło: osiadła skrzynka 1,61
+µs/tick, luźna 3,49 µs/tick. Przy czterech skrzynkach to 0,04% budżetu
+klatki — nic. Ale rozbicie pokazało, że z 1,61 µs osiadłej **1,3 µs szło na
+pytanie „czy grunt pode mną jeszcze jest?"**: `Planet.nearest` 0,61 plus
+`height_above_terrain` 0,69, zadawane 60 razy na sekundę o zdarzenie, które
+zdarza się, gdy spadnie pocisk.
+
+Zamienione na sygnał. `Planet.carve()` emituje `carved(point, radius)`,
+skrzynka słucha gruntu, na którym leży, i sprawdza prześwit tylko wtedy.
+Osiadła skrzynka ma teraz `set_physics_process(false)` i `set_process(false)`
+— **nie jest na klatce w ogóle**, co jest dokładnie tym, co „osiadła" miała
+znaczyć od początku. Zmierzone po zmianie: 400 osiadłych skrzynek, zero na
+klatce. Odliczanie `grace` też się wyłącza, gdy dojdzie do zera; `_process`
+chodzi na każdej klatce renderowania, czyli częściej niż fizyka.
+
+Luźna ścieżka została bez zmian: 3,49 µs, z czego ~1,3 to skanowanie grupy
+(`Planet.nearest` plus suma grawitacji). Przy 100 jednocześnie spadających
+skrzynkach to 0,35 ms i nie ma czego optymalizować — luźna skrzynka jest
+stanem przejściowym, trwa sekundy.
+
 ### Schemat statku: boks zamiast kropki
 
 Kropka umie powiedzieć tylko „tutaj". Cała reszta musiała iść w podpis obok,

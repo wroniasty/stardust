@@ -44,9 +44,9 @@ const FRICTION: float = 0.55
 ## becomes part of the ground it is lying on.
 const SETTLE_SPEED: float = 9.0
 
-## Clearance at which a settled crate notices the ground has gone and starts
-## falling again. Terrain gets carved by explosions, and a crate left hanging
-## over a fresh crater is a box standing in mid-air.
+## Clearance at which a woken crate decides the ground really has gone.
+## Terrain gets carved by explosions, and a crate left hanging over a fresh
+## crater is a box standing in mid-air.
 const DISLODGE: float = 2.0
 
 ## How hard the air holds a crate back, as a fraction of its speed through
@@ -72,7 +72,12 @@ var loose: bool = false
 ## is dropped by a ship that is still sitting on top of it, and without this
 ## the pilot picks it straight back up in the same frame -- which turns
 ## throwing something overboard into a no-op.
-var grace: float = 0.0
+var grace: float = 0.0:
+	set(value):
+		grace = value
+		# Nothing to count down means nothing to run. _process fires on every
+		# rendered frame, which is more often than physics.
+		set_process(grace > 0.0)
 
 @onready var _body: Polygon2D = $Body
 @onready var _glow: Polygon2D = $Glow
@@ -81,6 +86,14 @@ var grace: float = 0.0
 func _ready() -> void:
 	add_to_group(LOOT_GROUP)
 	body_entered.connect(_on_body_entered)
+	# Both driven by state rather than left on: a settled crate with nothing
+	# to count down costs exactly nothing, which is what "settled" claims.
+	set_physics_process(loose)
+	set_process(grace > 0.0)
+	# The ground it is lying on says when it stops being there.
+	var ground: Planet = get_parent() as Planet
+	if ground != null:
+		ground.carved.connect(_on_ground_carved)
 	_paint()
 
 
@@ -138,6 +151,7 @@ func _process(delta: float) -> void:
 		# that never re-entered the area.
 		for body: Node2D in get_overlapping_bodies():
 			touched.emit(self, body)
+		set_process(false)
 
 
 func _on_body_entered(body: Node2D) -> void:
@@ -152,6 +166,7 @@ func eject(from: Vector2, with_velocity: Vector2) -> void:
 	global_position = from
 	velocity = with_velocity
 	loose = true
+	set_physics_process(true)
 
 
 ## One step, no substepping.
@@ -168,10 +183,9 @@ func eject(from: Vector2, with_velocity: Vector2) -> void:
 ## sampling is fine, could still pass over a spire narrower than one step.
 ## Nothing in the game throws a crate anywhere near hard enough.
 func _physics_process(delta: float) -> void:
-	var planet: Planet = Planet.nearest(get_tree(), global_position)
 	if not loose:
-		_watch_for_a_hole(planet)
 		return
+	var planet: Planet = Planet.nearest(get_tree(), global_position)
 	velocity += _gravity_at(global_position) * delta
 	if planet != null:
 		var air: float = planet.air_density_at(global_position)
@@ -228,6 +242,7 @@ func _resolve_ground(planet: Planet) -> void:
 func _settle(planet: Planet) -> void:
 	loose = false
 	velocity = Vector2.ZERO
+	set_physics_process(false)
 	var up: Vector2 = (global_position - planet.global_position).normalized()
 	if up.is_zero_approx():
 		return
@@ -237,9 +252,19 @@ func _settle(planet: Planet) -> void:
 	global_rotation = up.angle() + PI * 0.5
 
 
-## A settled crate is part of the ground until the ground stops being there.
-func _watch_for_a_hole(planet: Planet) -> void:
-	if planet == null:
+## A settled crate is part of the ground until the ground stops being there,
+## and the ground is what tells it. Polling for this cost 1.3 us per crate
+## per tick -- eighty per cent of what a settled crate cost at all -- to
+## watch for something that happens when a shell lands.
+func _on_ground_carved(point: Vector2, radius: float) -> void:
+	if loose:
 		return
-	if planet.height_above_terrain(global_position) - RADIUS > DISLODGE:
+	# Only a hole near enough to be under this crate is worth looking at.
+	if global_position.distance_to(point) > radius + RADIUS * 2.0:
+		return
+	var ground: Planet = get_parent() as Planet
+	if ground == null:
+		return
+	if ground.height_above_terrain(global_position) - RADIUS > DISLODGE:
 		loose = true
+		set_physics_process(true)
