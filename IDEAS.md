@@ -795,12 +795,47 @@ jest teraz słaby (`WeakRef`, przez `parent_body()`): właścicielem jest lista
 `bodies` w systemie, a wchodzenie w górę od dziecka nigdy nie musi niczego
 utrzymywać przy życiu.
 
-**Rozmiar systemu: 41k do 302k px** (300 seedów). Float32 zaczyna drżeć powyżej
-~100k, więc pomiar jest odpowiedzią na otwarte pytanie z PLAN-u: albo floating
-origin, albo ściśnięcie układu. Stałe są dobrane pod **czas podróży** — skok
-między sąsiadkami ma być kwestią dziesięciu sekund pod ciągiem, nie wyprawą —
-i to jest ograniczenie od strony rozgrywki, które powinno wygrać z wygodą
-implementacji.
+**Rozmiar systemu: 41k do 302k px** (300 seedów). Stałe są dobrane pod **czas
+podróży** — skok między sąsiadkami ma być kwestią dziesięciu sekund pod ciągiem,
+nie wyprawą — i to ograniczenie od strony rozgrywki wygrywa z wygodą
+implementacji. Co prowadziło do pytania niżej.
+
+### Floating origin: nie jest potrzebny, i to jest zmierzone
+
+Plan zostawiał otwartą decyzję „floating origin na podstawie rozmiaru systemu",
+a ja sam w komentarzu powtórzyłem obiegową mądrość, że float32 zaczyna drżeć
+powyżej ~100k jednostek. Nikt tego tutaj nie zmierzył, więc powstał
+`tools/distance_bench.gd`: cała scena przesuwana na 0, 40k, 100k, 300k i 1000k
+px od początku układu, wszystko mierzone w ramce planety.
+
+| odległość | błąd przechowania | obieg przez ramkę | pełzanie kadłuba /10 s | dryf orbity /10 s |
+|---|---|---|---|---|
+| 0 | 0,0001 px | 0,0001 px | 0,124 px | 6,85 px |
+| 40k | 0,0004 | 0,0031 | 0,193 | 7,17 |
+| 100k | 0,0079 | 0,0050 | 0,164 | 7,34 |
+| 300k | 0,0054 | 0,0099 | 0,456 | 7,28 |
+| 1000k | 0,0074 | 0,0280 | 0,451 | 6,70 |
+
+Trzy wnioski:
+
+- **Współrzędne nie drżą.** Setne części piksela przy milionie pikseli. Nawet
+  przy 300k obieg punktu przez ramkę planety kosztuje 0,010 px.
+- **Orbita nie zauważa odległości w ogóle.** Dryf promienia jest taki sam w
+  zerze i w milionie, czyli to **całkowanie**, nie float. Gdyby kiedyś
+  przeszkadzało, poprawia się to integratorem, a nie ruchomym początkiem.
+- **Jedyna rosnąca liczba** to pełzanie statku leżącego na gruncie, trzymanego
+  przez solver kontaktu: 0,12 px/10 s w zerze, 0,45 przy 300k. I to dotyczy
+  **nieprzymrożonego** kadłuba — udane lądowanie ustawia `freeze` i przypina
+  statek do planety, więc tam nie kumuluje się nic.
+
+Decyzja: **bez floating origin**. Test pilnuje granicy — jeśli stałe układu
+kiedyś wyprowadzą system poza zmierzony zakres, suite to zgłosi, zamiast
+pozwolić grze działać na dowodach, których nikt nie zebrał.
+
+Czego **nie** zmierzyłem i warto to powiedzieć: renderowania. Headless nic nie
+rysuje, więc widoczne migotanie sprite'ów przy dużej odległości to osobne
+pytanie — kamera odejmuje własną pozycję, więc liczby na wejściu shadera są
+małe, ale to argument, nie pomiar.
 
 ### Seeker: cel bierze się z kursora, nie z odległości
 

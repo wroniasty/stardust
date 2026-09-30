@@ -1526,6 +1526,16 @@ const GALAXY_SCRIPT: GDScript = preload("res://scripts/autoload/galaxy.gd")
 ## about a generator; the interesting failures are the lucky rolls.
 const SYSTEMS_SAMPLED: int = 300
 
+## How far from the origin `tools/distance_bench.gd` has actually measured
+## the game behaving. Out to here the cost of distance is hundredths of a
+## pixel in stored coordinates and under half a pixel of creep in ten
+## seconds under a resting hull; orbits do not notice at all.
+##
+## A layout that walks past this number is a layout running on evidence
+## nobody collected, which is how "float32 shakes past a hundred thousand"
+## became something everyone repeats and nobody had measured here.
+const PROVEN_DISTANCE: float = 1000000.0
+
 
 ## The hold is one slot and fitting is a swap: nothing found may be lost, and
 ## nothing may be fitted where it does not belong.
@@ -3546,12 +3556,32 @@ func _check_system_model(probe: Planet) -> void:
 		],
 	)
 
-	# Printed rather than asserted: this is the input to the floating-origin
-	# decision that PLAN M3 still has open, and a threshold invented here
-	# would be that decision taken by the wrong file.
-	print("system radius: %.0f px to %.0f px (float32 shakes past ~100000)" % [
-		narrowest, widest,
-	])
+	print("system radius: %.0f px to %.0f px" % [narrowest, widest])
+	_expect(
+		widest < PROVEN_DISTANCE,
+		"no system reaches past the distance the bench has measured (%.0f of %.0f px)" % [
+			widest, PROVEN_DISTANCE,
+		],
+	)
+
+	# The pure part of it, instantly: a point at the far edge of the widest
+	# system, taken into a frame out there and back. No physics, so this is
+	# float32 and nothing else, and it is the thing that changes if the
+	# layout constants ever grow.
+	var far_off: Node2D = Node2D.new()
+	root.add_child(far_off)
+	far_off.global_position = Vector2(widest, 0.0)
+	var probe_point: Vector2 = Vector2(700.3, -415.9)
+	var round_trip: float = far_off.to_local(
+		far_off.to_global(probe_point)
+	).distance_to(probe_point)
+	_expect(
+		round_trip < 0.05,
+		"a coordinate survives the trip out to the system edge (%.4f px at %.0f)" % [
+			round_trip, widest,
+		],
+	)
+	far_off.queue_free()
 
 	_check_orbit_evaluation()
 	_check_moon_sized_world(probe)
