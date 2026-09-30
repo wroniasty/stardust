@@ -976,6 +976,7 @@ func _evaluate_phase() -> void:
 			_check_seeker_targets()
 			_check_system_model(_planet)
 			_check_streaming()
+			_check_system_map()
 			_check_aiming()
 			_check_stat_cards()
 			_check_scanner(_planet)
@@ -3851,6 +3852,57 @@ func _crate_labels(planet: Planet) -> Array[String]:
 		if child is LootCrate:
 			out.append((child as LootCrate).label())
 	return out
+
+
+## The system map, which is the only thing that shows a body the streaming
+## manager has not built.
+func _check_system_map() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var pilot: Node2D = Node2D.new()
+	root.add_child(pilot)
+	var map: SystemMap = SystemMap.new()
+	root.add_child(map)
+	# No manager: the map has to draw a system nobody is streaming, which is
+	# also what it will be asked for on a system seen from outside.
+	map.bind(system, pilot, null)
+
+	# The map's own rectangle, not a resolution written down here: every
+	# coordinate it deals in is relative to that, and a test measuring
+	# against a different one measures a picture nobody is looking at.
+	var view: Vector2 = map.view_size()
+	var plan: Dictionary = map.layout(view)
+	_expect(
+		map.to_map(Vector2.ZERO, plan).is_equal_approx(view * 0.5),
+		"the star is the middle of the map",
+	)
+	var outermost: float = 0.0
+	for body: SystemBody in system.bodies:
+		outermost = maxf(outermost, map.to_map(body.position_at(0.0), plan).distance_to(view * 0.5))
+	_expect(
+		outermost < minf(view.x, view.y) * 0.5,
+		"and the whole system fits on it (%.0f px of %.0f)" % [outermost, minf(view.x, view.y) * 0.5],
+	)
+
+	# Clicking works before a single frame has been drawn. The ship editor
+	# had to learn this the hard way and so did this class.
+	var target: SystemBody = system.planets()[system.planets().size() - 1]
+	_expect(
+		map.click_at(map.to_map(target.position_at(0.0), plan)) == target,
+		"a click lands on the body drawn there, with no frame drawn yet",
+	)
+	_expect(
+		map.click_at(view * 0.5 + Vector2(0.0, minf(view.x, view.y) * 0.49)) == null,
+		"and empty space picks nothing rather than the nearest thing to it",
+	)
+
+	# It is a panel, so it holds the pause, and it lets go.
+	map.toggle()
+	_expect(map.is_open() and PauseGate.held(), "opening the map stops the world")
+	map.close()
+	_expect(not map.is_open() and not PauseGate.held(), "and closing it starts it again")
+
+	map.free()
+	pilot.free()
 
 
 ## A planet built as the body a system says it is.

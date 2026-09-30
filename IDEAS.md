@@ -830,6 +830,38 @@ obietnica, że da się na tym stanąć.
 Okresy liczone są jednym przebiegiem na końcu, po zważeniu gwiazdy, żeby nic
 nie nosiło okresu wyliczonego z masy, która potem się zmieniła.
 
+### Mapa układu: rysowana z modelu, bo tylko model wie
+
+Mapa (`M`) czyta `StarSystem`, nie scenę. To jest jej jedyny powód
+istnienia: streaming trzyma w świecie jedną planetę naraz, więc mapa
+zbudowana z żywych węzłów pokazałaby jedną kropkę i nazwała to układem.
+
+**Orbity w skali, ciała nie.** Układ ma ćwierć miliona pikseli średnicy, a
+planeta dwa tysiące — planeta w skali to jedna dziesiąta piksela. W skali jest
+to, po co się na mapę patrzy: jak daleko coś jest. Kształty zamiast kolorów
+(dysk, pierścień, mały pierścień, kwadrat), bo przy ośmiu pikselach kolor to
+trzy piksele koloru.
+
+**Jasność znacznika mówi, czy ciało jest w świecie.** To nie ozdoba: to różnica
+między miejscem, w które można wlecieć, a miejscem, które powstanie, gdy się
+tam dotrze — i jedyne okno na to, co robi streaming manager.
+
+**Scrim 0,96, nie 0,72 jak w edytorze.** Edytorowi uchodzi mniej, bo kładzie na
+świat pełne panele; mapa to cienkie linie na ciemnym polu i przy 0,86 HUD lotu
+czytał się przez nią, a dwa zestawy liczb walczyły o to samo miejsce.
+
+**Ten sam błąd co edytor, drugi raz.** Pierwsza wersja odpowiadała na kliknięcie
+z tego, co zostawiło ostatnie `_draw`. To czyni klikanie niesprawdzalnym i
+błędnym przed pierwszą klatką — dokładnie to, co `ship_editor.gd` ma zapisane w
+komentarzu przy `_panels()`. Układ jest funkcją układu i prostokąta, i niczego
+więcej; klik liczy go sobie od nowa.
+
+Czego mapa jeszcze nie umie: **zoomu**. Księżyc krąży kilka tysięcy pikseli od
+planety w układzie o średnicy kilkuset tysięcy, więc każdy satelita siedzi
+wewnątrz znacznika swojej planety. Kliknięcie planety wymienia je z nazwy — to
+nie zastępuje zoomu, ale jest różnicą między „nic tam nie ma" a „coś tam jest,
+czego jeszcze nie widać".
+
 ### Streaming: trzy stany, nie cztery
 
 Projekt (sekcja 9) rozpisywał cztery poziomy, z jedynką jako „gwiazda i planety

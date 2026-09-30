@@ -60,6 +60,7 @@ var _landing_site: int = 0
 var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
 var _editor: ShipEditor = null
+var _map: SystemMap = null
 var _energy: EnergyHud = null
 var _creative: CreativeTool = null
 var _aim: AimHud = null
@@ -78,6 +79,7 @@ func _ready() -> void:
 	_build_configurator()
 	_build_loadout()
 	_build_editor()
+	_build_map()
 	_build_creative()
 	_build_aim_hud()
 	_build_energy_hud()
@@ -93,6 +95,14 @@ func _build_configurator() -> void:
 	_configurator.bind(planet)
 	_configurator.rebuilt.connect(_on_planet_rebuilt)
 	_configurator.teleport_requested.connect(_on_next_landing_site)
+
+
+func _build_map() -> void:
+	_map = SystemMap.new()
+	add_child(_map)
+	_map.bind(
+		Galaxy.system(SYSTEM_INDEX), (player as Player).ship, StreamingManager
+	)
 
 
 func _build_editor() -> void:
