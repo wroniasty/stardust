@@ -223,8 +223,11 @@ Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wył�
 
 - [x] Model danych systemu: `SystemBody` i `StarSystem` jako czyste dane (`RefCounted`, zero node'ów), `Galaxy` trzyma seed, zegar i cache systemów. Gwiazda, 3–5 planet, księżyce, stacje, wszystko z jednego seeda przez splitmix64. **System decyduje, jak duże i jak ciężkie; seed decyduje, jak wygląda** — promień i grawitacja są w deskryptorze, bo układ orbit ich potrzebuje; teren, pogoda i kolory zostają przy seedzie planety.
 - [x] Orbity analityczne od globalnego czasu: koła, `position_at(t)` rekurencyjne w górę drzewa, zero stanu. Ciało wyłączone i włączone z powrotem jest tam, gdzie byłoby — nie ma czego doganiać, bo nic nie całkowało. Okresy z `mu = g·r²` rodzica, więc trzecie prawo Keplera wychodzi za darmo.
-- [ ] `StreamingManager`: poziomy 0..3 z histerezą, kolejka instancjonowania, generacja terenu w WorkerThreadPool.
-- [ ] Zapis delty przy wyłączaniu planety (piksele, loot), odtwarzanie przy powrocie.
+- [x] `StreamingManager`: poziomy z histerezą i kolejka instancjonowania. **Trzy stany, nie cztery** — `GONE / AWAKE / SURFACE`. Poziom 1 z projektu („planety jako sprite'y”) nie ma przy 640x360 żadnego reżimu: planeta ma 2000+ px średnicy, więc jest albo szersza od ekranu, albo poza nim. Ciało budzi się, zanim cokolwiek mogłoby o nie zapytać — najdalej patrzy skaner (20k px), i test to przypina do jego własnej liczby.
+- [x] Jeden zamrożony zegar na wizytę, nie na ciało. Ciala stawiane raz, w tej samej chwili.
+- [ ] Generacja terenu w `WorkerThreadPool`. **Zmierzone**: 14 ms dla planety 1025 px i 35 ms dla 1710 px (`tools/terrain_bench.gd`) — czyli od jednej do dwóch zgubionych klatek przy każdym obudzeniu. Kolejka rozkłada to na ciała, ale nie na klatki.
+- [x] Delta lootu: skrzynka podniesiona zostaje podniesiona. Manager pamięta opróżnione półki per seed ciała, a pozostałe losuje bez zmian — zabranie jednej nie zmienia, czym są inne.
+- [ ] Delta terenu: zmodyfikowane piksele zapisywane przy wyłączaniu planety i odtwarzane przy powrocie. Dziś krater wykopany przed odlotem znika.
 - [ ] Gwiazda jako węzeł: grawitacja w tej samej grupie co planety, strefa obrażeń, oświetlenie 2D, cień nocnej strony planet. Masa jest już wyprowadzona z warunku Hilla, więc grawitacja gwiazdy nie zje studni planet.
 - [ ] Orbitowanie księżyca w polu planety, **odchylenie toru** przy przelocie obok ciała (nie proca: ciała nie wędrują po orbitach, a darmowa energia w procy bierze się z ruchu ciała — handel przyjęty świadomie, IDEAS.md „Planety nie okrążają gwiazdy”), pociski pod wpływem grawitacji.
 - [ ] Stacja orbitująca i stacja w deep space: dokowanie, naprawa, tankowanie.

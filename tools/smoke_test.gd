@@ -975,6 +975,7 @@ func _evaluate_phase() -> void:
 			_check_rarity_travels()
 			_check_seeker_targets()
 			_check_system_model(_planet)
+			_check_streaming()
 			_check_aiming()
 			_check_stat_cards()
 			_check_scanner(_planet)
@@ -1521,6 +1522,7 @@ func _check_weapons() -> void:
 ## autoloads (see _check_loot).
 const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd")
 const GALAXY_SCRIPT: GDScript = preload("res://scripts/autoload/galaxy.gd")
+const STREAMING_SCRIPT: GDScript = preload("res://scripts/autoload/streaming_manager.gd")
 
 ## How many systems the layout checks run over. One seed proves nothing
 ## about a generator; the interesting failures are the lucky rolls.
@@ -3618,6 +3620,172 @@ func _check_system_model(probe: Planet) -> void:
 	_check_orbit_evaluation()
 	_check_moon_sized_world(probe)
 	_check_adoption()
+
+
+## What exists as nodes, and when.
+##
+## The manager is the one piece of M3 that cannot be judged by looking at
+## it: every property here is about a threshold being crossed in one
+## direction or the other, and the interesting failures are at the
+## crossing.
+func _check_streaming() -> void:
+	var manager: Node = STREAMING_SCRIPT.new()
+	root.add_child(manager)
+	var container: Node2D = Node2D.new()
+	root.add_child(container)
+	var pilot: Node2D = Node2D.new()
+	root.add_child(pilot)
+	var system: StarSystem = StarSystem.generate(20260922)
+	# Owned here, not by the manager: in the game the loot source is an
+	# autoload nothing may free, so the manager never frees it.
+	var dice: Node = LOOT_SCRIPT.new()
+	manager.bind(system, container, 0.0, dice)
+	manager.track(pilot)
+	var world: SystemBody = system.planets()[0]
+
+	# Nothing may be asleep inside the reach of anything that looks at the
+	# world, and the longest-sighted thing in the game is the scanner. A
+	# contact that has not been built is a contact the scanner cannot
+	# report, and a planet that blinks into existence inside scanner range
+	# is a contact that appears out of nothing.
+	var eyes: ScannerHud = ScannerHud.new()
+	var sight: float = eyes.scan_range
+	eyes.free()
+	var sighted: bool = true
+	var gravity_safe: bool = true
+	for check: SystemBody in system.bodies:
+		var reach: float = manager.awake_distance(check)
+		sighted = sighted and reach >= sight
+		gravity_safe = gravity_safe and reach >= check.radius * Planet.INFLUENCE_RATIO.y
+	_expect(sighted, "nothing sleeps inside the scanner's reach (%.0f px)" % sight)
+	_expect(gravity_safe, "or inside the pull of its own gravity well")
+
+	# Far away: nothing in the scene at all.
+	pilot.global_position = manager.position_of(world) + Vector2(500000.0, 0.0)
+	manager._sweep()
+	manager._drain_queue()
+	_expect(
+		manager.level_of(world) == manager.Level.GONE and manager.node_for(world) == null,
+		"a body the player is nowhere near is not in the world",
+	)
+
+	# Walking in: built, then stocked, and the build is queued rather than
+	# taken in the frame the threshold was crossed.
+	pilot.global_position = manager.position_of(world) + Vector2(
+		manager.awake_distance(world) * 0.9, 0.0
+	)
+	manager._sweep()
+	_expect(
+		manager.node_for(world) == null,
+		"crossing the line queues the build rather than paying for it on the spot",
+	)
+	manager._drain_queue()
+	var built: Planet = manager.node_for(world) as Planet
+	_expect(
+		built != null and manager.level_of(world) == manager.Level.AWAKE,
+		"and the next frame it is there",
+	)
+	_expect(
+		built != null and built.global_position.distance_to(manager.position_of(world)) < 1.0,
+		"standing where the visit's clock says, not where its orbit is now",
+	)
+	_expect(
+		_crates_under(built) == 0,
+		"with nothing on the surface yet, because the pilot is still miles up",
+	)
+
+	# Hysteresis: a pilot sitting between the two thresholds keeps whatever
+	# they have, or a planet's terrain is rebuilt twice a second.
+	pilot.global_position = manager.position_of(world) + Vector2(
+		manager.awake_distance(world) * 1.15, 0.0
+	)
+	manager._sweep()
+	manager._drain_queue()
+	_expect(
+		manager.node_for(world) == built,
+		"drifting back out past the line does not immediately undo it",
+	)
+	pilot.global_position = manager.position_of(world) + Vector2(
+		manager.awake_distance(world) * 1.5, 0.0
+	)
+	manager._sweep()
+	_expect(
+		manager.level_of(world) == manager.Level.GONE,
+		"but going properly away does",
+	)
+
+	# Down at the surface: loot appears.
+	pilot.global_position = manager.position_of(world) + Vector2(world.radius * 1.2, 0.0)
+	manager._sweep()
+	manager._drain_queue()
+	manager._sweep()
+	var landed: Planet = manager.node_for(world) as Planet
+	_expect(
+		manager.level_of(world) == manager.Level.SURFACE and _crates_under(landed) > 0,
+		"standing on it puts the loot out (%d crates)" % _crates_under(landed),
+	)
+
+	# The first delta. Take one, leave, come back: the taken shelf stays
+	# empty and the others are exactly what they were.
+	var before: Array[String] = _crate_labels(landed)
+	var first: LootCrate = null
+	for child: Node in landed.get_children():
+		if child is LootCrate and first == null:
+			first = child as LootCrate
+	manager.forget_crate(first)
+	var taken_label: String = first.label()
+
+	pilot.global_position = manager.position_of(world) + Vector2(500000.0, 0.0)
+	manager._sweep()
+	pilot.global_position = manager.position_of(world) + Vector2(world.radius * 1.2, 0.0)
+	manager._sweep()
+	manager._drain_queue()
+	manager._sweep()
+	var again: Array[String] = _crate_labels(manager.node_for(world) as Planet)
+	_expect(
+		again.size() == before.size() - 1 and not again.has(taken_label),
+		"what was picked up is not waiting for you when you come back (%s)" % taken_label,
+	)
+	var kept: bool = true
+	for label: String in again:
+		kept = kept and before.has(label)
+	_expect(
+		kept,
+		"and taking one does not change what the others are (%s)" % ", ".join(again),
+	)
+
+	# A kind with no scene yet stays in the model rather than pretending.
+	_expect(
+		manager.node_for(system.star) == null
+		and manager.level_of(system.star) == manager.Level.GONE,
+		"a star has no scene yet, so it stays in the model and says so",
+	)
+
+	manager.clear()
+	manager.free()
+	dice.free()
+	container.free()
+	pilot.free()
+
+
+func _crates_under(planet: Planet) -> int:
+	var count: int = 0
+	if planet == null:
+		return count
+	for child: Node in planet.get_children():
+		if child is LootCrate:
+			count += 1
+	return count
+
+
+func _crate_labels(planet: Planet) -> Array[String]:
+	var out: Array[String] = []
+	if planet == null:
+		return out
+	for child: Node in planet.get_children():
+		if child is LootCrate:
+			out.append((child as LootCrate).label())
+	return out
 
 
 ## A planet built as the body a system says it is.

@@ -70,7 +70,7 @@ const DEBUG_CRATER_RADIUS: float = 28.0
 
 
 func _ready() -> void:
-	_spawn_planet()
+	_open_system()
 	_place_ship()
 	var ship: Ship = (player as Player).ship
 	if ship != null:
@@ -82,7 +82,6 @@ func _ready() -> void:
 	_build_aim_hud()
 	_build_energy_hud()
 	_build_scanner()
-	_spawn_crates()
 
 
 ## The planet configurator edits the planet; putting the ship somewhere that
@@ -156,34 +155,6 @@ func _on_jettisoned(item: Resource, rarity: int) -> void:
 	print("jettisoned: %s" % crate.label())
 
 
-## Rolls one module per shelf from the world seed, so the same world always
-## offers the same finds in the same places.
-func _spawn_crates() -> void:
-	if planet == null:
-		return
-	var sites: PackedFloat32Array = planet.landing_sites()
-	if sites.is_empty():
-		return
-
-	var scene: PackedScene = load(CRATE_SCENE) as PackedScene
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = world_seed + 7919
-
-	for i: int in range(mini(CRATES_PER_PLANET, sites.size())):
-		var angle: float = sites[i]
-		var crate: LootCrate = scene.instantiate() as LootCrate
-		var item_seed: int = rng.randi()
-		var rarity: int = LootGenerator.roll_rarity(rng)
-		crate.hold(LootGenerator.generate(item_seed, rarity), rarity)
-		# A child of the planet, in the planet's own frame, so it turns with
-		# the ground and needs no per-frame bookkeeping.
-		var ground: float = planet.terrain.surface_radius_at(angle)
-		crate.position = Vector2.from_angle(angle) * (ground + CRATE_CLEARANCE)
-		crate.rotation = angle + PI * 0.5
-		crate.touched.connect(_on_crate_touched)
-		planet.add_child(crate)
-
-
 func _on_crate_touched(crate: LootCrate, body: Node) -> void:
 	var ship: Ship = body as Ship
 	if ship == null or crate.item == null:
@@ -194,6 +165,9 @@ func _on_crate_touched(crate: LootCrate, body: Node) -> void:
 		return
 	print("picked up: %s" % crate.label())
 	_loadout.announce_pickup()
+	# Told, not inferred: the shelf this came off stays empty when the
+	# planet is streamed out and back.
+	StreamingManager.forget_crate(crate)
 	crate.queue_free()
 
 
@@ -203,11 +177,11 @@ func _on_planet_rebuilt() -> void:
 	# landing rather than leaving the pilot wherever they happened to be.
 	_landing_site = 0
 	_land_on_site(_landing_site)
-	# The old crates stood on ground that no longer exists.
-	for child: Node in planet.get_children():
-		if child is LootCrate:
-			child.queue_free()
-	_spawn_crates()
+	# The old crates stood on ground that no longer exists, and a rebuilt
+	# world is a new world: whatever was taken off the old shelves has no
+	# claim on the new ones.
+	if planet.body != null:
+		StreamingManager.restock(planet.body)
 
 
 func _on_next_landing_site() -> void:
@@ -316,20 +290,26 @@ func _damage_engine(ship: Ship, mount_name: String) -> void:
 const SYSTEM_INDEX: int = 0
 
 
-func _spawn_planet() -> void:
-	var scene: PackedScene = load(PLANET_SCENE) as PackedScene
-	planet = scene.instantiate() as Planet
-	# Seeded through the galaxy rather than straight from the export, so the
-	# planet the pilot lands on is a body the model knows about -- with an
-	# orbit, a name and a place in a system -- and not a one-off rolled here.
+## Opens a system: the manager takes it from here.
+##
+## The one body built by hand is the one the ship starts at, and it is
+## built immediately rather than queued -- the ship has to be put
+## somewhere, and it cannot be put next to a planet that is three frames
+## away from existing. Everything else comes and goes as the pilot flies.
+func _open_system() -> void:
 	Galaxy.galaxy_seed = world_seed
-	planet.body = Galaxy.system(SYSTEM_INDEX).planets()[0]
-	planet.placed_at = Galaxy.time
-	systems.add_child(planet)
-	print("system %s: %s at %.0f px" % [
-		Galaxy.system(SYSTEM_INDEX).display_name, planet.body.display_name,
-		planet.body.orbit_radius,
+	var here: StarSystem = Galaxy.system(SYSTEM_INDEX)
+	StreamingManager.bind(here, systems, Galaxy.time, LootGenerator)
+	StreamingManager.track((player as Player).ship)
+	StreamingManager.crate_placed.connect(_on_crate_placed)
+	planet = StreamingManager.force_awake(here.planets()[0]) as Planet
+	print("system %s: arriving at %s, %.0f px out" % [
+		here.display_name, planet.body.display_name, planet.body.orbit_radius,
 	])
+
+
+func _on_crate_placed(crate: LootCrate) -> void:
+	crate.touched.connect(_on_crate_touched)
 
 
 func _place_ship() -> void:

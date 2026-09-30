@@ -68,6 +68,15 @@ var velocity: Vector2 = Vector2.ZERO
 ## nothing. Ejecting one makes it loose; touching down settles it again.
 var loose: bool = false
 
+## Which body's shelf this crate was put on, and which shelf.
+##
+## Carried by the crate rather than tracked beside it: the streaming
+## manager has to know which shelf went empty, and the thing that knows
+## that best is the crate that was standing on it. -1 for a crate nobody
+## placed, such as one thrown overboard.
+var origin_seed: int = 0
+var shelf: int = -1
+
 ## Seconds before the crate will answer a ship at all. A jettisoned module
 ## is dropped by a ship that is still sitting on top of it, and without this
 ## the pilot picks it straight back up in the same frame -- which turns

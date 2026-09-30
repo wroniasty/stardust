@@ -830,6 +830,38 @@ obietnica, że da się na tym stanąć.
 Okresy liczone są jednym przebiegiem na końcu, po zważeniu gwiazdy, żeby nic
 nie nosiło okresu wyliczonego z masy, która potem się zmieniła.
 
+### Streaming: trzy stany, nie cztery
+
+Projekt (sekcja 9) rozpisywał cztery poziomy, z jedynką jako „gwiazda i planety
+jako sprite'y". Przy 640x360 ten poziom **nie ma reżimu**: planeta ma ponad
+dwa tysiące pikseli średnicy, a ekran pokazuje 640 px przy zoomie 1 i 1164 px
+przy najszerszym. Planeta jest więc albo szersza od ekranu, albo całkiem poza
+nim — nie ma odległości, z której jest widocznym krążkiem. Zostały trzy:
+`GONE`, `AWAKE` (ciało z terenem, kolizją i grawitacją), `SURFACE` (plus to, co
+na nim leży). Dorabianie środkowego poziomu, żeby zgadzało się z tabelką, byłoby
+poziomem, który nic nie robi.
+
+**Czym jest próg obudzenia.** Nie zasięgiem grawitacji, choć i on musi się
+zmieścić (8 promieni przeciw 6, jakie planeta może wylosować na studnię), tylko
+**zasięgiem wzroku**. Skaner melduje kontakty do 20 000 px, a kontakt, który nie
+został zbudowany, to kontakt, którego skaner nie zamelduje — planeta pojawiająca
+się z niczego wewnątrz zasięgu skanera to błąd, który widać. Stąd `SIGHT_RANGE`
+i test wiążący go z własną liczbą skanera, zamiast komentarza obiecującego, że
+ktoś o tym pamiętał.
+
+**Pierwsza delta: loot.** Skrzynka podniesiona ma zostać podniesiona. Manager
+trzyma opróżnione półki per seed ciała, a losowanie zawartości idzie po
+wszystkich półkach niezależnie od tego, które są puste — dzięki temu zabranie
+jednej skrzynki nie zmienia, czym są pozostałe. Delta terenu (piksele) to osobny
+krok; dziś krater wykopany przed odlotem znika.
+
+**Błąd, który znalazł test.** Gwiazda i stacje nie mają jeszcze sceny, a
+pierwsza wersja wrzucała je do kolejki jak wszystko inne. Gwiazda stawała na
+czele kolejki, zjadała jedyny budowlany slot klatki na odkrycie, że nie ma z
+czego jej zbudować, i wracała przy następnym przebiegu po to samo — przez co
+**pierwsza planeta nie budowała się nigdy**. Ciała bez sceny są teraz pomijane
+przy przebiegu, a nie odrzucane w kolejce.
+
 ### Planety nie okrążają gwiazdy, i to jest świadomy handel
 
 Ciała **wirują wokół własnej osi** (`spin_rate`, doba, grunt jadący pod
