@@ -47,7 +47,10 @@ func _report(planet: Planet) -> void:
 		terrain.angular_samples, terrain.radial_samples, texels, float(texels) / 1024.0,
 	])
 	print("  texel size at the surface: %.2f px" % (TAU * planet.surface_radius / float(terrain.angular_samples)))
-	print("  generation: %.1f ms" % _time_generation(planet))
+	var split: Vector2 = _time_generation(planet)
+	print("  generation: %.1f ms  (crust %.1f off-thread + texture %.1f on it)" % [
+		split.x + split.y, split.x, split.y,
+	])
 	print("  carve r=%.0f + texture upload: %.2f ms avg over %d craters" % [
 		CARVE_RADIUS, _time_carve(planet), CARVE_SAMPLES,
 	])
@@ -56,10 +59,16 @@ func _report(planet: Planet) -> void:
 	])
 
 
-func _time_generation(planet: Planet) -> float:
+## The two halves apart, because only one of them still has to be on the
+## frame: `build()` runs on a worker, `finish()` touches the GPU. The split
+## is the whole argument for threading it, so it is the thing to report.
+func _time_generation(planet: Planet) -> Vector2:
 	var started: int = Time.get_ticks_usec()
-	planet.terrain.generate(planet.planet_seed, planet.surface_radius)
-	return float(Time.get_ticks_usec() - started) / 1000.0
+	planet.terrain.build(planet.planet_seed, planet.surface_radius)
+	var crust: float = float(Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
+	planet.terrain.finish()
+	return Vector2(crust, float(Time.get_ticks_usec() - started) / 1000.0)
 
 
 ## Craters are walked around the planet so no two hit the same rock twice.

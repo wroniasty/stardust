@@ -70,6 +70,12 @@ var plateau_angles: PackedFloat32Array = PackedFloat32Array()
 ## Radius of the highest rock in each column. Kept in step with carving.
 var _surface_radius: PackedFloat32Array = PackedFloat32Array()
 
+## Whether anything has been carved out of this crust since it was
+## generated. What decides whether the crust is worth remembering: a world
+## nobody shot at regenerates identically from its seed, and storing a
+## copy of it would be storing the seed twice.
+var scarred: bool = false
+
 var _solid: PackedByteArray = PackedByteArray()
 var _image: Image = null
 var _band: float = 1.0
@@ -80,7 +86,19 @@ var _band: float = 1.0
 ## `plateau_count` flat landing shelves are levelled into the relief afterwards.
 ## Without them a rough planet can be unlandable everywhere, which is a
 ## generation bug rather than a difficulty setting (IDEAS.md section 7).
+## Builds the crust and hands it to the GPU. The two halves are separate
+## below because only the second one may touch the GPU, and the first is
+## fourteen to thirty-five milliseconds of arithmetic that has no business
+## on the frame.
 func generate(terrain_seed: int, surface_radius: float, plateau_count: int = 0) -> void:
+	build(terrain_seed, surface_radius, plateau_count)
+	finish()
+
+
+## Everything except the texture: noise, heights, shelves, the occupancy
+## grid and the surface cache. Pure arithmetic on this object's own arrays,
+## which is what makes it safe to run on a worker thread.
+func build(terrain_seed: int, surface_radius: float, plateau_count: int = 0) -> void:
 	inner_radius = surface_radius * (1.0 - DEPTH_FRACTION)
 	outer_radius = surface_radius * (1.0 + MOUNTAIN_FRACTION)
 	_band = outer_radius - inner_radius
@@ -129,7 +147,45 @@ func generate(terrain_seed: int, surface_radius: float, plateau_count: int = 0) 
 		for row: int in range(top_row + 1):
 			_solid[row * angular_samples + column] = SOLID
 
+	scarred = false
 	_rebuild_surface_cache()
+
+
+## The half that has to be on the main thread.
+func finish() -> void:
+	_make_texture()
+
+
+## The crust as it now stands, for whoever has to remember it.
+func crust() -> PackedByteArray:
+	return _solid
+
+
+## Puts a remembered crust back over a freshly generated one.
+##
+## Refused rather than forced when the sizes disagree: the grid is derived
+## from the radius, so a mismatch means this crust belongs to a different
+## world, and writing it in would be painting one planet's craters onto
+## another. Returns whether it was taken.
+func restore_crust(bytes: PackedByteArray) -> bool:
+	if bytes.size() != _solid.size() or bytes.is_empty():
+		return false
+	_solid = bytes
+	scarred = true
+	_rebuild_surface_cache()
+	# Only when there is something to write to. A crust put back before
+	# `finish()` has made the texture is a crust being restored on a worker
+	# thread, which is the point -- rescanning the surface after it is
+	# fifteen milliseconds, and that is a frame.
+	if texture != null:
+		_upload()
+	return true
+
+
+## Builds the image and the texture from scratch. Only on generation: after
+## that `_upload()` rewrites the same texture in place, which is what makes
+## a crater cost a third of a millisecond instead of a new allocation.
+func _make_texture() -> void:
 	_image = Image.create_from_data(angular_samples, radial_samples, false, Image.FORMAT_R8, _solid)
 	texture = ImageTexture.create_from_image(_image)
 
@@ -279,6 +335,7 @@ func carve_local(centre: Vector2, radius: float) -> bool:
 				changed = true
 
 	if changed:
+		scarred = true
 		for column: int in columns:
 			_surface_radius[column] = _scan_surface(column)
 		_upload()

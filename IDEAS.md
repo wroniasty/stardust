@@ -862,6 +862,45 @@ czego jej zbudować, i wracała przy następnym przebiegu po to samo — przez c
 **pierwsza planeta nie budowała się nigdy**. Ciała bez sceny są teraz pomijane
 przy przebiegu, a nie odrzucane w kolejce.
 
+### Generacja terenu na wątku, i co się przy tym wydało
+
+`PlanetTerrain.generate()` rozpadło się na dwa: `build()` — szum, wysokości,
+półki, siatka zajętości i cache powierzchni, czysta arytmetyka na własnych
+tablicach obiektu — i `finish()`, które robi obraz i teksturę. Tylko to drugie
+musi być na głównym wątku. Zmierzone na prawdziwym rendererze:
+
+| planeta | `build()` (wątek roboczy) | `finish()` (główny) |
+|---|---|---|
+| R 1025 px | 13,2 ms | 0,1 ms |
+| R 1710 px | 33,3 ms | 0,2 ms |
+| R 1644 px | 31,9 ms | 0,3 ms |
+
+Czyli z klatki schodzi praktycznie całość. Węzeł planety powstaje **poza
+drzewem**, siedzi tam, dopóki wątek liczy, i wchodzi dopiero gotowy — dzięki
+temu nie ma stanu „połowa planety w świecie", którego trzeba by bronić przed
+solverem kontaktu i skanerem. Przylot buduje synchronicznie: raz zapłacona
+zadyszka jest lepsza niż statek postawiony obok planety, której jeszcze nie ma.
+
+Zadanie raz wystartowane nie da się anulować, więc `clear()` **czeka** na
+zakończenie zamiast porzucać węzeł: wątek piszący do tablic zwolnionego
+obiektu to crash bez czytelnego stosu. Jeśli pilot odleciał w trakcie budowy,
+gotowa planeta jest wyrzucana, a nie zatrzymywana — zatrzymana byłaby planetą
+w świecie na odległości, o której manager już orzekł, że jest za daleka.
+
+**Delta terenu i pomiar, który zmienił projekt.** Skorupa zapamiętywana jest
+przy wyłączaniu planety, spakowana ZSTD, i tylko dla światów, w które ktoś
+strzelał — nietknięty wraca identyczny z seeda, a kopia byłaby seedem trzymanym
+dwa razy. Pierwsza wersja kładła ją z powrotem po dodaniu węzła do drzewa i
+najgorsza klatka powrotu wyszła **21,4 ms** przeciw **6,0 ms** dla świata bez
+krateru: `restore_crust()` przeskanowuje całą powierzchnię, co jest piętnastoma
+milisekundami. Planeta z kraterem zacinała więc mocniej niż nowa, co jest
+dokładnie na odwrót. Przywracanie poszło na wątek razem z generacją — **7,5 ms**.
+
+Dwa drobiazgi, które kosztowały po debugowaniu: `decompress()` domyślnie czyta
+FASTLZ, więc bufor ZSTD wraca **pusty, nie błędny**, i skorupa była po cichu
+odrzucana. A `restore_crust()` wołane przed `finish()` nie może dotykać
+tekstury, której jeszcze nie ma.
+
 ### Planety nie okrążają gwiazdy, i to jest świadomy handel
 
 Ciała **wirują wokół własnej osi** (`spin_rate`, doba, grunt jadący pod

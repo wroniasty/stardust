@@ -299,7 +299,11 @@ const SYSTEM_INDEX: int = 0
 func _open_system() -> void:
 	Galaxy.galaxy_seed = world_seed
 	var here: StarSystem = Galaxy.system(SYSTEM_INDEX)
-	StreamingManager.bind(here, systems, Galaxy.time, LootGenerator)
+	StreamingManager.loot = LootGenerator
+	# The one delta store, where the design puts it and where a save file
+	# will look for it.
+	StreamingManager.deltas = Galaxy.deltas
+	StreamingManager.bind(here, systems, Galaxy.time)
 	StreamingManager.track((player as Player).ship)
 	StreamingManager.crate_placed.connect(_on_crate_placed)
 	planet = StreamingManager.force_awake(here.planets()[0]) as Planet

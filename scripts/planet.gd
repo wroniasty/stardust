@@ -212,12 +212,56 @@ var body: SystemBody = null
 var placed_at: float = 0.0
 
 
+## Set by `prepare()`: the crust is already computed and must not be
+## thrown away and rebuilt when the node enters the tree.
+var _prebuilt: bool = false
+
+
 func _ready() -> void:
 	add_to_group(GRAVITY_GROUP)
-	if body != null:
+	if _prebuilt:
+		_raise()
+	elif body != null:
 		adopt(body, placed_at)
 	else:
 		generate(planet_seed)
+
+
+## The first half of being born, for a planet whose crust is going to be
+## computed on a worker thread: roll the parameters, and nothing else.
+##
+## Rolling is arithmetic and costs nothing; the crust is thirty-five
+## milliseconds. Splitting them is what lets the expensive half run off the
+## frame, and it can only run off the frame while the node is still out of
+## the tree -- a node in the tree is a node something can ask about.
+func prepare(descriptor: SystemBody, at_time: float) -> void:
+	body = descriptor
+	placed_at = at_time
+	roll_parameters(descriptor.seed, descriptor.radius, descriptor.surface_gravity)
+	_prebuilt = true
+
+
+## The work the worker thread does. Handed out as a Callable so the caller
+## decides which thread it runs on and this class does not have to know.
+##
+## `remembered` is a crust this world was left with. Put back here rather
+## than after the node is in the tree, because doing it on the main thread
+## cost fifteen milliseconds -- a returning planet hitched harder than a
+## new one, which is precisely backwards.
+func crust_task(remembered: PackedByteArray = PackedByteArray()) -> Callable:
+	return func() -> void:
+		terrain.build(planet_seed, surface_radius, plateau_count)
+		if not remembered.is_empty():
+			terrain.restore_crust(remembered)
+
+
+## The second half: the texture, the visuals and the place it stands.
+func _raise() -> void:
+	terrain.finish()
+	_build_terrain_quad()
+	_build_atmosphere()
+	_build_clouds()
+	global_position = body.position_at(placed_at)
 
 
 ## Builds this planet as the body the system says it is.
@@ -542,6 +586,20 @@ func rebuild() -> void:
 	_build_terrain_quad()
 	_build_atmosphere()
 	_build_clouds()
+
+
+## The crust as it now stands, or nothing when this world is untouched.
+##
+## Empty for an unscarred planet on purpose: a world nobody shot at comes
+## back identical from its seed, and keeping a copy of it would be keeping
+## the seed twice.
+func crust_delta() -> PackedByteArray:
+	return terrain.crust() if terrain.scarred else PackedByteArray()
+
+
+## Puts a remembered crust back. Returns whether it fitted.
+func apply_crust(bytes: PackedByteArray) -> bool:
+	return terrain.restore_crust(bytes)
 
 
 ## Angles, in the planet's own frame, of the shelves the generator levelled.

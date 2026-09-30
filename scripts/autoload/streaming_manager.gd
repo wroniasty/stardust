@@ -54,9 +54,9 @@ const HYSTERESIS: float = 1.3
 ## the pilot is committed to this world rather than passing it.
 const SURFACE_IN: float = 2.2
 
-## How many bodies may be built in one frame. Terrain generation is the
-## spike, so a pass that wakes three planets at once spreads over three
-## frames instead of dropping one.
+## How many bodies may be started in one frame. The expensive part now runs
+## on a worker, but each start still allocates a node and each finish still
+## uploads a texture, so they are spread rather than taken together.
 const BUILDS_PER_FRAME: int = 1
 
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
@@ -97,30 +97,35 @@ var visit_time: float = 0.0
 ## manager whose delta bookkeeping nothing can check.
 var loot: Node = null
 
+## Everything about this system that cannot be regenerated from a seed,
+## keyed by body seed: which shelves were emptied, and what the crust looks
+## like after being shot at. Handed in rather than owned, because the
+## design puts it on `Galaxy` where a save file can reach it -- this is the
+## dictionary from there, not a second copy of it.
+var deltas: Dictionary = {}
+
 var _container: Node2D = null
 var _tracked: Node2D = null
 var _levels: Dictionary = {}
 var _nodes: Dictionary = {}
 var _queue: Array[SystemBody] = []
 
-## Which shelves have already been emptied, keyed by body seed. The first
-## delta: without it a planet restocks itself every time it is streamed
-## back in, and loot you picked up is waiting for you when you return.
-var _taken: Dictionary = {}
+## Bodies whose crust is being computed on a worker: body -> {planet, task}.
+## The node is out of the tree for as long as it is here, which is the
+## point -- a half-built planet nothing can ask about is a planet that
+## does not have to be defended against.
+var _building: Dictionary = {}
 
 var _since_update: float = 0.0
 
 
 ## Hands the manager a system to keep. `at_time` is the moment the whole
 ## visit is a snapshot of.
-func bind(
-	new_system: StarSystem, into: Node2D, at_time: float, loot_source: Node
-) -> void:
+func bind(new_system: StarSystem, into: Node2D, at_time: float) -> void:
 	clear()
 	system = new_system
 	_container = into
 	visit_time = at_time
-	loot = loot_source
 
 
 ## Whose distance decides everything. The player, in practice.
@@ -129,6 +134,14 @@ func track(node: Node2D) -> void:
 
 
 func clear() -> void:
+	# Waited for rather than abandoned. A worker writing into a freed
+	# object's arrays is a crash with no stack worth reading, and there is
+	# no cancelling a task that has already started.
+	for body: SystemBody in _building.keys():
+		var pending: Dictionary = _building[body]
+		WorkerThreadPool.wait_for_task_completion(int(pending["task"]))
+		(pending["planet"] as Node).free()
+	_building.clear()
 	for body: SystemBody in _nodes.keys():
 		var node: Node2D = _nodes[body]
 		if is_instance_valid(node):
@@ -149,9 +162,11 @@ func node_for(body: SystemBody) -> Node2D:
 	return node if is_instance_valid(node) else null
 
 
-## Builds a body now, skipping the queue. What arriving in a system needs:
-## the ship has to be put somewhere, and it cannot be put next to a planet
-## that is still three frames away from existing.
+## Builds a body now, on this thread, skipping both the queue and the
+## worker. What arriving in a system needs: the ship has to be put
+## somewhere, and it cannot be put next to a planet that is still three
+## frames away from existing. Arrival pays the hitch once; flying about
+## afterwards pays nothing, which is the right way round.
 func force_awake(body: SystemBody) -> Node2D:
 	_raise_to(body, Level.SURFACE)
 	return node_for(body)
@@ -167,7 +182,7 @@ func position_of(body: SystemBody) -> Vector2:
 ## back. For the planet configurator, which rebuilds terrain under the
 ## shelves the crates were standing on.
 func restock(body: SystemBody) -> void:
-	_taken.erase(body.seed)
+	_delta(body).erase("taken")
 	var node: Node2D = node_for(body)
 	if node == null:
 		return
@@ -181,13 +196,26 @@ func restock(body: SystemBody) -> void:
 func forget_crate(crate: LootCrate) -> void:
 	if crate.shelf < 0:
 		return
-	var taken: PackedInt32Array = _taken.get(crate.origin_seed, PackedInt32Array())
+	var record: Dictionary = _delta_of(crate.origin_seed)
+	var taken: PackedInt32Array = record.get("taken", PackedInt32Array())
 	if not taken.has(crate.shelf):
 		taken.append(crate.shelf)
-	_taken[crate.origin_seed] = taken
+	record["taken"] = taken
+
+
+## This body's record of what cannot be regenerated, made on first ask.
+func _delta(body: SystemBody) -> Dictionary:
+	return _delta_of(body.seed)
+
+
+func _delta_of(seed: int) -> Dictionary:
+	if not deltas.has(seed):
+		deltas[seed] = {}
+	return deltas[seed]
 
 
 func _process(delta: float) -> void:
+	_collect_finished()
 	_drain_queue()
 	_since_update += delta
 	if _since_update < UPDATE_INTERVAL:
@@ -234,21 +262,73 @@ func _enqueue(body: SystemBody, wanted: Level) -> void:
 	# Going straight to SURFACE from nothing still queues, because the cost
 	# is the terrain and that is paid on the way to AWAKE either way.
 	if level_of(body) == Level.GONE:
-		if not _queue.has(body):
+		if not _queue.has(body) and not _building.has(body):
 			_queue.append(body)
 		return
 	_raise_to(body, wanted)
 
 
 func _drain_queue() -> void:
-	var built: int = 0
-	while built < BUILDS_PER_FRAME and not _queue.is_empty():
+	var started: int = 0
+	while started < BUILDS_PER_FRAME and not _queue.is_empty():
 		var body: SystemBody = _queue.pop_front()
-		if system == null or not system.bodies.has(body):
+		if system == null or not system.bodies.has(body) or _building.has(body):
 			continue
-		_raise_to(body, Level.AWAKE)
 		if node_for(body) != null:
-			built += 1
+			continue
+		_start_build(body)
+		started += 1
+
+
+## Puts a planet's crust on a worker thread. The node is made here and kept
+## out of the tree until the crust is ready.
+func _start_build(body: SystemBody) -> void:
+	if not builds_as_node(body):
+		return
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	planet.name = body.display_name.replace(" ", "_")
+	planet.prepare(body, visit_time)
+	_building[body] = {
+		"planet": planet,
+		"task": WorkerThreadPool.add_task(
+			planet.crust_task(_remembered_crust(body)), false, planet.name
+		),
+	}
+
+
+## Brings in whatever the workers have finished. One per frame, because
+## what is left on the main thread -- the texture upload and the visuals --
+## is still worth spreading.
+func _collect_finished() -> void:
+	for body: SystemBody in _building.keys():
+		var pending: Dictionary = _building[body]
+		if not WorkerThreadPool.is_task_completed(int(pending["task"])):
+			continue
+		WorkerThreadPool.wait_for_task_completion(int(pending["task"]))
+		_building.erase(body)
+		var planet: Planet = pending["planet"]
+		# The pilot may have left while it was being built. Finished and
+		# thrown away rather than kept: keeping it would mean a planet in
+		# the world at a distance the manager has already decided is too
+		# far, which is the rule the whole class exists to enforce.
+		if system == null or not system.bodies.has(body) or _wanted_now(body) == Level.GONE:
+			planet.free()
+			return
+		_container.add_child(planet)
+		_nodes[body] = planet
+		_levels[body] = Level.AWAKE
+		body_awake.emit(body, planet)
+		return
+
+
+## What level a body should be at right now, for deciding whether a build
+## that has just finished is still wanted.
+func _wanted_now(body: SystemBody) -> Level:
+	if _tracked == null or not is_instance_valid(_tracked):
+		return Level.GONE
+	return _wanted_level(
+		body, _tracked.global_position.distance_to(position_of(body)) - body.radius
+	)
 
 
 func _raise_to(body: SystemBody, wanted: Level) -> void:
@@ -273,6 +353,7 @@ func _lower_to(body: SystemBody, wanted: Level) -> void:
 	if wanted == Level.GONE:
 		var node: Node2D = node_for(body)
 		if node != null:
+			_remember_crust(body, node as Planet)
 			node.queue_free()
 		_nodes.erase(body)
 		_levels.erase(body)
@@ -300,6 +381,42 @@ static func builds_as_node(body: SystemBody) -> bool:
 	return body.kind == SystemBody.Kind.PLANET or body.kind == SystemBody.Kind.MOON
 
 
+## Keeps the crust of a world that was shot at, so the crater is still
+## there next time. Compressed, because the grid is up to 1.7 MB of mostly
+## runs and an unvisited galaxy should not be paid for in megabytes; the
+## raw size goes with it, since decompressing needs to know it.
+func _remember_crust(body: SystemBody, planet: Planet) -> void:
+	if planet == null:
+		return
+	var crust: PackedByteArray = planet.crust_delta()
+	if crust.is_empty():
+		return
+	var record: Dictionary = _delta(body)
+	record["crust"] = crust.compress(FileAccess.COMPRESSION_ZSTD)
+	record["crust_size"] = crust.size()
+
+
+## The crust this world was left with, unpacked, or nothing.
+##
+## The mode has to be named on the way out too: decompress() defaults to
+## FASTLZ, and a ZSTD buffer read as FASTLZ comes back empty rather than
+## wrong -- so the crust was simply refused and the crater quietly vanished.
+func _remembered_crust(body: SystemBody) -> PackedByteArray:
+	var record: Dictionary = _delta(body)
+	if not record.has("crust"):
+		return PackedByteArray()
+	var packed: PackedByteArray = record["crust"]
+	return packed.decompress(int(record["crust_size"]), FileAccess.COMPRESSION_ZSTD)
+
+
+## Puts it back on a planet that was built on this thread. Only the
+## immediate path needs this; a threaded build does it on the worker.
+func _replace_crust(body: SystemBody, planet: Planet) -> void:
+	var remembered: PackedByteArray = _remembered_crust(body)
+	if not remembered.is_empty():
+		planet.apply_crust(remembered)
+
+
 func _build(body: SystemBody) -> Node2D:
 	if not builds_as_node(body):
 		return null
@@ -308,6 +425,7 @@ func _build(body: SystemBody) -> Node2D:
 	planet.placed_at = visit_time
 	planet.name = body.display_name.replace(" ", "_")
 	_container.add_child(planet)
+	_replace_crust(body, planet)
 	return planet
 
 
@@ -319,7 +437,7 @@ func _place_crates(body: SystemBody, planet: Planet) -> void:
 		return
 	if loot == null:
 		return
-	var taken: PackedInt32Array = _taken.get(body.seed, PackedInt32Array())
+	var taken: PackedInt32Array = _delta(body).get("taken", PackedInt32Array())
 	var scene: PackedScene = load(CRATE_SCENE) as PackedScene
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = body.seed

@@ -3639,7 +3639,8 @@ func _check_streaming() -> void:
 	# Owned here, not by the manager: in the game the loot source is an
 	# autoload nothing may free, so the manager never frees it.
 	var dice: Node = LOOT_SCRIPT.new()
-	manager.bind(system, container, 0.0, dice)
+	manager.loot = dice
+	manager.bind(system, container, 0.0)
 	manager.track(pilot)
 	var world: SystemBody = system.planets()[0]
 
@@ -3680,10 +3681,20 @@ func _check_streaming() -> void:
 		"crossing the line queues the build rather than paying for it on the spot",
 	)
 	manager._drain_queue()
+	_expect(
+		manager.node_for(world) == null and not manager._building.is_empty(),
+		"and draining the queue starts a worker rather than building in place",
+	)
+	_stream_in(manager, world)
 	var built: Planet = manager.node_for(world) as Planet
 	_expect(
 		built != null and manager.level_of(world) == manager.Level.AWAKE,
-		"and the next frame it is there",
+		"and it is there once the worker is done",
+	)
+	_expect(
+		built != null and built.terrain.texture != null
+		and built.landing_sites().size() > 0,
+		"whole, with a texture and shelves -- the worker did the arithmetic, not half of it",
 	)
 	_expect(
 		built != null and built.global_position.distance_to(manager.position_of(world)) < 1.0,
@@ -3700,7 +3711,7 @@ func _check_streaming() -> void:
 		manager.awake_distance(world) * 1.15, 0.0
 	)
 	manager._sweep()
-	manager._drain_queue()
+	manager._collect_finished()
 	_expect(
 		manager.node_for(world) == built,
 		"drifting back out past the line does not immediately undo it",
@@ -3717,7 +3728,7 @@ func _check_streaming() -> void:
 	# Down at the surface: loot appears.
 	pilot.global_position = manager.position_of(world) + Vector2(world.radius * 1.2, 0.0)
 	manager._sweep()
-	manager._drain_queue()
+	_stream_in(manager, world)
 	manager._sweep()
 	var landed: Planet = manager.node_for(world) as Planet
 	_expect(
@@ -3739,7 +3750,7 @@ func _check_streaming() -> void:
 	manager._sweep()
 	pilot.global_position = manager.position_of(world) + Vector2(world.radius * 1.2, 0.0)
 	manager._sweep()
-	manager._drain_queue()
+	_stream_in(manager, world)
 	manager._sweep()
 	var again: Array[String] = _crate_labels(manager.node_for(world) as Planet)
 	_expect(
@@ -3754,6 +3765,48 @@ func _check_streaming() -> void:
 		"and taking one does not change what the others are (%s)" % ", ".join(again),
 	)
 
+	# The second delta: a hole stays a hole. Dug before leaving, still
+	# there on the way back, and nothing kept for a world nobody touched.
+	var shot: Planet = manager.node_for(world) as Planet
+	var mark: float = 0.7
+	var was_ground: float = shot.terrain.surface_radius_at(mark)
+	shot.carve(shot.polar_to_world(mark, was_ground - 10.0), 80.0)
+	var cratered: float = shot.terrain.surface_radius_at(mark)
+	_expect(
+		cratered < was_ground - 10.0,
+		"a crater is a crater (%.0f px down from %.0f)" % [was_ground - cratered, was_ground],
+	)
+
+	pilot.global_position = manager.position_of(world) + Vector2(500000.0, 0.0)
+	manager._sweep()
+	_expect(
+		manager.deltas.get(world.seed, {}).has("crust"),
+		"leaving a world you shot at keeps its crust",
+	)
+	var untouched: SystemBody = null
+	for other: SystemBody in system.planets():
+		if other != world and untouched == null:
+			untouched = other
+	_expect(
+		untouched != null and not manager.deltas.get(untouched.seed, {}).has("crust"),
+		"and a world nobody touched keeps nothing -- its seed already says it",
+	)
+
+	pilot.global_position = manager.position_of(world) + Vector2(world.radius * 1.2, 0.0)
+	manager._sweep()
+	_stream_in(manager, world)
+	var returned: Planet = manager.node_for(world) as Planet
+	_expect(
+		absf(returned.terrain.surface_radius_at(mark) - cratered) < 1.0,
+		"and the hole is where you left it (%.0f px against %.0f)" % [
+			returned.terrain.surface_radius_at(mark), cratered,
+		],
+	)
+	_expect(
+		returned != shot,
+		"on a planet that really was rebuilt, not one that never went away",
+	)
+
 	# A kind with no scene yet stays in the model rather than pretending.
 	_expect(
 		manager.node_for(system.star) == null
@@ -3766,6 +3819,18 @@ func _check_streaming() -> void:
 	dice.free()
 	container.free()
 	pilot.free()
+
+
+## Drives an asynchronous build to the point where the planet is in the
+## world. In the game a frame goes by and the manager collects it; a test
+## with no frames has to turn the handle itself.
+func _stream_in(manager: Node, body: SystemBody) -> void:
+	manager._drain_queue()
+	for tries: int in range(2000):
+		if manager.node_for(body) != null:
+			return
+		manager._collect_finished()
+		OS.delay_msec(1)
 
 
 func _crates_under(planet: Planet) -> int:
