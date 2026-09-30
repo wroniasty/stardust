@@ -197,9 +197,42 @@ var _atmosphere_material: ShaderMaterial = null
 var _cloud_material: ShaderMaterial = null
 
 
+## The descriptor this planet was built from, when it came out of a system
+## rather than out of a bare seed. Kept so the streaming manager can ask a
+## live node which body it is without a second table to keep in step.
+var body: SystemBody = null
+
+## The moment on the galaxy clock this planet is placed at. Handed in
+## rather than fetched, which is the whole point: a planet that reaches for
+## an autoload by path is a planet that behaves differently depending on
+## who is running it, and the first version of this did exactly that --
+## under `--script`, where the autoload does not exist, it still came back
+## with something that was not zero and put the planet a radian and a half
+## off its orbit.
+var placed_at: float = 0.0
+
+
 func _ready() -> void:
 	add_to_group(GRAVITY_GROUP)
-	generate(planet_seed)
+	if body != null:
+		adopt(body, placed_at)
+	else:
+		generate(planet_seed)
+
+
+## Builds this planet as the body the system says it is.
+##
+## The join between the two halves of the split: **the system decides how
+## big and how heavy, the seed decides what it looks like.** Size and
+## gravity are handed over, everything else -- terrain, weather, colour,
+## shelves -- is rolled from the body's own seed, and the roll is the same
+## one it would have made on its own.
+func adopt(descriptor: SystemBody, at_time: float = 0.0) -> void:
+	body = descriptor
+	placed_at = at_time
+	roll_parameters(descriptor.seed, descriptor.radius, descriptor.surface_gravity)
+	rebuild()
+	global_position = descriptor.position_at(at_time)
 
 
 ## Planet whose centre is closest to `point`, or null if there is none.
@@ -459,14 +492,23 @@ func generate(new_seed: int) -> void:
 
 
 ## Fills every parameter from the seed, touching nothing that is drawn.
-func roll_parameters(new_seed: int) -> void:
+## `forced_radius` and `forced_gravity` are how a system tells a planet how
+## big and how heavy it is. Both rolls happen either way and the result is
+## thrown away when overridden, so the random stream stays aligned: the
+## same seed gives the same terrain, weather and colours whether the size
+## came from the system or from the roll.
+func roll_parameters(
+	new_seed: int, forced_radius: float = 0.0, forced_gravity: float = 0.0
+) -> void:
 	planet_seed = new_seed
 
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = planet_seed
 
-	surface_radius = rng.randf_range(RADIUS_RANGE.x, RADIUS_RANGE.y)
-	surface_gravity = rng.randf_range(GRAVITY_RANGE.x, GRAVITY_RANGE.y)
+	var rolled_radius: float = rng.randf_range(RADIUS_RANGE.x, RADIUS_RANGE.y)
+	var rolled_gravity: float = rng.randf_range(GRAVITY_RANGE.x, GRAVITY_RANGE.y)
+	surface_radius = rolled_radius if forced_radius <= 0.0 else forced_radius
+	surface_gravity = rolled_gravity if forced_gravity <= 0.0 else forced_gravity
 	influence_radius = surface_radius * rng.randf_range(INFLUENCE_RATIO.x, INFLUENCE_RATIO.y)
 
 	if rng.randf() < 0.2:

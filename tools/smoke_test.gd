@@ -3585,6 +3585,58 @@ func _check_system_model(probe: Planet) -> void:
 
 	_check_orbit_evaluation()
 	_check_moon_sized_world(probe)
+	_check_adoption()
+
+
+## A planet built as the body a system says it is.
+##
+## The join has to hold in both directions: what the system dictates must
+## arrive, and what it does not dictate must be untouched by the dictating.
+func _check_adoption() -> void:
+	var body: SystemBody = StarSystem.generate(31337).planets()[0]
+
+	var adopted: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	adopted.body = body
+	root.add_child(adopted)
+	_expect(
+		is_equal_approx(adopted.surface_radius, body.radius)
+		and is_equal_approx(adopted.surface_gravity, body.surface_gravity),
+		"a planet is the size and weight the system says (%.0f px, %.1f px/s2)" % [
+			adopted.surface_radius, adopted.surface_gravity,
+		],
+	)
+	_expect(
+		adopted.global_position.distance_to(body.position_at(0.0)) < 1.0,
+		"and stands where its orbit puts it (%.0f px out of %.0f)" % [
+			adopted.global_position.length(), body.orbit_radius,
+		],
+	)
+	_expect(
+		adopted.influence_radius > adopted.surface_radius * Planet.INFLUENCE_RATIO.x - 0.001,
+		"with a well scaled to the size it was given, not to the one it rolled",
+	)
+
+	# The other half, and the reason both rolls happen even when both are
+	# overridden: a planet told how big to be still looks like the planet
+	# that seed describes. Drop the dictation and only size changes.
+	var free_rolled: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	free_rolled.planet_seed = body.seed
+	root.add_child(free_rolled)
+	_expect(
+		free_rolled.surface_color == adopted.surface_color
+		and free_rolled.atmosphere_color == adopted.atmosphere_color
+		and is_equal_approx(free_rolled.spin_rate, adopted.spin_rate),
+		"and looks like its seed either way -- the random stream stays aligned",
+	)
+	_expect(
+		not is_equal_approx(free_rolled.surface_radius, adopted.surface_radius)
+		or not is_equal_approx(free_rolled.surface_gravity, adopted.surface_gravity),
+		"while the size really did come from the system and not from the roll",
+	)
+	# Freed now, not queued: a planet still in the gravity group when the
+	# scanner check runs is a third contact the scanner is right to report.
+	adopted.free()
+	free_rolled.free()
 
 
 ## Orbits read off a clock, with nothing integrating anything.

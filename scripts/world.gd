@@ -5,8 +5,13 @@ extends Node2D
 ## The player never becomes a child of a system: systems are instantiated and
 ## freed underneath a player that stays put (see IDEAS.md section 9).
 ##
-## For M1 the "system" is one seeded planet at the origin and the ship parked
-## above it. Nothing is hand-placed: change the seed and you get another world.
+## The system comes out of the model now: `world_seed` seeds the galaxy, the
+## galaxy lays out system zero, and the world builds the first planet of it
+## where the orbit says. Nothing is hand-placed and nothing is invented here
+## -- change the seed and you get another system, with another world in it.
+##
+## Still only the one planet: switching bodies in and out as the player
+## moves is the streaming manager, and this is the joint it plugs into.
 
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const EXPLOSION_SCENE: String = "res://scenes/explosion.tscn"
@@ -306,11 +311,25 @@ func _damage_engine(ship: Ship, mount_name: String) -> void:
 	print("debug: no mount called %s" % mount_name)
 
 
+## Which system this world is a visit to. One, for now: laying systems out
+## across a galaxy is M4, and until then index zero is the only address.
+const SYSTEM_INDEX: int = 0
+
+
 func _spawn_planet() -> void:
 	var scene: PackedScene = load(PLANET_SCENE) as PackedScene
 	planet = scene.instantiate() as Planet
-	planet.planet_seed = world_seed
+	# Seeded through the galaxy rather than straight from the export, so the
+	# planet the pilot lands on is a body the model knows about -- with an
+	# orbit, a name and a place in a system -- and not a one-off rolled here.
+	Galaxy.galaxy_seed = world_seed
+	planet.body = Galaxy.system(SYSTEM_INDEX).planets()[0]
+	planet.placed_at = Galaxy.time
 	systems.add_child(planet)
+	print("system %s: %s at %.0f px" % [
+		Galaxy.system(SYSTEM_INDEX).display_name, planet.body.display_name,
+		planet.body.orbit_radius,
+	])
 
 
 func _place_ship() -> void:
