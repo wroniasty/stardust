@@ -977,6 +977,7 @@ func _evaluate_phase() -> void:
 			_check_system_model(_planet)
 			_check_streaming()
 			_check_system_map()
+			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
 			_check_scanner(_planet)
@@ -3935,6 +3936,78 @@ func _check_system_map() -> void:
 
 	map.free()
 	pilot.free()
+
+
+## The flight HUD, which is a picture now rather than eight rows of text.
+##
+## What can be checked without looking at it: which widget is up, and that
+## the conic it draws is the conic the orbit solver computed. The drawing
+## itself was looked at -- a circular orbit, an escape, a descent and a
+## transfer, on the real renderer.
+func _check_flight_hud(planet: Planet) -> void:
+	var ship: Ship = _spawn_ship()
+	var hud: FlightHud = FlightHud.new()
+	root.add_child(hud)
+	hud.bind(ship)
+
+	# Which widget is up is a question about the well, not about which
+	# planet happens to be nearest. The readout this replaces showed a
+	# planet's numbers from anywhere in the system, because the nearest
+	# planet is always some planet.
+	ship.global_position = planet.global_position + Vector2(planet.influence_radius * 0.5, 0.0)
+	_expect(hud.host() == planet, "inside the well, the HUD is about the planet")
+	ship.global_position = planet.global_position + Vector2(planet.influence_radius * 1.5, 0.0)
+	_expect(
+		hud.host() == null,
+		"and outside it the planet is just the nearest one, which is not the same thing",
+	)
+
+	# The reason a landing was refused reaches the HUD. The mark is drawn,
+	# the words are the news.
+	ship.global_position = planet.global_position + Vector2(planet.influence_radius * 0.5, 0.0)
+	_expect(hud.warning().is_empty(), "no mark when nothing was refused")
+	ship.last_landing_rejection = "slope"
+	_expect(hud.warning() == "slope", "and the reason itself when something was")
+
+	# The conic the HUD draws has to be the conic the solver measured, or
+	# the picture and the numbers beside it are two different orbits.
+	var mu: float = planet.gravitational_parameter()
+	var radius: float = planet.surface_radius * 2.4
+	var at: Vector2 = planet.global_position + Vector2(radius, 0.0)
+	# Eccentric enough for the shape to be a shape, slow enough that the
+	# far side is still inside the well -- past that the solver reports an
+	# escape, which is a different assertion.
+	var along: Vector2 = Vector2(0.0, sqrt(mu / radius) * 1.05)
+	var shape: Dictionary = planet.orbit_shape(at, along)
+	var extremes: Vector2 = planet.orbit_extremes(at, along)
+	var eccentricity: float = (shape["eccentricity"] as Vector2).length()
+	# At theta zero this is true by construction and says nothing. At PI it
+	# is the real check: the eccentricity comes from the eccentricity
+	# vector and the apoapsis from energy and momentum, by two different
+	# routes, and the picture is the solver's orbit only if they agree.
+	_expect(
+		absf(Planet.conic_radius(extremes.x, eccentricity, PI) - extremes.y) < 1.0,
+		"the drawn conic comes round to the apoapsis the solver found (%.0f of %.0f)" % [
+			Planet.conic_radius(extremes.x, eccentricity, PI), extremes.y,
+		],
+	)
+	# And the ship is drawn on the curve, not beside it: the true anomaly
+	# taken from the eccentricity vector has to give back where it is.
+	var arm: Vector2 = at - planet.global_position
+	var anomaly: float = (shape["eccentricity"] as Vector2).angle_to(arm)
+	_expect(
+		absf(Planet.conic_radius(extremes.x, eccentricity, anomaly) - arm.length()) < 1.0,
+		"and the ship sits on it, at the anomaly the eccentricity vector gives",
+	)
+
+	# A ship thrown hard enough has a periapsis and no far side.
+	_expect(
+		is_inf(planet.orbit_extremes(at, along * 3.0).y),
+		"leaving has no apoapsis to draw, and the widget says ESCAPE rather than a number",
+	)
+
+	hud.free()
+	ship.queue_free()
 
 
 ## A planet built as the body a system says it is.

@@ -407,6 +407,39 @@ func orbit_extremes(point: Vector2, velocity: Vector2) -> Vector2:
 	return Vector2(semi_major * (1.0 - eccentricity), apoapsis)
 
 
+## The coasting conic through `point`, as something that can be drawn.
+##
+## `orbit_extremes()` answers the two numbers a readout needs. A picture
+## needs the shape as well, and that is the **eccentricity vector**: it
+## points at periapsis and its length is the eccentricity. Returned as one
+## vector rather than as an angle and a magnitude, because those would be
+## two values that can disagree.
+func orbit_shape(point: Vector2, velocity: Vector2) -> Dictionary:
+	var extremes: Vector2 = orbit_extremes(point, velocity)
+	var shape: Dictionary = {
+		"periapsis": extremes.x, "apoapsis": extremes.y, "eccentricity": Vector2.ZERO,
+	}
+	var arm: Vector2 = point - global_position
+	var radius: float = arm.length()
+	var mu: float = gravitational_parameter()
+	if radius < 0.001 or mu <= 0.0:
+		return shape
+	shape["eccentricity"] = (
+		arm * (velocity.length_squared() - mu / radius) - velocity * arm.dot(velocity)
+	) / mu
+	return shape
+
+
+## Radius of a conic with this periapsis and eccentricity, `theta` radians
+## round from periapsis.
+##
+## One formula for both kinds: an ellipse closes because the divisor never
+## reaches zero, and a hyperbola runs off to infinity because it does.
+static func conic_radius(periapsis: float, eccentricity: float, theta: float) -> float:
+	var divisor: float = 1.0 + eccentricity * cos(theta)
+	return INF if divisor <= 0.0001 else periapsis * (1.0 + eccentricity) / divisor
+
+
 ## Classifies the coasting trajectory through `point` at `velocity`.
 ##
 ## This is what "are we in orbit" means: both ends of the conic inside the

@@ -830,6 +830,43 @@ obietnica, że da się na tym stanąć.
 Okresy liczone są jednym przebiegiem na końcu, po zważeniu gwiazdy, żeby nic
 nie nosiło okresu wyliczonego z masy, która potem się zmieniła.
 
+### Przyrząd orbity: obrazek zamiast ośmiu wierszy
+
+„PERI −1651 / APO 693" to dwie liczby, z których pilot za każdym razem musi
+sobie zbudować obrazek — w trakcie podchodzenia do lądowania. Obrazek jest tym,
+czego naprawdę chce, więc HUD go rysuje, a liczby zostają obok dla tych, które
+naprawdę są liczbami.
+
+**Dwa przyrządy, i to, który jest na ekranie, mówi gdzie jesteś.** W studni
+pytanie brzmi „co robi ta orbita"; poza nią — „gdzie lecę i jak szybko". Stary
+odczyt pokazywał liczby planety z dowolnego miejsca w układzie, bo *najbliższa*
+planeta to zawsze jakaś planeta. To nie to samo pytanie co *czy jej grawitacja
+tu sięga*, a poza zasięgiem stożek, który by narysowała, nie jest torem, po
+którym statek leci.
+
+**Grubsza zielona linia na orbicie.** „Czy jestem na orbicie" to pytanie tak/nie,
+a sam kolor to odcień, który trzeba pamiętać; grubość czyta się bez pamięci.
+
+**Planeta jest kropką, a grunt pierścieniem** — pierwsza wersja rysowała
+wypełniony dysk w skali i to było błędem, który widać dopiero na zrzucie: na
+krótkiej prostej apocentrum jest kilkaset pikseli nad gruntem, więc dysk
+wypełniał tarczę i połykał dokładnie ten tor, który pilot czytał. Pierścień
+mówi o skali to samo i zostawia środek widoczny — a tam właśnie mieszka stożek
+podorbitalny.
+
+Jeden wzór rysuje elipsę i hiperbolę: `r = p / (1 + e cos θ)`. Elipsa się
+domyka, bo mianownik nigdy nie dochodzi do zera, hiperbola ucieka, bo dochodzi.
+Tor przerywany jest tam, gdzie wychodzi poza studnię — linia docięta do krawędzi
+czytałaby się jak orbita przylegająca do niej.
+
+**Kadłub jako pasek na górze**, bo to jedyny odczyt, w którym trend znaczy
+więcej niż wartość: nikt nie lata na 63 procentach, lata się na „jeszcze
+większość" albo „prawie nic". Szerokość 160 px, żeby zmieścił się między dwiema
+kolumnami overlayu debugowego, bo tam góra ekranu jest wolna nawet z F7.
+
+Odmowa lądowania to **wykrzyknik i powód**. „WAVE OFF" było etykietą na newsie,
+który kolor już niósł.
+
 ### Mapa układu: rysowana z modelu, bo tylko model wie
 
 Mapa (`M`) czyta `StarSystem`, nie scenę. To jest jej jedyny powód

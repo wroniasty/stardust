@@ -8,7 +8,6 @@
 [ext_resource type="PackedScene" path="res://scenes/starfield.tscn" id="6_starfield"]
 [ext_resource type="PackedScene" path="res://scenes/debug_vectors.tscn" id="7_vectors"]
 [ext_resource type="PackedScene" path="res://scenes/trajectory_predictor.tscn" id="8_trajectory"]
-[ext_resource type="PackedScene" path="res://scenes/landing_hud.tscn" id="9_hud"]
 
 [node name="World" type="Node2D"]
 script = ExtResource("1_world")
@@ -37,5 +36,3 @@ ship_path = NodePath("../Player/Ship")
 [node name="DebugOverlay" parent="." instance=ExtResource("5_overlay")]
 ship_path = NodePath("../Player/Ship")
 
-[node name="LandingHud" parent="." instance=ExtResource("9_hud")]
-ship_path = NodePath("../Player/Ship")

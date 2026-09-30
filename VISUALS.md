@@ -157,6 +157,9 @@ tylko kolejność prac.
 - [ ] `scripts/ui/ui_value.gd`: wygładzanie geometrii (~120 ms) osobno od kwantowania cyfr (10 Hz). Bez tego HUD dalej wygląda na debugowy, choćby miał dobry font.
 - [ ] Stany ostrzegawcze czytelne bez czytania: kolor, puls prostokątny 2 Hz na tle a nie na tekście, stała pozycja.
 - [ ] Pasek energii: komórki z podziałką co koszt strzału, cisza timeoutu odróżnialna od doładowywania bez patrzenia na liczby (mechanika w IDEAS.md sekcja 14). Łuk segmentowy na ciepło kadłuba.
+- [x] **Przyrząd orbity zamiast ośmiu wierszy tekstu** (`scripts/flight_hud.gd`). Planeta jako kropka w ognisku, pierścień gruntu w skali, stożek toru z kropkami na perycentrum i apocentrum, kropka statku na krzywej. **W orbicie linia jest grubsza i zielona** — „czy jestem na orbicie” to pytanie tak/nie, a sam kolor to odcień, który trzeba pamiętać. Obok liczby, które naprawdę są liczbami: PERI, APO, ALT, V/S, SLOPE, GEAR. Odmowa lądowania jako **wykrzyknik i powód**, bez słowa „WAVE OFF” — etykieta na newsie, który kolor już niosł.
+- [x] Poza studnią grawitacyjną przyrząd zmienia się na **strzałkę kierunku lotu i prędkość**. Wewnątrz pytanie brzmi „co robi ta orbita”, na zewnątrz „gdzie lecę i jak szybko”, a diagram orbity wokół planety, przy której nie jesteś, nie odpowiada na żadne z nich.
+- [x] Kadłub jako **pasek na górze ekranu**, nie wiersz tekstu: nikt nie lata na 63 procentach, lata się na „jeszcze większość” albo „prawie nic”, a długość mówi to bez czytania.
 - [ ] Wskaźnik horyzontu i wektora prędkości przy lądowaniu, rysowany nad światem a nie w panelu.
 - [ ] Rozdzielenie: HUD gry kontra overlay debugowy pod F7. Rozdzielenie jest stylistyczne (UI_STYLE.md sekcja 8), więc samo się pilnuje.
 - [ ] `scripts/ui/hud_mode.gd`: tryby DEEP / ORBIT / LANDING / COMBAT wyprowadzone z liczb, które symulacja już liczy, z histerezą i minimalnym czasem trwania (UI_STYLE.md sekcja 10). `Ship` nie dowiaduje się, że tryby istnieją.
