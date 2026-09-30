@@ -278,7 +278,15 @@ func fire(carrier_velocity: Vector2, container: Node, shooter: Node = null) -> P
 		missile.thrust = firing.missile_thrust
 		missile.turn_rate = firing.missile_turn_rate
 		if firing.type == WeaponData.Type.HOMING_MISSILE:
-			missile.target = Missile.find_target(global_position, shooter, get_tree())
+			# Off the shooter's aim point, not off the mount: the pilot
+			# pointed at something, and the launcher's own position has no
+			# opinion about which of two ships that was. A shooter with no
+			# aim point cannot point at anything, so it gets no lock.
+			var pilot: Ship = shooter as Ship
+			if pilot != null:
+				missile.target = Missile.find_target(
+					pilot.aim_point, pilot, get_tree(), pilot.lock_reach()
+				)
 
 	round_instance.shooter = shooter
 	round_instance.global_position = global_position

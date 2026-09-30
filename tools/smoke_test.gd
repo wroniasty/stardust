@@ -973,6 +973,7 @@ func _evaluate_phase() -> void:
 			_check_ship_fitouts()
 			_check_creative_tool()
 			_check_rarity_travels()
+			_check_seeker_targets()
 			_check_aiming()
 			_check_stat_cards()
 			_check_scanner(_planet)
@@ -3069,14 +3070,15 @@ func _check_weapon_types(planet: Planet) -> void:
 	var seeker: WeaponData = load("res://resources/weapons/seeker.tres") as WeaponData
 	mount.fit(seeker)
 	mount._cooldown = 0.0
+	# Pointed at, because that is now how a seeker is told what to chase.
+	# It also makes the assertion exact: freed hulls linger in the group
+	# until the deferred free runs, and before the cursor decided the
+	# target this could only say "something, not the shooter".
+	ship.aim_point = mark.global_position
 	var guided: Missile = mount.fire(Vector2.ZERO, container, ship) as Missile
-	# Whatever it picked, not specifically `mark`: the smoke test frees
-	# ships with queue_free, which is deferred, so earlier hulls are still
-	# in the group during a synchronous check. What matters is that it chose
-	# a ship that is not the shooter and then flew at it.
 	_expect(
-		guided != null and guided.target != null and guided.target != ship,
-		"a seeker picks up something other than the ship that fired it",
+		guided != null and guided.target == mark,
+		"a seeker picks up the ship the cursor is on",
 	)
 	if guided != null and guided.target != null:
 		var chased: Node2D = guided.target
@@ -3436,6 +3438,58 @@ func _check_ejection() -> void:
 	)
 	crate.queue_free()
 	ship.queue_free()
+
+
+## Which ship a seeker chases. The whole thesis of mouse aiming is that the
+## answer is "the one you are pointing at", and the old answer was "the
+## nearest one", which is a weapon arguing with the cursor.
+func _check_seeker_targets() -> void:
+	var shooter: Ship = _spawn_ship()
+	shooter.global_position = Vector2(20000.0, 20000.0)
+	var close: Ship = _spawn_ship()
+	close.global_position = shooter.global_position + Vector2(200.0, 0.0)
+	var distant: Ship = _spawn_ship()
+	distant.global_position = shooter.global_position + Vector2(900.0, 0.0)
+	var reach: float = shooter.lock_reach()
+
+	_expect(
+		Missile.find_target(distant.global_position, shooter, root.get_tree(), reach) == distant,
+		"pointing at the far ship picks the far ship, though the near one is closer to the rail",
+	)
+	_expect(
+		Missile.find_target(close.global_position, shooter, root.get_tree(), reach) == close,
+		"and pointing at the near one picks the near one",
+	)
+
+	# Forgiving, but not infinitely: the pick circle is the cursor's own
+	# imprecision, and past it the pilot pointed at space.
+	var beside: Vector2 = close.global_position + Vector2(0.0, reach * 0.5)
+	_expect(
+		Missile.find_target(beside, shooter, root.get_tree(), reach) == close,
+		"near enough to a hull still counts as pointing at it",
+	)
+	_expect(
+		Missile.find_target(
+			shooter.global_position + Vector2(0.0, 5000.0), shooter, root.get_tree(), reach
+		) == null,
+		"and pointing at empty space is no lock at all, not a lock on whatever was nearest",
+	)
+
+	# Never itself, and never a wreck: both are missiles thrown away.
+	_expect(
+		Missile.find_target(shooter.global_position, shooter, root.get_tree(), reach) == null,
+		"a seeker will not lock the ship that fired it",
+	)
+	close.take_damage(2.0, "test")
+	_expect(
+		close.is_destroyed()
+		and Missile.find_target(close.global_position, shooter, root.get_tree(), reach) == null,
+		"nor a wreck, however squarely it is pointed at",
+	)
+
+	shooter.queue_free()
+	close.queue_free()
+	distant.queue_free()
 
 
 func _check_rarity_travels() -> void:

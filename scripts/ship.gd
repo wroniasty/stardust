@@ -302,6 +302,11 @@ var fire_secondary_command: bool = false
 ## of the two that can be aimed at empty space.
 var aim_point: Vector2 = Vector2.ZERO
 
+## How close to the cursor a ship has to be for a seeker to lock onto it,
+## in screen pixels. The target's own size is added on top, because a
+## freighter really is easier to point at than a fighter.
+const LOCK_RADIUS: float = 48.0
+
 ## Hull condition, 1.0 intact and 0.0 destroyed.
 ##
 ## On the same 0..1 scale as hull_heat and engine health, which is what makes
@@ -1637,6 +1642,19 @@ func gravity_acceleration_at(point: Vector2) -> Vector2:
 		if planet != null:
 			total += planet.gravity_at(point)
 	return total
+
+
+## How far from the cursor a seeker will still take a lock, in world pixels.
+##
+## Converted from screen pixels through the camera, so pointing is exactly
+## as forgiving at every framing. A fixed world radius would be at its most
+## generous zoomed right in -- which is where the pilot has the most
+## precision and needs the help least.
+func lock_reach() -> float:
+	var scale: float = 1.0
+	if is_inside_tree():
+		scale = get_viewport().get_canvas_transform().get_scale().x
+	return LOCK_RADIUS / maxf(scale, 0.001)
 
 
 ## Total force applied by the engines last tick, in global coordinates.

@@ -172,7 +172,7 @@ Cel: strzela się tam, gdzie się patrzy, a kursor mówi, czy to coś da.
 - [x] Dwa spusty: lewy i prawy przycisk myszy, `Hardpoint.trigger` przypisuje gniazdo, `G` w edytorze przełącza. Naciśnięcie spustu odpala te działka, które **mogą trafić**, nie wszystkie do niego podpięte.
 - [x] Łuk rysowany na schemacie w edytorze, z kolorem spustu. Działko na sztywno pokazuje pojedynczą kreskę — brak łuku też jest informacją.
 - [x] `traverse_range` i `traverse_rate` w tabelach lootu, z afiksami `turreted` (szerszy łuk za kadencję) i `quick-slewing` (szybszy obrót za obrażenia).
-- [ ] Wybór celu dla pocisków naprowadzanych z pozycji kursora, a nie „najbliższy statek": dziś seeker bierze najbliższego, nie tego, na którego pokazujesz.
+- [x] Wybór celu dla pocisków naprowadzanych **z pozycji kursora**, nie „najbliższy statek". Promień chwytu liczony w pikselach ekranu i przeliczany przez kamerę, więc celowanie jest tak samo wyrozumiałe przy każdym zoomie; rozmiar celu dochodzi na wierzch. Kursor na pustce to **brak zaczepienia** — rakieta leci prosto tam, gdzie pokazałeś, zamiast łapać cokolwiek było bliżej.
 - [x] Własny kadłub nie jest przeszkodą: amunicja przelatuje przez własny statek. Pocisk jest **martwy, dopóki nie wyjdzie poza obrys** tego, kto go wystrzelił — nie przez stały czas, bo to zakład o rozmiar kadłuba; przy 150 px/s przez 72-pikselowy kadłub stara łaska 0,2 s kończyła się w połowie drogi. Raz opuszczony obrys uzbraja na stałe, więc pocisk, który wróci dookoła planety, trafia.
 - [ ] Ewentualnie: teren między działkiem a celem. Kursor melduje wtedy zielony, choć pocisk trafi w zbocze — ale trafienie w zbocze jest prawdziwym skutkiem (robi krater), więc to raczej wygoda niż kłamstwo. Koszt: raycast na działko na klatkę.
 

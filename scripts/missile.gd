@@ -39,22 +39,30 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 
 
-## The nearest ship that is not the one that fired. Nothing hostile exists
-## yet, so this is what "a target" means until M5 puts enemies in the world;
-## a missile with nothing to chase flies straight, which is the honest
-## fallback rather than a special case.
-static func find_target(from: Vector2, shooter: Node, tree: SceneTree) -> Node2D:
+## The ship the pilot is pointing at, or nothing.
+##
+## Nearest to the **cursor**, not to the launcher. "You shoot where you are
+## looking" is the whole thesis of mouse aiming, and a seeker that picks the
+## closest ship instead is a weapon that argues with the cursor: point past
+## the wreck at the one behind it and the missile goes for the wreck.
+##
+## Nothing near the cursor means no lock, and a missile with nothing to
+## chase flies straight. That is not a special case to be papered over with
+## a fallback -- flying straight at the point you indicated is exactly what
+## pointing at empty space asked for.
+static func find_target(at: Vector2, shooter: Node, tree: SceneTree, reach: float) -> Node2D:
 	var best: Node2D = null
 	var nearest: float = INF
 	for node: Node in tree.get_nodes_in_group(Ship.SHIP_GROUP):
 		var ship: Ship = node as Ship
-		# Not the one that fired, and not a wreck: a missile that spends
-		# itself on something already dead is a missile wasted, and the ship
-		# that killed it is still right there.
+		# Not the one that fired, and not a wreck: a missile spent on
+		# something already dead is a missile wasted, and whatever killed it
+		# is still right there.
 		if ship == null or ship == shooter or ship.is_destroyed():
 			continue
-		var distance: float = ship.global_position.distance_squared_to(from)
-		if distance < nearest:
-			nearest = distance
-			best = ship
+		var distance: float = ship.global_position.distance_to(at)
+		if distance > reach + ship.hull_extent() or distance >= nearest:
+			continue
+		nearest = distance
+		best = ship
 	return best

@@ -754,6 +754,32 @@ nieprawda, bo spacja jest węższa od litery, którą zastępuje, i kolumna
 wartości wychodzi poszarpana. Font stoi obok formatów, które go zakładają,
 żeby ekran nie mógł wziąć karty i po cichu zgubić tego, co czyni ją czytelną.
 
+### Seeker: cel bierze się z kursora, nie z odległości
+
+Rakieta samonaprowadzająca brała najbliższy statek. To jest broń kłócąca się
+z kursorem: pokazujesz **za** wrak na tego z tyłu, a pocisk leci we wrak.
+Cała teza celowania myszką brzmi „strzela się tam, gdzie się patrzy", więc
+cel bierze się z `Ship.aim_point`, a nie z pozycji wyrzutni — wyrzutnia nie ma
+zdania o tym, który z dwóch statków miałeś na myśli.
+
+**Promień chwytu jest w pikselach ekranu**, przeliczany przez transformację
+kanwy (`Ship.lock_reach()`). Stały promień w świecie byłby najbardziej
+wyrozumiały przy maksymalnym przybliżeniu — czyli tam, gdzie pilot ma
+najwięcej precyzji i najmniej potrzebuje pomocy. Rozmiar celu
+(`hull_extent()`) dochodzi na wierzch, bo we frachtowiec naprawdę łatwiej
+wycelować niż w myśliwiec.
+
+**Brak celu to brak celu.** Kursor na pustce nie daje zaczepienia i rakieta
+leci prosto — a leci prosto *tam, gdzie pokazałeś*, bo wyrzutnia i tak
+obraca się za kursorem. To nie jest przypadek do zaklejenia awaryjnym
+„weź najbliższego": to jest dokładnie to, o co prosi pokazanie w próżnię.
+Kursor zostaje bursztynowy dla rakiet, i to nadal jest prawda.
+
+Przy okazji test zrobił się ostry. Stary sprawdzał tylko „coś, co nie jest
+strzelcem", bo `queue_free()` jest odroczone i zwolnione kadłuby wiszą w
+grupie do końca klatki. Skoro cel wybiera kursor, można powiedzieć **który**
+— i po cofnięciu zmiany padają cztery asercje zamiast żadnej.
+
 ### Skrzynki: dlaczego własna całka, a nie RigidBody2D
 
 Skrzynka jest `Area2D` i musi nią zostać — podniesienie to wejście statku w
