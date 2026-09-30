@@ -893,11 +893,31 @@ błędnym przed pierwszą klatką — dokładnie to, co `ship_editor.gd` ma zapi
 komentarzu przy `_panels()`. Układ jest funkcją układu i prostokąta, i niczego
 więcej; klik liczy go sobie od nowa.
 
-Czego mapa jeszcze nie umie: **zoomu**. Księżyc krąży kilka tysięcy pikseli od
-planety w układzie o średnicy kilkuset tysięcy, więc każdy satelita siedzi
-wewnątrz znacznika swojej planety. Kliknięcie planety wymienia je z nazwy — to
-nie zastępuje zoomu, ale jest różnicą między „nic tam nie ma" a „coś tam jest,
-czego jeszcze nie widać".
+**Zoom jest zasięgiem w świecie, nie mnożnikiem.** Pierwsza wersja miała
+drabinkę potęg czwórki i jest to błąd wart zapamiętania: systemy mają od 41k do
+302k px średnicy, więc **ten sam mnożnik to inny widok w każdym z nich**. Na
+zrzucie x64 wyrzuciło księżyc pół ekranu poza krawędź, bo trafiło na system
+szerszy, niż zakładałem. Zasięg w pikselach znaczy wszędzie to samo: 7500 px to
+„ta planeta i jej księżyce" w dowolnym systemie, jaki generator zbuduje.
+
+Powiększanie idzie wokół **wybranego ciała**, nie wokół gwiazdy — inaczej pierwszy
+krok wypycha z ekranu dokładnie to, co się przed chwilą kliknęło. A ciało dostaje
+swój prawdziwy okrąg powierzchni, gdy tylko zrobi się większy od znacznika: przy
+skali układu planeta to jedna dziesiąta piksela i znacznik jest wszystkim, co
+jest; przy 7500 px to jest to, na co się patrzy.
+
+**Teleport (`Enter`) jest narzędziem deweloperskim** i jest tak opisany w
+podpowiedziach. Do M4 nie ma sposobu przecięcia systemu innego niż przelecenie
+go, a testowanie streaming managera w ten sposób to testowanie go raz na
+godzinę. Cel budowany jest synchronicznie (`force_awake`) — to dokładnie ten
+przypadek, dla którego ta metoda istnieje — a statek ląduje na orbicie kołowej
+po tej stronie, z której przyleciał, żeby teleport nie obracał przy okazji pilota.
+
+Przy okazji wyszła nieświeża referencja: `World.planet` było planetą zbudowaną
+na starcie, co było w porządku, dopóki istniała tylko jedna. Ze streamingiem
+znaczy to konfigurator edytujący planetę, którą pilot już opuścił, i krater
+wykopany w niewłaściwym świecie. Świat śledzi teraz najbliższy żywy glob i
+przepina do niego konfigurator.
 
 ### Streaming: trzy stany, nie cztery
 

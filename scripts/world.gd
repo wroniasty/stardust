@@ -111,6 +111,7 @@ func _build_map() -> void:
 	_map.bind(
 		Galaxy.system(SYSTEM_INDEX), (player as Player).ship, StreamingManager
 	)
+	_map.teleport_requested.connect(_on_map_teleport)
 
 
 func _build_editor() -> void:
@@ -276,6 +277,10 @@ const DEBUG_ENGINE_HEALTH: float = 0.3
 const LANDING_CLEARANCE: float = 22.0
 
 
+func _process(_delta: float) -> void:
+	_follow_planet()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	var ship: Ship = (player as Player).ship
 
@@ -301,6 +306,13 @@ func _damage_engine(ship: Ship, mount_name: String) -> void:
 			print("debug: %s health set to %.2f" % [mount_name, engine.health])
 			return
 	print("debug: no mount called %s" % mount_name)
+
+
+## Where a teleport puts the ship, as a multiple of the planet's radius
+## above its terrain ceiling, and as a multiple of a bodiless thing's own
+## radius. High enough to be in a stable orbit rather than in the air.
+const ARRIVAL_CLEARANCE: float = 0.8
+const ARRIVAL_RATIO: float = 3.0
 
 
 ## Which system this world is a visit to. One, for now: laying systems out
@@ -332,6 +344,60 @@ func _open_system() -> void:
 
 func _on_crate_placed(crate: LootCrate) -> void:
 	crate.touched.connect(_on_crate_touched)
+
+
+## Puts the ship in orbit around whatever was picked on the map.
+##
+## A dev convenience, the same kind as the configurator's teleport between
+## landing shelves: until M4 there is no crossing a system except by
+## flying it, and testing the streaming manager that way is testing it
+## once an hour.
+##
+## Built before placed, and not queued: the ship cannot be put in orbit
+## around a planet that is three frames away from existing, which is
+## exactly what `force_awake` is for.
+func _on_map_teleport(body: SystemBody) -> void:
+	var ship: Ship = (player as Player).ship
+	if ship == null:
+		return
+	var node: Node2D = StreamingManager.force_awake(body)
+	var centre: Vector2 = StreamingManager.position_of(body)
+	# Arrive on the side the ship was already on, so a teleport does not
+	# also silently turn the pilot around.
+	var up: Vector2 = (ship.global_position - centre).normalized()
+	if up.is_zero_approx():
+		up = Vector2.UP
+
+	var arrival: Planet = node as Planet
+	if arrival == null:
+		# A star or a station: nothing to orbit yet, so simply stand off it.
+		ship.respawn(centre + up * body.radius * ARRIVAL_RATIO, Vector2.ZERO)
+		return
+	var radius: float = arrival.terrain_ceiling() + arrival.surface_radius * ARRIVAL_CLEARANCE
+	ship.respawn(
+		arrival.global_position + up * radius,
+		up.orthogonal() * arrival.circular_orbit_speed(radius),
+	)
+	_follow_planet()
+	print("teleported to %s" % body.display_name)
+
+
+## Keeps the world's idea of "the planet" on the one the ship is at.
+##
+## It used to be whichever planet the world built at startup, which was
+## fine while there was only ever one. With bodies streaming in and out,
+## a stale reference means the configurator edits a planet the pilot left
+## and a crater goes into the wrong world.
+func _follow_planet() -> void:
+	var ship: Ship = (player as Player).ship
+	if ship == null:
+		return
+	var here: Planet = Planet.nearest(get_tree(), ship.global_position)
+	if here == null or here == planet:
+		return
+	planet = here
+	if _configurator != null:
+		_configurator.bind(planet)
 
 
 func _place_ship() -> void:

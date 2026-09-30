@@ -54,6 +54,20 @@ const STATION_SIZE: float = 2.0
 ## How close a click has to land to pick a body, in screen pixels.
 const PICK_RADIUS: float = 9.0
 
+## How far the map reaches, in world pixels from its middle. Zero is the
+## whole system.
+##
+## Spans rather than magnifications, and that is the second attempt. A
+## ladder of multipliers was tried first and is wrong for a reason worth
+## keeping: systems run from 41k to 302k pixels across, so the same
+## multiplier is a different view in every one of them, and x64 put a
+## moon comfortably on screen in a wide system and half a screen off it
+## in a narrow one. A reach in pixels means the same thing everywhere --
+## 7500 is "this planet and its moons" in any system there is.
+const ZOOM_REACH: Array[float] = [0.0, 30000.0, 7500.0, 2000.0]
+
+signal teleport_requested(body: SystemBody)
+
 var _system: StarSystem = null
 var _ship: Node2D = null
 
@@ -65,6 +79,10 @@ var _manager: Node = null
 var _canvas: Control = null
 var _panel: Control = null
 var _picked: SystemBody = null
+
+## Index into ZOOM_LEVELS. Kept across openings: it is a setting, not a
+## state of the flight.
+var _zoom: int = 0
 
 func _ready() -> void:
 	layer = 21
@@ -109,7 +127,23 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"toggle_map"):
 		toggle()
 		get_viewport().set_input_as_handled()
-	elif is_open() and event.is_action_pressed(&"ui_cancel"):
+	elif not is_open():
+		return
+	elif event.is_action_pressed(&"ui_cancel"):
+		close()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"camera_zoom_in"):
+		set_zoom_level(_zoom + 1)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"camera_zoom_out"):
+		set_zoom_level(_zoom - 1)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"ui_accept") and _picked != null:
+		# A dev convenience, like the planet configurator's teleport, and
+		# marked as one in the hints. Until M4 there is no way to cross a
+		# system that is not flying it, and testing a streaming manager by
+		# flying to each planet is testing it once an hour.
+		teleport_requested.emit(_picked)
 		close()
 		get_viewport().set_input_as_handled()
 
@@ -152,6 +186,17 @@ func picked() -> SystemBody:
 	return _picked
 
 
+## Clamped rather than wrapped: running off the end of the ladder should
+## stop, not jump to the other extreme.
+func set_zoom_level(level: int) -> void:
+	_zoom = clampi(level, 0, ZOOM_REACH.size() - 1)
+	_canvas.queue_redraw()
+
+
+func zoom_level() -> int:
+	return _zoom
+
+
 ## Pixels of world per pixel of map, and where the star sits. A function of
 ## the system and the viewport only, so a click resolves without waiting
 ## for a frame to have been drawn -- the same reason the ship editor works
@@ -159,10 +204,17 @@ func picked() -> SystemBody:
 func layout(view: Vector2) -> Dictionary:
 	var room: float = minf(view.x, view.y) * 0.5 - PAD * 3.0
 	var reach: float = _system.outer_radius() if _system != null else 1.0
+	if ZOOM_REACH[_zoom] > 0.0:
+		reach = ZOOM_REACH[_zoom]
 	return {
 		"centre": view * 0.5,
 		"scale": room / maxf(reach, 1.0),
+		"reach": reach,
 		"turn": -_view_rotation(),
+		# Magnifying about the star would push everything worth looking at
+		# off the edge at the first step. What a pilot zooms in on is the
+		# thing they just clicked, so that is what the middle is.
+		"focus": Vector2.ZERO if _picked == null else _position_of(_picked),
 	}
 
 
@@ -186,7 +238,8 @@ func view_size() -> Vector2:
 
 
 func to_map(point: Vector2, plan: Dictionary) -> Vector2:
-	return Vector2(plan["centre"]) + point.rotated(float(plan["turn"])) * float(plan["scale"])
+	var from_focus: Vector2 = point - Vector2(plan["focus"])
+	return Vector2(plan["centre"]) + from_focus.rotated(float(plan["turn"])) * float(plan["scale"])
 
 
 func _process(_delta: float) -> void:
@@ -203,8 +256,17 @@ func _draw_map() -> void:
 	var plan: Dictionary = layout(view)
 
 	_text(font, Vector2(PAD, PAD + float(FONT_SIZE)), "UKŁAD %s" % _system.display_name, LABEL)
+	var hints: String = "M zamyka,  klik wybiera,  + / - przybliża"
+	if _picked != null:
+		hints += ",  Enter teleportuje (dev)"
+	_text(font, Vector2(PAD, view.y - PAD), hints, LABEL)
+	# Always, not only when zoomed: a map whose scale you have to infer is
+	# a map you cannot judge a distance on.
 	_text(
-		font, Vector2(PAD, view.y - PAD), "M zamyka,  klik wybiera ciało", LABEL
+		font,
+		Vector2(PAD, PAD + float(FONT_SIZE) * 2.5),
+		"zasięg %.0f px" % float(plan["reach"]),
+		LABEL,
 	)
 
 	# Orbits first, so no marker is drawn under a line.
@@ -223,7 +285,7 @@ func _draw_map() -> void:
 			)
 
 	for body: SystemBody in _system.bodies:
-		_draw_body(body, to_map(_position_of(body), plan))
+		_draw_body(body, to_map(_position_of(body), plan), float(plan["scale"]))
 
 	if _ship != null and is_instance_valid(_ship):
 		_draw_ship(to_map(_ship.global_position, plan))
@@ -247,10 +309,18 @@ func _is_live(body: SystemBody) -> bool:
 	return _manager.node_for(body) != null
 
 
-func _draw_body(body: SystemBody, at: Vector2) -> void:
+func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
 	var colour: Color = LIVE if _is_live(body) else MODELLED
 	if body == _picked:
 		colour = PICK
+
+	# The body's real size, once the map is close enough for it to be
+	# bigger than the marker standing in for it. At system scale a planet
+	# is a tenth of a pixel and the marker is all there is; zoomed to a
+	# planet and its moons it is the thing you are looking at.
+	var surface: float = body.radius * scale
+	if surface > PLANET_SIZE + 1.0:
+		_canvas.draw_arc(at, surface, 0.0, TAU, 32, colour, 1.0)
 
 	match body.kind:
 		SystemBody.Kind.STAR:

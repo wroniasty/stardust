@@ -1530,6 +1530,9 @@ const STREAMING_SCRIPT: GDScript = preload("res://scripts/autoload/streaming_man
 ## about a generator; the interesting failures are the lucky rolls.
 const SYSTEMS_SAMPLED: int = 300
 
+## The map's own margin, which its layout reserves on every side.
+const PAD_ON_MAP: float = 24.0
+
 ## How far from the origin `tools/distance_bench.gd` has actually measured
 ## the game behaving. Out to here the cost of distance is hundredths of a
 ## pixel in stored coordinates and under half a pixel of creep in ten
@@ -3928,6 +3931,44 @@ func _check_system_map() -> void:
 		absf(on_map.length() - probe_point.length() * float(turned["scale"])) < 0.01,
 		"and turning it does not change how far away anything looks",
 	)
+	# Zoom is a reach in the world, not a magnification. The ladder has to
+	# clamp, and each rung has to put a body at that reach on the rim.
+	map.set_zoom_level(-3)
+	_expect(map.zoom_level() == 0, "zooming out past the end stops at the whole system")
+	map.set_zoom_level(99)
+	var closest: int = SystemMap.ZOOM_REACH.size() - 1
+	_expect(map.zoom_level() == closest, "and in past the end stops at the closest rung")
+
+	for rung: int in range(1, SystemMap.ZOOM_REACH.size()):
+		map.set_zoom_level(rung)
+		var near: Dictionary = map.layout(view)
+		var reach: float = SystemMap.ZOOM_REACH[rung]
+		var edge: Vector2 = map.to_map(Vector2(reach, 0.0) + Vector2(near["focus"]), near)
+		_expect(
+			absf((edge - view * 0.5).length() - minf(view.x, view.y) * 0.5 + PAD_ON_MAP) < 1.0,
+			"at reach %.0f px, something that far out lands on the rim" % reach,
+		)
+	map.set_zoom_level(0)
+
+	# Magnifying about the star would push what was just clicked off the
+	# edge at the first step, so the middle is whatever is picked.
+	map.click_at(map.to_map(target.position_at(0.0), map.layout(view)))
+	map.set_zoom_level(2)
+	_expect(
+		map.to_map(target.position_at(0.0), map.layout(view)).distance_to(view * 0.5) < 0.01,
+		"zoom is about the body you picked, which ends up in the middle",
+	)
+	map.set_zoom_level(0)
+
+	# The teleport is a dev convenience and carries what was picked.
+	var asked: Array[SystemBody] = []
+	map.teleport_requested.connect(func(body: SystemBody) -> void: asked.append(body))
+	map.teleport_requested.emit(map.picked())
+	_expect(
+		asked.size() == 1 and asked[0] == target,
+		"asking to teleport says which body was meant",
+	)
+
 	# It is a panel, so it holds the pause, and it lets go.
 	map.toggle()
 	_expect(map.is_open() and PauseGate.held(), "opening the map stops the world")
