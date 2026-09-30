@@ -8,6 +8,13 @@ extends CanvasLayer
 
 @onready var _sky: ColorRect = $Sky
 
+## Framebuffer pixels the field slides per pixel the camera travels.
+##
+## A feel number, not a derivation: the shader offsets a screen-space
+## pattern, so there is no "correct" rate to compute, only one that reads
+## as distance.
+const PARALLAX_SCALE: float = 1.0
+
 var _material: ShaderMaterial = null
 
 
@@ -21,10 +28,27 @@ func _process(_delta: float) -> void:
 	var camera: Camera2D = get_viewport().get_camera_2d()
 	if camera == null:
 		return
-	# Screen pixels moved, not world units: zoom must scale the parallax or the
-	# stars drift at the wrong rate when the camera pulls back.
-	var parallax_offset: Vector2 = camera.get_screen_center_position() * camera.zoom
-	_material.set_shader_parameter("world_offset", parallax_offset)
+	# Straight off the camera's position, with **no zoom in it**.
+	#
+	# It used to be `position * zoom`, on the argument that the parallax
+	# should slow down as the camera pulls back. The argument is fine and
+	# the expression is not: zoom is animated by speed, so every change of
+	# throttle multiplied the whole offset by a different number and the
+	# field lurched by Delta-zoom times the distance from the origin. Once
+	# the world moved onto its orbit, nineteen thousand pixels out, a zoom
+	# of 1.0 easing to 0.7 threw the sky five thousand pixels sideways --
+	# and because the three layers take 0.10, 0.30 and 0.65 of it, they
+	# sheared past each other and the whole field looked like it was
+	# turning.
+	#
+	# The shader offsets a screen-space pattern and has no scale term, so
+	# it cannot express "see more sky when zoomed out" anyway. What it can
+	# express is a field fixed in the world that the camera looks around,
+	# and that is worth more than the rate: fly a loop and the stars are
+	# where you left them.
+	_material.set_shader_parameter(
+		"world_offset", camera.get_screen_center_position() * PARALLAX_SCALE
+	)
 
 	# The rotation actually on screen, not the one being asked for: while the
 	# camera eases towards a new angle the sky has to ease with it, or the

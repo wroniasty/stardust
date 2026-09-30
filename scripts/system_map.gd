@@ -162,7 +162,20 @@ func layout(view: Vector2) -> Dictionary:
 	return {
 		"centre": view * 0.5,
 		"scale": room / maxf(reach, 1.0),
+		"turn": -_view_rotation(),
 	}
+
+
+## How the world is turned on screen right now.
+##
+## The map turns with it, so a direction on the map is the direction you
+## would fly if you pointed the nose that way. A map with a fixed north is
+## a map you have to do arithmetic on before it tells you anything, and the
+## camera is already free to sit at any angle -- the arrows turn it, and
+## the approach lock turns it for you on short finals.
+func _view_rotation() -> float:
+	var camera: Camera2D = get_viewport().get_camera_2d()
+	return 0.0 if camera == null else camera.get_screen_rotation()
 
 
 ## The area the map is drawn into. Public because every coordinate here is
@@ -173,7 +186,7 @@ func view_size() -> Vector2:
 
 
 func to_map(point: Vector2, plan: Dictionary) -> Vector2:
-	return Vector2(plan["centre"]) + point * float(plan["scale"])
+	return Vector2(plan["centre"]) + point.rotated(float(plan["turn"])) * float(plan["scale"])
 
 
 func _process(_delta: float) -> void:
@@ -198,6 +211,8 @@ func _draw_map() -> void:
 	for body: SystemBody in _system.bodies:
 		if body.orbit_period <= 0.0 or body.parent_body() == null:
 			continue
+		# A ring is a circle whichever way the view is turned, so only its
+		# centre has to turn with everything else.
 		var around: Vector2 = to_map(_position_of(body.parent_body()), plan)
 		var ring: float = body.orbit_radius * float(plan["scale"])
 		if ring >= 1.0:

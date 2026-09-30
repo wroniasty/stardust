@@ -2074,6 +2074,19 @@ func _check_camera(planet: Planet) -> void:
 		material.get_shader_parameter("view_rotation") != null,
 		"and the script feeds it every frame",
 	)
+
+	# The parallax offset cannot be checked here either, and for the same
+	# reason as the rotation above: get_screen_center_position() is what
+	# the engine last put on screen, and headless never puts anything
+	# there, so it reads zero however the camera is moved. What it used to
+	# be was `position * zoom`, and zoom is animated by speed -- so every
+	# change of throttle multiplied the whole offset by a different number
+	# and the field jumped by the change times the distance from the
+	# origin. Reported from the game as the stars swirling under throttle,
+	# and checked there: the camera sits 19621 px out on the starting
+	# orbit, so easing from zoom 1.7 to 0.55 used to swing the offset
+	# across 22600 px of it. Measured after the fix, over the same zoom
+	# change: 18 px, and those are the camera drifting as the ship falls.
 	sky.queue_free()
 
 	# The approach lock. Two conditions that say different things: the gear
@@ -3895,6 +3908,25 @@ func _check_system_map() -> void:
 		"and empty space picks nothing rather than the nearest thing to it",
 	)
 
+	# The map turns with the view, because a direction on it should be the
+	# direction you would fly if you pointed the nose that way.
+	#
+	# Driven with a rotation put into the plan by hand rather than by a
+	# camera: which rotation to use is one line of wiring, and
+	# get_screen_rotation() reads zero headless whatever the camera does.
+	# What is worth testing is the geometry, and that is all in `to_map`.
+	var turned: Dictionary = map.layout(view)
+	turned["turn"] = -PI * 0.5
+	var probe_point: Vector2 = Vector2(10000.0, 0.0)
+	var on_map: Vector2 = map.to_map(probe_point, turned) - view * 0.5
+	_expect(
+		absf(angle_difference(on_map.angle(), -PI * 0.5)) < 0.01,
+		"a view turned a quarter turn draws the world turned with it",
+	)
+	_expect(
+		absf(on_map.length() - probe_point.length() * float(turned["scale"])) < 0.01,
+		"and turning it does not change how far away anything looks",
+	)
 	# It is a panel, so it holds the pause, and it lets go.
 	map.toggle()
 	_expect(map.is_open() and PauseGate.held(), "opening the map stops the world")
