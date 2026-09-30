@@ -3492,6 +3492,10 @@ func _check_system_model(probe: Planet) -> void:
 	var kepler_breaks: int = 0
 	var seed_clashes: int = 0
 	var dockless: int = 0
+	var crushed: int = 0
+	var moons_outside_hill: int = 0
+	var pull_lo: float = INF
+	var pull_hi: float = 0.0
 	var widest: float = 0.0
 	var narrowest: float = INF
 	var shortest_year: float = INF
@@ -3523,6 +3527,23 @@ func _check_system_model(probe: Planet) -> void:
 			shortest_year = minf(shortest_year, planet.orbit_period)
 			longest_year = maxf(longest_year, planet.orbit_period)
 
+			# The star has to leave the planet something to hold with. Its
+			# Hill sphere must cover the **widest** well the planet could roll,
+			# because the layout never sees which one it rolled -- and a planet
+			# whose declared influence reaches past its Hill sphere is a planet
+			# promising a grip it has not got.
+			var hill: float = planet.orbit_radius * pow(
+				planet.mu() / (3.0 * system.star.mu()), 1.0 / 3.0
+			)
+			if hill < planet.radius * Planet.INFLUENCE_RATIO.y - 0.001:
+				crushed += 1
+			for moon: SystemBody in planet.children:
+				if moon.kind == SystemBody.Kind.MOON and moon.orbit_radius >= hill:
+					moons_outside_hill += 1
+			var pull: float = system.star.mu() / (planet.orbit_radius * planet.orbit_radius)
+			pull_lo = minf(pull_lo, pull)
+			pull_hi = maxf(pull_hi, pull)
+
 			# One star, one mu, so T^2 / r^3 is the same for every planet of it.
 			var kepler: float = planet.orbit_period * planet.orbit_period
 			kepler /= pow(planet.orbit_radius, 3.0)
@@ -3549,6 +3570,17 @@ func _check_system_model(probe: Planet) -> void:
 	_expect(kepler_breaks == 0, "planets of one star obey one third law")
 	_expect(seed_clashes == 0, "no two bodies in a system share a seed")
 	_expect(dockless == 0, "every system has somewhere to dock")
+	_expect(
+		crushed == 0,
+		"every planet keeps its widest possible well inside its Hill sphere",
+	)
+	_expect(moons_outside_hill == 0, "and every moon orbits inside that sphere too")
+	_expect(
+		pull_hi < Planet.GRAVITY_RANGE.x,
+		"the star never out-pulls a planet's own surface at that planet's orbit (%.2f to %.2f px/s2)" % [
+			pull_lo, pull_hi,
+		],
+	)
 	_expect(
 		shortest_year > 30.0 and longest_year < 36000.0,
 		"a year runs from half a minute to ten hours (%.0f s to %.0f s)" % [

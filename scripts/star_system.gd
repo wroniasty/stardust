@@ -15,15 +15,8 @@ extends RefCounted
 ## How many planets a system can have.
 const PLANET_COUNT: Vector2i = Vector2i(3, 5)
 
-## The star, as a radius in pixels and a surface gravity in px/s^2.
-##
-## Together they set mu, and mu sets how long a year is. Chosen from travel
-## time rather than from astronomy: at these numbers an inner planet goes
-## round in some four minutes and a ship needs around 650 px/s to circle it,
-## so a hop between neighbours is tens of seconds under thrust rather than
-## an errand.
+## How big the star is. How *heavy* it is is not rolled -- see `_weigh_star`.
 const STAR_RADIUS: Vector2 = Vector2(6000.0, 11000.0)
-const STAR_GRAVITY: Vector2 = Vector2(260.0, 460.0)
 
 ## Where the innermost planet sits, as a multiple of the star's radius, and
 ## how much further out each next one is.
@@ -102,7 +95,6 @@ static func generate(system_seed: int) -> StarSystem:
 	system.star.seed = derive(system_seed, 0)
 	system.star.display_name = system.display_name
 	system.star.radius = rng.randf_range(STAR_RADIUS.x, STAR_RADIUS.y)
-	system.star.surface_gravity = rng.randf_range(STAR_GRAVITY.x, STAR_GRAVITY.y)
 	system.bodies.append(system.star)
 
 	var orbit: float = system.star.radius * rng.randf_range(FIRST_ORBIT.x, FIRST_ORBIT.y)
@@ -112,7 +104,55 @@ static func generate(system_seed: int) -> StarSystem:
 		orbit = inner.orbit_radius * rng.randf_range(ORBIT_STEP.x, ORBIT_STEP.y)
 
 	system._add_stations(rng)
+	# Weighed after the planets are placed, because how heavy the star may
+	# be is a question about them, and periods after that, because they are
+	# a question about the star.
+	system._weigh_star()
+	system._set_periods()
 	return system
+
+
+## Decides how heavy the star is: as heavy as the system can bear.
+##
+## Rolling the star's mass independently of its planets was wrong, and
+## measurably so. At the rolled numbers the worst planet's Hill sphere came
+## out at a fifth of its own declared gravity well and the star pulled 67
+## px/s^2 at an orbit -- harder than a planet pulls at its own surface. A
+## planet like that holds nothing: "inside the planet's influence" would
+## have meant nothing, because the ship falls into the star from there
+## anyway, and the trajectory predictor, which draws a conic around the
+## nearest planet and ignores everything else, would have been drawing
+## fiction.
+##
+## So the constraint comes first and the mass follows from it: every planet
+## keeps its **widest** possible well inside its Hill sphere, whatever that
+## planet happens to roll for a well later. The tightest planet in the
+## system sets the limit and the star gets exactly that.
+##
+##     r_hill = a * (mu_p / 3 mu_star)^(1/3)  >=  k * r_p
+##
+## rearranged for mu_star, with k the widest well ratio a planet can roll.
+func _weigh_star() -> void:
+	var allowed: float = INF
+	for planet: SystemBody in planets():
+		var wanted: float = planet.radius * Planet.INFLUENCE_RATIO.y / planet.orbit_radius
+		allowed = minf(allowed, planet.mu() / (3.0 * wanted * wanted * wanted))
+	if allowed == INF or allowed <= 0.0:
+		return
+	# Stated as a surface gravity because that is how mu is spelled
+	# everywhere else in the game. It is a way of writing down a mass, not a
+	# promise about standing on it.
+	star.surface_gravity = allowed / (star.radius * star.radius)
+
+
+## Every orbit's period, from the body it goes round. Done in one pass at
+## the end so that nothing carries a period worked out from a mass that was
+## later revised.
+func _set_periods() -> void:
+	for body: SystemBody in bodies:
+		var above: SystemBody = body.parent_body()
+		if above != null:
+			body.orbit_period = above.period_for(body.orbit_radius)
 
 
 ## Derives a child seed from a parent's seed and an index.
@@ -198,7 +238,6 @@ func _add_planet(
 		floor_orbit = inner.orbit_radius + _reach_of(inner) + _reach_of(planet) 			+ Planet.INFLUENCE_RATIO.x * planet.radius
 	planet.orbit_radius = maxf(wanted, floor_orbit)
 	planet.orbit_phase = rng.randf() * TAU
-	planet.orbit_period = star.period_for(planet.orbit_radius)
 	return planet
 
 
@@ -228,7 +267,6 @@ func _add_moon(rng: RandomNumberGenerator, planet: SystemBody) -> void:
 	moon.set_parent_body(planet)
 	moon.orbit_radius = planet.radius * rng.randf_range(MOON_ORBIT.x, MOON_ORBIT.y)
 	moon.orbit_phase = rng.randf() * TAU
-	moon.orbit_period = planet.period_for(moon.orbit_radius)
 	planet.children.append(moon)
 	bodies.append(moon)
 
@@ -265,6 +303,5 @@ func _add_station(
 	station.set_parent_body(host)
 	station.orbit_radius = orbit
 	station.orbit_phase = rng.randf() * TAU
-	station.orbit_period = host.period_for(orbit)
 	host.children.append(station)
 	bodies.append(station)

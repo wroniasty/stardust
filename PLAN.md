@@ -225,8 +225,8 @@ Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wył�
 - [x] Orbity analityczne od globalnego czasu: koła, `position_at(t)` rekurencyjne w górę drzewa, zero stanu. Ciało wyłączone i włączone z powrotem jest tam, gdzie byłoby — nie ma czego doganiać, bo nic nie całkowało. Okresy z `mu = g·r²` rodzica, więc trzecie prawo Keplera wychodzi za darmo.
 - [ ] `StreamingManager`: poziomy 0..3 z histerezą, kolejka instancjonowania, generacja terenu w WorkerThreadPool.
 - [ ] Zapis delty przy wyłączaniu planety (piksele, loot), odtwarzanie przy powrocie.
-- [ ] Gwiazda: grawitacja, strefa obrażeń, oświetlenie 2D, cień nocnej strony planet.
-- [ ] Orbitowanie księżyca w polu planety, proca grawitacyjna między ciałami, pociski pod wpływem grawitacji.
+- [ ] Gwiazda jako węzeł: grawitacja w tej samej grupie co planety, strefa obrażeń, oświetlenie 2D, cień nocnej strony planet. Masa jest już wyprowadzona z warunku Hilla, więc grawitacja gwiazdy nie zje studni planet.
+- [ ] Orbitowanie księżyca w polu planety, **odchylenie toru** przy przelocie obok ciała (nie proca: ciała nie wędrują po orbitach, a darmowa energia w procy bierze się z ruchu ciała — handel przyjęty świadomie, IDEAS.md „Planety nie okrążają gwiazdy”), pociski pod wpływem grawitacji.
 - [ ] Stacja orbitująca i stacja w deep space: dokowanie, naprawa, tankowanie.
 - [ ] Test: przelot przez wszystkie planety systemu bez przycięć, powrót do zmodyfikowanej planety pokazuje zmiany.
 - [x] Decyzja o floating origin: **nie jest potrzebny**, zmierzone przez `tools/distance_bench.gd`. Systemy mają 41k–302k px promienia; przy 300k błąd przechowania współrzędnej to 0,005 px, obieg przez układ planety 0,010 px, a orbita nie zauważa odległości w ogóle (dryf 7 px/10 s tak samo w zerze i w milionie — to całkowanie, nie float). Jedyna rosnąca liczba to pełzanie nieprzymrożonego kadłuba na gruncie: 0,12 px/10 s w zerze, 0,45 przy 300k. Test pilnuje, żeby układ nie wyszedł poza zmierzony zakres.

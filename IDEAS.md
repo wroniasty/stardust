@@ -800,6 +800,66 @@ podróży** — skok między sąsiadkami ma być kwestią dziesięciu sekund pod
 nie wyprawą — i to ograniczenie od strony rozgrywki wygrywa z wygodą
 implementacji. Co prowadziło do pytania niżej.
 
+### Gwiazda ważona przez swoje planety, nie losowana
+
+Pierwsza wersja losowała masę gwiazdy niezależnie od układu. Pytanie
+„niech grawitacja gwiazdy działa tak jak grawitacja planety" kazało to
+zmierzyć i wyszło, że tak zbudowany system **nie działa**: w najgorszym
+przypadku sfera Hilla planety wychodziła na **0,20** jej własnej zadeklarowanej
+studni, a gwiazda ciągnęła na orbicie do **67 px/s²** — mocniej, niż planeta
+ciągnie na własnej powierzchni (25–60).
+
+Taka planeta nie trzyma niczego. „Wejdź w studnię planety" nie znaczyłoby nic,
+bo statek i tak spada na gwiazdę; a predyktor trajektorii, który rysuje stożek
+wokół **najbliższej planety** i ignoruje resztę, rysowałby fikcję wszędzie poza
+samą powierzchnią.
+
+Więc najpierw warunek, a masa z niego: każda planeta mieści swój **najszerszy
+możliwy** krąg wpływu w sferze Hilla — najszerszy, bo układ nigdy nie widzi,
+który planeta sobie wylosuje. Najciasniejsza planeta w systemie wyznacza limit,
+a gwiazda dostaje dokładnie tyle:
+
+    r_hill = a · (mu_p / 3 mu_*)^(1/3)  ≥  k · r_p
+
+przekształcone na `mu_*`, z `k` równym najszerszej studni, jaką planeta może
+wylosować. Po zmianie: ciąg gwiazdy **0,01 do 2,84 px/s²** na orbicie planety,
+rok od 10 minut do 8 godzin. Masa zapisana jest jako `surface_gravity`, bo tak
+mu jest zapisywane wszędzie indziej w grze — to sposób zanotowania masy, nie
+obietnica, że da się na tym stanąć.
+
+Okresy liczone są jednym przebiegiem na końcu, po zważeniu gwiazdy, żeby nic
+nie nosiło okresu wyliczonego z masy, która potem się zmieniła.
+
+### Planety nie okrążają gwiazdy, i to jest świadomy handel
+
+Ciała **wirują wokół własnej osi** (`spin_rate`, doba, grunt jadący pod
+wylądowanym statkiem — wszystko jak dotąd) i **nie wędrują po orbicie**.
+
+Powód jest konkretny: problem ruchomej ramki bierze się z **przyspieszającego
+środka**. Planeta lecąca 300–600 px/s ciągnie za sobą wszystko w swojej studni,
+a uspójnienie tego wymaga prędkości orbitalnej w `surface_velocity_at`,
+dziedziczenia jej przy starcie i pilnowania, żeby wiszący statek i luźna
+skrzynka nie zostały w tyle. Wirowanie nic takiego nie robi — środek stoi —
+i dlatego zostaje bez zmian.
+
+**Jeden zamrożony zegar na wizytę, nie na ciało.** Gdyby każde ciało zamrażało
+się we własnej chwili obudzenia, dwie planety obudzone dziesięć minut od siebie
+stałyby pod wzajemnie niespójnymi kątami, a planeta uśpiona i obudzona ponownie
+**teleportowałaby się** — przy 600 px/s i dziesięciu minutach o 360 000 px.
+Streaming manager zamraża jedno `system_time` przy wejściu do systemu i stawia
+wszystko na ten sam moment. Między wizytami zegar biegnie dalej: wracasz,
+planety stoją gdzie indziej, i nikt nie widział skoku, bo nie było go tam.
+
+**Co to kosztuje: prawdziwą procę grawitacyjną.** Przelot obok nieruchomego
+ciała to czyste odchylenie — prędkość na wyjściu równa się prędkości na
+wejściu. Darmowa energia bierze się z tego, że ciało się porusza. Pozycja
+„proca grawitacyjna między ciałami" z PLAN M3 znaczy więc „zakręcanie", nie
+„przyspieszanie", i to jest cena przyjęta świadomie, a nie odkryta później.
+
+Uboczny skutek do zapamiętania: **doba istnieje, rok nie**. Okresy orbitalne są
+policzone i zapisane, bo bez nich nie da się ustawić pozycji przy wejściu do
+systemu, ale w trakcie wizyty nic ich nie realizuje.
+
 ### Floating origin: nie jest potrzebny, i to jest zmierzone
 
 Plan zostawiał otwartą decyzję „floating origin na podstawie rozmiaru systemu",
