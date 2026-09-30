@@ -431,6 +431,21 @@ func gravity_at(point: Vector2) -> Vector2:
 	return (to_centre / distance) * strength
 
 
+## What a rolled world can be, as ranges rather than literals in the roll.
+##
+## Named because the system model rolls the same two numbers when it lays
+## out a system, and a moon has to orbit inside its parent's well whatever
+## that well happened to roll: `INFLUENCE_RATIO.x` is the floor the layout
+## has to stay under. Two places rolling the same quantity from two sets of
+## literals is two places that drift apart.
+##
+## Gravity is kept well under the ship's 80 px/s^2 of main thrust so a stock
+## ship can always lift off.
+const RADIUS_RANGE: Vector2 = Vector2(900.0, 1800.0)
+const GRAVITY_RANGE: Vector2 = Vector2(25.0, 60.0)
+const INFLUENCE_RATIO: Vector2 = Vector2(3.5, 6.0)
+
+
 ## Rolls every parameter from a seed and builds the planet from them.
 ##
 ## The two halves are separate on purpose. Rolling fills the fields; building
@@ -450,11 +465,9 @@ func roll_parameters(new_seed: int) -> void:
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = planet_seed
 
-	surface_radius = rng.randf_range(900.0, 1800.0)
-	# Kept well under the ship's 80 px/s^2 of main thrust so a stock ship can
-	# always lift off. Heavy worlds that fight the engines are an M2 problem.
-	surface_gravity = rng.randf_range(25.0, 60.0)
-	influence_radius = surface_radius * rng.randf_range(3.5, 6.0)
+	surface_radius = rng.randf_range(RADIUS_RANGE.x, RADIUS_RANGE.y)
+	surface_gravity = rng.randf_range(GRAVITY_RANGE.x, GRAVITY_RANGE.y)
+	influence_radius = surface_radius * rng.randf_range(INFLUENCE_RATIO.x, INFLUENCE_RATIO.y)
 
 	if rng.randf() < 0.2:
 		atmosphere_height = 0.0

@@ -754,6 +754,54 @@ nieprawda, bo spacja jest węższa od litery, którą zastępuje, i kolumna
 wartości wychodzi poszarpana. Font stoi obok formatów, które go zakładają,
 żeby ekran nie mógł wziąć karty i po cichu zgubić tego, co czyni ją czytelną.
 
+### Model systemu: co należy do systemu, a co do seeda planety
+
+Podział, który trzeba było rozstrzygnąć przed pierwszą linią: **system decyduje,
+jak duże i jak ciężkie jest ciało; seed decyduje, jak ono wygląda.** Promień i
+grawitacja siedzą w `SystemBody`, bo układ orbit bez nich nie istnieje — orbita
+musi ominąć powierzchnię, księżyc musi zostać w studni rodzica. Teren, pogoda,
+kolory i półki do lądowania zostają przy `seed` i rolowane są dopiero, gdy planeta
+powstaje. Dwa miejsca rolujce tę samą liczbę to dwa miejsca, które się rozjadą,
+więc `Planet.RADIUS_RANGE`, `GRAVITY_RANGE` i `INFLUENCE_RATIO` dostały nazwy i
+są czytane z obu stron.
+
+**Orbity są kołami, i to jest wybór, nie niedopatrzenie.** Elipsa chce równania
+Keplera rozwiązywanego przy każdym zapytaniu, żeby zależność od czasu była
+uczciwa; sparametryzowanie jej anomalią średnią narysowałoby dobry kształt i
+kłamało o prędkości, czyli najgorsze z obu. Koło jest dokładnie okresowe,
+dokładne w dowolnej chwili i kosztuje jeden sinus. Okres liczony z `mu = g·r²`
+rodzica, więc trzecie prawo Keplera wychodzi za darmo i daleka planeta naprawdę
+jest wolniejsza.
+
+`position_at(t)` jest rekurencyjne w górę drzewa i **nie ma żadnego stanu**. To
+jest to, co robi streaming darmowym: ciało wyłączone na dziesięć minut i włączone
+z powrotem jest dokładnie tam, gdzie byłoby — nie ma dryfu do nazbierania ani
+aktualizacji do przegapienia, bo nic nigdy nie całkowało.
+
+**Odstępy między orbitami są konstrukcją, nie szczęściem.** Pierwsza wersja
+mnożyła promień przez 1,45–1,85 i przechodziła test na 300 seedach — ale dwie
+sąsiadki, które obie wylosowały duży promień i obie dostały księżyc, potrzebują
+więcej miejsca, niż zostawia najmniejszy krok. Generator, który unika kolizji na
+większości seedów, to generator z błędem czekającym na seed. Teraz krok jest tym,
+o co planeta prosi, a dostaje minimum: zasięg sąsiadki, własny zasięg i własną
+najwęższą studnię. Miejsce na stację rezerwuje każda planeta, czy ją dostanie,
+czy nie — stacje rozdawane są po ułożeniu orbit, a planeta, której stacja
+wyrosła później, byłaby już postawiona za blisko.
+
+**Cykl referencji.** `parent` i `children` trzymały się nawzajem, a `RefCounted`
+liczy referencje i nie zbiera cykli — każdy wygenerowany system wyciekał, co
+Godot wypisał przy wyjściu po tym, jak test wygenerował ich trzysta. Link w górę
+jest teraz słaby (`WeakRef`, przez `parent_body()`): właścicielem jest lista
+`bodies` w systemie, a wchodzenie w górę od dziecka nigdy nie musi niczego
+utrzymywać przy życiu.
+
+**Rozmiar systemu: 41k do 302k px** (300 seedów). Float32 zaczyna drżeć powyżej
+~100k, więc pomiar jest odpowiedzią na otwarte pytanie z PLAN-u: albo floating
+origin, albo ściśnięcie układu. Stałe są dobrane pod **czas podróży** — skok
+między sąsiadkami ma być kwestią dziesięciu sekund pod ciągiem, nie wyprawą —
+i to jest ograniczenie od strony rozgrywki, które powinno wygrać z wygodą
+implementacji.
+
 ### Seeker: cel bierze się z kursora, nie z odległości
 
 Rakieta samonaprowadzająca brała najbliższy statek. To jest broń kłócąca się

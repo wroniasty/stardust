@@ -974,6 +974,7 @@ func _evaluate_phase() -> void:
 			_check_creative_tool()
 			_check_rarity_travels()
 			_check_seeker_targets()
+			_check_system_model(_planet)
 			_check_aiming()
 			_check_stat_cards()
 			_check_scanner(_planet)
@@ -1519,6 +1520,11 @@ func _check_weapons() -> void:
 ## The loot generator, reached as a script because the smoke test has no
 ## autoloads (see _check_loot).
 const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd")
+const GALAXY_SCRIPT: GDScript = preload("res://scripts/autoload/galaxy.gd")
+
+## How many systems the layout checks run over. One seed proves nothing
+## about a generator; the interesting failures are the lucky rolls.
+const SYSTEMS_SAMPLED: int = 300
 
 
 ## The hold is one slot and fitting is a swap: nothing found may be lost, and
@@ -3438,6 +3444,205 @@ func _check_ejection() -> void:
 	)
 	crate.queue_free()
 	ship.queue_free()
+
+
+## The system model: a star, its planets, their moons, and where all of it
+## is at a given moment.
+##
+## Checked over three hundred seeds rather than one, because a generator
+## that works on the seed it was written against is a generator nobody has
+## tested. Everything here is a layout invariant -- orbits that do not
+## cross, moons inside their parent's well -- rather than a number, so the
+## ranges stay tunable without rewriting the test.
+func _check_system_model(probe: Planet) -> void:
+	# Reproducible, or the save file (a seed plus deltas) is worthless.
+	var once: StarSystem = StarSystem.generate(4242)
+	var twice: StarSystem = StarSystem.generate(4242)
+	var same: bool = once.display_name == twice.display_name
+	same = same and once.bodies.size() == twice.bodies.size()
+	if same:
+		for i: int in range(once.bodies.size()):
+			var a: SystemBody = once.bodies[i]
+			var b: SystemBody = twice.bodies[i]
+			same = same and a.display_name == b.display_name and a.seed == b.seed
+			same = same and is_equal_approx(a.orbit_radius, b.orbit_radius)
+			same = same and is_equal_approx(a.orbit_phase, b.orbit_phase)
+	_expect(same, "the same seed builds the same system (%s, %d bodies)" % [
+		once.display_name, once.bodies.size(),
+	])
+	var other: StarSystem = StarSystem.generate(4243)
+	_expect(
+		other.display_name != once.display_name or other.bodies.size() != once.bodies.size(),
+		"and a different seed builds a different one",
+	)
+
+	var crossings: int = 0
+	var moons_adrift: int = 0
+	var moons_grazing: int = 0
+	var kepler_breaks: int = 0
+	var seed_clashes: int = 0
+	var dockless: int = 0
+	var widest: float = 0.0
+	var narrowest: float = INF
+	var shortest_year: float = INF
+	var longest_year: float = 0.0
+
+	for index: int in range(SYSTEMS_SAMPLED):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(9001, index))
+		widest = maxf(widest, system.outer_radius())
+		narrowest = minf(narrowest, system.outer_radius())
+
+		var seeds: Dictionary = {}
+		for body: SystemBody in system.bodies:
+			if seeds.has(body.seed):
+				seed_clashes += 1
+			seeds[body.seed] = true
+
+		# No two orbits cross, counting whatever each planet is carrying: two
+		# worlds that swap places would be a system that eats itself.
+		var inner: SystemBody = null
+		for planet: SystemBody in system.planets():
+			if inner != null:
+				# Not merely "they do not touch": the outer one keeps its own
+				# narrowest gravity well clear of everything inside it.
+				var reach_out: float = planet.orbit_radius - (planet.extent() - planet.orbit_radius)
+				var clearance: float = reach_out - inner.extent()
+				if clearance < Planet.INFLUENCE_RATIO.x * planet.radius - 0.001:
+					crossings += 1
+			inner = planet
+			shortest_year = minf(shortest_year, planet.orbit_period)
+			longest_year = maxf(longest_year, planet.orbit_period)
+
+			# One star, one mu, so T^2 / r^3 is the same for every planet of it.
+			var kepler: float = planet.orbit_period * planet.orbit_period
+			kepler /= pow(planet.orbit_radius, 3.0)
+			if absf(kepler - TAU * TAU / system.star.mu()) > kepler * 0.0001:
+				kepler_breaks += 1
+
+		for moon: SystemBody in system.of_kind(SystemBody.Kind.MOON):
+			# Inside the parent's well at its narrowest possible roll. The
+			# layout never sees the roll, so it has to hold for all of them.
+			if moon.orbit_radius + moon.radius >= Planet.INFLUENCE_RATIO.x * moon.parent_body().radius:
+				moons_adrift += 1
+			if moon.orbit_radius <= moon.parent_body().radius + moon.radius:
+				moons_grazing += 1
+
+		if system.of_kind(SystemBody.Kind.STATION).is_empty():
+			dockless += 1
+
+	_expect(
+		crossings == 0,
+		"no planet sits inside another's well, over %d systems" % SYSTEMS_SAMPLED,
+	)
+	_expect(moons_adrift == 0, "every moon orbits inside its parent gravity well")
+	_expect(moons_grazing == 0, "and clear of its parent surface")
+	_expect(kepler_breaks == 0, "planets of one star obey one third law")
+	_expect(seed_clashes == 0, "no two bodies in a system share a seed")
+	_expect(dockless == 0, "every system has somewhere to dock")
+	_expect(
+		shortest_year > 30.0 and longest_year < 36000.0,
+		"a year runs from half a minute to ten hours (%.0f s to %.0f s)" % [
+			shortest_year, longest_year,
+		],
+	)
+
+	# Printed rather than asserted: this is the input to the floating-origin
+	# decision that PLAN M3 still has open, and a threshold invented here
+	# would be that decision taken by the wrong file.
+	print("system radius: %.0f px to %.0f px (float32 shakes past ~100000)" % [
+		narrowest, widest,
+	])
+
+	_check_orbit_evaluation()
+	_check_moon_sized_world(probe)
+
+
+## Orbits read off a clock, with nothing integrating anything.
+func _check_orbit_evaluation() -> void:
+	var system: StarSystem = StarSystem.generate(77)
+	var planet: SystemBody = system.planets()[0]
+
+	_expect(
+		system.star.position_at(0.0).is_zero_approx()
+		and system.star.position_at(123456.0).is_zero_approx(),
+		"the star is the origin, at every moment",
+	)
+	_expect(
+		is_equal_approx(planet.position_at(0.0).length(), planet.orbit_radius),
+		"a planet stays on its orbit (%.0f px)" % planet.orbit_radius,
+	)
+
+	# Exactly periodic, which is what makes streaming free: a body switched
+	# off and back on is where it would have been, because nothing was
+	# integrating it and there is nothing to catch up on.
+	var drift: float = planet.position_at(1000.0).distance_to(
+		planet.position_at(1000.0 + planet.orbit_period)
+	)
+	# Bounded against the orbit rather than absolutely. The model is exact;
+	# Vector2 is float32, so a position nineteen thousand pixels out cannot
+	# be reproduced to better than a few hundredths of a pixel whatever the
+	# maths does. A tighter bound would be testing the engine.
+	_expect(
+		drift < planet.orbit_radius * 1e-5,
+		"and is in the same place a year later (%.4f px of %.0f)" % [
+			drift, planet.orbit_radius,
+		],
+	)
+	_expect(
+		not planet.position_at(0.0).is_equal_approx(
+			planet.position_at(planet.orbit_period * 0.5)
+		),
+		"but somewhere else half a year later",
+	)
+
+	var carried: int = 0
+	for moon: SystemBody in system.of_kind(SystemBody.Kind.MOON):
+		carried += 1
+		for at: float in [0.0, 137.0, 9000.0]:
+			var gap: float = moon.position_at(at).distance_to(moon.parent_body().position_at(at))
+			_expect(
+				absf(gap - moon.orbit_radius) < 0.01,
+				"a moon is carried by its planet, not left behind (%.2f of %.0f px)" % [
+					gap, moon.orbit_radius,
+				],
+			)
+	_expect(carried > 0, "and this system has a moon to check that on")
+
+	# The cache hands back the same system rather than a fresh roll.
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	galaxy.galaxy_seed = 555
+	_expect(
+		galaxy.system(0) == galaxy.system(0) and galaxy.system(0) != galaxy.system(1),
+		"the galaxy generates a system once and then keeps it",
+	)
+	var was: int = galaxy.system(0).seed
+	galaxy.reset(556)
+	_expect(
+		galaxy.system(0).seed != was,
+		"and reseeding drops everything the old seed produced",
+	)
+	galaxy.free()
+
+
+## The moon radius the layout invents has to be a radius a planet can
+## actually be built at. A number chosen in one file and used in another is
+## a guess until something checks it.
+func _check_moon_sized_world(probe: Planet) -> void:
+	var was_radius: float = probe.surface_radius
+	var was_plateaus: int = probe.plateau_count
+	probe.surface_radius = StarSystem.MOON_RADIUS.x
+	probe.plateau_count = maxi(
+		Planet.MIN_PLATEAUS, int(TAU * probe.surface_radius / Planet.PLATEAU_SPACING)
+	)
+	probe.rebuild()
+	var shelves: int = probe.landing_sites().size()
+	_expect(
+		shelves >= Planet.MIN_PLATEAUS,
+		"a world the size of the smallest moon still has %d shelves to land on" % shelves,
+	)
+	probe.surface_radius = was_radius
+	probe.plateau_count = was_plateaus
+	probe.rebuild()
 
 
 ## Which ship a seeker chases. The whole thesis of mouse aiming is that the

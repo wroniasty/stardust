@@ -189,7 +189,6 @@ Cel: kliknąć w rzecz i zobaczyć, z czego się składa — a przy wymianie zob
 - [x] Przy wymianie **dwie karty obok siebie**, a w lewej różnica przy każdym wierszu (`dps +0.364 lepiej`, `energia +10.7 gorzej`). Porównanie, między którym trzeba przewijać, to dwa odczyty wzięte w różnych chwilach.
 - [x] Jednoliniowy werdykt zniknął dla broni — karta mówi to samo dokładniej. Został dla silników, bo tam liczy się wpływ na cały statek, którego karta nie zna.
 - [x] Gniazda na schemacie jako **kwadratowe boksy z ikonami** zamiast kropek z podpisami. Ramka mówi, czy tu pasuje niesiony moduł, wypełnienie — czy coś siedzi i jakiej jest rzadkości, glif — jakie to gniazdo (strzałka ciągu, celownik, ogniwo, układ scalony, noga), a w hardpoincie **co jest zamontowane**: ○ puste, + działo, | wiązka, ↑ rakieta. Nazwa jednego gniazda na kliknięcie, nie jedenaście naraz. Wewnętrzne zatoki są rozsuwane przy rysowaniu — na schemacie, bo przesunięcie węzłów przesunęłoby środek masy.
-- [ ] Ładniejsza oprawa: ramki, ikony, kolor wiersza wg kierunku zmiany zamiast słowa „lepiej / gorzej".
 - [x] Ta sama karta w szybkiej wymianie na Tab. Karta mieszka na `ModuleData`, nie w ekranie, który ją rysuje — dwa ekrany formatujące własną to dwie rzeczy po cichu niezgodne co do tego, czym jest broń.
 - [x] Karty pisze się czcionką o stałej szerokości (`ModuleData.card_font()`). Wiersz dopycha spacjami, a w czcionce proporcjonalnej to po prostu nieprawda: kolumny liczb nie dawały się czytać w dół.
 - [x] Wiersz, który nie mieści się w panelu edytora, jest liczony i zgłoszony przy podpowiedziach klawiszy. Karta bez ostatniej linii wygląda dokładnie jak karta, która się tam kończy.
@@ -222,15 +221,15 @@ Gotowe, gdy: da się znaleźć moduł, obejrzeć go obok tego, co już jest zamo
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.
 
-- [ ] Model danych systemu w `Galaxy`: gwiazda, planety, księżyce, stacje, orbity, seedy.
-- [ ] Orbity analityczne od globalnego czasu.
+- [x] Model danych systemu: `SystemBody` i `StarSystem` jako czyste dane (`RefCounted`, zero node'ów), `Galaxy` trzyma seed, zegar i cache systemów. Gwiazda, 3–5 planet, księżyce, stacje, wszystko z jednego seeda przez splitmix64. **System decyduje, jak duże i jak ciężkie; seed decyduje, jak wygląda** — promień i grawitacja są w deskryptorze, bo układ orbit ich potrzebuje; teren, pogoda i kolory zostają przy seedzie planety.
+- [x] Orbity analityczne od globalnego czasu: koła, `position_at(t)` rekurencyjne w górę drzewa, zero stanu. Ciało wyłączone i włączone z powrotem jest tam, gdzie byłoby — nie ma czego doganiać, bo nic nie całkowało. Okresy z `mu = g·r²` rodzica, więc trzecie prawo Keplera wychodzi za darmo.
 - [ ] `StreamingManager`: poziomy 0..3 z histerezą, kolejka instancjonowania, generacja terenu w WorkerThreadPool.
 - [ ] Zapis delty przy wyłączaniu planety (piksele, loot), odtwarzanie przy powrocie.
 - [ ] Gwiazda: grawitacja, strefa obrażeń, oświetlenie 2D, cień nocnej strony planet.
 - [ ] Orbitowanie księżyca w polu planety, proca grawitacyjna między ciałami, pociski pod wpływem grawitacji.
 - [ ] Stacja orbitująca i stacja w deep space: dokowanie, naprawa, tankowanie.
 - [ ] Test: przelot przez wszystkie planety systemu bez przycięć, powrót do zmodyfikowanej planety pokazuje zmiany.
-- [ ] Decyzja o floating origin na podstawie rozmiaru systemu.
+- [ ] Decyzja o floating origin na podstawie rozmiaru systemu. **Liczba jest zmierzona**: przy obecnych stałych układu systemy mają od 41k do 302k px promienia (300 seedów), a float32 zaczyna drżeć powyżej ~100k. Albo floating origin, albo ściśnięcie układu (`ORBIT_STEP`, `PLANET_COUNT`) — to jest ta decyzja.
 
 Gotowe, gdy: lot planeta-planeta jest płynny, a wyłączona planeta pamięta stan.
 
