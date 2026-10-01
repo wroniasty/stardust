@@ -1519,6 +1519,18 @@ func _gear_point() -> Vector2:
 
 ## Puts every engine back into new condition. The repair key for now; a bench
 ## at a station later.
+## Puts the hull back together: integrity, heat and the damage tally.
+##
+## Separate from `respawn`, which also moves the ship and empties the
+## hold. The sandbox wants the one without the other -- carry on from
+## where you are, undamaged -- and so will a repair bay at a station.
+func repair_hull() -> void:
+	hull_integrity = 1.0
+	hull_heat = 0.0
+	accumulated_damage = 0.0
+	last_landing_rejection = ""
+
+
 func repair_engines() -> void:
 	for engine: EngineInstance in engines:
 		engine.health = 1.0

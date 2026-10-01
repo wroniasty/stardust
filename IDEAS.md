@@ -864,10 +864,32 @@ piaskownica istnieje. Dwa powody, oba w `ShipControl.rebuild()`:
   bo ich waga jest o rząd wielkości większa — i stockowy statek ma po zmianie
   dokładnie te same 3760 autorytetu CW co przedtem.
 
-Zmierzone: gimbal daje **1638** autorytetu CW przeciw 3760 na dyszach, i po
-trzech sekundach komendy **2,93 rad/s obrotu przy 58 px/s dryfu**. Raport
+Zmierzone: pojedynczy gimbal daje **1638** autorytetu CW przeciw 3760 na
+dyszach, i po trzech sekundach komendy **2,93 rad/s obrotu przy 58 px/s
+dryfu**. Raport
 konfiguracji nazywa ten dryf (`CW pushes the ship sideways at 48.9 px/s2`) i
 dobrze robi — to jest handel, nie usterka, ale pilot ma o nim wiedzieć.
+
+**Dwie dysze zamiast jednej: para sił.** Pojedynczy gimbal obraca i pcha, bo
+jedna siła nie ma czego znieść. Dziób i rufa, obie wychylane **w tę samą
+stronę**, dają momenty, które się dodają, i ciągi, które się znoszą — czysta
+para sił. Nie wymagało to żadnej zmiany w kodzie: `_aim_gimbals` wyprowadza
+kierunek wychylenia z ramienia, więc obie dysze dostają ten sam znak same z
+siebie. Zmierzone: **4366 autorytetu CW** (więcej niż 3760 na stockowych
+dyszach) przy **1,4 px/s² pchnięcia resztkowego** zamiast 48,9.
+
+Kadłub takiego statku musi być **symetryczny**. Para jest parą tylko dopóki
+ramiona względem środka masy są równe, a środek masy idzie za kształtem: na
+trójkącie siedzi za środkiem geometrycznym i jedna dysza dostaje dłuższe
+ramię. Reszta 1,4 px/s² to właśnie to — środek masy wypada 0,2 px od środka
+kadłuba przez zatoki i działo.
+
+**Czego dwie dysze nie potrafią: strafe'u** — i raport to melduje. Choć w
+zasadzie potrafiłyby: wychylone **przeciwnie** dają czysty ciąg boczny, więc
+dwie wychylane dysze wystarczyłyby na przód, tył, obrót i bok naraz. Brakuje
+dwóch rzeczy, tych samych co przy obrocie: `_aim_gimbals` celuje wyłącznie pod
+komendę obrotu, a grupy nie liczą wkładu bocznego z wychylenia. To jest
+następny krok tej samej myśli, nie rzecz zrobiona.
 
 Czego ta zmiana **nie** obejmuje: alokatora NNLS. Kolumna alokatora jest jedna
 na silnik i niezależna od komendy, a moment z gimbala zależy od tego, w którą

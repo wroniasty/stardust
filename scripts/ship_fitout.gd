@@ -64,7 +64,26 @@ static func all() -> Array[Dictionary]:
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
 		},
 		{
-			"name": "gimbal (bez dysz obrotowych)",
+			"name": "gimbal podwójny (para sił)",
+			"blurb": "dwie wychylane dysze, dziób i rufa: momenty się dodają, ciągi znoszą",
+			# Symmetric on purpose. The two nozzles only cancel while their
+			# arms about the centre of mass are equal, and the centre of
+			# mass follows the hull: on a triangle it sits aft of the
+			# middle and the pair stops being a pair.
+			"hull": [Vector2(0, -15), Vector2(-9, 0), Vector2(0, 15), Vector2(9, 0)],
+			"cargo": 9.0,
+			"legs": [Vector2(-8, 14), Vector2(8, 14)],
+			"mounts": [
+				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 13), "engine": "gimbal"},
+				# Nose nozzle, pointing the other way: it is the retro and
+				# the other half of the couple at the same time.
+				{"name": "NoseDrive", "size": 3.5, "at": Vector2(0, -13), "turn": AFT,
+					"engine": "gimbal"},
+			],
+			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -17), "weapon": "pulse"}],
+		},
+		{
+			"name": "gimbal pojedynczy (dryfuje)",
 			"blurb": "obrót z wychylanej dyszy głównej, nic poza nią nie kręci",
 			"hull": [Vector2(0, -14), Vector2(-9, 12), Vector2(9, 12)],
 			"cargo": 11.0,

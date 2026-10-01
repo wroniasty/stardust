@@ -4160,21 +4160,37 @@ func _check_fitout_presets() -> void:
 	for gun: Hardpoint in ship.hardpoints:
 		_expect(is_instance_valid(gun), "the guns a refit leaves behind are live nodes")
 
-	# The one the request was about.
-	var gimbal: Dictionary = _preset_named("gimbal")
-	ShipFitout.apply(ship, gimbal)
-	var turning: float = ship.control.authority_of(ShipControl.Command.CW)
-	_expect(
-		turning > 0.0,
-		"a ship whose only steering is a gimbal can steer (%.0f of CW)" % turning,
-	)
+	# The two the request was about, and the difference between them is
+	# the whole point. One gimballed nozzle turns the ship and shoves it;
+	# two, nose and tail, swing the same way, so their torques add and
+	# their thrusts cancel. A couple instead of a push.
+	ShipFitout.apply(ship, _preset_named("pojedynczy"))
+	var lone_turn: float = ship.control.authority_of(ShipControl.Command.CW)
+	var lone_shove: float = _turn_residual(ship)
 	var torque_jets: bool = false
 	for engine: EngineInstance in ship.engines:
 		torque_jets = torque_jets or engine.data.type == EngineData.Type.TORQUE
-	_expect(not torque_jets, "and it really has no torque jets to be doing it with")
 	_expect(
-		_findings_of(ship.configuration()).contains("pushes the ship sideways"),
-		"the report names what that costs rather than letting it pass as free",
+		lone_turn > 0.0 and not torque_jets,
+		"one gimballed nozzle can steer with no torque jets at all (%.0f of CW)" % lone_turn,
+	)
+
+	ShipFitout.apply(ship, _preset_named("para sił"))
+	var pair_turn: float = ship.control.authority_of(ShipControl.Command.CW)
+	var pair_shove: float = _turn_residual(ship)
+	_expect(
+		pair_turn > lone_turn,
+		"two of them turn harder than one (%.0f against %.0f)" % [pair_turn, lone_turn],
+	)
+	_expect(
+		pair_shove < lone_shove * 0.1,
+		"and barely shove at all -- the thrusts cancel (%.1f against %.1f px/s2)" % [
+			pair_shove, lone_shove,
+		],
+	)
+	_expect(
+		_findings_of(ship.configuration()).contains("STRAFE"),
+		"what two nozzles cannot do is strafe, and the report says so",
 	)
 
 	# And the trade is real on the stock ship too: letting a gimbal into the
@@ -4214,6 +4230,15 @@ func _check_fitout_presets() -> void:
 
 	_expect(seen.size() >= 5, "there are %d ships to try, not one" % seen.size())
 	ship.queue_free()
+
+
+## How hard a turn command pushes the hull about, in px/s^2. What a
+## couple is supposed to make nearly nothing of.
+func _turn_residual(ship: Ship) -> float:
+	for line: String in ship.configuration().lines():
+		if line.contains("CW pushes the ship sideways"):
+			return float(line.get_slice("at ", 1).get_slice(" px", 0))
+	return 0.0
 
 
 func _preset_named(fragment: String) -> Dictionary:

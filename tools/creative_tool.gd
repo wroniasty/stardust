@@ -215,6 +215,7 @@ func _build_ui() -> void:
 	rows.add_child(_button("przebuduj kadłub", _on_reshape))
 
 	rows.add_child(_heading("STATEK"))
+	rows.add_child(_button("napraw statek", _on_repair_ship))
 	rows.add_child(_button("napraw silniki", _on_repair))
 	rows.add_child(_button("naładuj energię", _on_recharge))
 	rows.add_child(_button("uszkodź losowy silnik", _on_break))
@@ -402,6 +403,22 @@ func _on_reshape() -> void:
 	_say("%s x%.1f — %d punktów kontaktu, %d przebiegów solvera" % [
 		chosen["name"], factor, _ship.contact_points().size(), _ship.contact_iterations(),
 	])
+	_refresh()
+
+
+## Everything back to new: hull, engines and the pool.
+##
+## Kept beside the engines-only button rather than replacing it, because
+## flying a sound hull on ruined engines is a different experiment from
+## flying a ruined hull on sound ones, and the sandbox exists to be able
+## to set up either.
+func _on_repair_ship() -> void:
+	if _ship == null:
+		return
+	_ship.repair_hull()
+	_ship.repair_engines()
+	_ship.energy = _ship.energy_capacity()
+	_say("statek jak nowy: kadłub 100%, silniki, pula %.0f" % _ship.energy)
 	_refresh()
 
 
