@@ -81,12 +81,26 @@ func rebuild(
 	var contributions: Array[Vector3] = []
 	var torques: PackedFloat32Array = PackedFloat32Array()
 	var forces: Array[Vector2] = []
+	# What a nozzle hard over adds, on top of what it makes pointing
+	# straight. For a main drive on the centreline that is the whole of its
+	# torque: the arm is parallel to the thrust, so the cross product is
+	# nothing until the nozzle swings.
+	#
+	# Kept apart from the contribution instead of folded into it, because a
+	# gimbal swings **both ways**: one engine serves CW and CCW, and a
+	# single contribution vector can only point one way. Which way it goes
+	# is decided per command, below.
+	var swing: PackedFloat32Array = PackedFloat32Array()
 	for engine: EngineInstance in engines:
 		var force: Vector2 = engine.nominal_force()
 		var arm: Vector2 = engine.mount.position - centre_of_mass
 		var torque: float = arm.cross(force)
 		forces.append(force)
 		torques.append(torque)
+		var reach: float = engine.data.gimbal_range if engine.data != null else 0.0
+		swing.append(
+			0.0 if reach <= 0.0 else absf(arm.cross(force.rotated(reach)) - torque)
+		)
 		contributions.append(
 			Vector3(force.x / mass, force.y / mass, (torque / inertia) * gyration)
 		)
@@ -104,13 +118,28 @@ func rebuild(
 		var members: Array = []
 		var best: float = 0.0
 
+		var turning: bool = command == Command.CW or command == Command.CCW
 		for i: int in range(engines.size()):
 			var contribution: Vector3 = contributions[i]
+			if turning and swing[i] > 0.0:
+				# The nozzle will be swung the way that helps, so the torque
+				# it can bring to this command is always the full swing in
+				# the command's own direction.
+				contribution.z += signf(axis.z) * (swing[i] / inertia) * gyration
 			var along: float = contribution.dot(axis)
 			if along <= 0.0:
 				continue
 			var sideways: float = (contribution - axis * along).length()
-			var weight: float = along - side_penalty * sideways
+			# A gimballed engine turning the ship also shoves it forward
+			# hard, and the side penalty rejected it for exactly that --
+			# which left a ship whose only steering is a gimbal unable to
+			# steer at all. The shove is not evidence that this is the
+			# wrong tool; it is the known price of the tool. The relative
+			# threshold below still drops it when real torque jets are
+			# bolted on, because theirs is an order of magnitude better.
+			var weight: float = along
+			if not (turning and swing[i] > 0.0):
+				weight -= side_penalty * sideways
 			if weight <= 0.0:
 				continue
 			members.append({"engine": engines[i], "weight": weight, "index": i})
@@ -126,8 +155,8 @@ func rebuild(
 			var index: int = member["index"]
 			# Authority in native units, scaled by the weight the engine will
 			# actually be run at when the command is held at 1.
-			if command == Command.CW or command == Command.CCW:
-				authority += absf(torques[index]) * normalised
+			if turning:
+				authority += (absf(torques[index]) + swing[index]) * normalised
 			else:
 				var axis_2d: Vector2 = Vector2(axis.x, axis.y)
 				authority += forces[index].dot(axis_2d) * normalised

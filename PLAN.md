@@ -120,6 +120,8 @@ Pytania do rozstrzygnięcia na koniec M1 (zapisać odpowiedzi w IDEAS.md):
 Cel: statek jako zestaw modułów, które są lootem.
 
 - [x] Komputer lotu jako moduł (`FlightComputerData` w `ComputerBay`): alokacja przez ograniczone najmniejsze kwadraty z rzeczywistym ciągiem i kondycją każdego silnika. Na uszkodzonym statku obrót zostawia 36 N zamiast 88 N siły bocznej.
+- [x] **Gotowe konfiguracje statków** w sandboksie (`ShipFitout`): stock, stock z silnikami o 75% mocniejszymi, **gimbal bez dysz obrotowych**, przechwytujący, frachtowiec i goły kadłub. Preset niesie montaże, silniki, działa, obrys, ładownię i nogi; przebudowa jest **w miejscu**, bo podmiana sceny unieważniłaby kamerę, HUD-y, edytor i streaming manager.
+- [x] Grupy kontroli liczą **moment z gimbala**. Przedtem napęd główny na osi miał zerowy moment z dyszą prosto, więc CW/CCW nie miały żadnego członka i statek sterowany wyłącznie gimbalem **nie skręcał w ogóle**. Dodatkowo kara za bok nie dotyczy gimbala przy obrocie: pchnięcie do przodu to znana cena tego narzędzia, nie dowód, że jest złe. Zmierzone: 1638 autorytetu CW przeciw 3760 na dyszach, 2,93 rad/s po trzech sekundach i 58 px/s dryfu.
 - [x] Gimbal: `gimbal_range` i `gimbal_rate` na `EngineData`, dysza wychylana proporcjonalnie do żądania obrotu. Kierunek wychylenia wyprowadzony z ramienia, nie deklarowany per mount.
 - [x] Punkty kontaktu wyprowadzane z `hull_outline`: wierzchołki plus podział krawędzi krokiem 6 px (cztery teksele), liczone raz w `_ready()`. `HULL_POINTS` zniknęło.
 - [x] `CollisionShape2D` liczony z tego samego obrysu przez `Geometry2D.convex_hull()`. Jedno źródło — to, w co trafia pocisk, nie może się rozjechać z tym, co dotyka gruntu.

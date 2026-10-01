@@ -439,7 +439,17 @@ var _gravity: Vector2 = Vector2.ZERO
 var _terrain_contacts: int = 0
 
 
-func _ready() -> void:
+## Finds the parts bolted to this hull, by walking the children.
+##
+## Pulled out of `_ready` because the sandbox can now rebuild a ship into
+## another fitout, which means the children change after it: a cached
+## hardpoint list that still names nodes the refit freed is a list that
+## crashes the next time anything pulls a trigger.
+func collect_parts() -> void:
+	hardpoints.clear()
+	generator_bay = null
+	computer_bay = null
+	gear = null
 	for child: Node in get_children():
 		if child is Hardpoint:
 			hardpoints.append(child as Hardpoint)
@@ -449,6 +459,10 @@ func _ready() -> void:
 			computer_bay = child as ComputerBay
 		elif child is LandingGear:
 			gear = child as LandingGear
+
+
+func _ready() -> void:
+	collect_parts()
 	# Set once here rather than at every landing: it never changes, and writing
 	# it from _integrate_forces would be another state change the server
 	# refuses mid-flush.

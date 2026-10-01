@@ -75,6 +75,7 @@ var _kind: OptionButton = null
 var _rarity: OptionButton = null
 var _seed_spin: SpinBox = null
 var _shape: OptionButton = null
+var _fitout: OptionButton = null
 var _scale: SpinBox = null
 var _status: Label = null
 var _report: Label = null
@@ -191,6 +192,13 @@ func _build_ui() -> void:
 	rows.add_child(_button("do ładowni", _on_spawn))
 	rows.add_child(_button("wypełnij cargo", _on_fill))
 	rows.add_child(_button("opróżnij cargo", _on_empty))
+
+	rows.add_child(_heading("KONFIGURACJA"))
+	_fitout = OptionButton.new()
+	for preset: Dictionary in ShipFitout.all():
+		_fitout.add_item(preset["name"])
+	rows.add_child(_labelled("statek", _fitout))
+	rows.add_child(_button("przebuduj statek", _on_refit))
 
 	rows.add_child(_heading("KADŁUB"))
 	_shape = OptionButton.new()
@@ -342,6 +350,32 @@ func _on_empty() -> void:
 ## Swaps the hull for another outline and rebuilds everything derived from
 ## it. The whole reason the outline became one source is so that this is
 ## three calls rather than a scene edit.
+## Rebuilds the ship as one of the presets: mounts, engines, guns, hull,
+## hold and legs in one go.
+##
+## The hull comes with the fitout rather than being kept from whatever the
+## shape picker last did, because a fitout is a ship and a ship is a shape
+## with engines on it. Reshaping afterwards still works and is the
+## interesting thing to do next: it is how you find out what a layout does
+## on a hull it was not drawn for.
+func _on_refit() -> void:
+	if _ship == null:
+		return
+	var preset: Dictionary = ShipFitout.all()[_fitout.selected]
+	ShipFitout.apply(_ship, preset)
+	_scale.value = 1.0
+	# The shape picker follows, so the two controls do not disagree about
+	# what the ship currently is.
+	for i: int in range(SHAPES.size()):
+		if SHAPES[i]["name"] == preset["name"]:
+			_shape.selected = i
+	_say("%s — %s. %d silników, %d dział, ładownia %.0f" % [
+		preset["name"], preset["blurb"], _ship.engines.size(),
+		_ship.hardpoints.size(), _ship.cargo_capacity(),
+	])
+	_refresh()
+
+
 func _on_reshape() -> void:
 	if _ship == null:
 		return

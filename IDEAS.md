@@ -830,6 +830,52 @@ obietnica, że da się na tym stanąć.
 Okresy liczone są jednym przebiegiem na końcu, po zważeniu gwiazdy, żeby nic
 nie nosiło okresu wyliczonego z masy, która potem się zmieniła.
 
+### Konfiguracje statków, i czego nauczyła ta z gimbalem
+
+Narzędzie kreatywne umiało zmienić kształt kadłuba, czyli połowę tego, czym jest
+statek. Drugą połową jest **konfiguracja** — gdzie są montaże i co w nich siedzi
+— i była dokładnie jedna: układ z `ship.tscn`. `ShipFitout` to tabela całych
+statków: montaże, silniki, działa, obrys, ładownia i nogi. Przebudowa idzie **w
+miejscu**, bo podmiana sceny unieważniłaby kamerę, HUD-y, edytor i streaming
+manager — piaskownica, która unieważnia połowę referencji gry, uczy wyłącznie
+tego, jak wygląda crash.
+
+Skala silnika mnoży **ciąg i gabaryt naraz**. Tabela skalująca sam ciąg
+rozdawałaby darmową moc, a to jedyna rzecz, której piaskownica nie może robić po
+cichu (sekcja 14). Zasoby silników są współdzielone, więc skalowanie idzie na
+kopii: inaczej pierwszy preset z mocniejszym napędem zmieniałby wszystkie
+późniejsze statki w sesji.
+
+**Statek z samym gimbalem nie skręcał.** Preset, o który prosił użytkownik — bez
+dysz obrotowych, obrót z wychylanej dyszy głównej — okazał się statkiem, który
+nie potrafi się obrócić, i to jest dokładnie ten rodzaj rzeczy, dla którego
+piaskownica istnieje. Dwa powody, oba w `ShipControl.rebuild()`:
+
+- **Moment liczony był z dyszą prosto.** Napęd główny na osi ma ramię równoległe
+  do ciągu, więc iloczyn wektorowy wychodzi zero i grupa CW nie miała żadnego
+  członka. Teraz każdy silnik niesie też **wychylenie** — ile momentu dodaje
+  dysza na maksymalnym wychyleniu — i jest ono dodawane do wkładu osobno dla
+  każdej komendy obrotu, bo gimbal wychyla się w **obie** strony, a jeden wektor
+  wkładu umie wskazać tylko jedną.
+- **Kara za bok odrzucała go i tak.** Silnik, który przy obrocie pcha też do
+  przodu, dostawał ujemną wagę i wypadał. Dla gimbala to pchnięcie jest **znaną
+  ceną narzędzia**, nie dowodem, że narzędzie jest złe. Przy obrocie kara go nie
+  dotyczy; względny próg i tak go odrzuca, gdy na kadłubie są prawdziwe dysze,
+  bo ich waga jest o rząd wielkości większa — i stockowy statek ma po zmianie
+  dokładnie te same 3760 autorytetu CW co przedtem.
+
+Zmierzone: gimbal daje **1638** autorytetu CW przeciw 3760 na dyszach, i po
+trzech sekundach komendy **2,93 rad/s obrotu przy 58 px/s dryfu**. Raport
+konfiguracji nazywa ten dryf (`CW pushes the ship sideways at 48.9 px/s2`) i
+dobrze robi — to jest handel, nie usterka, ale pilot ma o nim wiedzieć.
+
+Czego ta zmiana **nie** obejmuje: alokatora NNLS. Kolumna alokatora jest jedna
+na silnik i niezależna od komendy, a moment z gimbala zależy od tego, w którą
+stronę się skręca — czyli od decyzji, którą alokator dopiero podejmuje. Grupy
+go widzą, alokator nie. Na statku z komputerem NNLS gimbal będzie więc
+niedowykorzystany, i to jest następne pytanie do rozstrzygnięcia, a nie rzecz
+załatwiona.
+
 ### Trajektoria na mapie: jedna przyszłość, nie dwie
 
 `TrajectoryPredictor` całkował już tor statku dla linii pod F7. Mapa

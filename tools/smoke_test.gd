@@ -971,6 +971,7 @@ func _evaluate_phase() -> void:
 			_check_gear_module()
 			_check_weapon_types(_planet)
 			_check_ship_fitouts()
+			_check_fitout_presets()
 			_check_creative_tool()
 			_check_rarity_travels()
 			_check_seeker_targets()
@@ -4122,6 +4123,111 @@ func _check_flight_hud(planet: Planet) -> void:
 
 	hud.free()
 	ship.queue_free()
+
+
+## Whole ships from the sandbox's preset table.
+##
+## The interesting one is the gimbal-only ship, and it is interesting
+## because it did not work: a main drive on the centreline makes no torque
+## with its nozzle straight, so the control groups gave it no CW or CCW at
+## all, and the preset the request asked for -- no torque jets, steering
+## from the gimbal -- was a ship that could not steer.
+func _check_fitout_presets() -> void:
+	var ship: Ship = _spawn_ship()
+	var seen: Array[String] = []
+	for preset: Dictionary in ShipFitout.all():
+		ShipFitout.apply(ship, preset)
+		seen.append(String(preset["name"]))
+		_expect(
+			ship.engine_mounts().size() == (preset["mounts"] as Array).size()
+			and ship.hardpoints.size() == (preset["guns"] as Array).size(),
+			"%s is built with what it declares (%d mounts, %d guns)" % [
+				preset["name"], ship.engine_mounts().size(), ship.hardpoints.size(),
+			],
+		)
+		_expect(
+			ship.control.authority_of(ShipControl.Command.FORWARD) > 0.0,
+			"and can go forward",
+		)
+		_expect(
+			absf(ship.hull_extent() - _extent_of(preset["hull"])) < 0.01,
+			"with the hull it names, not the one left over from the last refit",
+		)
+
+	# A refit is in place, so everything pointing at this ship has to still
+	# be pointing at something: a cached hardpoint list naming nodes the
+	# refit freed is a list that crashes at the next trigger pull.
+	for gun: Hardpoint in ship.hardpoints:
+		_expect(is_instance_valid(gun), "the guns a refit leaves behind are live nodes")
+
+	# The one the request was about.
+	var gimbal: Dictionary = _preset_named("gimbal")
+	ShipFitout.apply(ship, gimbal)
+	var turning: float = ship.control.authority_of(ShipControl.Command.CW)
+	_expect(
+		turning > 0.0,
+		"a ship whose only steering is a gimbal can steer (%.0f of CW)" % turning,
+	)
+	var torque_jets: bool = false
+	for engine: EngineInstance in ship.engines:
+		torque_jets = torque_jets or engine.data.type == EngineData.Type.TORQUE
+	_expect(not torque_jets, "and it really has no torque jets to be doing it with")
+	_expect(
+		_findings_of(ship.configuration()).contains("pushes the ship sideways"),
+		"the report names what that costs rather than letting it pass as free",
+	)
+
+	# And the trade is real on the stock ship too: letting a gimbal into the
+	# turn groups must not change a hull that has proper jets.
+	var stock_authority: float = 0.0
+	ShipFitout.apply(ship, _preset_named("stock"))
+	stock_authority = ship.control.authority_of(ShipControl.Command.CW)
+	var from_scene: Ship = _spawn_ship()
+	_expect(
+		absf(stock_authority - from_scene.control.authority_of(ShipControl.Command.CW)) < 1.0,
+		"the stock preset is the stock ship (%.0f of CW either way)" % stock_authority,
+	)
+	from_scene.queue_free()
+
+	# A bigger engine is a heavier one. A table that scaled only the thrust
+	# would be handing out free power, which is the one thing a sandbox must
+	# not do quietly.
+	var plain: EngineData = load(ShipFitout.ENGINES["main"]) as EngineData
+	var was_thrust: float = plain.max_thrust
+	var was_bulk: float = plain.bulk
+	ShipFitout.apply(ship, _preset_named("mocniejsze"))
+	var beefy: EngineData = null
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == "MainDrive":
+			beefy = engine.data
+	_expect(
+		beefy != null and beefy.max_thrust > was_thrust and beefy.bulk > was_bulk,
+		"a scaled engine is stronger and heavier (%.0f N, %.2f bulk)" % [
+			0.0 if beefy == null else beefy.max_thrust,
+			0.0 if beefy == null else beefy.bulk,
+		],
+	)
+	_expect(
+		is_equal_approx(plain.max_thrust, was_thrust) and is_equal_approx(plain.bulk, was_bulk),
+		"and the resource it was scaled from is untouched -- they are shared",
+	)
+
+	_expect(seen.size() >= 5, "there are %d ships to try, not one" % seen.size())
+	ship.queue_free()
+
+
+func _preset_named(fragment: String) -> Dictionary:
+	for preset: Dictionary in ShipFitout.all():
+		if String(preset["name"]).contains(fragment):
+			return preset
+	return {}
+
+
+func _extent_of(outline: Array) -> float:
+	var out: float = 0.0
+	for point: Vector2 in outline:
+		out = maxf(out, point.length())
+	return out
 
 
 ## A planet built as the body a system says it is.
