@@ -830,6 +830,35 @@ obietnica, że da się na tym stanąć.
 Okresy liczone są jednym przebiegiem na końcu, po zważeniu gwiazdy, żeby nic
 nie nosiło okresu wyliczonego z masy, która potem się zmieniła.
 
+### Trajektoria na mapie: jedna przyszłość, nie dwie
+
+`TrajectoryPredictor` całkował już tor statku dla linii pod F7. Mapa
+potrzebowała tego samego, więc rdzeń wyszedł na zewnątrz jako statyczne
+`coast()`: **dwie prognozy tego samego statku to dwie przyszłości do trzymania
+w zgodzie**. Ta sama funkcja grawitacji i ten sam półjawny Euler co w solverze,
+więc to nie jest przybliżenie fizyki — to jest fizyka, puszczona do przodu.
+Ciąg i opór są pominięte celowo: pytanie brzmi „co będzie, jeśli teraz puścię".
+
+**Horyzont skaluje się zasięgiem mapy**, nie jest stały, bo stały jest zły z obu
+stron: dwie minuty lotu to dwunastopikselowy kikut na układzie o średnicy
+trzystu tysięcy pikseli, i kilka pełnych orbit, kiedy mapa jest przybliżona do
+jednej planety. Krok całkowania rośnie razem z horyzontem, i to jest w porządku
+akurat tam, gdzie rośnie: daleko od ciał tor jest prostą, a prostej nie da się
+źle scałkować.
+
+**Przerywana, nie ciągła.** To prognoza, nie droga; ciągła linia obok ciągłych
+pierścieni orbit czytałaby się jak kolejna orbita, a nie jak najbliższe kilka
+minut tego statku. Kreski odmierzane są długością łuku **na ekranie**, nie w
+świecie — kreska, która rozciąga się z zoomem, przestaje być kreską.
+
+Czerwona i z krzyżykiem, kiedy kończy się w gruncie, co zamienia manewr
+deorbitacyjny w celowanie (sekcja 8).
+
+Jedna rzecz, którą widać na zrzucie i warto nazwać: **między planetami tor jest
+prostą**, bo gwiazda nie jest jeszcze źródłem grawitacji w scenie (ma masę w
+modelu, ale nie ma węzła). Prognoza nie kłamie — pokazuje dokładnie to, co
+statek zrobi — i zakrzywi się sama tego dnia, w którym gwiazda dostanie węzeł.
+
 ### Przyrząd orbity: obrazek zamiast ośmiu wierszy
 
 „PERI −1651 / APO 693" to dwie liczby, z których pilot za każdym razem musi

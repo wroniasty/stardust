@@ -69,46 +69,65 @@ func get_impact_point() -> Vector2:
 	return _impact
 
 
-func _predict() -> void:
-	_apoapsis = Vector2.INF
-	_periapsis = Vector2.INF
-	_impact = Vector2.INF
+## Where a ship goes if it does nothing, as world points, with the place it
+## ends in the ground if it does.
+##
+## Static and free of this node, because there are two things that want
+## this answer now -- the line on F7 and the dashed curve on the system
+## map -- and two forward integrations of the same ship would be two
+## futures to keep in step. Forward-integrated with the same gravity
+## function and the same semi-implicit Euler as the solver, so this is not
+## an approximation of the physics: it is the physics, run ahead.
+##
+## Drag and thrust are left out on purpose. The question being asked is
+## "if I let go now, what happens".
+static func coast(ship: Ship, count: int, scale: float) -> Dictionary:
+	var result: Dictionary = {"path": PackedVector2Array(), "impact": Vector2.INF}
+	if ship == null or not is_instance_valid(ship) or not ship.is_inside_tree():
+		return result
 
 	# Gathered once, not per step: the group lookup would otherwise dominate.
 	var planets: Array[Planet] = []
-	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
+	for source: Node in ship.get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
 		var planet: Planet = source as Planet
 		if planet != null:
 			planets.append(planet)
 
-	var reference: Planet = Planet.nearest(get_tree(), _ship.global_position)
-	var step: float = (1.0 / float(Engine.physics_ticks_per_second)) * step_scale
-
-	var position_now: Vector2 = _ship.global_position
-	var velocity: Vector2 = _ship.linear_velocity
-
+	var step: float = (1.0 / float(Engine.physics_ticks_per_second)) * scale
+	var at: Vector2 = ship.global_position
+	var velocity: Vector2 = ship.linear_velocity
 	var path: PackedVector2Array = PackedVector2Array()
-	path.append(position_now)
+	path.append(at)
 
-	var radii: PackedFloat32Array = PackedFloat32Array()
-	if reference != null:
-		radii.append(position_now.distance_to(reference.global_position))
-
-	for i: int in range(steps):
+	for i: int in range(count):
 		var acceleration: Vector2 = Vector2.ZERO
 		for planet: Planet in planets:
-			acceleration += planet.gravity_at(position_now)
+			acceleration += planet.gravity_at(at)
 		# Semi-implicit Euler, matching the solver: velocity first, then use it.
 		velocity += acceleration * step
-		position_now += velocity * step
-		path.append(position_now)
-
-		if reference != null:
-			radii.append(position_now.distance_to(reference.global_position))
-
-		if _hits_ground(planets, position_now):
-			_impact = position_now
+		at += velocity * step
+		path.append(at)
+		if hits_ground(planets, at):
+			result["impact"] = at
 			break
+
+	result["path"] = path
+	return result
+
+
+func _predict() -> void:
+	_apoapsis = Vector2.INF
+	_periapsis = Vector2.INF
+
+	var flight: Dictionary = coast(_ship, steps, step_scale)
+	var path: PackedVector2Array = flight["path"]
+	_impact = flight["impact"]
+
+	var reference: Planet = Planet.nearest(get_tree(), _ship.global_position)
+	var radii: PackedFloat32Array = PackedFloat32Array()
+	if reference != null:
+		for point: Vector2 in path:
+			radii.append(point.distance_to(reference.global_position))
 
 	_line.points = path
 	_find_extremes(path, radii)
@@ -116,7 +135,7 @@ func _predict() -> void:
 
 
 ## Terrain is only worth sampling once the path is low enough to reach it.
-func _hits_ground(planets: Array[Planet], point: Vector2) -> bool:
+static func hits_ground(planets: Array[Planet], point: Vector2) -> bool:
 	for planet: Planet in planets:
 		if point.distance_to(planet.global_position) > planet.terrain_ceiling():
 			continue

@@ -3931,6 +3931,24 @@ func _check_system_map() -> void:
 		absf(on_map.length() - probe_point.length() * float(turned["scale"])) < 0.01,
 		"and turning it does not change how far away anything looks",
 	)
+	# The map draws the same forecast, worked out when it opens: the panel
+	# pauses the game, so four hundred integration steps a frame would be
+	# four hundred steps to reach the same answer.
+	var flier: Ship = _spawn_ship()
+	flier.global_position = Vector2(60000.0, 20000.0)
+	flier.linear_velocity = Vector2(-200.0, 40.0)
+	map.bind(system, flier, null)
+	_expect(map.forecast().is_empty(), "a shut map has no forecast to keep")
+	map.toggle()
+	_expect(
+		map.forecast().size() > 2
+		and map.forecast()[0].is_equal_approx(flier.global_position),
+		"opening it works one out, starting where the ship is",
+	)
+	map.close()
+	map.bind(system, pilot, null)
+	flier.queue_free()
+
 	# Zoom is a reach in the world, not a magnification. The ladder has to
 	# clamp, and each rung has to put a body at that reach on the rim.
 	map.set_zoom_level(-3)
@@ -4045,6 +4063,46 @@ func _check_flight_hud(planet: Planet) -> void:
 	_expect(
 		is_inf(planet.orbit_extremes(at, along * 3.0).y),
 		"leaving has no apoapsis to draw, and the widget says ESCAPE rather than a number",
+	)
+
+	# The forecast, which the F7 line and the map now share. One ship, one
+	# future: two forward integrations of the same craft would be two
+	# futures to keep in step.
+	var period: float = TAU * sqrt(pow(radius, 3.0) / mu)
+	ship.global_position = at
+	ship.linear_velocity = Vector2(0.0, sqrt(mu / radius))
+	var round_trip: Dictionary = TrajectoryPredictor.coast(
+		ship, 400, period * float(Engine.physics_ticks_per_second) / 400.0
+	)
+	var path: PackedVector2Array = round_trip["path"]
+	_expect(
+		path.size() > 1 and path[0].is_equal_approx(ship.global_position),
+		"the forecast starts where the ship is",
+	)
+	_expect(
+		not round_trip["impact"].is_finite(),
+		"a circular orbit does not end in the ground",
+	)
+	var closure: float = path[path.size() - 1].distance_to(path[0])
+	_expect(
+		closure < radius * 0.05,
+		"and comes back round to where it started (%.0f px of %.0f)" % [closure, radius],
+	)
+
+	# Aimed at the rock: the path has to stop at the ground rather than
+	# carry on through it, and say where.
+	ship.linear_velocity = (planet.global_position - at).normalized() * 60.0
+	var dive: Dictionary = TrajectoryPredictor.coast(ship, 400, 6.0)
+	_expect(
+		dive["impact"].is_finite()
+		and (dive["path"] as PackedVector2Array).size() < 400,
+		"a path into the ground stops there and says where",
+	)
+	_expect(
+		planet.height_above_terrain(dive["impact"]) < planet.surface_radius * 0.1,
+		"and the place it says is on the ground (%.0f px above it)" % [
+			planet.height_above_terrain(dive["impact"]),
+		],
 	)
 
 	hud.free()

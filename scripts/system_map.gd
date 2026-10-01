@@ -35,6 +35,27 @@ const LABEL: Color = Color(0.56, 0.63, 0.72)
 const TEXT: Color = Color(0.78, 0.80, 0.83)
 const PICK: Color = Color(1.00, 0.85, 0.35)
 const SHIP: Color = Color(0.36, 0.92, 0.50)
+const TRACK: Color = Color(0.45, 0.70, 0.95)
+const TRACK_IMPACT: Color = Color(1.00, 0.40, 0.35)
+
+## The dash pattern, in screen pixels along the curve rather than in world
+## units: a dash that stretches with the zoom stops being a dash.
+const DASH: float = 4.0
+const DASH_GAP: float = 3.0
+
+## How many points the forecast is drawn from. Enough that a curve reads as
+## a curve at the width of the panel.
+const TRACK_STEPS: int = 400
+
+## How far ahead to look, as a multiple of what the map can see, and the
+## bounds on it in seconds.
+##
+## Tied to the view rather than fixed, because a fixed horizon is wrong at
+## both ends: two minutes of coasting is a twelve-pixel stub on a system
+## three hundred thousand pixels across, and it is several orbits when the
+## map is zoomed to one planet.
+const TRACK_SPAN: float = 2.0
+const TRACK_SECONDS: Vector2 = Vector2(20.0, 4000.0)
 
 ## A body in the world right now is drawn brighter than one that is only in
 ## the model. Not decoration: it is the difference between a place you can
@@ -80,9 +101,16 @@ var _canvas: Control = null
 var _panel: Control = null
 var _picked: SystemBody = null
 
-## Index into ZOOM_LEVELS. Kept across openings: it is a setting, not a
+## Index into ZOOM_REACH. Kept across openings: it is a setting, not a
 ## state of the flight.
 var _zoom: int = 0
+
+## The forecast, worked out when the map opens. The map pauses the game, so
+## the ship is not going anywhere while it is up; recomputing four hundred
+## integration steps every frame would be four hundred steps to arrive at
+## the same answer.
+var _track: PackedVector2Array = PackedVector2Array()
+var _impact: Vector2 = Vector2.INF
 
 func _ready() -> void:
 	layer = 21
@@ -115,6 +143,7 @@ func toggle() -> void:
 	# Exclusive: two paused panels stacked on each other is a trap, because
 	# the lower one looks exactly like a panel that stopped taking input.
 	PauseGate.hold_exclusive(self, get_tree())
+	_forecast()
 	_canvas.queue_redraw()
 
 
@@ -190,7 +219,34 @@ func picked() -> SystemBody:
 ## stop, not jump to the other extreme.
 func set_zoom_level(level: int) -> void:
 	_zoom = clampi(level, 0, ZOOM_REACH.size() - 1)
+	# How far ahead is worth looking depends on how far the map can see.
+	_forecast()
 	_canvas.queue_redraw()
+
+
+## Works out where the ship is going if it does nothing, from the same
+## integration the F7 line uses. Public so a test can ask for it without a
+## frame having been drawn.
+func forecast() -> PackedVector2Array:
+	return _track
+
+
+func _forecast() -> void:
+	_track = PackedVector2Array()
+	_impact = Vector2.INF
+	var ship: Ship = _ship as Ship
+	if ship == null or not is_instance_valid(ship):
+		return
+	var plan: Dictionary = layout(view_size())
+	var seconds: float = clampf(
+		float(plan["reach"]) * TRACK_SPAN / maxf(ship.linear_velocity.length(), 1.0),
+		TRACK_SECONDS.x,
+		TRACK_SECONDS.y,
+	)
+	var scale: float = seconds * float(Engine.physics_ticks_per_second) / float(TRACK_STEPS)
+	var flight: Dictionary = TrajectoryPredictor.coast(ship, TRACK_STEPS, scale)
+	_track = flight["path"]
+	_impact = flight["impact"]
 
 
 func zoom_level() -> int:
@@ -287,6 +343,7 @@ func _draw_map() -> void:
 	for body: SystemBody in _system.bodies:
 		_draw_body(body, to_map(_position_of(body), plan), float(plan["scale"]))
 
+	_draw_track(plan)
 	if _ship != null and is_instance_valid(_ship):
 		_draw_ship(to_map(_ship.global_position, plan))
 
@@ -336,6 +393,53 @@ func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
 				false,
 				1.0,
 			)
+
+
+## Where the ship is going if it does nothing, dashed.
+##
+## Dashed rather than solid because it is a forecast and not a road: a
+## solid line beside the solid orbit rings would read as another orbit
+## rather than as this ship's next few minutes. Red when it ends in the
+## ground, with a cross on the spot -- which turns a deorbit burn into
+## aiming (IDEAS.md section 8).
+func _draw_track(plan: Dictionary) -> void:
+	if _track.size() < 2:
+		return
+	var on_map: PackedVector2Array = PackedVector2Array()
+	for point: Vector2 in _track:
+		on_map.append(to_map(point, plan))
+	var colour: Color = TRACK_IMPACT if _impact.is_finite() else TRACK
+	_dashed(on_map, colour)
+	if _impact.is_finite():
+		var hit: Vector2 = to_map(_impact, plan)
+		for turn: float in [-0.25, 0.25]:
+			var arm: Vector2 = Vector2(3.0, 0.0).rotated(turn * TAU)
+			_canvas.draw_line(hit - arm, hit + arm, TRACK_IMPACT, 1.0)
+
+
+## Walks a polyline by arc length and draws every other stretch, so the
+## dashes are an even length on screen whatever the curve is doing.
+func _dashed(points: PackedVector2Array, colour: Color) -> void:
+	var travelled: float = 0.0
+	for i: int in range(1, points.size()):
+		var from: Vector2 = points[i - 1]
+		var length: float = from.distance_to(points[i])
+		if length <= 0.0001:
+			continue
+		var along: Vector2 = (points[i] - from) / length
+		var cursor: float = 0.0
+		while cursor < length:
+			var phase: float = fmod(travelled + cursor, DASH + DASH_GAP)
+			var run: float = minf(
+				(DASH - phase) if phase < DASH else (DASH + DASH_GAP - phase),
+				length - cursor,
+			)
+			if phase < DASH:
+				_canvas.draw_line(
+					from + along * cursor, from + along * (cursor + run), colour, 1.0
+				)
+			cursor += maxf(run, 0.01)
+		travelled += length
 
 
 ## The ship, as a cross rather than a dot: a dot at this scale is
