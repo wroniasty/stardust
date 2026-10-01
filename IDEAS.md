@@ -896,6 +896,10 @@ kolumnami overlayu debugowego, bo tam góra ekranu jest wolna nawet z F7.
 Odmowa lądowania to **wykrzyknik i powód**. „WAVE OFF" było etykietą na newsie,
 który kolor już niósł.
 
+**Stan toru wrócił jako słowo**, i to jest cofnięcie własnej nadgorliwości. Wyrzuciłem wiersz „ORBIT" razem z „WAVE OFF", na argument, że gruba zielona linia mówi to samo. Pilot zgłosił, że sygnalizacja się nie pojawiła — i miał rację: kolor to odcień, który trzeba pamiętać, a jeden piksel grubości to odcień, który trzeba pamiętać **z próbką obok**. Słowo kosztuje pięć znaków panelu, który je ma. Dla toru podorbitalnego nadal nie ma słowa, bo to jest normalny stan statku startującego i lądującego — i czerwone perycentrum mówi to samo.
+
+Pierwsze miejsce, w które je wstawiłem — lewy górny róg tarczy — było złe: słowo siadało na pierścieniu orbity, który opisywało, w tym samym kolorze. Teraz jest nad panelem po prawej, a znak odmowy nad nim po lewej.
+
 ### Mapa układu: rysowana z modelu, bo tylko model wie
 
 Mapa (`M`) czyta `StarSystem`, nie scenę. To jest jej jedyny powód

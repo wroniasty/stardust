@@ -51,10 +51,25 @@ const APSIS_DOT: float = 1.8
 ## pixels across and cheap enough to do every frame.
 const CONIC_STEPS: int = 64
 
-## A ship in orbit gets a thicker line, because "am I in orbit" is a yes or
-## no question and a colour alone is a shade the pilot has to remember.
-const ORBIT_WIDTH: float = 2.0
+## A ship in orbit gets a thicker line and a word for it.
+##
+## The line alone was the first attempt and it was not enough, which a
+## pilot said before I noticed: a colour is a shade you have to remember,
+## and one pixel of extra thickness is a shade you have to remember with
+## a reference beside it. The word is unambiguous and costs five
+## characters of a panel that has room for them.
+##
+## Nothing is said for a suborbital path, because that is the normal state
+## of a ship taking off or coming in to land -- saying it would be noise
+## on the one line meant to carry news, and the red periapsis says it
+## anyway.
+const ORBIT_WIDTH: float = 2.5
 const TRACK_WIDTH: float = 1.0
+const STATE_WORDS: Dictionary = {
+	Planet.OrbitState.ORBIT: "ORBIT",
+	Planet.OrbitState.DECAYING: "DECAY",
+	Planet.OrbitState.ESCAPE: "ESCAPE",
+}
 
 ## The transfer arrow, for when there is no well to be in.
 const ARROW_LENGTH: float = 26.0
@@ -166,7 +181,7 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:
 
 	var x: float = dial.end.x + 6.0
 	var y: float = box.position.y + ROW
-	var landed: bool = _ship.flight_mode == Ship.FlightMode.LANDED
+	var landed: bool = landed_now()
 	_row(font, x, y, "PERI", _apsis_text(planet, shape["periapsis"], landed), _orbit_colour(orbit))
 	y += ROW
 	_row(font, x, y, "APO", _apsis_text(planet, shape["apoapsis"], landed), _apoapsis_colour(shape))
@@ -180,6 +195,19 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:
 	_row(font, x, y, "GEAR", _gear_text(), _gear_colour())
 
 	_draw_warning(font, box)
+	# Above the panel and to the right, where the refusal mark is above it
+	# and to the left. Inside the dial it sat on the orbit ring it was
+	# describing, in the same colour, which is a word you have to already
+	# know is there to read.
+	if not landed_now():
+		var word: String = state_text(orbit)
+		if not word.is_empty():
+			_text(
+				font,
+				Vector2(box.end.x - _width(font, word), box.position.y - 4.0),
+				word,
+				_orbit_colour(orbit),
+			)
 
 
 ## An apsis as a height above the nominal surface.
@@ -289,6 +317,15 @@ func _draw_transfer(font: Font, box: Rect2) -> void:
 ## Why the landing was refused, as a mark rather than a sentence. The
 ## reason is the news; "WAVE OFF" was a label on news the colour already
 ## carried.
+## What this trajectory is called, or nothing when it has no news.
+func state_text(orbit: Planet.OrbitState) -> String:
+	return String(STATE_WORDS.get(orbit, ""))
+
+
+func landed_now() -> bool:
+	return _ship != null and _ship.flight_mode == Ship.FlightMode.LANDED
+
+
 func warning() -> String:
 	if _ship == null or not is_instance_valid(_ship):
 		return ""

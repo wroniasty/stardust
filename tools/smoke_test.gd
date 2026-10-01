@@ -4028,6 +4028,21 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.last_landing_rejection = "slope"
 	_expect(hud.warning() == "slope", "and the reason itself when something was")
 
+	# An orbit says so in a word. The thick green ring was the only signal
+	# at first and a pilot reported not seeing it: a colour is a shade you
+	# have to remember, and a pixel of thickness is a shade you have to
+	# remember with a reference beside it.
+	_expect(
+		hud.state_text(Planet.OrbitState.ORBIT) == "ORBIT"
+		and hud.state_text(Planet.OrbitState.DECAYING) == "DECAY"
+		and hud.state_text(Planet.OrbitState.ESCAPE) == "ESCAPE",
+		"every trajectory worth a word gets one",
+	)
+	_expect(
+		hud.state_text(Planet.OrbitState.SUBORBITAL).is_empty(),
+		"and coming down says nothing, because that is what flying normally looks like",
+	)
+
 	# The conic the HUD draws has to be the conic the solver measured, or
 	# the picture and the numbers beside it are two different orbits.
 	var mu: float = planet.gravitational_parameter()
