@@ -1219,6 +1219,33 @@ dopiero lot na gwiazdę w uruchomionej grze. Test całkuje teraz `_update_heat`
 samego statku zamiast go przepisywać: dwie minuty w środku strefy napełniają
 pasek i zjadają kadłub, dziesięć minut tuż za nią nie rusza paska z zera.
 
+### Akord trzyma swoje klawisze aż do puszczenia
+
+`SETTLE` pilnuje **wchodzenia** w akord: przetoczenie palca z A na D nakłada
+je na kilkadziesiąt milisekund i bez okna czytałoby się to jak „stop" w
+środku skrętu. Wychodzenie było uznane za natychmiastowe — i to jest prawda o
+akordzie, ale nieprawda o klawiszach.
+
+Palce nie schodzą z akordu razem, tak samo jak na niego nie wchodzą. Przy
+puszczaniu A+D jeden przeżywa drugi o kilkadziesiąt milisekund i przez ten
+czas czyta się jako zwykła komenda obrotu: **statek zaczyna się kręcić
+dokładnie w chwili, gdy pilot przestał kazać mu przestać.** Na geście paniki.
+
+Lustrem `SETTLE` byłoby okno przy puszczaniu, a okno to zgadywanie. Za
+krótkie — wolne puszczenie nadal zakręci statkiem; za długie — zjada
+świadome wciśnięcie, które w nie trafi; i tak czy owak liczba jest zła dla
+czyichś rąk. Więc nie ma tu liczby: **klawisz, który był częścią akordu,
+zostaje zużyty, dopóki nie zostanie puszczony.** Tego nie da się źle
+nastroić.
+
+Co to kosztuje: przetoczenie się z A+D w świadomy skręt wymaga ponownego
+wciśnięcia klawisza, zamiast samego podniesienia jednego palca. Jedno
+stuknięcie, przeciw gestowi paniki, który sam się cofał.
+
+Ubocznie: dedykowane klawisze postawy (HOME/END/INSERT) tego problemu nie
+mają z definicji — jeden klawisz nie ma z czym się rozjechać. To jest drugi
+argument za tym, żeby istniały obok akordów.
+
 ### Dopalanie: wyjście z dziury, które coś kosztuje
 
 Statek da się postawić tam, skąd silniki go nie podniosą — ciężki świat,

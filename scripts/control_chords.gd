@@ -41,8 +41,11 @@ enum Chord { NONE, KILL_ROTATION, PROGRADE, RETROGRADE, AUTO_ORBIT, AUTO_LEVEL,
 ##
 ## Rolling a finger from A to D overlaps the two for a few tens of
 ## milliseconds, and without this that reads as "stop turning" in the middle
-## of a turn the pilot is still making. Releasing is instant: letting go has
-## to be believed immediately.
+## of a turn the pilot is still making.
+##
+## The chord itself still ends the instant one key comes up -- letting go
+## has to be believed immediately. What does not end with it is the hold
+## on the keys; see `_locked`.
 const SETTLE: float = 0.06
 
 ## Checked in order, first match wins. Kill rotation is first on purpose: it
@@ -83,6 +86,26 @@ var _candidate: Chord = Chord.NONE
 var _held_for: float = 0.0
 var _active: Chord = Chord.NONE
 
+## Keys that were part of a chord and have not been let go of yet.
+##
+## Fingers do not come off a chord together any more than they go onto
+## one together. Releasing A+D, one of them outlasts the other by a few
+## tens of milliseconds, and for those milliseconds the survivor reads as
+## a plain turn command: the ship starts spinning again at the exact
+## moment the pilot stopped telling it to stop. On the panic gesture.
+##
+## SETTLE is the guard on the way in and the mirror of it would be a
+## window on the way out -- and a window is a guess. Too short and a slow
+## release still spins the ship; too long and a deliberate press landing
+## inside it is eaten; and either way the number is wrong for somebody's
+## hands. So there is no number here. A key that was part of a chord
+## stays spent until it is released, which cannot be tuned wrong.
+##
+## What it costs: rolling out of A+D into a deliberate turn needs a fresh
+## press rather than just letting one finger up. A tap, weighed against a
+## panic gesture that used to undo itself.
+var _locked: Dictionary = {}
+
 
 ## `held` maps action names to whether they are down. Returns the chord in
 ## force this tick, which is NONE until one has survived the settle window.
@@ -101,6 +124,15 @@ func update(held: Dictionary, delta: float) -> Chord:
 		_active = Chord.NONE
 	elif _held_for >= SETTLE:
 		_active = found
+
+	# A lock lasts exactly as long as the finger does. Clearing first and
+	# re-arming after means a chord that is still engaged keeps its keys
+	# locked without the two rules having to agree about ordering.
+	for key: StringName in _locked.keys():
+		if not bool(held.get(key, false)):
+			_locked.erase(key)
+	for key: StringName in _keys_of(_active):
+		_locked[key] = true
 	return _active
 
 
@@ -110,9 +142,24 @@ func active() -> Chord:
 
 ## The actions the chord in force has taken over, which the ship must not
 ## also read as ordinary commands.
+## The keys the ship must not read as commands this tick: the ones making
+## up the chord in force, plus any left over from one that has just ended
+## and is still being let go of.
+##
+## Read off `_locked`, which `update` fills, so calling this without
+## having called `update` first answers about the previous tick -- which
+## is the only sensible thing it could do.
 func consumed() -> Array[StringName]:
+	var keys: Array[StringName] = []
+	for key: StringName in _locked:
+		keys.append(key)
+	return keys
+
+
+## The actions a chord is made of, or nothing for NONE.
+func _keys_of(chord: Chord) -> Array[StringName]:
 	for entry: Dictionary in CHORDS:
-		if entry["chord"] == _active:
+		if entry["chord"] == chord:
 			var keys: Array[StringName] = []
 			for key: StringName in entry["keys"]:
 				keys.append(key)

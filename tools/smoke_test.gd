@@ -2199,6 +2199,39 @@ func _check_chords() -> void:
 		"letting go of one is believed at once, without a window",
 	)
 
+	# ...but the key that outlasted the other is not a turn command. Two
+	# fingers do not come off together, so for a few tens of milliseconds
+	# one of them is still down, and without this the ship starts turning
+	# again at the moment the pilot stopped telling it to stop -- on the
+	# one gesture that means panic. Reported from the cockpit.
+	_expect(
+		chords.consumed().has(&"rotate_left"),
+		"and the finger that outlasts the other is still spent, not a fresh turn",
+	)
+	_expect(
+		not chords.consumed().has(&"rotate_right"),
+		"while the one already lifted is free again",
+	)
+	# Held a good while longer, in case anyone is tempted to make this a
+	# window: a slow release has to work as well as a quick one.
+	for tick: int in range(60):
+		chords.update(down.call([&"rotate_left"]), 1.0 / 60.0)
+	_expect(
+		chords.consumed().has(&"rotate_left"),
+		"a second later it is still spent -- the hold runs on the key, not on a clock",
+	)
+	chords.update({}, 0.016)
+	_expect(
+		chords.consumed().is_empty(),
+		"and letting go of it is what gives it back",
+	)
+	_expect(
+		chords.update(down.call([&"rotate_left"]), 1.0) == ControlChords.Chord.NONE
+		and not chords.consumed().has(&"rotate_left"),
+		"pressing it again turns the ship, which is how you get a turn out of it",
+	)
+	chords.update({}, 0.016)
+
 	var prograde: Dictionary = down.call([&"strafe_left", &"strafe_right", &"thrust_forward"])
 	chords.update(prograde, 1.0)
 	_expect(chords.active() == ControlChords.Chord.PROGRADE, "Q+E+W points along the way we go")
@@ -2208,6 +2241,10 @@ func _check_chords() -> void:
 	)
 	chords.update(down.call([&"strafe_left", &"strafe_right", &"thrust_reverse"]), 1.0)
 	_expect(chords.active() == ControlChords.Chord.RETROGRADE, "Q+E+S points back along it")
+	_expect(
+		not chords.consumed().has(&"thrust_forward"),
+		"rolling from one chord straight into another still works, holds and all",
+	)
 
 	for pair: Array in [
 		[ControlChords.Chord.ALTITUDE_HOLD, [&"thrust_forward", &"thrust_reverse", &"rotate_left"]],
