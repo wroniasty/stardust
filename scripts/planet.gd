@@ -1,15 +1,13 @@
 class_name Planet
-extends Node2D
+extends GravityWell
 ## A planet: a destructible crust with its own gravity well and a layered
 ## atmosphere.
 ##
 ## Every parameter is rolled from `planet_seed`, so a planet is reproducible
 ## from one number and nothing about it is hand-placed.
 ##
-## Gravity is not a gravity_point Area2D: its falloff is fixed and cannot be
-## faded out at the edge of the well. Planets publish themselves in the
-## GRAVITY_GROUP instead and ships sum `gravity_at()` themselves
-## (see IDEAS.md section 5).
+## The pull, the well and its edge live in GravityWell, which the star shares.
+## What is a planet and not a star begins here: ground, air and weather.
 ##
 ## The crust lives in PlanetTerrain as a polar bitmap. This node only owns it,
 ## keeps the shader pointed at it, and converts between world and local space
@@ -28,9 +26,6 @@ enum OrbitState {
 	DECAYING,  ## Closed, but dips into the atmosphere and will not last.
 	SUBORBITAL,  ## Comes down: the low point is inside the rock.
 }
-
-## Planets register here so ships can find them without a scene path.
-const GRAVITY_GROUP: StringName = &"gravity_sources"
 
 ## Emitted when rock is actually removed, so anything resting on the ground
 ## can hear that it moved instead of asking every frame whether it did.
@@ -119,17 +114,8 @@ const ANGULAR_DAMP_RATIO: float = 0.5
 @export var planet_seed: int = 0
 
 # --- Rolled from the seed in generate(). ---
-
-## Radius of the nominal surface, in pixels. Mountains rise above it and
-## valleys cut below it; see PlanetTerrain for the actual crust.
-var surface_radius: float = 600.0
-
-## Gravitational acceleration at the nominal surface, in pixels per second
-## squared.
-var surface_gravity: float = 40.0
-
-## Beyond this radius the planet pulls nothing.
-var influence_radius: float = 3000.0
+# `surface_radius`, `surface_gravity` and `influence_radius` are rolled here
+# too, but declared in GravityWell: they are what makes a thing a source.
 
 ## Thickness of the atmosphere above the surface. Zero means an airless rock.
 var atmosphere_height: float = 90.0
@@ -218,7 +204,6 @@ var _prebuilt: bool = false
 
 
 func _ready() -> void:
-	add_to_group(GRAVITY_GROUP)
 	if _prebuilt:
 		_raise()
 	elif body != null:
@@ -279,15 +264,20 @@ func adopt(descriptor: SystemBody, at_time: float = 0.0) -> void:
 	global_position = descriptor.position_at(at_time)
 
 
+func marker_color() -> Color:
+	return surface_color
+
+
 ## Planet whose centre is closest to `point`, or null if there is none.
 ##
 ## Ships, projectiles and the debug HUD all need this; keeping one copy means
 ## the day planets stop being a flat group (M3 streaming) there is one place to
-## change.
+## change. A Planet and not a GravityWell on purpose: every caller wants
+## ground, air or terrain, and the star has none of those.
 static func nearest(tree: SceneTree, point: Vector2) -> Planet:
 	var best: Planet = null
 	var best_distance: float = INF
-	for source: Node in tree.get_nodes_in_group(GRAVITY_GROUP):
+	for source: Node in tree.get_nodes_in_group(GROUP):
 		var planet: Planet = source as Planet
 		if planet == null:
 			continue
@@ -525,22 +515,6 @@ func air_density_at(point: Vector2) -> float:
 	return atmosphere_density * fraction
 
 
-## Gravitational acceleration a body feels at `point`, in pixels per second
-## squared. Inverse square above the surface, faded smoothly to nothing at the
-## edge of the well so a ship does not get a kick when it crosses the boundary.
-func gravity_at(point: Vector2) -> Vector2:
-	var to_centre: Vector2 = global_position - point
-	var distance: float = to_centre.length()
-	if distance < 0.001 or distance >= influence_radius:
-		return Vector2.ZERO
-
-	# Underground the inverse square would blow up, so hold it at surface value.
-	var effective: float = maxf(distance, surface_radius)
-	var strength: float = surface_gravity * pow(surface_radius / effective, 2.0)
-	strength *= _edge_falloff(distance)
-	return (to_centre / distance) * strength
-
-
 ## What a rolled world can be, as ranges rather than literals in the roll.
 ##
 ## Named because the system model rolls the same two numbers when it lays
@@ -755,14 +729,6 @@ func cloud_ceiling() -> float:
 	if not has_clouds:
 		return surface_radius
 	return cloud_base_radius() + atmosphere_height * cloud_depth
-
-
-## Smoothly takes gravity to zero over the outer tenth of the well.
-func _edge_falloff(distance: float) -> float:
-	var fade_start: float = influence_radius * 0.9
-	if distance <= fade_start:
-		return 1.0
-	return 1.0 - smoothstep(fade_start, influence_radius, distance)
 
 
 func _build_terrain_quad() -> void:

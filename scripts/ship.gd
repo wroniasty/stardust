@@ -169,6 +169,56 @@ const HEAT_REFERENCE_SPEED: float = 300.0
 const HEAT_RATE: float = 0.8
 const HEAT_COOLING: float = 0.05
 
+## And from starlight, as a fraction of what the star's own surface gets.
+##
+## This is the number that decides where the star's damage zone ends, and
+## it does so through HEAT_COOLING rather than through a radius of its own.
+## The bleed is a constant, not a fraction of the heat, so starlight does
+## not warm the hull to some equilibrium -- it either out-paces the bleed,
+## in which case the bar climbs all the way, or it does not, in which case
+## the bar never leaves zero. The zone has a hard edge, and it is at
+## `burn_radius`. At 0.15 that is 1.73 star radii, inside every planet's
+## orbit in 300 sampled systems with a third to spare: an inner world has
+## to be somewhere a ship can go.
+const STAR_HEAT_RATE: float = 0.15
+
+## Where a hot hull starts to be a damaged one, and how fast.
+##
+## The heat bar has existed since M1.6 and meant nothing: it filled up on
+## reentry and the pilot could ignore it. A star you can fly into needs
+## somewhere to put its damage, and inventing a second mechanism for "too
+## hot" when a heat bar was already sitting there would have been two
+## systems telling the same story. So the bar burns now, and reentry is
+## held to the same rule as starlight -- which is what the bar was always
+## claiming.
+##
+## BURN_RATE is the hull a pegged bar takes per second: a little over three
+## seconds of full heat and the ship is gone, which from the star's surface
+## is about thirteen seconds of not turning round.
+const BURN_HEAT: float = 0.75
+const BURN_RATE: float = 0.3
+
+
+## How close to `star` a hull may sit before it starts to burn, in pixels
+## from the star's centre.
+##
+## Derived rather than declared: it is simply where starlight starts
+## beating the hull's own cooling. Inside, the bar climbs however slowly
+## and the hull eventually burns; outside, starlight alone never moves it
+## off zero, so a ship can sit there forever. Diving through faster than
+## the bar fills is allowed, and is the intended way to go and look.
+##
+## The first version of this derived a settling point, `flux * rate /
+## cooling`, and was wrong: the bleed is a constant and not a fraction of
+## the heat, so nothing settles. The test agreed with it, because the test
+## did the same arithmetic instead of asking the hull. Flying at the star
+## in the running game is what found it, and the test now integrates the
+## ship's own heat model rather than restating it.
+static func burn_radius(star: Star) -> float:
+	if star == null or STAR_HEAT_RATE <= 0.0:
+		return 0.0
+	return star.surface_radius * sqrt(STAR_HEAT_RATE / HEAT_COOLING)
+
 ## Fired on every terrain impact hard enough to hurt. M1.7 turns this into hull
 ## HP and death; for now it only accumulates.
 signal hull_impact(impact_speed: float, damage: float)
@@ -321,6 +371,11 @@ var accumulated_damage: float = 0.0
 ## Hull heat, 0..1. Climbs while braking against thick air at speed and bleeds
 ## off in vacuum. M2 turns a full bar into engine damage.
 var hull_heat: float = 0.0
+
+## Starlight falling on the hull, 1.0 at the star's own surface. Kept as
+## state because the HUD wants it every frame and recomputing it there
+## would be a second answer to the same question.
+var star_flux: float = 0.0
 
 ## Air density at the hull, 0..1, refreshed every physics tick. Cached here
 ## because the heat model, the contrails and the HUD all want it and none of
@@ -1053,7 +1108,8 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	_update_heat(state.step)
 
 
-## Hull heating from braking against the air.
+## Hull heating, from braking against the air and from standing too close
+## to the star, and the damage a hull that stays hot takes.
 func _update_heat(step: float) -> void:
 	var planet: Planet = nearest_planet()
 	air_density = planet.air_density_at(global_position) if planet != null else 0.0
@@ -1061,7 +1117,17 @@ func _update_heat(step: float) -> void:
 	if air_density > 0.0:
 		var speed_ratio: float = linear_velocity.length() / HEAT_REFERENCE_SPEED
 		hull_heat += air_density * speed_ratio * speed_ratio * HEAT_RATE * step
+	# One bar, two sources. The air heats what it brakes; the star heats
+	# whatever is in front of it, moving or not, which is what makes
+	# hanging around near it a decision rather than an accident.
+	var star: Star = Star.of(get_tree())
+	star_flux = star.irradiance_at(global_position) if star != null else 0.0
+	hull_heat += star_flux * STAR_HEAT_RATE * step
 	hull_heat = clampf(hull_heat - HEAT_COOLING * step, 0.0, 1.0)
+
+	if hull_heat > BURN_HEAT:
+		var over: float = (hull_heat - BURN_HEAT) / (1.0 - BURN_HEAT)
+		take_damage(over * BURN_RATE * step, "heat")
 
 
 ## True if any command in `command_set` would translate the ship rather than
@@ -1662,12 +1728,7 @@ func get_applied_gravity() -> Vector2:
 
 ## Sums the pull of every gravity source that reaches `point`.
 func gravity_acceleration_at(point: Vector2) -> Vector2:
-	var total: Vector2 = Vector2.ZERO
-	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
-		var planet: Planet = source as Planet
-		if planet != null:
-			total += planet.gravity_at(point)
-	return total
+	return GravityWell.pull_at(get_tree(), point)
 
 
 ## How far from the cursor a seeker will still take a lock, in world pixels.

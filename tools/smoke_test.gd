@@ -976,6 +976,7 @@ func _evaluate_phase() -> void:
 			_check_rarity_travels()
 			_check_seeker_targets()
 			_check_system_model(_planet)
+			_check_star()
 			_check_streaming()
 			_check_system_map()
 			_check_flight_hud(_planet)
@@ -3548,18 +3549,31 @@ func _check_system_model(probe: Planet) -> void:
 			shortest_year = minf(shortest_year, planet.orbit_period)
 			longest_year = maxf(longest_year, planet.orbit_period)
 
-			# The star has to leave the planet something to hold with. Its
-			# Hill sphere must cover the **widest** well the planet could roll,
-			# because the layout never sees which one it rolled -- and a planet
-			# whose declared influence reaches past its Hill sphere is a planet
-			# promising a grip it has not got.
-			var hill: float = planet.orbit_radius * pow(
-				planet.mu() / (3.0 * system.star.mu()), 1.0 / 3.0
-			)
-			if hill < planet.radius * Planet.INFLUENCE_RATIO.y - 0.001:
+			# The star has to leave the planet something to hold with, and
+			# the test for that is the **direct** one: at the edge of the
+			# widest well the planet could roll, measuring the star from
+			# the near side, the planet still has to out-pull it.
+			#
+			# This assertion used to ask about the Hill sphere and passed
+			# while the thing it was protecting was false. The Hill radius
+			# is derived in the frame that turns with the planet, where
+			# the star's pull is mostly cancelled by the orbital
+			# acceleration; ours do not turn, so nothing cancels, and the
+			# sphere came out seven times wider than the radius where the
+			# pulls are actually equal. Measured under the old rule: the
+			# star beat the innermost planet two to one inside its own
+			# declared well.
+			var well: float = planet.radius * Planet.INFLUENCE_RATIO.y
+			var gap: float = planet.orbit_radius - well
+			var dominance: float = (planet.mu() / (well * well)) / (system.star.mu() / (gap * gap))
+			if dominance < StarSystem.WELL_DOMINANCE - 0.001:
 				crushed += 1
 			for moon: SystemBody in planet.children:
-				if moon.kind == SystemBody.Kind.MOON and moon.orbit_radius >= hill:
+				var moon_gap: float = planet.orbit_radius - moon.orbit_radius
+				var moon_hold: float = planet.mu() / (moon.orbit_radius * moon.orbit_radius)
+				if moon.kind != SystemBody.Kind.MOON:
+					continue
+				if moon_hold < system.star.mu() / (moon_gap * moon_gap):
 					moons_outside_hill += 1
 			var pull: float = system.star.mu() / (planet.orbit_radius * planet.orbit_radius)
 			pull_lo = minf(pull_lo, pull)
@@ -3593,18 +3607,24 @@ func _check_system_model(probe: Planet) -> void:
 	_expect(dockless == 0, "every system has somewhere to dock")
 	_expect(
 		crushed == 0,
-		"every planet keeps its widest possible well inside its Hill sphere",
+		"every planet out-pulls the star x%.0f at the edge of its widest well"
+			% StarSystem.WELL_DOMINANCE,
 	)
-	_expect(moons_outside_hill == 0, "and every moon orbits inside that sphere too")
+	_expect(moons_outside_hill == 0, "and holds its moons against the star as well")
 	_expect(
 		pull_hi < Planet.GRAVITY_RANGE.x,
 		"the star never out-pulls a planet's own surface at that planet's orbit (%.2f to %.2f px/s2)" % [
 			pull_lo, pull_hi,
 		],
 	)
+	# Bounds on the clock, not on taste. Short enough that a system is not
+	# frozen -- come back after an hour of play and the outer worlds have
+	# visibly moved -- and long enough that two visits a few minutes apart
+	# do not find a planet somewhere else entirely. Measured range over the
+	# sample: 1363 s to 78086 s.
 	_expect(
-		shortest_year > 30.0 and longest_year < 36000.0,
-		"a year runs from half a minute to ten hours (%.0f s to %.0f s)" % [
+		shortest_year > 600.0 and longest_year < 108000.0,
+		"a year runs from ten minutes to thirty hours (%.0f s to %.0f s)" % [
 			shortest_year, longest_year,
 		],
 	)
@@ -3826,11 +3846,23 @@ func _check_streaming() -> void:
 		"on a planet that really was rebuilt, not one that never went away",
 	)
 
-	# A kind with no scene yet stays in the model rather than pretending.
+	# The star went up with the system and is still up, half a million
+	# pixels later. Everything else in here is about bodies coming and
+	# going; the star is the one that must not, because its pull is what a
+	# ship between planets is coasting on.
 	_expect(
-		manager.node_for(system.star) == null
-		and manager.level_of(system.star) == manager.Level.GONE,
-		"a star has no scene yet, so it stays in the model and says so",
+		manager.star_node() != null and manager.level_of(system.star) == manager.Level.AWAKE,
+		"the star is in the world however far the pilot has gone",
+	)
+	_expect(
+		manager.star_node().global_position.is_zero_approx(),
+		"and it is at the origin, which is what every orbit is measured from",
+	)
+	# Stations are the kind that still has no scene, and they say so.
+	var dock: Array[SystemBody] = system.of_kind(SystemBody.Kind.STATION)
+	_expect(
+		not dock.is_empty() and manager.node_for(dock[0]) == null,
+		"a station has no scene yet, so it stays in the model and says so",
 	)
 
 	manager.clear()
@@ -3874,6 +3906,122 @@ func _crate_labels(planet: Planet) -> Array[String]:
 
 ## The system map, which is the only thing that shows a body the streaming
 ## manager has not built.
+## The star: what it pulls on, what it does not, and how close is too close.
+func _check_star() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var star: Star = (load("res://scenes/star.tscn") as PackedScene).instantiate() as Star
+	root.add_child(star)
+	star.adopt(system.star, system.outer_radius())
+
+	# It is a gravity source and it is not a planet. Everything that only
+	# wants the pull sees it; everything that wants ground does not, and
+	# `Planet.nearest` is the one that would otherwise hand a star to code
+	# about to ask it for terrain.
+	var wells: Array[GravityWell] = GravityWell.all(self)
+	_expect(wells.has(star), "the star is in the gravity group like any other source")
+	_expect(
+		Planet.nearest(self, Vector2(1000.0, 0.0)) != star,
+		"but it is never the nearest planet -- it has no ground to be one",
+	)
+
+	var out: Vector2 = Vector2(system.planets()[0].orbit_radius, 0.0)
+	var pull: float = star.gravity_at(out).length()
+	_expect(pull > 0.0, "it pulls at the innermost orbit (%.3f px/s2)" % pull)
+	_expect(
+		star.gravity_at(out).normalized().is_equal_approx(Vector2.LEFT),
+		"and it pulls inwards, towards the middle of the system",
+	)
+	var twice: float = star.gravity_at(out * 2.0).length()
+	_expect(
+		absf(twice * 4.0 - pull) < pull * 0.01,
+		"inverse square, like everything else that pulls (%.4f against %.4f)" % [
+			twice * 4.0, pull,
+		],
+	)
+	_expect(
+		star.gravity_at(Vector2(system.outer_radius(), 0.0)).length() > 0.0,
+		"and its reach covers the outermost orbit, so deep space is not a vacuum of force",
+	)
+	_expect(
+		GravityWell.pull_at(self, out).length() >= pull,
+		"a ship sums it with the rest rather than choosing between them",
+	)
+
+	_expect(
+		star.irradiance_at(Vector2(star.surface_radius, 0.0)) > 0.99,
+		"the surface gets the full flux by definition (%.2f)" % star.irradiance_at(
+			Vector2(star.surface_radius, 0.0)
+		),
+	)
+
+	# Heat, by running the ship's own model rather than restating it.
+	#
+	# The first version of this test did the arithmetic itself, agreed with
+	# the arithmetic in `burn_radius`, and both were wrong the same way --
+	# they assumed the hull cools by a fraction of its heat when it bleeds
+	# a constant. Flying at the star in the running game is what found it.
+	# A test that computes the answer it is checking can only ever find
+	# typing mistakes.
+	var burn: float = Ship.burn_radius(star)
+	var pilot: Ship = _spawn_ship()
+	var hot: float = _bake(pilot, star, Vector2(burn * 0.7, 0.0), 120.0)
+	_expect(
+		hot >= Ship.BURN_HEAT,
+		"two minutes well inside the burn radius fills the bar (%.2f)" % hot,
+	)
+	_expect(
+		pilot.hull_integrity < 1.0,
+		"and takes it out of the hull (%.0f%% left)" % (pilot.hull_integrity * 100.0),
+	)
+	var cool: float = _bake(pilot, star, Vector2(burn * 1.15, 0.0), 600.0)
+	_expect(
+		cool == 0.0,
+		"ten minutes just outside it and the bar has not moved at all (%.3f)" % cool,
+	)
+	_expect(
+		pilot.hull_integrity == 1.0,
+		"so a ship can sit there as long as it likes",
+	)
+	pilot.free()
+
+	# No world may sit inside the zone. An inner planet you cannot land on
+	# because the sun cooks you on approach is an inner planet that is not
+	# in the game, and the layout does not know the heat model exists -- so
+	# this is checked over the sample rather than assumed.
+	var scorched: int = 0
+	var closest: float = INF
+	for seed_index: int in range(SYSTEMS_SAMPLED):
+		var other: StarSystem = StarSystem.generate(seed_index)
+		var reach: float = other.star.radius * sqrt(
+			Ship.STAR_HEAT_RATE / Ship.HEAT_COOLING
+		)
+		for planet: SystemBody in other.planets():
+			var approach: float = planet.orbit_radius - planet.radius
+			closest = minf(closest, approach / reach)
+			if approach <= reach:
+				scorched += 1
+	_expect(
+		scorched == 0,
+		"no planet orbits inside the star's burn radius (closest comes to x%.2f of it)" % closest,
+	)
+
+	star.free()
+
+
+## Parks `ship` at `at` and runs its heat model for `seconds` of game
+## time, returning the bar. The ship's own `_update_heat`, not a copy of
+## it: the point is to find out what the game does, not what this file
+## thinks it does.
+func _bake(ship: Ship, star: Star, at: Vector2, seconds: float) -> float:
+	ship.repair_hull()
+	ship.global_position = at
+	ship.linear_velocity = Vector2.ZERO
+	var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+	for tick: int in range(roundi(seconds / step)):
+		ship._update_heat(step)
+	return ship.hull_heat
+
+
 func _check_system_map() -> void:
 	var system: StarSystem = StarSystem.generate(20260922)
 	var pilot: Node2D = Node2D.new()

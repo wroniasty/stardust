@@ -120,8 +120,10 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 	if extent.x <= 0.0 or extent.y <= 0.0:
 		return found
 
-	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
-		var body: Planet = source as Planet
+	for source: Node in get_tree().get_nodes_in_group(GravityWell.GROUP):
+		# Every source, star included: the pilot wants to know where the sun
+		# is at least as much as where the moon is.
+		var body: GravityWell = source as GravityWell
 		if body == null:
 			continue
 		var to_centre: float = _ship.global_position.distance_to(body.global_position)
@@ -254,7 +256,7 @@ func _draw_marker(font: Font, contact: Dictionary) -> void:
 	var direction: Vector2 = contact["direction"]
 	var size: float = contact["size"]
 
-	var colour: Color = _marker_color(contact["body"] as Planet)
+	var colour: Color = _marker_color(contact["body"] as GravityWell)
 	colour.a = INSIDE_ALPHA if bool(contact["inside"]) else OUTSIDE_ALPHA
 
 	# A triangle pointing out of the screen, at the body.
@@ -307,10 +309,10 @@ func _draw_label(
 
 
 ## The body's own colour, lifted to something readable against space. Using
-## the surface colour means the marker and the planet you eventually see are
+## the body's colour means the marker and the thing you eventually see are
 ## recognisably the same object.
-func _marker_color(body: Planet) -> Color:
-	return body.surface_color.lerp(Color.WHITE, 0.35)
+func _marker_color(body: GravityWell) -> Color:
+	return body.marker_color().lerp(Color.WHITE, 0.35)
 
 
 func distance_text(distance: float) -> String:

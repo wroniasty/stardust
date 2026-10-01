@@ -87,9 +87,12 @@ static func coast(ship: Ship, count: int, scale: float) -> Dictionary:
 		return result
 
 	# Gathered once, not per step: the group lookup would otherwise dominate.
+	# Two lists, because the two questions are different ones: everything
+	# pulls, only a planet has ground to end the flight against.
+	var wells: Array[GravityWell] = GravityWell.all(ship.get_tree())
 	var planets: Array[Planet] = []
-	for source: Node in ship.get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
-		var planet: Planet = source as Planet
+	for well: GravityWell in wells:
+		var planet: Planet = well as Planet
 		if planet != null:
 			planets.append(planet)
 
@@ -101,8 +104,8 @@ static func coast(ship: Ship, count: int, scale: float) -> Dictionary:
 
 	for i: int in range(count):
 		var acceleration: Vector2 = Vector2.ZERO
-		for planet: Planet in planets:
-			acceleration += planet.gravity_at(at)
+		for well: GravityWell in wells:
+			acceleration += well.gravity_at(at)
 		# Semi-implicit Euler, matching the solver: velocity first, then use it.
 		velocity += acceleration * step
 		at += velocity * step

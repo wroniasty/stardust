@@ -17,7 +17,7 @@ signal touched(crate: LootCrate, body: Node)
 
 ## Every crate joins this, so anything that wants to find loot -- the scanner
 ## now, salvage and cargo later -- asks the group rather than walking the
-## planet's children. The same shape as Planet.GRAVITY_GROUP, and for the same
+## planet's children. The same shape as GravityWell.GROUP, and for the same
 ## reason: the day crates stop hanging off planets, one line changes.
 const LOOT_GROUP: StringName = &"loot"
 
@@ -195,7 +195,10 @@ func _physics_process(delta: float) -> void:
 	if not loose:
 		return
 	var planet: Planet = Planet.nearest(get_tree(), global_position)
-	velocity += _gravity_at(global_position) * delta
+	# The same sum a ship makes, through the same function, so a crate and
+	# the ship that dropped it never fall differently. One thrown in deep
+	# space keeps going; one thrown near the star drifts towards it.
+	velocity += GravityWell.pull_at(get_tree(), global_position) * delta
 	if planet != null:
 		var air: float = planet.air_density_at(global_position)
 		if air > 0.0:
@@ -207,16 +210,6 @@ func _physics_process(delta: float) -> void:
 	if planet != null:
 		_resolve_ground(planet)
 
-
-## Sums every gravity source that reaches the crate, the same way a ship
-## does. A crate thrown in deep space keeps going, which is correct.
-func _gravity_at(point: Vector2) -> Vector2:
-	var total: Vector2 = Vector2.ZERO
-	for source: Node in get_tree().get_nodes_in_group(Planet.GRAVITY_GROUP):
-		var planet: Planet = source as Planet
-		if planet != null:
-			total += planet.gravity_at(point)
-	return total
 
 
 func _resolve_ground(planet: Planet) -> void:

@@ -1121,6 +1121,67 @@ Uboczny skutek do zapamiętania: **doba istnieje, rok nie**. Okresy orbitalne s�
 policzone i zapisane, bo bez nich nie da się ustawić pozycji przy wejściu do
 systemu, ale w trakcie wizyty nic ich nie realizuje.
 
+Drugi skutek, odkryty dopiero przy stawianiu gwiazdy: **sfera Hilla tu nie
+obowiązuje**. Jest wyprowadzona dla ciała, które krąży. Patrz niżej, „Gwiazda:
+ciągnie wszędzie, parzy blisko".
+
+### Gwiazda: ciągnie wszędzie, parzy blisko
+
+Gwiazda jest węzłem w tej samej grupie `gravity_sources` co planety. Żeby to
+było możliwe bez udawania, że gwiazda jest planetą, studnia wyprowadziła się
+do wspólnej klasy bazowej **`GravityWell`**: promień, grawitacja
+powierzchniowa, zasięg, `gravity_at()` i wygaszanie na krawędzi. Planeta
+dokłada do tego grunt, powietrze i pogodę. Podział przebiega dokładnie tam,
+gdzie przebiega pytanie: kto chce samego ciągu, bierze `GravityWell`; kto chce
+w co uderzyć, bierze `Planet` i dostaje wyłącznie planety.
+
+**Kryterium Hilla było złym narzędziem i test to przepuścił.** Masa gwiazdy
+była wyprowadzana z warunku, żeby sfera Hilla każdej planety mieściła jej
+najszerszą możliwą studnię. Sfera Hilla jest jednak wyprowadzona w układzie
+obracającym się razem z planetą, gdzie większość ciągu gwiazdy kasuje
+przyspieszenie orbitalne — i wychodzi jakieś **siedem razy szersza** niż
+promień, na którym ciągi są naprawdę równe. Nasze planety nie krążą, więc nie
+ma czego kasować. Zmierzone na 200 systemach pod starą regułą: **na krawędzi
+własnej, zadeklarowanej studni najbliższej planety gwiazda wygrywała 2:1** —
+czyli dokładnie to, przed czym komentarz przy tej funkcji ostrzegał.
+
+Kryterium jest teraz bezpośrednie: `mu_p / w² ≥ 2 · mu_* / (a − w)²`, przy `w`
+najszerszej studni, jaką planeta może wylosować, i gwieździe mierzonej od
+bliższej strony orbity. Dwa do jednego, a nie jeden do jednego: na granicy
+formalnej ciągi się znoszą, więc statek jest tam w swobodnym spadku donikąd, a
+stożek rysowany przez HUD nic nie znaczy.
+
+Kosztowało to gwiazdę cztery piąte masy. Co zostało, zmierzone na 300
+systemach: **0,001–0,56 px/s² na orbitach planet**, przy najgorszym stosunku
+do grawitacji powierzchniowej planety **1%**. Czyli: na minutę lotu kilkaset
+pikseli znoszenia — coś, co widać na przerywanej krzywej mapy i co trzeba
+uwzględnić na długim transferze, i nic, z czym planeta musi walczyć. Rok
+wydłużył się do 1363–78086 s.
+
+**Strefa obrażeń to pasek ciepła, a nie drugi mechanizm.** `hull_heat`
+istniał od M1.6 i nic nie robił: napełniał się przy wejściu w atmosferę i
+pilot mógł go zignorować. Gwiazda potrzebowała gdzie odłożyć obrażenia, a
+wymyślanie drugiego „za gorąco" obok istniejącego paska byłoby dwoma
+układami opowiadającymi tę samą historię. Więc: jeden pasek, dwa źródła
+(tarcie i światło), jeden skutek — powyżej `BURN_HEAT` kadłub się pali.
+Próg 0,75 leży powyżej wszystkiego, co osiąga zdecydowany aerobraking
+(zmierzone: **0,447** na testowym zejściu), więc zwykłe lądowanie nic na tym
+nie traci.
+
+**Promień strefy jest wyprowadzony, nie zadeklarowany** — i pierwsza wersja
+tego wyprowadzenia była błędna. Liczyłem punkt równowagi `flux · rate /
+cooling`, zakładając, że kadłub stygnie o ułamek swojego ciepła. Stygnie o
+stałą. Nic więc się nie ustala: światło albo przegania wyciek i pasek dochodzi
+do końca, albo nie przegania i pasek **nie rusza się z zera**. Strefa ma ostrą
+krawędź, na `sqrt(STAR_HEAT_RATE / HEAT_COOLING)` promieni gwiazdy, czyli 1,73.
+Mieści się w orbicie każdej planety w 300 systemach z zapasem **×1,36** —
+wewnętrzny świat musi być miejscem, do którego da się dolecieć.
+
+Test zgadzał się z błędnym wzorem, bo **robił tę samą arytmetykę**. Znalazł to
+dopiero lot na gwiazdę w uruchomionej grze. Test całkuje teraz `_update_heat`
+samego statku zamiast go przepisywać: dwie minuty w środku strefy napełniają
+pasek i zjadają kadłub, dziesięć minut tuż za nią nie rusza paska z zera.
+
 ### Floating origin: nie jest potrzebny, i to jest zmierzone
 
 Plan zostawiał otwartą decyzję „floating origin na podstawie rozmiaru systemu",

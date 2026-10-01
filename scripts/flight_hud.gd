@@ -38,6 +38,10 @@ const CAUTION_FRACTION: float = 0.6
 const BAR_WIDTH: float = 160.0
 const BAR_HEIGHT: float = 5.0
 
+## The heat bar under it, thinner because it is the second question.
+const HEAT_HEIGHT: float = 3.0
+const HEAT_GAP: float = 2.0
+
 ## The orbit diagram: a square, with the text column beside it.
 const DIAL: float = 66.0
 const PANEL_WIDTH: float = 158.0
@@ -154,6 +158,31 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 	_canvas.draw_rect(frame, FRAME, false, 1.0)
 	var reading: String = "%3.0f%%" % (health * 100.0)
 	_text(font, Vector2(left - 4.0 - _width(font, reading), frame.end.y), reading, colour)
+	_draw_heat(font, left, frame.end.y + HEAT_GAP)
+
+
+## Heat, as a second bar under the hull, and only when there is any.
+##
+## Hidden at zero deliberately. In ordinary flight it would be an empty box
+## that never moves, and a gauge the pilot has learned to ignore is worse
+## than no gauge at all -- which is roughly what the heat reading was
+## before it could hurt anyone. It appears on the first hot air or the
+## first sunlight, and it brings its own threshold mark, so "how close am
+## I to burning" is answered by looking rather than by remembering a
+## number.
+func _draw_heat(font: Font, left: float, top: float) -> void:
+	var heat: float = clampf(_ship.hull_heat, 0.0, 1.0)
+	if heat <= 0.01:
+		return
+	var frame: Rect2 = Rect2(left, top, BAR_WIDTH, HEAT_HEIGHT)
+	var burning: bool = heat >= Ship.BURN_HEAT
+	var colour: Color = BAD if burning else CAUTION
+	_canvas.draw_rect(Rect2(frame.position, Vector2(BAR_WIDTH * heat, HEAT_HEIGHT)), colour, true)
+	_canvas.draw_rect(frame, FRAME, false, 1.0)
+	var mark: float = left + BAR_WIDTH * Ship.BURN_HEAT
+	_canvas.draw_line(Vector2(mark, top - 1.0), Vector2(mark, frame.end.y + 1.0), BAD, 1.0)
+	if burning:
+		_text(font, Vector2(frame.end.x + 4.0, frame.end.y + 1.0), "HEAT", BAD)
 
 
 func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:

@@ -60,6 +60,7 @@ const SURFACE_IN: float = 2.2
 const BUILDS_PER_FRAME: int = 1
 
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
+const STAR_SCENE: String = "res://scenes/star.tscn"
 const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
 
 ## Crates are put on the landing shelves rather than scattered: the shelves
@@ -126,6 +127,13 @@ func bind(new_system: StarSystem, into: Node2D, at_time: float) -> void:
 	system = new_system
 	_container = into
 	visit_time = at_time
+	# The star goes up with the system and never comes down. It is the one
+	# body whose pull reaches the whole system, so a star that streamed out
+	# at distance would be a system that loses its gravity the moment you
+	# are far enough away to be coasting on it. It costs one node with no
+	# terrain, which is why it can simply always be there.
+	if system != null and system.star != null:
+		_raise_to(system.star, Level.AWAKE)
 
 
 ## Whose distance decides everything. The player, in practice.
@@ -335,9 +343,9 @@ func _raise_to(body: SystemBody, wanted: Level) -> void:
 	if wanted >= Level.AWAKE and node_for(body) == null:
 		var node: Node2D = _build(body)
 		if node == null:
-			# Stars and stations have no scene yet, so they stay in the
-			# model until their own step builds them. Saying so here beats
-			# a level table that claims they are in the world.
+			# Stations have no scene yet, so they stay in the model until
+			# their own step builds them. Saying so here beats a level
+			# table that claims they are in the world.
 			return
 		_nodes[body] = node
 		_levels[body] = Level.AWAKE
@@ -370,15 +378,26 @@ func _lower_to(body: SystemBody, wanted: Level) -> void:
 				child.queue_free()
 
 
-## Whether this kind of body has anything to build yet.
+## Whether the distance sweep has anything to do about this kind of body.
 ##
-## Stars and stations are in the model and not in the scene until their own
-## steps put them there. They are skipped rather than queued and refused:
-## queued, a star sat at the head of the queue, spent the frame's one build
-## on discovering it had no scene, and came back next sweep to do it again
-## -- which is how the first planet never got built at all.
+## The star is excluded for the opposite reason to everything else here:
+## not because it has no scene, but because it is never taken down, so
+## measuring how far away it is would only ever answer a question nobody
+## asked. Stations are still waiting for their own step. Both are skipped
+## rather than queued and refused: queued, a star sat at the head of the
+## queue, spent the frame's one build on discovering it had no scene, and
+## came back next sweep to do it again -- which is how the first planet
+## never got built at all.
 static func builds_as_node(body: SystemBody) -> bool:
 	return body.kind == SystemBody.Kind.PLANET or body.kind == SystemBody.Kind.MOON
+
+
+## The star of the bound system, if it is in the world. Always, in the
+## game; null under a test that bound nothing.
+func star_node() -> Star:
+	if system == null or system.star == null:
+		return null
+	return node_for(system.star) as Star
 
 
 ## Keeps the crust of a world that was shot at, so the crater is still
@@ -418,6 +437,12 @@ func _replace_crust(body: SystemBody, planet: Planet) -> void:
 
 
 func _build(body: SystemBody) -> Node2D:
+	if body.kind == SystemBody.Kind.STAR:
+		var star: Star = (load(STAR_SCENE) as PackedScene).instantiate() as Star
+		star.name = body.display_name.replace(" ", "_") + "_Star"
+		star.adopt(body, system.outer_radius())
+		_container.add_child(star)
+		return star
 	if not builds_as_node(body):
 		return null
 	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet

@@ -112,31 +112,58 @@ static func generate(system_seed: int) -> StarSystem:
 	return system
 
 
+## How much harder a planet must pull than the star at the edge of its own
+## well, for the well to be worth the name.
+##
+## Two to one. One to one is the formal boundary and a terrible place to
+## stand: the two pulls cancel, so a ship there is in free fall towards
+## nothing in particular and the conic the HUD draws is meaningless.
+const WELL_DOMINANCE: float = 2.0
+
+
 ## Decides how heavy the star is: as heavy as the system can bear.
 ##
 ## Rolling the star's mass independently of its planets was wrong, and
-## measurably so. At the rolled numbers the worst planet's Hill sphere came
-## out at a fifth of its own declared gravity well and the star pulled 67
-## px/s^2 at an orbit -- harder than a planet pulls at its own surface. A
-## planet like that holds nothing: "inside the planet's influence" would
-## have meant nothing, because the ship falls into the star from there
-## anyway, and the trajectory predictor, which draws a conic around the
-## nearest planet and ignores everything else, would have been drawing
-## fiction.
+## measurably so -- the star pulled 67 px/s^2 at an orbit, harder than a
+## planet pulls at its own surface. A planet like that holds nothing:
+## "inside the planet's influence" would mean nothing, because the ship
+## falls into the star from there anyway, and the trajectory predictor,
+## which draws a conic around the nearest planet and ignores everything
+## else, would be drawing fiction.
 ##
-## So the constraint comes first and the mass follows from it: every planet
-## keeps its **widest** possible well inside its Hill sphere, whatever that
-## planet happens to roll for a well later. The tightest planet in the
-## system sets the limit and the star gets exactly that.
+## So the constraint comes first and the mass follows from it. **Which**
+## constraint took two goes. The first version used the Hill sphere, and
+## the Hill sphere is the wrong instrument here: it is derived in the frame
+## that turns with the planet, where most of the star's pull is cancelled
+## by the orbital acceleration, and it comes out some seven times wider
+## than the radius at which the two pulls are actually equal. Our planets
+## do not orbit (IDEAS.md "Planety nie okrazaja gwiazdy"), so there is no
+## centrifugal term to do the cancelling and the ship feels the star in
+## full. Measured on 200 systems under the Hill rule: at the innermost
+## planet's well edge the star out-pulled the planet two to one, which is
+## the exact thing the paragraph above says must not happen.
 ##
-##     r_hill = a * (mu_p / 3 mu_star)^(1/3)  >=  k * r_p
+## The criterion that holds for a body standing still is the direct one:
 ##
-## rearranged for mu_star, with k the widest well ratio a planet can roll.
+##     mu_p / w^2  >=  WELL_DOMINANCE * mu_star / (a - w)^2
+##
+## with `w` the widest well that planet could later roll, and the star
+## measured from the near side of the orbit, which is where it is worst.
+## Rearranged for mu_star; the tightest planet sets the limit.
+##
+## It costs the star most of its mass -- a fifth of what the Hill rule
+## allowed -- and that is the honest price. What is left pulls 0.07 to 0.53
+## px/s^2 at the innermost orbit, which over a minute's coast is a few
+## hundred pixels of drift: something the map's dashed curve shows and a
+## long transfer has to allow for, and nothing a planet has to fight.
 func _weigh_star() -> void:
 	var allowed: float = INF
 	for planet: SystemBody in planets():
-		var wanted: float = planet.radius * Planet.INFLUENCE_RATIO.y / planet.orbit_radius
-		allowed = minf(allowed, planet.mu() / (3.0 * wanted * wanted * wanted))
+		var well: float = planet.radius * Planet.INFLUENCE_RATIO.y
+		var gap: float = planet.orbit_radius - well
+		if gap <= 0.0:
+			continue
+		allowed = minf(allowed, planet.mu() * gap * gap / (WELL_DOMINANCE * well * well))
 	if allowed == INF or allowed <= 0.0:
 		return
 	# Stated as a surface gravity because that is how mu is spelled
