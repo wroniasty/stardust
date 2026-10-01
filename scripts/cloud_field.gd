@@ -20,6 +20,22 @@ const MAX_CLOUDS: int = 220
 var spin: float = 0.0
 
 
+## Points this layer's shader at the star, in this layer's own frame.
+##
+## Per layer rather than once for the planet, because each layer turns at
+## its own rate: one direction shared between them would have the
+## terminator sliding across the deck as the layers drifted apart.
+func face_the_star(star_position: Vector2, lit: bool) -> void:
+	var shader: ShaderMaterial = material as ShaderMaterial
+	if shader == null:
+		return
+	var arm: Vector2 = to_local(star_position)
+	shader.set_shader_parameter(
+		"sun_dir", Vector2.UP if arm.is_zero_approx() else arm.normalized()
+	)
+	shader.set_shader_parameter("sunlight", 1.0 if lit else 0.0)
+
+
 ## Places `count` clouds in a band between `base_radius` and `base_radius +
 ## thickness`, each `size` pixels, with opacity from `alpha_range`.
 ##
@@ -42,6 +58,14 @@ func build(
 	# Both flags have to be set before the instance count, or the buffers are
 	# already allocated without room for them.
 	batch.use_custom_data = true
+	# Which way out of the planet this cloud sits, so the shader can tell
+	# whether it is in daylight. Carried as an instance colour because all
+	# four custom-data channels are already spoken for, and because the
+	# alternative -- reading the instance's own transform in the vertex
+	# stage -- means betting on which space MODEL_MATRIX is expressed in.
+	# The direction is in this field's own frame and never changes; the
+	# field turns, and the star's direction is handed in turned to match.
+	batch.use_colors = true
 	batch.mesh = quad
 	batch.instance_count = count
 
@@ -63,6 +87,12 @@ func build(
 			scale,
 			0.0,
 			Vector2.from_angle(angle) * radius,
+		))
+		batch.set_instance_color(i, Color(
+			Vector2.from_angle(angle).x * 0.5 + 0.5,
+			Vector2.from_angle(angle).y * 0.5 + 0.5,
+			0.0,
+			1.0,
 		))
 		batch.set_instance_custom_data(i, Color(
 			rng.randf(),

@@ -35,7 +35,36 @@ uniform float flat_base : hint_range(0.0, 1.0) = 0.7;
 /// Where that base sits in the quad.
 uniform float base_line : hint_range(0.3, 1.0) = 0.86;
 
+/// Direction of the star, as a unit vector in this quad's own frame, and how
+/// much of a difference it makes. The planet turns under it, so the quad is
+/// told afresh every frame; `sunlight` is zero for a world with no star in
+/// the scene at all, which is M1's single planet and most of the tests, and
+/// those stay lit all the way round rather than half-dark for no reason.
+uniform vec2 sun_dir = vec2(0.0, -1.0);
+uniform float sunlight : hint_range(0.0, 1.0) = 0.0;
+
+/// How dark the night side gets. Between the ground's floor and the air's:
+/// cloud tops catch the last of the light, which is what they do.
+uniform float night : hint_range(0.0, 1.0) = 0.30;
+
+/// Half-width of the terminator, as a dot product. The band where it is
+/// neither day nor night; wide enough to read as a curve rather than a cut.
+const float TERMINATOR = 0.22;
+
+/// 1.0 in full daylight, `night` on the far side.
+float daylight(vec2 from_centre) {
+	float facing = dot(normalize(from_centre), sun_dir);
+	float lit = smoothstep(-TERMINATOR, TERMINATOR, facing);
+	return mix(1.0, mix(night, 1.0, lit), sunlight);
+}
+
 varying vec4 cloud_data;
+
+/// Worked out per cloud in the vertex stage rather than per fragment: a
+/// cloud is small against the planet, so every pixel of one is at
+/// essentially the same time of day, and asking once per quad is both
+/// cheaper and steadier than asking per pixel across a soft edge.
+varying float cloud_daylight;
 
 float hash(float n) {
 	return fract(sin(n * 127.1) * 43758.5453123);
@@ -76,6 +105,12 @@ float segment_distance(vec2 p, vec2 a, vec2 b) {
 
 void vertex() {
 	cloud_data = INSTANCE_CUSTOM;
+	// The instance colour is not a colour: it carries which way out of the
+	// planet this cloud sits, packed into 0..1 the way a colour has to be.
+	cloud_daylight = daylight(COLOR.rg * 2.0 - vec2(1.0));
+	// And it must not go on to tint the cloud, which is what an instance
+	// colour normally does.
+	COLOR = vec4(1.0);
 }
 
 void fragment() {
@@ -142,5 +177,5 @@ void fragment() {
 	alpha *= 0.84 + 0.16 * fbm(point * 5.0 + vec2(0.0, seed));
 
 	vec3 lit = mix(shade_color, cloud_color, smoothstep(base_line, base_line * 0.25, UV.y));
-	COLOR = vec4(mix(cloud_color, lit, shading), alpha * alpha_scale);
+	COLOR = vec4(mix(cloud_color, lit, shading) * cloud_daylight, alpha * alpha_scale);
 }

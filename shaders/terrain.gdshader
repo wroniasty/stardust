@@ -23,6 +23,32 @@ uniform vec3 core_color : source_color = vec3(0.18, 0.16, 0.17);
 uniform float crust_depth = 7.0;
 uniform float rock_depth = 30.0;
 
+/// Direction of the star, as a unit vector in this quad's own frame, and how
+/// much of a difference it makes. The planet turns under it, so the quad is
+/// told afresh every frame; `sunlight` is zero for a world with no star in
+/// the scene at all, which is M1's single planet and most of the tests, and
+/// those stay lit all the way round rather than half-dark for no reason.
+uniform vec2 sun_dir = vec2(0.0, -1.0);
+uniform float sunlight : hint_range(0.0, 1.0) = 0.0;
+
+/// How dark the night side gets. Not black, and higher than the air above
+/// it, which is backwards for a real planet and right for this one: the
+/// ground is the thing the pilot has to land on, and a surface that cannot
+/// be read is a surface that gets crashed into. The air is free to go dark
+/// because nobody lands on it.
+uniform float night : hint_range(0.0, 1.0) = 0.50;
+
+/// Half-width of the terminator, as a dot product. The band where it is
+/// neither day nor night; wide enough to read as a curve rather than a cut.
+const float TERMINATOR = 0.22;
+
+/// 1.0 in full daylight, `night` on the far side.
+float daylight(vec2 from_centre) {
+	float facing = dot(normalize(from_centre), sun_dir);
+	float lit = smoothstep(-TERMINATOR, TERMINATOR, facing);
+	return mix(1.0, mix(night, 1.0, lit), sunlight);
+}
+
 const float TAU_C = 6.283185307179586;
 
 float solid_at(float angle01, float radius) {
@@ -55,5 +81,5 @@ void fragment() {
 	color = mix(rock_color, color, under_rock);
 	color = mix(crust_color, color, under_crust);
 
-	COLOR = vec4(color, 1.0);
+	COLOR = vec4(color * daylight(local), 1.0);
 }

@@ -978,6 +978,7 @@ func _evaluate_phase() -> void:
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
+			_check_daylight()
 			_check_streaming()
 			_check_system_map()
 			_check_flight_hud(_planet)
@@ -4113,6 +4114,114 @@ func _check_orbit_host() -> void:
 
 	planet.free()
 	star.free()
+
+
+## Which way the shaders think the star is, and how big the star draws.
+##
+## Headless, so none of this is about pixels. It is about the one thing
+## that cannot be seen by looking at a still: whether the direction handed
+## to the shader is the direction of the star in the frame the shader
+## measures against. Get that wrong and the terminator sits somewhere
+## plausible-looking and never moves with the planet.
+func _check_daylight() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var star: Star = (load("res://scenes/star.tscn") as PackedScene).instantiate() as Star
+	root.add_child(star)
+	star.adopt(system.star)
+
+	var surface: ColorRect = star.get_node("Surface")
+	var corona: ColorRect = star.get_node("Corona")
+	_expect(
+		is_equal_approx(surface.size.x, star.surface_radius * 2.0)
+		and surface.position.is_equal_approx(-Vector2.ONE * star.surface_radius),
+		"the star's face is a quad the width of the star (%.0f px)" % surface.size.x,
+	)
+	var shown: float = float(
+		(corona.material as ShaderMaterial).get_shader_parameter("disc")
+	) * corona.size.x * 0.5
+	_expect(
+		absf(shown - star.surface_radius) < 1.0,
+		"and the corona is told where that face ends, in its own units (%.0f against %.0f)" % [
+			shown, star.surface_radius,
+		],
+	)
+	_expect(
+		corona.material != surface.material,
+		"the two quads do not share a material, or the second star built would recolour the first",
+	)
+
+	# Heavier is bluer, all the way up. The colour is the only thing about
+	# a star the pilot can read from across the system, and it is supposed
+	# to be telling them how hard it pulls.
+	var climbing: bool = true
+	var previous: float = -1.0
+	for step: int in range(12):
+		var gravity: float = lerpf(
+			StarSystem.STAR_GRAVITY.x, StarSystem.STAR_GRAVITY.y, float(step) / 11.0
+		)
+		var hue: Color = Star.colour_for(gravity)
+		climbing = climbing and hue.b >= previous
+		previous = hue.b
+	_expect(climbing, "a heavier star is a bluer one, at every step of the range")
+
+	# The terminator. A planet is handed the direction in its own frame,
+	# and the frame turns: the test spins the planet and checks that the
+	# direction turns with it by the same amount and the other way.
+	# A world with weather on it, because the cloud decks are part of what
+	# is being checked and a test that quietly skips half of itself when
+	# the seed rolls a clear sky is a test that stops noticing.
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	root.add_child(planet)
+	for candidate: SystemBody in system.planets():
+		planet.adopt(candidate)
+		if planet.has_clouds:
+			break
+	planet.rotation = 0.0
+	planet._follow_the_star()
+	var ground: ShaderMaterial = (planet.get_node("Terrain") as ColorRect).material
+	var air: ShaderMaterial = (planet.get_node("Atmosphere") as ColorRect).material
+	var first: Vector2 = ground.get_shader_parameter("sun_dir")
+	_expect(
+		first.is_equal_approx(planet.to_local(star.global_position).normalized()),
+		"a planet points its surface shader at the star, in the frame the shader measures in",
+	)
+	_expect(
+		float(ground.get_shader_parameter("sunlight")) > 0.5
+		and float(air.get_shader_parameter("sunlight")) > 0.5,
+		"and switches the whole term on, surface and air alike",
+	)
+
+	planet.rotation = 0.7
+	planet._follow_the_star()
+	var turned: Vector2 = ground.get_shader_parameter("sun_dir")
+	_expect(
+		absf(angle_difference(turned.angle(), first.angle() - 0.7)) < 0.001,
+		"turn the planet and the star swings the other way in its frame (%.3f rad)" % (
+			angle_difference(turned.angle(), first.angle())
+		),
+	)
+
+	# Each cloud deck turns at its own rate, so each needs its own answer.
+	var decks: Array[Node] = planet.get_node("Clouds").get_children()
+	var materials: Dictionary = {}
+	for deck: Node in decks:
+		materials[(deck as CanvasItem).material] = true
+	_expect(
+		decks.size() > 1 and materials.size() == decks.size(),
+		"each of the %d cloud decks has its own material, because each faces its own way" % (
+			decks.size()
+		),
+	)
+
+	# And with no star at all, nothing is darkened: M1's lone planet and
+	# most of these tests have no sun to be on the far side of.
+	star.free()
+	planet._follow_the_star()
+	_expect(
+		float(ground.get_shader_parameter("sunlight")) == 0.0,
+		"a world with no star in the scene is lit all the way round",
+	)
+	planet.free()
 
 
 ## Parks `ship` at `at` and runs its heat model for `seconds` of game

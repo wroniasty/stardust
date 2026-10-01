@@ -1219,6 +1219,60 @@ dopiero lot na gwiazdę w uruchomionej grze. Test całkuje teraz `_update_heat`
 samego statku zamiast go przepisywać: dwie minuty w środku strefy napełniają
 pasek i zjadają kadłub, dziesięć minut tuż za nią nie rusza paska z zera.
 
+### Gwiazda świeci, planeta ma noc
+
+Tarcza gwiazdy była płaskim wypełnionym kołem. Przy promieniu dwóch do pięciu
+tysięcy pikseli i ekranie szerokim na 640 pilot **nigdy nie widzi tarczy** —
+tylko kawałek powierzchni wypełniający widok. Płaskie wypełnienie czyta się
+więc jak zepsuty render, i nie ma w nim niczego, co powiedziałoby, czy się
+leci. Faktura w skali ekranu jest tu całą robotą; kształt tarczy prawie nie
+ma znaczenia, bo widać zawsze tylko jej skrawek.
+
+Powierzchnia to teraz shader: granulacja (fbm z czterech oktaw, cele
+wielkości 85 px świata, znoszone powoli w dwóch kierunkach), **pociemnienie
+brzegowe** jako jedyna wskazówka, że to kula, i czysta krawędź. Kolor tarczy
+jest **podciągnięty w stronę bieli o 45%**: prawdziwa gwiazda jest biała tam,
+gdzie patrzy się w nią prosto, a barwa wychodzi dopiero na brzegu i w koronie.
+Malowana swoim nominalnym kolorem czytała się jak ceglany mur.
+
+**Korona jest addytywna i to jest cała poprawka.** Pierwsza wersja rysowała
+cztery półprzezroczyste koła zwykłym alfa-blendingiem. Jasny kolor zmieszany
+alfą z czernią daje przyciemnioną wersję tego koloru, więc biała gwiazda
+nosiła szarą smugę — czytało się to jak dym, nie jak światło. Światło się
+dodaje. Przy okazji gwiazdy tła nadal prześwitują przez halo, zamiast być
+przez nie wymazane.
+
+**Noc na planecie: dwa różne progi, i to jest wybór rozgrywki, nie fizyki.**
+Kierunek na gwiazdę jest podawany do shaderów gruntu, powietrza i chmur jako
+wektor **w ramce tego quada**, odświeżany co klatkę — bo doba to dokładnie
+to: planeta obraca się pod gwiazdą, a terminator po niej wędruje. Nic się nie
+przechowuje, więc planeta obudzona przy dowolnym odczycie zegara ma tę porę
+dnia, którą powinna mieć.
+
+Progi nocy są trzy i są celowo niespójne z fizyką: **grunt 0,50, chmury 0,30,
+powietrze 0,22.** Grunt jaśniejszy od powietrza nad nim jest dla prawdziwej
+planety odwrotnością prawdy, a tutaj jest słuszny: po gruncie się ląduje, a
+powierzchnia, której nie da się odczytać, to powierzchnia, w którą się
+wbija. Powietrze może gasnąć do końca, bo nikt na nim nie ląduje — i to
+właśnie w nim noc się czyta, jako jasny sierp cieniejący w ciemność.
+Zmierzone: noc przy 0,40 wszędzie dawała grunt na poziomie (17, 12, 29), nie
+do wylądowania.
+
+Chmury nie mogły dostać wspólnej odpowiedzi, bo **każda warstwa obraca się
+własnym tempem**; jeden kierunek na wszystkie oznaczałby terminator
+przesuwający się po pokrywie w miarę rozjeżdżania się warstw. Każda warstwa
+ma więc własny materiał. Kierunek „na zewnątrz planety" dla pojedynczej
+chmury jedzie w **kolorze instancji** — wszystkie cztery kanały custom data
+są zajęte, a alternatywa, czyli odczytanie własnej transformacji instancji w
+stopniu wierzchołków, to zakład o to, w jakiej przestrzeni wyrażony jest
+`MODEL_MATRIX`. Zakładów w shaderze nie przyjmuję.
+
+Przy okazji, lekcja o narzędziu, nie o grze: **`ShipCamera` wygładza pozycję
+z szybkością 10/s**, więc zrzut ekranu zrobiony klatkę po teleportacji
+pokazuje miejsce, z którego statek odleciał. Wyglądało to dokładnie jak
+gwiazda, która się nie renderuje, i kosztowało godzinę zgadywania. Probe
+robiący zrzuty musi dać kamerze dojść.
+
 ### HUD orbitalny należy do tego, co ciągnie najmocniej
 
 Panel orbity pytał wcześniej o **najbliższą planetę** i znikał, gdy statek

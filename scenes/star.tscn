@@ -1,7 +1,41 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/star.gd" id="1_star"]
+[ext_resource type="Shader" path="res://shaders/corona.gdshader" id="2_corona"]
+[ext_resource type="Shader" path="res://shaders/star.gdshader" id="3_surface"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_corona"]
+shader = ExtResource("2_corona")
+shader_parameter/glow_color = Color(1, 0.8, 0.5, 1)
+shader_parameter/disc = 0.45
+shader_parameter/strength = 0.5
+shader_parameter/falloff = 2.5
+shader_parameter/rays = 7.0
+shader_parameter/ray_depth = 0.13
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_surface"]
+shader = ExtResource("3_surface")
+shader_parameter/core_color = Color(1, 0.89, 0.6, 1)
+shader_parameter/cells = 32.0
+shader_parameter/churn = 0.015
+shader_parameter/limb = 0.4
+shader_parameter/grain = 0.3
 
 [node name="Star" type="Node2D"]
-z_index = -10
 script = ExtResource("1_star")
+
+[node name="Corona" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_corona")
+offset_left = -100.0
+offset_top = -100.0
+offset_right = 100.0
+offset_bottom = 100.0
+mouse_filter = 2
+
+[node name="Surface" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_surface")
+offset_left = -50.0
+offset_top = -50.0
+offset_right = 50.0
+offset_bottom = 50.0
+mouse_filter = 2

@@ -34,6 +34,31 @@ uniform float rim_strength : hint_range(0.0, 1.0) = 0.25;
 /// rather than as a window onto the starfield.
 uniform float opaque_depth : hint_range(0.001, 0.5) = 0.06;
 
+/// Direction of the star, as a unit vector in this quad's own frame, and how
+/// much of a difference it makes. The planet turns under it, so the quad is
+/// told afresh every frame; `sunlight` is zero for a world with no star in
+/// the scene at all, which is M1's single planet and most of the tests, and
+/// those stay lit all the way round rather than half-dark for no reason.
+uniform vec2 sun_dir = vec2(0.0, -1.0);
+uniform float sunlight : hint_range(0.0, 1.0) = 0.0;
+
+/// How dark the night side gets. Low, because this is where the night
+/// actually reads: a bright crescent of air thinning into darkness is the
+/// whole picture, and the ground keeps its own, higher floor so that it
+/// stays landable.
+uniform float night : hint_range(0.0, 1.0) = 0.22;
+
+/// Half-width of the terminator, as a dot product. The band where it is
+/// neither day nor night; wide enough to read as a curve rather than a cut.
+const float TERMINATOR = 0.22;
+
+/// 1.0 in full daylight, `night` on the far side.
+float daylight(vec2 from_centre) {
+	float facing = dot(normalize(from_centre), sun_dir);
+	float lit = smoothstep(-TERMINATOR, TERMINATOR, facing);
+	return mix(1.0, mix(night, 1.0, lit), sunlight);
+}
+
 void fragment() {
 	vec2 centered = UV - vec2(0.5);
 	float radius = length(centered) * 2.0;
@@ -58,5 +83,8 @@ void fragment() {
 		alpha = mix(shell_haze * thickness, 1.0, clamp(depth, 0.0, 1.0));
 	}
 
-	COLOR = vec4(atmosphere_color, clamp(alpha, 0.0, 1.0));
+	// The air is darkened rather than thinned out. A night side you can
+	// see the starfield through is a planet with a hole in it; one that
+	// goes dark and keeps its edge is a planet with a night side.
+	COLOR = vec4(atmosphere_color * daylight(centered), clamp(alpha, 0.0, 1.0));
 }

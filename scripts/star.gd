@@ -26,17 +26,22 @@ const COLOURS: Array[Color] = [
 	Color(0.68, 0.82, 1.00),  ## Blue giant.
 ]
 
-## Corona shells beyond the surface: (radius as a multiple of the surface,
-## alpha). Drawn outward from the disc so the star has an edge that glows
-## rather than a cut-out circle against the starfield.
-const CORONA: Array[Vector2] = [
-	Vector2(1.06, 0.55),
-	Vector2(1.14, 0.30),
-	Vector2(1.28, 0.14),
-	Vector2(1.50, 0.05),
-]
+## How far the corona quad reaches, as a multiple of the star's radius.
+## The glow itself falls off inside it; this is only where the quad stops.
+const CORONA_REACH: float = 2.2
+
+## How wide a convection cell should be, in world pixels.
+##
+## Fixed in pixels and turned into a cell count per star, rather than a
+## fixed count across the disc: a count would make every star look the
+## same size on screen however big it is, and the only thing the pilot
+## ever sees is a screen's worth of surface.
+const CELL_PIXELS: float = 85.0
 
 var colour: Color = COLOURS[2]
+
+@onready var _corona: ColorRect = $Corona
+@onready var _surface: ColorRect = $Surface
 
 
 ## Builds this star as the body the system says it is.
@@ -49,7 +54,52 @@ func adopt(descriptor: SystemBody) -> void:
 	# The star does not move: it is the origin everything else is measured
 	# from (IDEAS.md, "Planety nie okrazaja gwiazdy").
 	global_position = Vector2.ZERO
-	queue_redraw()
+	_build_quads()
+
+
+## Sizes the two quads and hands them their colours.
+func _build_quads() -> void:
+	if _surface == null:
+		# Adopted before entering the tree, which is the normal path: the
+		# @onready members are not there yet, and `_ready` calls back.
+		return
+	_fit(_surface, surface_radius)
+	_fit(_corona, surface_radius * CORONA_REACH)
+
+	var surface_material: ShaderMaterial = _own_material(_surface)
+	surface_material.set_shader_parameter("core_color", colour)
+	surface_material.set_shader_parameter(
+		"cells", maxf(8.0, 2.0 * surface_radius / CELL_PIXELS)
+	)
+
+	var corona_material: ShaderMaterial = _own_material(_corona)
+	# Warmer than the star by a touch: the outer atmosphere of a star is
+	# cooler than its face, and the difference is what stops the halo from
+	# reading as a blur of the disc.
+	corona_material.set_shader_parameter("glow_color", colour.lerp(COLOURS[1], 0.3))
+	corona_material.set_shader_parameter("disc", 1.0 / CORONA_REACH)
+
+
+func _fit(quad: ColorRect, radius: float) -> void:
+	quad.size = Vector2.ONE * radius * 2.0
+	quad.position = -Vector2.ONE * radius
+
+
+## The shader material this node may write into, duplicated off the scene's
+## shared one the first time. Without this every star in a session would be
+## the colour of the last one built.
+func _own_material(quad: ColorRect) -> ShaderMaterial:
+	var mine: ShaderMaterial = quad.material as ShaderMaterial
+	if mine.resource_local_to_scene:
+		return mine
+	mine = mine.duplicate() as ShaderMaterial
+	mine.resource_local_to_scene = true
+	quad.material = mine
+	return mine
+
+
+func _ready() -> void:
+	_build_quads()
 
 
 ## Radiant flux at `point`, as a fraction of what the surface gets.
@@ -94,13 +144,3 @@ static func colour_for(gravity: float) -> Color:
 
 func marker_color() -> Color:
 	return colour
-
-
-func _draw() -> void:
-	# Outermost first: each shell is translucent and the next one paints
-	# over it, so going the other way would hide the whole corona under
-	# its own widest ring.
-	for i: int in range(CORONA.size() - 1, -1, -1):
-		var shell: Vector2 = CORONA[i]
-		draw_circle(Vector2.ZERO, surface_radius * shell.x, Color(colour, shell.y))
-	draw_circle(Vector2.ZERO, surface_radius, colour)

@@ -340,6 +340,38 @@ func carve(point: Vector2, radius: float) -> bool:
 func _physics_process(delta: float) -> void:
 	if not is_zero_approx(spin_rate):
 		rotation = wrapf(rotation + spin_rate * delta, -PI, PI)
+	_follow_the_star()
+
+
+## Tells the surface, the air and every cloud deck which way the star is.
+##
+## Every frame, because this is what a day is: the planet turns and the
+## terminator walks round it. There is nothing to store and nothing to keep
+## in step -- the direction is read off the star's position, so a planet
+## woken up at any clock reading has the time of day it should have.
+##
+## With no star in the scene the strength goes to zero and the shaders skip
+## the whole term, which leaves M1's single planet and the tests lit all
+## the way round instead of half dark for no reason anyone could see.
+func _follow_the_star() -> void:
+	var star: Star = Star.of(get_tree())
+	var lit: float = 0.0
+	var towards: Vector2 = Vector2.UP
+	if star != null:
+		var arm: Vector2 = to_local(star.global_position)
+		if not arm.is_zero_approx():
+			towards = arm.normalized()
+			lit = 1.0
+	for shader: ShaderMaterial in [_terrain_material, _atmosphere_material]:
+		if shader != null:
+			shader.set_shader_parameter("sun_dir", towards)
+			shader.set_shader_parameter("sunlight", lit)
+	for child: Node in _clouds.get_children():
+		var field: CloudField = child as CloudField
+		if field != null:
+			field.face_the_star(
+				star.global_position if star != null else Vector2.ZERO, star != null
+			)
 
 
 ## Radius of the ground below a world point, in the planet's local frame.
@@ -708,7 +740,10 @@ func _build_clouds() -> void:
 	for layer: int in range(CLOUD_LAYERS):
 		var field: CloudField = CloudField.new()
 		field.name = "Layer%d" % layer
-		field.material = _cloud_material
+		# A copy each, because each layer turns at its own rate and so is
+		# facing the star from a slightly different angle. Everything else
+		# about them is identical; this one parameter is not.
+		field.material = _cloud_material.duplicate() as ShaderMaterial
 		# Layers are spread across the deck and stacked from the inside out, so
 		# the highest one is thinnest and faintest, the way a real sky thins.
 		var fraction: float = float(layer) / float(CLOUD_LAYERS)
