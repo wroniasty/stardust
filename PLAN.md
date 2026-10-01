@@ -221,6 +221,19 @@ Gotowe, gdy: da się znaleźć moduł, obejrzeć go obok tego, co już jest zamo
 
 ---
 
+## MAUX2: Dopalanie i ekran pomocy
+
+Poza kolejnością milestone'ów: jedno wyszło z gry (statek nie do podniesienia
+z ciężkiego świata), drugie z tego, że klawiszy zrobiło się trzydzieści parę.
+
+- [x] **Dopalanie silników głównych.** `EngineData` dostaje mnożnik ciągu i mnożnik spalania; jedynka znaczy „bez trybu awaryjnego", więc mają go tylko duże napędy. Stokowo **3× ciągu za 12× spalania**: 54,2 → 162,7 px/s² przy grawitacji planet 25–60, na **8,3 s** pełnej puli. Paliwa jeszcze nie ma, więc płaci pula energii — dopalanie konkuruje z bronią. **Zatrzask, nie próg**: sam próg dawał impuls ciągu co sekundę nad pustą pulą, bo spalanie odsuwa ładowanie; teraz jedno wciśnięcie to jedno palenie.
+- [x] **Dedykowane klawisze postawy**: prograde HOME, retrograde END, zatrzymanie obrotu INSERT, hamowanie także DELETE obok Z. Akordy zostają — są tym, co ręce pilota mają pod palcami bez schodzenia z klawiszy ruchu; klawisz wygrywa, bo jest jednoznaczny.
+- [x] **Ekran pomocy na `?` / `F1`**, czytany z InputMap, nie z przepisanej listy. Test pilnuje, że każda akcja ma opis — przy pierwszym uruchomieniu wypadły cztery akcje, o których nie wiedziałem.
+- [ ] Płomień silnika w dopalaniu wygląda tak samo jak bez: `set_exhaust` przycina do 0..1, więc trzykrotny ciąg nie ma jak się pokazać.
+- [ ] Przemapowanie klawiszy przez gracza (M6 ma to w „Menu, ustawienia, mapowanie klawiszy"); ekran pomocy jest już gotowy na to, bo nazwy czyta z mapy.
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.

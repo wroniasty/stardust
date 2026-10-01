@@ -219,6 +219,21 @@ static func burn_radius(star: Star) -> float:
 		return 0.0
 	return star.surface_radius * sqrt(STAR_HEAT_RATE / HEAT_COOLING)
 
+## How much of the pool has to be there before emergency power will light,
+## as a fraction of capacity. Once lit it burns the pool to nothing.
+##
+## A threshold alone was not enough, and the test said so: the burn pushes
+## the recharge delay back every tick, so a pilot holding the key over an
+## empty pool got a burst of boost roughly every second as the pool
+## crawled back over the line and was emptied again. Unpredictable thrust
+## during a landing is worse than no thrust.
+##
+## So it latches as well. One press is one burn: it lights, it runs until
+## released or until the pool is dry, and after that it will not light
+## again until the key has been let go. That makes it a reserve the pilot
+## spends rather than a tap they lean on.
+const BOOST_RESERVE: float = 0.10
+
 ## Fired on every terrain impact hard enough to hurt. M1.7 turns this into hull
 ## HP and death; for now it only accumulates.
 signal hull_impact(impact_speed: float, damage: float)
@@ -318,6 +333,16 @@ var active_commands: Dictionary = {}
 ## Assist holds, set from input or by an AI.
 var kill_rotation_command: bool = false
 var brake_command: bool = false
+
+## Held: the pilot is asking for emergency power.
+var boost_command: bool = false
+
+## Whether the engines are actually on it. Different from the ask, because
+## the pool decides -- which is the whole point of boost costing something.
+var boost_active: bool = false
+
+## This press has had its burn. Cleared by letting go of the key.
+var _boost_spent: bool = false
 
 ## The optional assists, engaged by the pilot and refused by the ship when
 ## the computer in the bay does not offer them.
@@ -1077,6 +1102,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	for engine: EngineInstance in engines:
 		engine.advance(state.step)
 		engine.mount.set_exhaust(engine.effective_output())
+	_resolve_boost(state.step)
 
 	_applied_force = Vector2.ZERO
 	_applied_torque = 0.0
@@ -1106,6 +1132,48 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 
 	_resolve_terrain(state)
 	_update_heat(state.step)
+
+
+## Decides whether the engines run on emergency power this tick, and takes
+## the fuel for it out of the pool.
+##
+## After the throttles have moved and before any force is applied, because
+## what it costs depends on what the engines are actually managing: a
+## drive at a quarter throttle burns a quarter as much, and a dead one
+## burns nothing at all.
+func _resolve_boost(step: float) -> void:
+	var demand: float = 0.0
+	for engine: EngineInstance in engines:
+		demand += engine.boost_demand()
+
+	if not boost_command:
+		# Letting go is what rearms it.
+		_boost_spent = false
+		boost_active = false
+	elif demand <= 0.0:
+		# Asked for with the throttles shut. Nothing burns and nothing is
+		# spent, so the press is still good when the pilot opens up.
+		boost_active = false
+	elif _boost_spent:
+		boost_active = false
+	elif boost_active:
+		# Lit: keep it lit while there is anything left to burn, and let
+		# the last tick run on whatever is in the bottom of the pool
+		# rather than charging for a tick it does not deliver.
+		boost_active = energy > 0.0
+		if boost_active:
+			spend_energy(minf(demand * step, energy))
+		else:
+			_boost_spent = true
+	else:
+		boost_active = (
+			energy >= energy_capacity() * BOOST_RESERVE
+			and spend_energy(demand * step)
+		)
+		_boost_spent = not boost_active
+
+	for engine: EngineInstance in engines:
+		engine.boosting = boost_active
 
 
 ## Hull heating, from braking against the air and from standing too close
@@ -1682,6 +1750,9 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 	commands.clear()
 	active_commands.clear()
 	kill_rotation_command = false
+	boost_command = false
+	boost_active = false
+	_boost_spent = false
 	heading_command = ControlChords.Chord.NONE
 	brake_command = false
 	fire_command = false
@@ -1776,6 +1847,12 @@ func read_player_input(delta: float) -> void:
 	_set_command(ShipControl.Command.STRAFE_LEFT, _strength(&"strafe_left", taken))
 	_set_command(ShipControl.Command.STRAFE_RIGHT, _strength(&"strafe_right", taken))
 
+	# A chord and a key for the same thing, and both are worth having. The
+	# chords exist because the keyboard is nearly full, and they are what a
+	# pilot's hands can reach without leaving the movement keys; the keys
+	# exist because a chord has to be learned, and the three things here
+	# are the ones a pilot reaches for when something has gone wrong. The
+	# key wins when both are held, because the key is unambiguous.
 	kill_rotation_command = chord == ControlChords.Chord.KILL_ROTATION
 	auto_orbit_command = chord == ControlChords.Chord.AUTO_ORBIT
 	auto_level_command = chord == ControlChords.Chord.AUTO_LEVEL
@@ -1787,7 +1864,20 @@ func read_player_input(delta: float) -> void:
 	heading_command = ControlChords.Chord.NONE
 	if chord == ControlChords.Chord.PROGRADE or chord == ControlChords.Chord.RETROGRADE:
 		heading_command = chord
+
+	if Input.is_action_pressed("kill_rotation"):
+		kill_rotation_command = true
+	if Input.is_action_pressed("hold_prograde"):
+		heading_command = ControlChords.Chord.PROGRADE
+	elif Input.is_action_pressed("hold_retrograde"):
+		heading_command = ControlChords.Chord.RETROGRADE
+	# Pointing and spinning are different jobs, so a pilot holding both
+	# gets the one that wins arguments: stop.
+	if kill_rotation_command:
+		heading_command = ControlChords.Chord.NONE
+
 	brake_command = Input.is_action_pressed("brake")
+	boost_command = Input.is_action_pressed("boost")
 
 
 func _strength(action: StringName, taken: Array[StringName]) -> float:

@@ -10,3 +10,5 @@ bulk = 3.0
 spool_time = 0.6
 reliability = 1.0
 fuel_cost = 1.0
+boost_thrust = 3.0
+boost_burn = 12.0

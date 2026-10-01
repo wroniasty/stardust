@@ -161,6 +161,19 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 	_text(font, Vector2(left - 4.0 - _width(font, reading), frame.end.y), reading, colour)
 	_draw_heat(font, left, frame.end.y + HEAT_GAP)
 
+	# Emergency power, beside the hull rather than down in the panel: it
+	# is the one reading a pilot needs while looking at the ground coming
+	# up. Shown when asked for and refused as well as when running --
+	# "nothing happened when I pressed it" has to have an answer on the
+	# screen, and the answer is an empty pool.
+	if _ship.boost_command:
+		_text(
+			font,
+			Vector2(frame.end.x + 4.0, frame.end.y),
+			"BOOST" if _ship.boost_active else "BOOST --",
+			CAUTION if _ship.boost_active else BAD,
+		)
+
 
 ## Heat, as a second bar under the hull, and only when there is any.
 ##

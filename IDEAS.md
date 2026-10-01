@@ -1219,6 +1219,69 @@ dopiero lot na gwiazdę w uruchomionej grze. Test całkuje teraz `_update_heat`
 samego statku zamiast go przepisywać: dwie minuty w środku strefy napełniają
 pasek i zjadają kadłub, dziesięć minut tuż za nią nie rusza paska z zera.
 
+### Dopalanie: wyjście z dziury, które coś kosztuje
+
+Statek da się postawić tam, skąd silniki go nie podniosą — ciężki świat,
+pełna ładownia, uszkodzony napęd, albo wszystko naraz — i bez tego jedyną
+odpowiedzią jest respawn. Silnik dostaje więc dwie liczby: **mnożnik ciągu**
+i **mnożnik spalania**. Jedynka znaczy „ten silnik nie ma trybu awaryjnego";
+mają go tylko duże napędy, bo manewrówka na trzykrotnym przeciążeniu to nie
+manewrówka, tylko bomba.
+
+Mnożnik spalania jest celowo dużo bardziej stromy niż mnożnik ciągu. Dopalanie
+nie jest lepszym silnikiem z wadą, tylko tym samym silnikiem wydawanym
+szybciej: **trzy razy ciąg za dwanaście razy spalanie**.
+
+Zmierzone na stokowym statku (masa 16,6, pula 100):
+
+| | bez | z dopalaniem |
+|---|---|---|
+| sam napęd główny | 54,2 px/s² | **162,7 px/s²** |
+| czas palenia na pełnej puli | — | **8,3 s** |
+| napęd zbity do 50% zdrowia | 27,1 px/s² | 81,3 px/s² |
+
+Planety ciągną 25–60 px/s² przy powierzchni, więc zdrowy stokowy statek przy
+54,2 **ledwo nie wystartuje z najcięższych światów** — dokładnie ta pułapka, o
+którą chodziło — a z dopalaniem ma zapas 2,7×. Napęd zbity do połowy nie
+podniesie się znikąd, a z dopalaniem podniesie się z każdego świata. Zbity do
+jednej trzeciej nie podniesie się z najcięższego nawet z dopalaniem, i to jest
+w porządku: wrak ma zostać wrakiem.
+
+**Paliwa jeszcze nie ma, więc płaci pula energii.** `fuel_cost` istniał od M2
+jako pole dla ekonomii paliwa z M5; mnożnik spalania mnoży właśnie je, a
+wychodzi to dziś z puli, bo to jedyny zasób, który statek naprawdę ma.
+Dopalanie konkuruje więc z bronią — każde wydanie odsuwa ładowanie puli — i to
+jest słuszna konkurencja, a nie efekt uboczny.
+
+**Zatrzask, nie próg.** Pierwsza wersja miała tylko minimum do zapalenia (10%
+puli). Test pokazał, że to za mało: spalanie odsuwa ładowanie co klatkę, więc
+pilot trzymający klawisz nad pustą pulą dostawał **impuls ciągu mniej więcej
+co sekundę**, w miarę jak pula przepełzała nad próg i była opróżniana.
+Nieprzewidywalny ciąg przy lądowaniu jest gorszy niż żaden. Więc: jedno
+wciśnięcie to jedno palenie. Zapala się, pali do puszczenia klawisza albo do
+dna, a potem nie zapali się ponownie, dopóki klawisz nie zostanie puszczony.
+To czyni z niego rezerwę, którą się wydaje, a nie kran, na którym można wisieć.
+
+### Ekran pomocy czyta InputMap, a nie własną listę
+
+Lista klawiszy przepisana do ekranu pomocy jest listą błędną od drugiej łatki
+— i to w najgorszy sposób, bo pilot w nią wierzy. Na ekranie zapisane jest
+więc tylko **co dana akcja znaczy**; który klawisz ją wywołuje, bierze się z
+tej samej tablicy, którą gra pyta o stan klawiatury. Akordy idą z tej samej
+tablicy, z której czyta je dopasowywacz.
+
+Jednej rzeczy ekran nie sprawdzi o sobie sam, więc sprawdza ją test: **każda
+akcja w InputMap ma wpis w opisach.** Dodaj klawisz bez opisu i zestaw pada.
+Przy pierwszym uruchomieniu wypadły cztery akcje, o których nie wiedziałem, że
+istnieją (`ship_fire_secondary`, trzy edytorskie) — co jest dokładnie tą
+klasą błędu, którą ten test ma łapać.
+
+Uboczna lekcja: **stałe klawiszy Godota warto sprawdzić, a nie zgadnąć.**
+Wpisałem HOME/END/INSERT z pamięci i trafiłem w ALT, CAPSLOCK i NUMLOCK —
+sąsiednie liczby. Zobaczyłem to dopiero na zrzucie z ekranu pomocy, który
+nazywa klawisze tak, jak nazywa je silnik. Ekran pomocy złapał błąd w
+bindingach, zanim złapał go pilot.
+
 ### Gwiazda świeci, planeta ma noc
 
 Tarcza gwiazdy była płaskim wypełnionym kołem. Przy promieniu dwóch do pięciu

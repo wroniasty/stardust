@@ -61,6 +61,7 @@ var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
+var _help: HelpScreen = null
 var _flight: FlightHud = null
 var _energy: EnergyHud = null
 var _creative: CreativeTool = null
@@ -81,6 +82,7 @@ func _ready() -> void:
 	_build_loadout()
 	_build_editor()
 	_build_map()
+	_build_help()
 	_build_flight_hud()
 	_build_creative()
 	_build_aim_hud()
@@ -112,6 +114,11 @@ func _build_map() -> void:
 		Galaxy.system(SYSTEM_INDEX), (player as Player).ship, StreamingManager
 	)
 	_map.teleport_requested.connect(_on_map_teleport)
+
+
+func _build_help() -> void:
+	_help = HelpScreen.new()
+	add_child(_help)
 
 
 func _build_editor() -> void:

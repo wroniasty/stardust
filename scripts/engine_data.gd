@@ -45,9 +45,33 @@ enum Type {
 ## oscillating thrust.
 @export_range(0.0, 1.0) var reliability: float = 1.0
 
-## Fuel burned per second at full throttle. Unused until the fuel economy lands
-## in M5; the field exists so the loot tables have somewhere to put it.
+## Fuel burned per second at full throttle. The fuel economy itself lands
+## in M5; until then this is the rate `boost_burn` multiplies, and the
+## pool it comes out of is the ship's energy (see Ship.BOOST_RESERVE).
 @export var fuel_cost: float = 0.0
+
+## Emergency power: what the thrust is multiplied by while the pilot holds
+## boost, and what the burn is multiplied by to pay for it.
+##
+## A way out of a hole, and that is the whole reason it exists. A ship can
+## be put somewhere its engines cannot lift it out of -- a heavy world, a
+## full hold, a damaged drive, or all three -- and without this the only
+## answer is to respawn. One is the default, meaning this engine has no
+## emergency setting; only the big drives get one, because a thruster
+## running at three times its rating is not a thruster, it is a bomb.
+##
+## The burn multiplier is deliberately far steeper than the thrust one.
+## Boost is not a better engine with a drawback, it is the same engine
+## spent faster: three times the push for twelve times the burn means
+## roughly eight seconds of it on a full pool, which is enough to get off
+## the ground and not enough to fly anywhere on.
+@export var boost_thrust: float = 1.0
+@export var boost_burn: float = 1.0
+
+
+## Whether this engine has an emergency setting at all.
+func can_boost() -> bool:
+	return boost_thrust > 1.0
 
 
 ## Throttle change per second while spooling. MAIN only.
@@ -63,6 +87,9 @@ func stat_rows() -> Array[Dictionary]:
 		row("paliwo", fuel_cost, 2, -1, "/s"),
 		row("gabaryt", bulk, 2, -1),
 	]
+	if can_boost():
+		rows.append(row("dopalanie", boost_thrust, 1, 1, "x"))
+		rows.append(row("spalanie", fuel_cost * boost_burn, 1, -1, "/s"))
 	if gimbal_range > 0.0:
 		rows.append(row("gimbal", rad_to_deg(gimbal_range), 0, 1, " st"))
 		rows.append(row("wychylanie", rad_to_deg(gimbal_rate), 0, 1, " st/s"))

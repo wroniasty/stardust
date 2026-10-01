@@ -12,3 +12,5 @@ gimbal_range = 0.2094
 gimbal_rate = 2.4
 reliability = 0.93
 fuel_cost = 1.1
+boost_thrust = 3.0
+boost_burn = 13.0

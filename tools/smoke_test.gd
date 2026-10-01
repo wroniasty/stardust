@@ -965,6 +965,7 @@ func _evaluate_phase() -> void:
 			_check_shot_mods()
 			_check_energy_balance()
 			_check_engine_failures()
+			_check_boost()
 			_check_hull_outline(_planet)
 			_check_allocator()
 			_check_gimbal()
@@ -979,6 +980,7 @@ func _evaluate_phase() -> void:
 			_check_star()
 			_check_orbit_host()
 			_check_daylight()
+			_check_bindings()
 			_check_streaming()
 			_check_system_map()
 			_check_flight_hud(_planet)
@@ -4049,6 +4051,197 @@ func _check_star() -> void:
 	)
 
 	star.free()
+
+
+## Emergency power: what it buys, what it costs, and that it runs out.
+func _check_boost() -> void:
+	var ship: Ship = _spawn_ship()
+	var main: EngineInstance = null
+	var small: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 1.0
+		if engine.data.type == EngineData.Type.MAIN and main == null:
+			main = engine
+		if not engine.data.can_boost() and small == null:
+			small = engine
+
+	_expect(main != null and main.data.can_boost(), "the main drive has an emergency setting")
+	_expect(
+		small != null,
+		"and the small engines do not -- a thruster at three times its rating is a bomb",
+	)
+
+	var plain: float = main.current_force().length()
+	main.boosting = true
+	var lit: float = main.current_force().length()
+	main.boosting = false
+	_expect(
+		absf(lit / plain - main.data.boost_thrust) < 0.001,
+		"boosting multiplies the thrust by exactly what the engine says (x%.2f)" % (
+			lit / plain
+		),
+	)
+	var quiet: float = small.current_force().length()
+	small.boosting = true
+	_expect(
+		is_equal_approx(small.current_force().length(), quiet),
+		"and an engine with no boost is unmoved by being told to boost",
+	)
+	small.boosting = false
+
+	# What it is for. A heavy world against a drive that has been knocked
+	# about is the case that prompted this: without boost the ship is on
+	# the ground for good, and respawning is not an answer.
+	var lift: float = 0.0
+	for engine: EngineInstance in ship.engines:
+		if engine.data.type == EngineData.Type.MAIN:
+			lift += engine.data.max_thrust
+	var crippled: float = lift * 0.5 / ship.mass
+	_expect(
+		crippled < Planet.GRAVITY_RANGE.y,
+		"a main drive at half health cannot lift off the heaviest world (%.1f of %.1f px/s2)" % [
+			crippled, Planet.GRAVITY_RANGE.y,
+		],
+	)
+	_expect(
+		crippled * main.data.boost_thrust > Planet.GRAVITY_RANGE.y,
+		"and with emergency power it can (%.1f px/s2)" % (
+			crippled * main.data.boost_thrust
+		),
+	)
+
+	# The cost, driven through the ship's own rule rather than restated.
+	var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+	ship.energy = ship.energy_capacity()
+	ship.boost_command = true
+	ship._resolve_boost(step)
+	_expect(ship.boost_active, "holding boost on a full pool lights it")
+	var drain: float = (ship.energy_capacity() - ship.energy) / step
+	_expect(
+		drain > 0.0,
+		"and it comes out of the pool at %.1f a second, not out of nothing" % drain,
+	)
+
+	var burned: float = 0.0
+	var lit_for: float = 0.0
+	for tick: int in range(2000):
+		ship._resolve_boost(step)
+		if not ship.boost_active:
+			break
+		lit_for += step
+		burned += 1.0
+	_expect(
+		lit_for > 3.0 and lit_for < 30.0,
+		"a full pool is worth %.1f seconds of it: enough to get off the ground, not to fly on" % (
+			lit_for
+		),
+	)
+	_expect(ship.energy <= 0.001, "and it burns the pool to nothing (%.3f left)" % ship.energy)
+
+	# No pulsing on the way out. A threshold on its own was not enough:
+	# the burn holds the recharge off, so a pool crawling back over the
+	# line gets emptied again, and a pilot holding the key over a dead
+	# pool got a burst of thrust about once a second. Ten seconds of
+	# holding it down, with the pool recharging, must give nothing.
+	var relit: int = 0
+	for tick: int in range(600):
+		ship._recharge(step)
+		ship._resolve_boost(step)
+		if ship.boost_active:
+			relit += 1
+	_expect(
+		relit == 0,
+		"holding it over a spent pool gives nothing back (%d ticks of pulsing)" % relit,
+	)
+	_expect(
+		ship.energy > ship.energy_capacity() * Ship.BOOST_RESERVE,
+		"even though the pool refilled while they held it (%.0f)" % ship.energy,
+	)
+	# Letting go is what rearms it. One press, one burn.
+	ship.boost_command = false
+	ship._resolve_boost(step)
+	ship.boost_command = true
+	ship._resolve_boost(step)
+	_expect(ship.boost_active, "letting go and pressing again strikes it")
+
+	# An engine that is not pushing is not burning.
+	ship.energy = ship.energy_capacity()
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 0.0
+	ship._resolve_boost(step)
+	_expect(
+		not ship.boost_active and is_equal_approx(ship.energy, ship.energy_capacity()),
+		"a ship with its engines idle burns nothing, however hard the key is held",
+	)
+	ship.free()
+
+
+## Every binding the game answers to is one the help screen knows about.
+func _check_bindings() -> void:
+	# The one thing a help screen cannot check about itself. Add an action
+	# to the input map without saying what it does and this fails, which
+	# is the only arrangement under which the screen stays true.
+	var missing: Array[StringName] = HelpScreen.undocumented()
+	_expect(
+		missing.is_empty(),
+		"every action the game answers to is on the help screen (missing: %s)" % (
+			"none" if missing.is_empty() else ", ".join(missing)
+		),
+	)
+
+	var screen: HelpScreen = HelpScreen.new()
+	root.add_child(screen)
+	var rows: Array[Dictionary] = screen.lines()
+	var unbound: Array[String] = []
+	var blocks: int = 0
+	for row: Dictionary in rows:
+		if row["kind"] == "head":
+			blocks += 1
+		elif String(row["key"]).contains("?"):
+			unbound.append(String(row["text"]))
+	_expect(
+		unbound.is_empty(),
+		"and every line on it names a key (%s)" % (
+			"all do" if unbound.is_empty() else ", ".join(unbound)
+		),
+	)
+	_expect(
+		blocks >= 5 and rows.size() > 30,
+		"the screen is the whole keyboard, not a sample (%d lines in %d blocks)" % [
+			rows.size(), blocks,
+		],
+	)
+	# The chords are spelled out of the matcher's own table, so a chord
+	# that was changed and not re-documented shows up as a wrong key list
+	# rather than as a stale line nobody noticed.
+	_expect(
+		rows.size() - HelpScreen.LABELS.size() - blocks == ControlChords.CHORDS.size(),
+		"and the chords on it are the chords the matcher knows (%d)" % (
+			ControlChords.CHORDS.size()
+		),
+	)
+
+	_expect(not screen.is_open(), "it starts shut")
+	screen.toggle()
+	_expect(screen.is_open() and paused, "opening it holds the game still")
+	screen.close()
+	_expect(not screen.is_open() and not paused, "and closing it lets go")
+	screen.free()
+
+
+	for action: StringName in [
+		&"boost", &"hold_prograde", &"hold_retrograde", &"kill_rotation",
+		&"toggle_help",
+	]:
+		_expect(
+			InputMap.has_action(action) and not InputMap.action_get_events(action).is_empty(),
+			"%s is a real action with a key on it" % action,
+		)
+	var brakes: Array[InputEvent] = InputMap.action_get_events(&"brake")
+	_expect(
+		brakes.size() >= 2,
+		"brake answers to more than one key (%d of them)" % brakes.size(),
+	)
 
 
 ## Which body the orbit readout belongs to, and the answer out in the dark.

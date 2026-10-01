@@ -163,6 +163,30 @@ func advance(delta: float) -> void:
 			throttle = clampf(target_throttle, 0.0, 1.0)
 
 
+## Set by the ship each tick: whether this engine is running on emergency
+## power. Owned here rather than read from the ship, because what an
+## engine is doing is an engine's business -- and because the ship has to
+## be able to switch it off for one engine and not another when the pool
+## only stretches so far.
+var boosting: bool = false
+
+
+## What the thrust is multiplied by right now. One unless this engine has
+## an emergency setting and is being asked for it.
+func boost_factor() -> float:
+	return data.boost_thrust if boosting and data.can_boost() else 1.0
+
+
+## Fuel per second this engine would burn on emergency power at what it is
+## currently managing. Zero for an engine with no boost, and zero for one
+## that is idle, dropped out or dead -- a drive that is not pushing is not
+## burning, however hard the pilot leans on the key.
+func boost_demand() -> float:
+	if not data.can_boost():
+		return 0.0
+	return data.fuel_cost * data.boost_burn * effective_output()
+
+
 ## Which way this engine is actually pushing, with the nozzle where it is.
 func thrust_direction() -> Vector2:
 	return mount.force_direction().rotated(gimbal)
@@ -170,7 +194,7 @@ func thrust_direction() -> Vector2:
 
 ## Force in the ship's local frame at the current throttle.
 func current_force() -> Vector2:
-	return thrust_direction() * data.max_thrust * effective_output()
+	return thrust_direction() * data.max_thrust * effective_output() * boost_factor()
 
 
 ## Force in the ship's local frame at full throttle, ignoring health.
