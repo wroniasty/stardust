@@ -13,20 +13,6 @@ extends GravityWell
 ## keeps the shader pointed at it, and converts between world and local space
 ## for callers (see IDEAS.md section 6).
 
-## What a coasting trajectory is doing with respect to this planet.
-##
-## Derived from the trajectory, never switched on. An earlier version made
-## "in orbit" a mode the ship entered, which meant a second implementation of
-## motion that had to agree with the first and twice did not; and because it
-## only accepted near-circular orbits, a perfectly good ellipse was never
-## called an orbit at all (see IDEAS.md section 8).
-enum OrbitState {
-	ESCAPE,  ## Leaves the well, or is already outside it.
-	ORBIT,  ## Closed, and clears the air the whole way round.
-	DECAYING,  ## Closed, but dips into the atmosphere and will not last.
-	SUBORBITAL,  ## Comes down: the low point is inside the rock.
-}
-
 ## Emitted when rock is actually removed, so anything resting on the ground
 ## can hear that it moved instead of asking every frame whether it did.
 ## Terrain is carved a few times a minute and read sixty times a second;
@@ -183,11 +169,6 @@ var _atmosphere_material: ShaderMaterial = null
 var _cloud_material: ShaderMaterial = null
 
 
-## The descriptor this planet was built from, when it came out of a system
-## rather than out of a bare seed. Kept so the streaming manager can ask a
-## live node which body it is without a second table to keep in step.
-var body: SystemBody = null
-
 ## The moment on the galaxy clock this planet is placed at. Handed in
 ## rather than fetched, which is the whole point: a planet that reaches for
 ## an autoload by path is a planet that behaves differently depending on
@@ -222,7 +203,12 @@ func _ready() -> void:
 func prepare(descriptor: SystemBody, at_time: float) -> void:
 	body = descriptor
 	placed_at = at_time
-	roll_parameters(descriptor.seed, descriptor.radius, descriptor.surface_gravity)
+	roll_parameters(
+		descriptor.seed,
+		descriptor.radius,
+		descriptor.surface_gravity,
+		descriptor.well_radius,
+	)
 	_prebuilt = true
 
 
@@ -259,7 +245,12 @@ func _raise() -> void:
 func adopt(descriptor: SystemBody, at_time: float = 0.0) -> void:
 	body = descriptor
 	placed_at = at_time
-	roll_parameters(descriptor.seed, descriptor.radius, descriptor.surface_gravity)
+	roll_parameters(
+		descriptor.seed,
+		descriptor.radius,
+		descriptor.surface_gravity,
+		descriptor.well_radius,
+	)
 	rebuild()
 	global_position = descriptor.position_at(at_time)
 
@@ -286,6 +277,10 @@ static func nearest(tree: SceneTree, point: Vector2) -> Planet:
 			best_distance = distance
 			best = planet
 	return best
+
+
+func has_ground() -> bool:
+	return true
 
 
 ## Radius at the top of the atmosphere. Equals surface_radius when airless.
@@ -340,119 +335,6 @@ func carve(point: Vector2, radius: float) -> bool:
 		return false
 	carved.emit(point, radius)
 	return true
-
-
-## Speed of a circular orbit at `radius`, in pixels per second.
-##
-## For an inverse square field measured at the surface this is
-## sqrt(g * R^2 / r). Orbit lock, the tests and any autopilot must agree on it,
-## so it lives here rather than being rederived at each call site.
-func circular_orbit_speed(radius: float) -> float:
-	if radius <= 0.001:
-		return 0.0
-	return sqrt(surface_gravity * surface_radius * surface_radius / radius)
-
-
-## Standard gravitational parameter, mu = g * R^2.
-##
-## The one number that turns this planet's arcade gravity into textbook orbital
-## mechanics: above the surface the field is exactly inverse square, so the
-## conic sections are exact rather than fitted.
-func gravitational_parameter() -> float:
-	return surface_gravity * surface_radius * surface_radius
-
-
-## Periapsis and apoapsis radii of the coasting orbit through `point` at
-## `velocity`, as (periapsis, apoapsis). Apoapsis is INF when the ship leaves.
-##
-## Exact only where the field is: below the surface gravity is capped, and over
-## the outer tenth of the well it is faded out so a ship does not get a kick
-## crossing the boundary (see gravity_at). An apoapsis past the influence
-## radius therefore never happens -- the ship coasts out of the well instead --
-## so it is reported as an escape rather than as a number that would be wrong.
-func orbit_extremes(point: Vector2, velocity: Vector2) -> Vector2:
-	var arm: Vector2 = point - global_position
-	var radius: float = arm.length()
-	var mu: float = gravitational_parameter()
-	if radius < 0.001 or mu <= 0.0:
-		return Vector2(0.0, INF)
-
-	var energy: float = velocity.length_squared() * 0.5 - mu / radius
-	# Angular momentum: in 2D the cross product is the scalar h.
-	var momentum: float = arm.cross(velocity)
-	var eccentricity: float = sqrt(maxf(
-		0.0, 1.0 + 2.0 * energy * momentum * momentum / (mu * mu)
-	))
-
-	if energy >= 0.0:
-		# Unbound: there is still a periapsis, from the conic's semi-latus
-		# rectum, but no far side to come back to.
-		var latus: float = momentum * momentum / mu
-		return Vector2(latus / maxf(1.0 + eccentricity, 0.001), INF)
-
-	var semi_major: float = -mu / (2.0 * energy)
-	var apoapsis: float = semi_major * (1.0 + eccentricity)
-	if apoapsis >= influence_radius:
-		return Vector2(semi_major * (1.0 - eccentricity), INF)
-	return Vector2(semi_major * (1.0 - eccentricity), apoapsis)
-
-
-## The coasting conic through `point`, as something that can be drawn.
-##
-## `orbit_extremes()` answers the two numbers a readout needs. A picture
-## needs the shape as well, and that is the **eccentricity vector**: it
-## points at periapsis and its length is the eccentricity. Returned as one
-## vector rather than as an angle and a magnitude, because those would be
-## two values that can disagree.
-func orbit_shape(point: Vector2, velocity: Vector2) -> Dictionary:
-	var extremes: Vector2 = orbit_extremes(point, velocity)
-	var shape: Dictionary = {
-		"periapsis": extremes.x, "apoapsis": extremes.y, "eccentricity": Vector2.ZERO,
-	}
-	var arm: Vector2 = point - global_position
-	var radius: float = arm.length()
-	var mu: float = gravitational_parameter()
-	if radius < 0.001 or mu <= 0.0:
-		return shape
-	shape["eccentricity"] = (
-		arm * (velocity.length_squared() - mu / radius) - velocity * arm.dot(velocity)
-	) / mu
-	return shape
-
-
-## Radius of a conic with this periapsis and eccentricity, `theta` radians
-## round from periapsis.
-##
-## One formula for both kinds: an ellipse closes because the divisor never
-## reaches zero, and a hyperbola runs off to infinity because it does.
-static func conic_radius(periapsis: float, eccentricity: float, theta: float) -> float:
-	var divisor: float = 1.0 + eccentricity * cos(theta)
-	return INF if divisor <= 0.0001 else periapsis * (1.0 + eccentricity) / divisor
-
-
-## Classifies the coasting trajectory through `point` at `velocity`.
-##
-## This is what "are we in orbit" means: both ends of the conic inside the
-## well, and the near end clear of the air. Every other answer is a different
-## thing the pilot needs to know about rather than a failure to be in orbit.
-func orbit_state(point: Vector2, velocity: Vector2) -> OrbitState:
-	var arm: Vector2 = point - global_position
-	# Beyond the well the planet has no say: gravity there is zero, so the
-	# conic would be a fiction drawn around a body that is not pulling.
-	if arm.length() >= influence_radius:
-		return OrbitState.ESCAPE
-
-	var extremes: Vector2 = orbit_extremes(point, velocity)
-	var inbound: bool = velocity.dot(arm) < 0.0
-	if extremes.x <= terrain_ceiling() and (inbound or not is_inf(extremes.y)):
-		# An open trajectory heading outwards has a periapsis below the rock in
-		# its past, not its future, so only an inbound one is coming down.
-		return OrbitState.SUBORBITAL
-	if is_inf(extremes.y):
-		return OrbitState.ESCAPE
-	if extremes.x <= atmosphere_radius():
-		return OrbitState.DECAYING
-	return OrbitState.ORBIT
 
 
 func _physics_process(delta: float) -> void:
@@ -549,7 +431,10 @@ func generate(new_seed: int) -> void:
 ## same seed gives the same terrain, weather and colours whether the size
 ## came from the system or from the roll.
 func roll_parameters(
-	new_seed: int, forced_radius: float = 0.0, forced_gravity: float = 0.0
+	new_seed: int,
+	forced_radius: float = 0.0,
+	forced_gravity: float = 0.0,
+	forced_well: float = 0.0,
 ) -> void:
 	planet_seed = new_seed
 
@@ -560,7 +445,13 @@ func roll_parameters(
 	var rolled_gravity: float = rng.randf_range(GRAVITY_RANGE.x, GRAVITY_RANGE.y)
 	surface_radius = rolled_radius if forced_radius <= 0.0 else forced_radius
 	surface_gravity = rolled_gravity if forced_gravity <= 0.0 else forced_gravity
-	influence_radius = surface_radius * rng.randf_range(INFLUENCE_RATIO.x, INFLUENCE_RATIO.y)
+	# The well is drawn either way, like the two above it, so that forcing
+	# one does not shift every later roll and give the same world a
+	# different face depending on who built it.
+	var rolled_well: float = surface_radius * rng.randf_range(
+		INFLUENCE_RATIO.x, INFLUENCE_RATIO.y
+	)
+	influence_radius = rolled_well if forced_well <= 0.0 else forced_well
 
 	if rng.randf() < 0.2:
 		atmosphere_height = 0.0

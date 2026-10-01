@@ -1145,18 +1145,55 @@ ma czego kasować. Zmierzone na 200 systemach pod starą regułą: **na krawędz
 własnej, zadeklarowanej studni najbliższej planety gwiazda wygrywała 2:1** —
 czyli dokładnie to, przed czym komentarz przy tej funkcji ostrzegał.
 
-Kryterium jest teraz bezpośrednie: `mu_p / w² ≥ 2 · mu_* / (a − w)²`, przy `w`
-najszerszej studni, jaką planeta może wylosować, i gwieździe mierzonej od
-bliższej strony orbity. Dwa do jednego, a nie jeden do jednego: na granicy
-formalnej ciągi się znoszą, więc statek jest tam w swobodnym spadku donikąd, a
-stożek rysowany przez HUD nic nie znaczy.
+Kryterium jest teraz bezpośrednie: `mu_p / w² ≥ 2 · mu_* / (a − w)²`, przy
+gwieździe mierzonej od bliższej strony orbity. Dwa do jednego, a nie jeden do
+jednego: na granicy formalnej ciągi się znoszą, więc statek jest tam w
+swobodnym spadku donikąd, a stożek rysowany przez HUD nic nie znaczy.
 
-Kosztowało to gwiazdę cztery piąte masy. Co zostało, zmierzone na 300
-systemach: **0,001–0,56 px/s² na orbitach planet**, przy najgorszym stosunku
-do grawitacji powierzchniowej planety **1%**. Czyli: na minutę lotu kilkaset
-pikseli znoszenia — coś, co widać na przerywanej krzywej mapy i co trzeba
-uwzględnić na długim transferze, i nic, z czym planeta musi walczyć. Rok
-wydłużył się do 1363–78086 s.
+**Ale czytałem to z niewłaściwej strony, i to był drugi błąd.** Pierwsza
+wersja brała najszerszą studnię, jaką planeta *może* wylosować, jako daną, i
+pytała, jak lekka musi być gwiazda, żeby wszystkie przeżyły. Najciaśniejsza
+planeta w układzie ustawiała wtedy masę dla całej reszty. Gwiazda straciła na
+tym cztery piąte masy i wyszła fizycznie nieistotna: zmierzone w grze, w
+miejscu, gdzie faktycznie się lata, **0,069 px/s² — cztery dziesiąte procenta
+tego, co statek czuje**, a między orbitami, gdzie była jedynym ciągnącym
+ciałem, 0,045 px/s², czyli 224 px znoszenia na sto sekund. Wszystkie asercje
+przechodziły. Zgłosił to pilot słowami „wygląda na to, że gwiazda nie
+przyciąga statku".
+
+Czytane z drugiej strony nie kosztuje nic. **Gwiazda jest losowana jak każde
+inne ciało, a każda planeta dostaje studnię, którą naprawdę utrzyma** —
+ciasną dla świata wewnętrznego, pełną wylosowaną szerokość dalej. Tam gdzie
+nawet `WELL_FLOOR` (trzy promienie, tyle żeby dało się okrążyć) nie wychodzi,
+**układ odsuwa planetę na zewnątrz**, bo przesunięcie planety jest darmowe, a
+odchudzenie gwiazdy nie.
+
+Zmierzone na tych samych 300 systemach, po zmianie:
+
+| | przed | po |
+|---|---|---|
+| ciąg gwiazdy na pierwszej orbicie | 0,069 px/s² | **0,87–2,47 px/s²** |
+| między orbitami | 0,045 px/s² | **0,43–1,61 px/s²** |
+| znoszenie po 100 s dryfu (w grze) | 224 px | **4673 px, 102 px/s** |
+| studnie planet | 3,5–6 promieni, losowane | 3,0–6,0, wyprowadzone |
+| orbity wewnętrzne | — | odsunięte najwyżej ×1,5 |
+
+Najgorszy stosunek ciągu gwiazdy do grawitacji powierzchniowej planety to
+nadal **4,8%**, więc wylądowany statek nadal nie czuje gwiazdy z boku.
+
+**Gwiazda zeszczuplała przy okazji**, z 6000–11000 px na 2600–4800. Była
+szeroka, bo szerokość niosła masę (`mu = g·R²`); teraz masę niesie
+grawitacja, która jest losowana osobno (45–110 px/s² na powierzchni, więcej
+niż jakakolwiek planeta). Przy 11000 px promienia gwiazda nigdy nie była
+tarczą na ekranie 640×360, tylko ścianą, na którą się wpada. Przy 3000 widać
+krzywiznę. Z tego samego powodu `FIRST_ORBIT` jest teraz w pikselach, a nie w
+promieniach gwiazdy: wiązanie skali całego układu z tym, jak gruba wygląda
+gwiazda, było pozostałością po czasach, gdy ciężka i szeroka znaczyło to samo.
+
+**Kolor gwiazdy to odczyt, nie ozdoba.** Nie jest już losowany osobno —
+wynika z masy, więc niebieska naprawdę jest tą ciężką. To jedyna rzecz, którą
+o gwieździe widać z drugiego końca układu, i teraz mówi, jak mocno ten system
+będzie ciągnął na transferze.
 
 **Strefa obrażeń to pasek ciepła, a nie drugi mechanizm.** `hull_heat`
 istniał od M1.6 i nic nie robił: napełniał się przy wejściu w atmosferę i
@@ -1181,6 +1218,32 @@ Test zgadzał się z błędnym wzorem, bo **robił tę samą arytmetykę**. Znal
 dopiero lot na gwiazdę w uruchomionej grze. Test całkuje teraz `_update_heat`
 samego statku zamiast go przepisywać: dwie minuty w środku strefy napełniają
 pasek i zjadają kadłub, dziesięć minut tuż za nią nie rusza paska z zera.
+
+### HUD orbitalny należy do tego, co ciągnie najmocniej
+
+Panel orbity pytał wcześniej o **najbliższą planetę** i znikał, gdy statek
+wyszedł z jej studni. Między orbitami zostawał sam wskaźnik kierunku — choć
+statek spadał wtedy wokół gwiazdy i miał normalny stożek do narysowania.
+
+Reguła jest teraz jednozdaniowa: **gospodarzem jest studnia, która ciągnie w
+tym punkcie najmocniej.** Nie wymaga wyjątku na gwiazdę. Wewnątrz studni
+planety wygrywa planeta, bo `WELL_DOMINANCE` tego pilnuje przy układaniu
+systemu; na zewnątrz zostaje gwiazda i tylko gwiazda.
+
+Przekazanie wypada w **wygaszaniu na krawędzi**, nie na nominalnej granicy
+studni. Dominacja 2:1 jest liczona na czystym odwrotnym kwadracie, ale pole
+jest wygaszane przez ostatnią dziesiątą część studni, żeby przekroczenie
+granicy nie było kopnięciem. W tej ostatniej dziesiątej planeta naprawdę już
+puszcza, więc statek naprawdę spada wokół gwiazdy — i panel to mówi. Test
+przypina obie strony: do 0,89 studni planeta, przy 0,995 gwiazda.
+
+Żeby to było możliwe, cała arytmetyka orbit — `OrbitState`, `orbit_extremes`,
+`orbit_shape`, `conic_radius`, `circular_orbit_speed` — przeniosła się do
+`GravityWell`. Jedyne dwa pytania, na które gwiazda odpowiada inaczej niż
+planeta, to „gdzie kończy się grunt" i „gdzie kończy się powietrze"; dla
+gwiazdy oba wskazują na jej powierzchnię. `has_ground()` decyduje, czy panel
+pokazuje nachylenie i podwozie, czy nazwę ciała: nachylenie 0,0° nad gwiazdą
+czytałoby się jak płaski grunt, co jest gorszą odpowiedzią niż żadna.
 
 ### Floating origin: nie jest potrzebny, i to jest zmierzone
 

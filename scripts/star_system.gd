@@ -15,17 +15,32 @@ extends RefCounted
 ## How many planets a system can have.
 const PLANET_COUNT: Vector2i = Vector2i(3, 5)
 
-## How big the star is. How *heavy* it is is not rolled -- see `_weigh_star`.
-const STAR_RADIUS: Vector2 = Vector2(6000.0, 11000.0)
-
-## Where the innermost planet sits, as a multiple of the star's radius, and
-## how much further out each next one is.
+## How big the star is, and how heavy. Both rolled, which they were not:
+## the mass used to be derived from the planets and came out so small that
+## the star pulled four hundredths of a pixel per second squared where
+## anyone flies -- a tenth of a per cent of what a ship feels. See
+## `_well_limit` for why that derivation had to go.
 ##
-## Multiplicative rather than additive, which is roughly what real systems
-## do and is also the cheapest guarantee that no two orbits cross: every gap
-## is wider than the one inside it, so the ordering cannot invert however
-## the rolls land.
-const FIRST_ORBIT: Vector2 = Vector2(2.6, 3.4)
+## The radius came down with it, from six to eleven thousand. A star that
+## wide is never a disc on a 640x360 screen, only a wall you eventually
+## run into, and it was wide in the first place to carry mass that is now
+## carried by the gravity instead. At three thousand you can see it curve.
+const STAR_RADIUS: Vector2 = Vector2(2600.0, 4800.0)
+const STAR_GRAVITY: Vector2 = Vector2(45.0, 110.0)
+
+## Where the innermost planet sits, in pixels, and how much further out
+## each next one is.
+##
+## Absolute rather than a multiple of the star's radius, now that the
+## radius no longer stands in for the mass. Tying the whole system's scale
+## to how fat the star looked was a leftover: it meant a heavy star and a
+## wide one were the same thing, and shrinking one shrank the system.
+##
+## The step is multiplicative, which is roughly what real systems do and
+## is also the cheapest guarantee that no two orbits cross: every gap is
+## wider than the one inside it, so the ordering cannot invert however the
+## rolls land.
+const FIRST_ORBIT: Vector2 = Vector2(14000.0, 22000.0)
 const ORBIT_STEP: Vector2 = Vector2(1.45, 1.85)
 
 ## The gap every planet keeps from whatever is inside it, on top of both
@@ -44,12 +59,13 @@ const ORBIT_STEP: Vector2 = Vector2(1.45, 1.85)
 
 ## A moon's orbit, as a multiple of its parent's radius.
 ##
-## The ceiling is the part that matters. A planet's well is only
-## `Planet.INFLUENCE_RATIO.x` radii wide at its narrowest roll, and a moon
-## orbiting outside its parent's gravity is a moon the player watches fall
-## away. Kept under that floor with room to spare, because the planet rolls
-## its own well and the layout never sees the roll.
-const MOON_ORBIT: Vector2 = Vector2(2.0, 3.0)
+## The ceiling is the part that matters. A planet is only guaranteed
+## `WELL_FLOOR` radii of well -- that is the whole point of the floor --
+## and a moon orbiting outside its parent's gravity is a moon the player
+## watches fall away. Kept under the floor with room for the moon's own
+## radius on top, because the moon is placed before the layout knows how
+## much well its parent ended up with.
+const MOON_ORBIT: Vector2 = Vector2(1.8, 2.4)
 const MOON_RADIUS: Vector2 = Vector2(350.0, 620.0)
 const MOON_CHANCE: float = 0.45
 
@@ -95,20 +111,23 @@ static func generate(system_seed: int) -> StarSystem:
 	system.star.seed = derive(system_seed, 0)
 	system.star.display_name = system.display_name
 	system.star.radius = rng.randf_range(STAR_RADIUS.x, STAR_RADIUS.y)
+	system.star.surface_gravity = rng.randf_range(STAR_GRAVITY.x, STAR_GRAVITY.y)
 	system.bodies.append(system.star)
 
-	var orbit: float = system.star.radius * rng.randf_range(FIRST_ORBIT.x, FIRST_ORBIT.y)
+	var orbit: float = rng.randf_range(FIRST_ORBIT.x, FIRST_ORBIT.y)
 	var inner: SystemBody = null
 	for index: int in range(rng.randi_range(PLANET_COUNT.x, PLANET_COUNT.y)):
 		inner = system._add_planet(rng, index, orbit, inner)
 		orbit = inner.orbit_radius * rng.randf_range(ORBIT_STEP.x, ORBIT_STEP.y)
 
 	system._add_stations(rng)
-	# Weighed after the planets are placed, because how heavy the star may
-	# be is a question about them, and periods after that, because they are
-	# a question about the star.
-	system._weigh_star()
 	system._set_periods()
+	# A fifth past the outermost orbit. Last, because it is the only well
+	# in the system that is a question about everything else: the star has
+	# to still be pulling wherever the player can get to, or deep space
+	# would be the one place with no gravity at all and a trajectory
+	# crossing the line would kink.
+	system.star.well_radius = maxf(system.outer_radius() * 1.2, system.star.radius * 4.0)
 	return system
 
 
@@ -120,56 +139,51 @@ static func generate(system_seed: int) -> StarSystem:
 ## nothing in particular and the conic the HUD draws is meaningless.
 const WELL_DOMINANCE: float = 2.0
 
+## The narrowest well a planet is allowed to keep, in its own radii.
+##
+## Below this a world is not somewhere you can orbit: three radii leaves
+## room to come round twice at a sensible altitude, and it is what the
+## moons are sized against. A planet that cannot hold this much where the
+## layout wanted to put it gets moved outwards until it can -- moving a
+## planet is free, and making the star lighter is not.
+const WELL_FLOOR: float = 3.0
 
-## Decides how heavy the star is: as heavy as the system can bear.
+
+## Where this planet stops out-pulling the star by WELL_DOMINANCE, in
+## pixels from its own centre. How far its gravity is allowed to reach.
 ##
-## Rolling the star's mass independently of its planets was wrong, and
-## measurably so -- the star pulled 67 px/s^2 at an orbit, harder than a
-## planet pulls at its own surface. A planet like that holds nothing:
-## "inside the planet's influence" would mean nothing, because the ship
-## falls into the star from there anyway, and the trajectory predictor,
-## which draws a conic around the nearest planet and ignores everything
-## else, would be drawing fiction.
+## This replaced deriving the **star's mass** from the planets, which is
+## the same constraint read from the wrong end and which cost the star
+## everything. The old rule took every planet's widest possible well as
+## given and asked how light the star had to be to leave all of them
+## intact; the tightest planet in the system then set the mass for the
+## whole thing. Measured: the star ended up pulling 0.07 px/s^2 where the
+## ship actually flies, four tenths of one per cent of what it feels, and
+## 0.045 px/s^2 out between the orbits where it was the only thing pulling
+## at all -- two hundred pixels of drift over a hundred seconds, which is
+## nothing.
 ##
-## So the constraint comes first and the mass follows from it. **Which**
-## constraint took two goes. The first version used the Hill sphere, and
-## the Hill sphere is the wrong instrument here: it is derived in the frame
-## that turns with the planet, where most of the star's pull is cancelled
-## by the orbital acceleration, and it comes out some seven times wider
-## than the radius at which the two pulls are actually equal. Our planets
-## do not orbit (IDEAS.md "Planety nie okrazaja gwiazdy"), so there is no
-## centrifugal term to do the cancelling and the ship feels the star in
-## full. Measured on 200 systems under the Hill rule: at the innermost
-## planet's well edge the star out-pulled the planet two to one, which is
-## the exact thing the paragraph above says must not happen.
+## Read the other way round it costs nothing at all. The star is rolled
+## like any other body and each planet keeps the well it can actually
+## hold: tight for an inner world, the full rolled width further out. The
+## same sampled systems now give 0.9 to 2.2 px/s^2 at the innermost orbit
+## and 0.6 to 1.4 between orbits, twenty times what they did, at the price
+## of inner orbits moving out by at most half as much again.
 ##
-## The criterion that holds for a body standing still is the direct one:
+##     mu_p / w^2  =  WELL_DOMINANCE * mu_star / (a - w)^2
 ##
-##     mu_p / w^2  >=  WELL_DOMINANCE * mu_star / (a - w)^2
-##
-## with `w` the widest well that planet could later roll, and the star
-## measured from the near side of the orbit, which is where it is worst.
-## Rearranged for mu_star; the tightest planet sets the limit.
-##
-## It costs the star most of its mass -- a fifth of what the Hill rule
-## allowed -- and that is the honest price. What is left pulls 0.07 to 0.53
-## px/s^2 at the innermost orbit, which over a minute's coast is a few
-## hundred pixels of drift: something the map's dashed curve shows and a
-## long transfer has to allow for, and nothing a planet has to fight.
-func _weigh_star() -> void:
-	var allowed: float = INF
-	for planet: SystemBody in planets():
-		var well: float = planet.radius * Planet.INFLUENCE_RATIO.y
-		var gap: float = planet.orbit_radius - well
-		if gap <= 0.0:
-			continue
-		allowed = minf(allowed, planet.mu() * gap * gap / (WELL_DOMINANCE * well * well))
-	if allowed == INF or allowed <= 0.0:
-		return
-	# Stated as a surface gravity because that is how mu is spelled
-	# everywhere else in the game. It is a way of writing down a mass, not a
-	# promise about standing on it.
-	star.surface_gravity = allowed / (star.radius * star.radius)
+## solved for w, with the star measured from the near side of the orbit,
+## which is where it is worst.
+func _well_limit(planet: SystemBody) -> float:
+	var ratio: float = sqrt(WELL_DOMINANCE * star.mu() / planet.mu())
+	return planet.orbit_radius / (1.0 + ratio)
+
+
+## The orbit at which `planet` would just keep WELL_FLOOR radii of well.
+## The same equation as `_well_limit`, solved for the orbit instead.
+func _orbit_holding_floor(planet: SystemBody) -> float:
+	var well: float = planet.radius * WELL_FLOOR
+	return well * (1.0 + sqrt(WELL_DOMINANCE * star.mu() / planet.mu()))
 
 
 ## Every orbit's period, from the body it goes round. Done in one pass at
@@ -260,11 +274,24 @@ func _add_planet(
 	if planet.radius >= MOON_PARENT_RADIUS and rng.randf() < MOON_CHANCE:
 		_add_moon(rng, planet)
 
-	var floor_orbit: float = 0.0
+	# The widest well this planet would like, rolled here rather than by
+	# the planet: the layout has to know it to place the next one out, and
+	# two places rolling the same quantity is two places that drift apart.
+	var ceiling: float = planet.radius * rng.randf_range(
+		Planet.INFLUENCE_RATIO.x, Planet.INFLUENCE_RATIO.y
+	)
+
+	var floor_orbit: float = _orbit_holding_floor(planet)
 	if inner != null:
-		floor_orbit = inner.orbit_radius + _reach_of(inner) + _reach_of(planet) 			+ Planet.INFLUENCE_RATIO.x * planet.radius
+		floor_orbit = maxf(
+			floor_orbit,
+			inner.orbit_radius + _reach_of(inner) + _reach_of(planet)
+				+ Planet.INFLUENCE_RATIO.x * planet.radius,
+		)
 	planet.orbit_radius = maxf(wanted, floor_orbit)
 	planet.orbit_phase = rng.randf() * TAU
+	# Only now: how far it reaches depends on where it ended up.
+	planet.well_radius = minf(ceiling, _well_limit(planet))
 	return planet
 
 
@@ -294,6 +321,12 @@ func _add_moon(rng: RandomNumberGenerator, planet: SystemBody) -> void:
 	moon.set_parent_body(planet)
 	moon.orbit_radius = planet.radius * rng.randf_range(MOON_ORBIT.x, MOON_ORBIT.y)
 	moon.orbit_phase = rng.randf() * TAU
+	# A moon is deep inside its parent, so what limits its own well is the
+	# parent and not the star. Half the way back to the parent: far enough
+	# to orbit, near enough that the two wells do not fight over the gap.
+	moon.well_radius = minf(
+		moon.radius * Planet.INFLUENCE_RATIO.y, moon.orbit_radius * 0.5
+	)
 	planet.children.append(moon)
 	bodies.append(moon)
 

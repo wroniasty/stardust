@@ -70,9 +70,9 @@ const CONIC_STEPS: int = 64
 const ORBIT_WIDTH: float = 2.5
 const TRACK_WIDTH: float = 1.0
 const STATE_WORDS: Dictionary = {
-	Planet.OrbitState.ORBIT: "ORBIT",
-	Planet.OrbitState.DECAYING: "DECAY",
-	Planet.OrbitState.ESCAPE: "ESCAPE",
+	GravityWell.OrbitState.ORBIT: "ORBIT",
+	GravityWell.OrbitState.DECAYING: "DECAY",
+	GravityWell.OrbitState.ESCAPE: "ESCAPE",
 }
 
 ## The transfer arrow, for when there is no well to be in.
@@ -105,21 +105,22 @@ func _process(_delta: float) -> void:
 		_canvas.queue_redraw()
 
 
-## The planet whose well the ship is actually in, or null out in the dark.
+## The body whose well the ship is actually in, or null out in the dark.
 ##
 ## Nearest is not the same question. The old readout showed a planet's
 ## numbers from anywhere in the system, because the nearest planet is
 ## always some planet; what matters is whether its gravity reaches here,
 ## because outside that the conic it would draw is not the path the ship
 ## is on.
-func host() -> Planet:
+##
+## Any gravity source, not only a planet. Out between the orbits the star
+## is the one thing pulling, so the orbit panel belongs to it there -- and
+## before this it simply vanished, leaving the pilot with a direction
+## arrow while actually falling round something.
+func host() -> GravityWell:
 	if _ship == null or not is_instance_valid(_ship):
 		return null
-	var planet: Planet = _ship.nearest_planet()
-	if planet == null:
-		return null
-	var gap: float = _ship.global_position.distance_to(planet.global_position)
-	return planet if gap < planet.influence_radius else null
+	return GravityWell.dominant_at(get_tree(), _ship.global_position)
 
 
 func _draw_hud() -> void:
@@ -133,11 +134,11 @@ func _draw_hud() -> void:
 		view.x - MARGIN - PANEL_WIDTH, view.y - MARGIN - PANEL_HEIGHT,
 		PANEL_WIDTH, PANEL_HEIGHT
 	)
-	var planet: Planet = host()
-	if planet == null:
+	var well: GravityWell = host()
+	if well == null:
 		_draw_transfer(font, box)
 		return
-	_draw_orbit_panel(font, box, planet)
+	_draw_orbit_panel(font, box, well)
 
 
 ## Hull, as a bar across the top.
@@ -185,9 +186,9 @@ func _draw_heat(font: Font, left: float, top: float) -> void:
 		_text(font, Vector2(frame.end.x + 4.0, frame.end.y + 1.0), "HEAT", BAD)
 
 
-func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:
+func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 	var dial: Rect2 = Rect2(box.position + Vector2(2.0, 4.0), Vector2(DIAL, DIAL))
-	var orbit: Planet.OrbitState = planet.orbit_state(
+	var orbit: GravityWell.OrbitState = planet.orbit_state(
 		_ship.global_position, _ship.linear_velocity
 	)
 	var shape: Dictionary = planet.orbit_shape(_ship.global_position, _ship.linear_velocity)
@@ -206,7 +207,6 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:
 		_ship.global_position
 	)
 	var descent: float = -relative.dot(up)
-	var slope: float = planet.slope_at(_ship.global_position)
 
 	var x: float = dial.end.x + 6.0
 	var y: float = box.position.y + ROW
@@ -219,9 +219,17 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:
 	y += ROW
 	_row(font, x, y, "V/S", "%+6.1f" % -descent, _descent_colour(descent))
 	y += ROW
-	_row(font, x, y, "SLOPE", "%5.1f d" % rad_to_deg(slope), _slope_colour(absf(slope)))
-	y += ROW
-	_row(font, x, y, "GEAR", _gear_text(), _gear_colour())
+	# The last two rows are about touching down, and there is nothing to
+	# touch down on out here. Left blank rather than filled with zeros: a
+	# slope of 0.0 degrees over a star reads as flat ground, which is a
+	# worse answer than no answer.
+	if planet.has_ground():
+		var slope: float = (planet as Planet).slope_at(_ship.global_position)
+		_row(font, x, y, "SLOPE", "%5.1f d" % rad_to_deg(slope), _slope_colour(absf(slope)))
+		y += ROW
+		_row(font, x, y, "GEAR", _gear_text(), _gear_colour())
+	else:
+		_row(font, x, y, "NAME", planet.catalogue_name(), IDLE)
 
 	_draw_warning(font, box)
 	# Above the panel and to the right, where the refusal mark is above it
@@ -245,7 +253,7 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: Planet) -> void:
 ## an apsis happens somewhere else on the planet, where the ground is a
 ## different height, so the only honest common reference is the radius the
 ## planet is named by.
-func _apsis_text(planet: Planet, value: float, landed: bool) -> String:
+func _apsis_text(planet: GravityWell, value: float, landed: bool) -> String:
 	if landed:
 		return "    --"
 	if is_inf(value):
@@ -255,7 +263,7 @@ func _apsis_text(planet: Planet, value: float, landed: bool) -> String:
 
 ## The conic, with the planet at its focus and a dot at each end of it.
 func _draw_conic(
-	dial: Rect2, planet: Planet, shape: Dictionary, orbit: Planet.OrbitState
+	dial: Rect2, planet: GravityWell, shape: Dictionary, orbit: GravityWell.OrbitState
 ) -> void:
 	var focus: Vector2 = dial.get_center()
 	var periapsis: float = float(shape["periapsis"])
@@ -290,7 +298,7 @@ func _draw_conic(
 		_canvas.draw_arc(focus, ground_ring, 0.0, TAU, 48, GROUND, 1.0)
 
 	var colour: Color = _orbit_colour(orbit)
-	var width: float = ORBIT_WIDTH if orbit == Planet.OrbitState.ORBIT else TRACK_WIDTH
+	var width: float = ORBIT_WIDTH if orbit == GravityWell.OrbitState.ORBIT else TRACK_WIDTH
 	var track: PackedVector2Array = PackedVector2Array()
 	for step: int in range(CONIC_STEPS + 1):
 		var theta: float = TAU * float(step) / float(CONIC_STEPS) - PI
@@ -347,7 +355,7 @@ func _draw_transfer(font: Font, box: Rect2) -> void:
 ## reason is the news; "WAVE OFF" was a label on news the colour already
 ## carried.
 ## What this trajectory is called, or nothing when it has no news.
-func state_text(orbit: Planet.OrbitState) -> String:
+func state_text(orbit: GravityWell.OrbitState) -> String:
 	return String(STATE_WORDS.get(orbit, ""))
 
 
@@ -388,13 +396,13 @@ func _view_rotation() -> float:
 	return 0.0 if camera == null else camera.get_screen_rotation()
 
 
-func _orbit_colour(orbit: Planet.OrbitState) -> Color:
+func _orbit_colour(orbit: GravityWell.OrbitState) -> Color:
 	match orbit:
-		Planet.OrbitState.SUBORBITAL:
+		GravityWell.OrbitState.SUBORBITAL:
 			return BAD
-		Planet.OrbitState.DECAYING:
+		GravityWell.OrbitState.DECAYING:
 			return CAUTION
-		Planet.OrbitState.ESCAPE:
+		GravityWell.OrbitState.ESCAPE:
 			return IDLE
 		_:
 			return GOOD

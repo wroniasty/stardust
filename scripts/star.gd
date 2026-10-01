@@ -13,8 +13,11 @@ extends GravityWell
 ## nothing ever reaches.
 
 ## Palette, coolest first. A star's colour is the one thing about it the
-## pilot can read from across the system, so it is rolled from the seed and
-## carries the only characterisation the body has.
+## pilot can read from across the system, so it is not rolled separately:
+## it is read off the mass. A blue star really is the heavy one, and the
+## colour on the scanner marker is then a reading rather than a decoration
+## -- how hard this system is going to pull on a transfer, visible from
+## anywhere in it.
 const COLOURS: Array[Color] = [
 	Color(1.00, 0.44, 0.28),  ## Red dwarf.
 	Color(1.00, 0.66, 0.33),  ## Orange.
@@ -33,30 +36,16 @@ const CORONA: Array[Vector2] = [
 	Vector2(1.50, 0.05),
 ]
 
-## The descriptor this star was built from, as on Planet and for the same
-## reason: so the streaming manager can ask a live node which body it is.
-var body: SystemBody = null
-
 var colour: Color = COLOURS[2]
 
 
 ## Builds this star as the body the system says it is.
-##
-## `reach` is how far its pull is allowed to go -- the system's own outer
-## radius, handed in rather than read off a parent, because the star is the
-## one body with nothing above it to ask.
-func adopt(descriptor: SystemBody, reach: float) -> void:
+func adopt(descriptor: SystemBody) -> void:
 	body = descriptor
 	surface_radius = descriptor.radius
 	surface_gravity = descriptor.surface_gravity
-	# A fifth past the outermost orbit. The cutoff has to be beyond
-	# everything the player can reach, or deep space would be the one place
-	# in the system with no gravity at all and a trajectory crossing the
-	# line would kink.
-	influence_radius = maxf(reach * 1.2, descriptor.radius * 4.0)
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = descriptor.seed
-	colour = COLOURS[rng.randi() % COLOURS.size()]
+	influence_radius = descriptor.well_radius
+	colour = colour_for(descriptor.surface_gravity)
 	# The star does not move: it is the origin everything else is measured
 	# from (IDEAS.md, "Planety nie okrazaja gwiazdy").
 	global_position = Vector2.ZERO
@@ -92,6 +81,15 @@ static func of(tree: SceneTree) -> Star:
 		if star != null:
 			return star
 	return null
+
+
+## Which of those a star of this surface gravity is.
+static func colour_for(gravity: float) -> Color:
+	var across: float = inverse_lerp(
+		StarSystem.STAR_GRAVITY.x, StarSystem.STAR_GRAVITY.y, gravity
+	)
+	var step: int = floori(clampf(across, 0.0, 0.999) * float(COLOURS.size()))
+	return COLOURS[step]
 
 
 func marker_color() -> Color:

@@ -35,6 +35,17 @@ var display_name: String = "body"
 var radius: float = 1000.0
 var surface_gravity: float = 0.0
 
+## How far this body's pull reaches, in pixels. Zero means "whatever the
+## body rolls for itself", which is what a planet built from a bare seed
+## and no system does.
+##
+## Here rather than rolled by the planet because it is not a free choice:
+## a well only reaches as far as the body still out-pulls the star, and
+## how far that is depends on where the layout put it. The layout is the
+## only thing that knows, so the layout decides -- same reason radius and
+## gravity live here (IDEAS.md "Gwiazda: ciagnie wszedzie").
+var well_radius: float = 0.0
+
 ## What it goes round, or null for the star.
 ##
 ## Held weakly, and that is the whole reason it is behind a method. Bodies

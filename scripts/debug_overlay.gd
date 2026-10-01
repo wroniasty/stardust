@@ -103,13 +103,13 @@ func _planet_lines(planet: Planet) -> PackedStringArray:
 	lines.append("PLANET   seed %d" % planet.planet_seed)
 	lines.append("radius   %7.0f   gravity %6.1f" % [planet.surface_radius, planet.surface_gravity])
 	lines.append("influence%7.0f   mu   %7.1f M" % [
-		planet.influence_radius, planet.gravitational_parameter() / 1000000.0,
+		planet.influence_radius, planet.mu() / 1000000.0,
 	])
 	lines.append("crust    %7.0f .. %.0f" % [planet.terrain.inner_radius, planet.terrain.outer_radius])
 	lines.append("air h    %7.0f   density %6.2f" % [planet.atmosphere_height, planet.atmosphere_density])
 	lines.append("air top  %7.0f   v_esc   %6.1f" % [
 		planet.atmosphere_radius(),
-		sqrt(2.0 * planet.gravitational_parameter() / maxf(planet.surface_radius, 1.0)),
+		sqrt(2.0 * planet.mu() / maxf(planet.surface_radius, 1.0)),
 	])
 	lines.append("v_circ   %7.1f at surface" % planet.circular_orbit_speed(planet.surface_radius))
 	var day: String = "never"

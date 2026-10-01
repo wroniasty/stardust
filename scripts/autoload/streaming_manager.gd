@@ -152,8 +152,16 @@ func clear() -> void:
 	_building.clear()
 	for body: SystemBody in _nodes.keys():
 		var node: Node2D = _nodes[body]
-		if is_instance_valid(node):
-			node.queue_free()
+		if not is_instance_valid(node):
+			continue
+		# Out of the tree now, deleted whenever. `queue_free` alone leaves
+		# the node in its groups until the end of the frame, so a caller
+		# that unbinds one system and asks a question before the next
+		# frame -- a test, or a jump between systems -- gets answers from
+		# a world that has already been thrown away.
+		if node.get_parent() != null:
+			node.get_parent().remove_child(node)
+		node.queue_free()
 	_nodes.clear()
 	_levels.clear()
 	_queue.clear()
@@ -440,7 +448,7 @@ func _build(body: SystemBody) -> Node2D:
 	if body.kind == SystemBody.Kind.STAR:
 		var star: Star = (load(STAR_SCENE) as PackedScene).instantiate() as Star
 		star.name = body.display_name.replace(" ", "_") + "_Star"
-		star.adopt(body, system.outer_radius())
+		star.adopt(body)
 		_container.add_child(star)
 		return star
 	if not builds_as_node(body):

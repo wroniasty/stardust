@@ -1955,7 +1955,7 @@ func _apply_auto_orbit(state: PhysicsDirectBodyState2D) -> void:
 	var tangent: Vector2 = Vector2(-arm.y, arm.x).normalized()
 	if tangent.dot(state.linear_velocity) < 0.0:
 		tangent = -tangent
-	var wanted: Vector2 = tangent * sqrt(planet.gravitational_parameter() / radius)
+	var wanted: Vector2 = tangent * sqrt(planet.mu() / radius)
 
 	var change: Vector2 = wanted - state.linear_velocity
 	if change.length() <= AUTO_ORBIT_EPS:
@@ -1989,7 +1989,7 @@ func _apply_auto_orbit_probe() -> void:
 	var tangent: Vector2 = Vector2(-arm.y, arm.x).normalized()
 	if tangent.dot(linear_velocity) < 0.0:
 		tangent = -tangent
-	var change: Vector2 = tangent * sqrt(planet.gravitational_parameter() / radius) - linear_velocity
+	var change: Vector2 = tangent * sqrt(planet.mu() / radius) - linear_velocity
 	if change.length() > AUTO_ORBIT_EPS:
 		active_commands[ShipControl.Command.FORWARD] = 1.0
 

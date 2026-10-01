@@ -14,6 +14,20 @@ extends Node2D
 ## ground -- the trajectory predictor's impact test, the configurator --
 ## still asks for a Planet and gets only planets.
 
+## What a coasting trajectory is doing with respect to this body.
+##
+## Derived from the trajectory, never switched on. An earlier version made
+## "in orbit" a mode the ship entered, which meant a second implementation of
+## motion that had to agree with the first and twice did not; and because it
+## only accepted near-circular orbits, a perfectly good ellipse was never
+## called an orbit at all (see IDEAS.md section 8).
+enum OrbitState {
+	ESCAPE,  ## Leaves the well, or is already outside it.
+	ORBIT,  ## Closed, and clears the air the whole way round.
+	DECAYING,  ## Closed, but dips into the atmosphere and will not last.
+	SUBORBITAL,  ## Comes down: the low point is inside the rock.
+}
+
 ## Sources register here so that nothing has to know a scene path.
 const GROUP: StringName = &"gravity_sources"
 
@@ -25,6 +39,17 @@ var surface_gravity: float = 40.0
 
 ## Beyond this radius the body pulls nothing.
 var influence_radius: float = 3000.0
+
+## The descriptor this body was built from, when it came out of a system
+## rather than out of a bare seed. Kept so that whatever has a node can
+## ask which body it is without a second table to keep in step.
+var body: SystemBody = null
+
+
+## What to call this in a readout. The catalogue name when there is one,
+## and the node's own name when the body was built from a bare seed.
+func catalogue_name() -> String:
+	return name if body == null else body.display_name
 
 
 func _enter_tree() -> void:
@@ -79,6 +104,65 @@ static func pull_at(tree: SceneTree, point: Vector2) -> Vector2:
 	return total
 
 
+## Whether this body has a surface worth talking about: ground to land
+## on, air to brake in, a slope under the ship. A planet does, a star does
+## not, and a readout asks rather than checking the class.
+func has_ground() -> bool:
+	return false
+
+
+## Height of `point` above this body, in pixels. Above the nominal surface,
+## which for a body with terrain is not the same as above the ground --
+## Planet overrides it with the one the landing check uses.
+func height_above_terrain(point: Vector2) -> float:
+	return global_position.distance_to(point) - surface_radius
+
+
+## How fast the surface is moving under `point`. Zero unless the body spins
+## and has a surface to speak of.
+func surface_velocity_at(_point: Vector2) -> Vector2:
+	return Vector2.ZERO
+
+
+## The well that pulls hardest at `point`, if `point` is inside its reach.
+##
+## Not the nearest body: the nearest is always *some* body, and a conic
+## drawn around one that is not pulling here is a picture of a path the
+## ship is not on. Hardest-pulling is the honest answer and it needs no
+## special case for the star -- inside a planet's well the planet wins by
+## WELL_DOMINANCE because the layout made sure of it, and out between the
+## orbits the star is the only thing left.
+static func dominant_at(tree: SceneTree, point: Vector2) -> GravityWell:
+	var best: GravityWell = null
+	var strongest: float = 0.0
+	for source: Node in tree.get_nodes_in_group(GROUP):
+		var well: GravityWell = source as GravityWell
+		if well == null:
+			continue
+		var pull: float = well.gravity_at(point).length()
+		if pull > strongest:
+			strongest = pull
+			best = well
+	return best
+
+
+## Radius above which nothing solid can exist. The surface, unless the body
+## has terrain standing above it -- which only a planet does.
+func terrain_ceiling() -> float:
+	return surface_radius
+
+
+## Radius at the top of the air. The surface, unless the body has air --
+## which, again, only a planet does.
+##
+## Both of these are here so the orbit maths above can be written once.
+## "Where does the ground stop" and "where does the air stop" are the only
+## two questions in it that a star answers differently from a planet, and
+## for a star they are the same place: its own surface.
+func atmosphere_radius() -> float:
+	return surface_radius
+
+
 ## What colour this body reads as from a distance: on a scanner marker, on
 ## the map, anywhere it is too far away to be itself. Answered by the body
 ## because the body is what knows -- a planet has a surface, a star has a
@@ -86,6 +170,110 @@ static func pull_at(tree: SceneTree, point: Vector2) -> Vector2:
 ## second table to keep in step with the first.
 func marker_color() -> Color:
 	return Color(0.7, 0.7, 0.72)
+
+
+## Speed of a circular orbit at `radius`, in pixels per second.
+##
+## For an inverse square field measured at the surface this is
+## sqrt(g * R^2 / r). Orbit lock, the tests and any autopilot must agree on it,
+## so it lives here rather than being rederived at each call site.
+func circular_orbit_speed(radius: float) -> float:
+	if radius <= 0.001:
+		return 0.0
+	return sqrt(surface_gravity * surface_radius * surface_radius / radius)
+
+
+## Periapsis and apoapsis radii of the coasting orbit through `point` at
+## `velocity`, as (periapsis, apoapsis). Apoapsis is INF when the ship leaves.
+##
+## Exact only where the field is: below the surface gravity is capped, and over
+## the outer tenth of the well it is faded out so a ship does not get a kick
+## crossing the boundary (see gravity_at). An apoapsis past the influence
+## radius therefore never happens -- the ship coasts out of the well instead --
+## so it is reported as an escape rather than as a number that would be wrong.
+func orbit_extremes(point: Vector2, velocity: Vector2) -> Vector2:
+	var arm: Vector2 = point - global_position
+	var radius: float = arm.length()
+	var mu: float = mu()
+	if radius < 0.001 or mu <= 0.0:
+		return Vector2(0.0, INF)
+
+	var energy: float = velocity.length_squared() * 0.5 - mu / radius
+	# Angular momentum: in 2D the cross product is the scalar h.
+	var momentum: float = arm.cross(velocity)
+	var eccentricity: float = sqrt(maxf(
+		0.0, 1.0 + 2.0 * energy * momentum * momentum / (mu * mu)
+	))
+
+	if energy >= 0.0:
+		# Unbound: there is still a periapsis, from the conic's semi-latus
+		# rectum, but no far side to come back to.
+		var latus: float = momentum * momentum / mu
+		return Vector2(latus / maxf(1.0 + eccentricity, 0.001), INF)
+
+	var semi_major: float = -mu / (2.0 * energy)
+	var apoapsis: float = semi_major * (1.0 + eccentricity)
+	if apoapsis >= influence_radius:
+		return Vector2(semi_major * (1.0 - eccentricity), INF)
+	return Vector2(semi_major * (1.0 - eccentricity), apoapsis)
+
+
+## The coasting conic through `point`, as something that can be drawn.
+##
+## `orbit_extremes()` answers the two numbers a readout needs. A picture
+## needs the shape as well, and that is the **eccentricity vector**: it
+## points at periapsis and its length is the eccentricity. Returned as one
+## vector rather than as an angle and a magnitude, because those would be
+## two values that can disagree.
+func orbit_shape(point: Vector2, velocity: Vector2) -> Dictionary:
+	var extremes: Vector2 = orbit_extremes(point, velocity)
+	var shape: Dictionary = {
+		"periapsis": extremes.x, "apoapsis": extremes.y, "eccentricity": Vector2.ZERO,
+	}
+	var arm: Vector2 = point - global_position
+	var radius: float = arm.length()
+	var mu: float = mu()
+	if radius < 0.001 or mu <= 0.0:
+		return shape
+	shape["eccentricity"] = (
+		arm * (velocity.length_squared() - mu / radius) - velocity * arm.dot(velocity)
+	) / mu
+	return shape
+
+
+## Radius of a conic with this periapsis and eccentricity, `theta` radians
+## round from periapsis.
+##
+## One formula for both kinds: an ellipse closes because the divisor never
+## reaches zero, and a hyperbola runs off to infinity because it does.
+static func conic_radius(periapsis: float, eccentricity: float, theta: float) -> float:
+	var divisor: float = 1.0 + eccentricity * cos(theta)
+	return INF if divisor <= 0.0001 else periapsis * (1.0 + eccentricity) / divisor
+
+
+## Classifies the coasting trajectory through `point` at `velocity`.
+##
+## This is what "are we in orbit" means: both ends of the conic inside the
+## well, and the near end clear of the air. Every other answer is a different
+## thing the pilot needs to know about rather than a failure to be in orbit.
+func orbit_state(point: Vector2, velocity: Vector2) -> OrbitState:
+	var arm: Vector2 = point - global_position
+	# Beyond the well the planet has no say: gravity there is zero, so the
+	# conic would be a fiction drawn around a body that is not pulling.
+	if arm.length() >= influence_radius:
+		return OrbitState.ESCAPE
+
+	var extremes: Vector2 = orbit_extremes(point, velocity)
+	var inbound: bool = velocity.dot(arm) < 0.0
+	if extremes.x <= terrain_ceiling() and (inbound or not is_inf(extremes.y)):
+		# An open trajectory heading outwards has a periapsis below the rock in
+		# its past, not its future, so only an inbound one is coming down.
+		return OrbitState.SUBORBITAL
+	if is_inf(extremes.y):
+		return OrbitState.ESCAPE
+	if extremes.x <= atmosphere_radius():
+		return OrbitState.DECAYING
+	return OrbitState.ORBIT
 
 
 ## Smoothly takes gravity to zero over the outer tenth of the well.

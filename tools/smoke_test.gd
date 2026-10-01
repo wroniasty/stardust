@@ -537,7 +537,7 @@ func _begin_phase() -> void:
 			# whose low point still clears the air. Any slower and the test
 			# would be about rescuing a suborbital arc, which is a different
 			# manoeuvre the assist is not claiming to do.
-			var circular: float = sqrt(_planet.gravitational_parameter() / height)
+			var circular: float = sqrt(_planet.mu() / height)
 			_ship.linear_velocity = Vector2.RIGHT * circular * 0.9
 			_fit_computer(_ship, true)
 			_ship.auto_orbit_command = true
@@ -977,6 +977,7 @@ func _evaluate_phase() -> void:
 			_check_seeker_targets()
 			_check_system_model(_planet)
 			_check_star()
+			_check_orbit_host()
 			_check_streaming()
 			_check_system_map()
 			_check_flight_hud(_planet)
@@ -3515,6 +3516,8 @@ func _check_system_model(probe: Planet) -> void:
 	var seed_clashes: int = 0
 	var dockless: int = 0
 	var crushed: int = 0
+	var starved: int = 0
+	var inner_pull: float = INF
 	var moons_outside_hill: int = 0
 	var pull_lo: float = INF
 	var pull_hi: float = 0.0
@@ -3551,23 +3554,28 @@ func _check_system_model(probe: Planet) -> void:
 
 			# The star has to leave the planet something to hold with, and
 			# the test for that is the **direct** one: at the edge of the
-			# widest well the planet could roll, measuring the star from
-			# the near side, the planet still has to out-pull it.
+			# well this planet actually got, measuring the star from the
+			# near side, the planet still has to out-pull it.
 			#
-			# This assertion used to ask about the Hill sphere and passed
-			# while the thing it was protecting was false. The Hill radius
-			# is derived in the frame that turns with the planet, where
-			# the star's pull is mostly cancelled by the orbital
-			# acceleration; ours do not turn, so nothing cancels, and the
-			# sphere came out seven times wider than the radius where the
-			# pulls are actually equal. Measured under the old rule: the
-			# star beat the innermost planet two to one inside its own
-			# declared well.
-			var well: float = planet.radius * Planet.INFLUENCE_RATIO.y
+			# This assertion has been wrong twice, in the same place. It
+			# first asked about the Hill sphere, which is derived in the
+			# frame that turns with the planet -- ours do not turn, so
+			# nothing cancels the star and the sphere comes out seven
+			# times too wide; under that rule the star beat the innermost
+			# planet two to one inside its own declared well. It then
+			# asked about the widest well a planet *could* roll, which was
+			# right while the star was weighed to afford that, and became
+			# wrong the moment wells started being derived per planet.
+			# Both times the fix was to ask about the thing that exists.
+			var well: float = planet.well_radius
 			var gap: float = planet.orbit_radius - well
 			var dominance: float = (planet.mu() / (well * well)) / (system.star.mu() / (gap * gap))
+			# Only the clipped ones sit exactly on the line; a planet whose
+			# rolled ceiling was narrower than the limit keeps far more.
 			if dominance < StarSystem.WELL_DOMINANCE - 0.001:
 				crushed += 1
+			if well < planet.radius * StarSystem.WELL_FLOOR - 0.001:
+				starved += 1
 			for moon: SystemBody in planet.children:
 				var moon_gap: float = planet.orbit_radius - moon.orbit_radius
 				var moon_hold: float = planet.mu() / (moon.orbit_radius * moon.orbit_radius)
@@ -3578,6 +3586,8 @@ func _check_system_model(probe: Planet) -> void:
 			var pull: float = system.star.mu() / (planet.orbit_radius * planet.orbit_radius)
 			pull_lo = minf(pull_lo, pull)
 			pull_hi = maxf(pull_hi, pull)
+			if planet == system.planets()[0]:
+				inner_pull = minf(inner_pull, pull)
 
 			# One star, one mu, so T^2 / r^3 is the same for every planet of it.
 			var kepler: float = planet.orbit_period * planet.orbit_period
@@ -3611,20 +3621,45 @@ func _check_system_model(probe: Planet) -> void:
 			% StarSystem.WELL_DOMINANCE,
 	)
 	_expect(moons_outside_hill == 0, "and holds its moons against the star as well")
+	# The floor is what the layout pays for by moving planets outwards. A
+	# planet below it is one the star has squeezed out of being orbitable
+	# at all, and the layout is supposed to have moved it rather than let
+	# that happen.
+	_expect(
+		starved == 0,
+		"and every planet keeps at least %.1f radii of well to be orbited in"
+			% StarSystem.WELL_FLOOR,
+	)
 	_expect(
 		pull_hi < Planet.GRAVITY_RANGE.x,
 		"the star never out-pulls a planet's own surface at that planet's orbit (%.2f to %.2f px/s2)" % [
 			pull_lo, pull_hi,
 		],
 	)
+	# And a floor, which is the half nobody thought to write down. The
+	# first star was correct, tested, and physically irrelevant: it pulled
+	# 0.07 px/s^2 where the ship actually flies -- four tenths of one per
+	# cent of what the ship felt -- and two hundred pixels of drift over a
+	# hundred seconds out between the orbits where it was the only thing
+	# pulling at all. Every assertion passed. A pilot said it did not pull.
+	#
+	# Half a pixel per second squared is the line, because that is where a
+	# hundred-second coast picks up fifty px/s and two and a half thousand
+	# pixels of drift -- visible on the map's dashed curve, and worth
+	# correcting for on a transfer.
+	_expect(
+		inner_pull > 0.5,
+		"and pulls hard enough at the innermost orbit to be worth flying round (%.2f px/s2 at worst)"
+			% inner_pull,
+	)
 	# Bounds on the clock, not on taste. Short enough that a system is not
 	# frozen -- come back after an hour of play and the outer worlds have
 	# visibly moved -- and long enough that two visits a few minutes apart
 	# do not find a planet somewhere else entirely. Measured range over the
-	# sample: 1363 s to 78086 s.
+	# sample: 557 s to 27859 s.
 	_expect(
-		shortest_year > 600.0 and longest_year < 108000.0,
-		"a year runs from ten minutes to thirty hours (%.0f s to %.0f s)" % [
+		shortest_year > 300.0 and longest_year < 54000.0,
+		"a year runs from five minutes to fifteen hours (%.0f s to %.0f s)" % [
 			shortest_year, longest_year,
 		],
 	)
@@ -3876,10 +3911,17 @@ func _check_streaming() -> void:
 ## world. In the game a frame goes by and the manager collects it; a test
 ## with no frames has to turn the handle itself.
 func _stream_in(manager: Node, body: SystemBody) -> void:
-	manager._drain_queue()
 	for tries: int in range(2000):
 		if manager.node_for(body) != null:
 			return
+		# Drained every turn, not once at the top. The manager starts one
+		# build per frame, so a queue with somebody else at the head means
+		# the body being waited for is not even started yet -- and a
+		# helper that drains once would then spin two thousand times
+		# collecting nothing and return as if the world had refused to
+		# build. Which is exactly what it did, the moment a wider system
+		# put a second planet within reach of the test's parking spot.
+		manager._drain_queue()
 		manager._collect_finished()
 		OS.delay_msec(1)
 
@@ -3911,7 +3953,7 @@ func _check_star() -> void:
 	var system: StarSystem = StarSystem.generate(20260922)
 	var star: Star = (load("res://scenes/star.tscn") as PackedScene).instantiate() as Star
 	root.add_child(star)
-	star.adopt(system.star, system.outer_radius())
+	star.adopt(system.star)
 
 	# It is a gravity source and it is not a planet. Everything that only
 	# wants the pull sees it; everything that wants ground does not, and
@@ -4005,6 +4047,71 @@ func _check_star() -> void:
 		"no planet orbits inside the star's burn radius (closest comes to x%.2f of it)" % closest,
 	)
 
+	star.free()
+
+
+## Which body the orbit readout belongs to, and the answer out in the dark.
+func _check_orbit_host() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var star: Star = (load("res://scenes/star.tscn") as PackedScene).instantiate() as Star
+	root.add_child(star)
+	star.adopt(system.star)
+
+	var world: SystemBody = system.planets()[0]
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	planet.body = world
+	root.add_child(planet)
+
+	# Low over the planet, the planet is what you are flying round.
+	var low: Vector2 = planet.global_position + Vector2(planet.surface_radius * 1.4, 0.0)
+	_expect(
+		GravityWell.dominant_at(self, low) == planet,
+		"close in, the planet is what the readout is about",
+	)
+	# Out to where the well starts letting go, it still is -- and not one
+	# step further, which is the honest answer rather than the tidy one.
+	# WELL_DOMINANCE is set on the raw inverse square, but the field is
+	# faded to nothing over the outer tenth so that crossing the boundary
+	# is not a kick. Inside that last tenth the planet really has stopped
+	# holding on, so the star really is what the ship is falling round,
+	# and the readout says so. The handover lands in the fade, where the
+	# planet is already giving the ship up.
+	var out: Vector2 = (planet.global_position - star.global_position).normalized()
+	var holding: Vector2 = planet.global_position + out * planet.influence_radius * 0.89
+	_expect(
+		GravityWell.dominant_at(self, holding) == planet,
+		"and still is right out to where the well starts fading (0.89 of it)",
+	)
+	var fading: Vector2 = planet.global_position + out * planet.influence_radius * 0.995
+	_expect(
+		GravityWell.dominant_at(self, fading) == star,
+		"while in the last of the fade the star has it, because by then the planet has let go",
+	)
+	# Out between the orbits there is nothing but the star, and before this
+	# the panel simply went away and left an arrow.
+	var between: Vector2 = Vector2(
+		(world.orbit_radius + system.planets()[1].orbit_radius) * 0.5, 0.0
+	)
+	_expect(
+		GravityWell.dominant_at(self, between) == star,
+		"out between the orbits it is the star, which is the only thing pulling",
+	)
+	_expect(
+		star.orbit_state(between, Vector2(0.0, star.circular_orbit_speed(between.length())))
+			== GravityWell.OrbitState.ORBIT,
+		"and a circular orbit of the star reads as an orbit, like any other",
+	)
+	_expect(
+		not star.has_ground() and planet.has_ground(),
+		"a star has nothing to land on and says so, so the readout drops the landing rows",
+	)
+	_expect(
+		is_equal_approx(star.atmosphere_radius(), star.surface_radius)
+		and is_equal_approx(star.terrain_ceiling(), star.surface_radius),
+		"and its ground and its air are both just its surface",
+	)
+
+	planet.free()
 	star.free()
 
 
@@ -4194,7 +4301,7 @@ func _check_flight_hud(planet: Planet) -> void:
 
 	# The conic the HUD draws has to be the conic the solver measured, or
 	# the picture and the numbers beside it are two different orbits.
-	var mu: float = planet.gravitational_parameter()
+	var mu: float = planet.mu()
 	var radius: float = planet.surface_radius * 2.4
 	var at: Vector2 = planet.global_position + Vector2(radius, 0.0)
 	# Eccentric enough for the shape to be a shape, slow enough that the
@@ -4426,9 +4533,15 @@ func _check_adoption() -> void:
 			adopted.global_position.length(), body.orbit_radius,
 		],
 	)
+	# The well is handed over like the size and the weight, and for a
+	# stronger reason: a planet cannot work out its own, because how far
+	# its pull reaches depends on how heavy the star is and how close the
+	# layout put it, and the planet knows neither.
 	_expect(
-		adopted.influence_radius > adopted.surface_radius * Planet.INFLUENCE_RATIO.x - 0.001,
-		"with a well scaled to the size it was given, not to the one it rolled",
+		is_equal_approx(adopted.influence_radius, body.well_radius),
+		"with the well the system worked out for it (%.0f px, %.1f radii)" % [
+			adopted.influence_radius, adopted.influence_radius / adopted.surface_radius,
+		],
 	)
 
 	# The other half, and the reason both rolls happen even when both are
@@ -4454,9 +4567,23 @@ func _check_adoption() -> void:
 	free_rolled.free()
 
 
+## The lowest-numbered system that has a moon in it.
+func _system_with_a_moon() -> StarSystem:
+	for seed_index: int in range(100):
+		var system: StarSystem = StarSystem.generate(seed_index)
+		if not system.of_kind(SystemBody.Kind.MOON).is_empty():
+			return system
+	return StarSystem.generate(0)
+
+
 ## Orbits read off a clock, with nothing integrating anything.
 func _check_orbit_evaluation() -> void:
-	var system: StarSystem = StarSystem.generate(77)
+	# The first seed with a moon on it, rather than one written down here.
+	# A hard-coded seed is a hard-coded roll, and every time the generator
+	# gains a roll -- the star's own gravity, this time -- the stream
+	# shifts underneath it and the test quietly stops checking the thing
+	# it was named after.
+	var system: StarSystem = _system_with_a_moon()
 	var planet: SystemBody = system.planets()[0]
 
 	_expect(
