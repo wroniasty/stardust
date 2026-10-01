@@ -64,6 +64,11 @@ const TRACK_SECONDS: Vector2 = Vector2(20.0, 4000.0)
 const LIVE: Color = Color(0.92, 0.94, 0.97)
 const MODELLED: Color = Color(0.52, 0.56, 0.62)
 
+## The air, in the colour air is. Not the body's own colour: the two
+## rings round a planet say different things, and telling them apart at a
+## glance is the only reason to draw both.
+const AIR: Color = Color(0.45, 0.70, 1.00)
+
 ## Marker sizes, by kind. A star is a disc, a planet a ring, a moon a small
 ## ring, a station a square: shapes rather than colours, because at eight
 ## pixels a colour is three pixels of it.
@@ -371,6 +376,23 @@ func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
 	if body == _picked:
 		colour = PICK
 
+	# How far this body reaches, drawn before the body so the body sits on
+	# top of its own rings. Both are things a pilot plans against rather
+	# than looks at: the well is where a transfer stops being a straight
+	# line and starts being an arrival, and the air is where aerobraking
+	# begins and where an orbit stops lasting.
+	#
+	# Each appears only once it is bigger than the marker standing in for
+	# the body, which at system scale is never -- a well is a few thousand
+	# pixels against a system of hundreds of thousands. Zoom to a planet
+	# and they are the two circles the approach is about.
+	var well: float = body.well_radius * scale
+	if well > PLANET_SIZE + 2.0:
+		_dotted_ring(at, well, Color(colour, 0.35))
+	var air: float = (body.radius + maxf(body.atmosphere_height, 0.0)) * scale
+	if body.atmosphere_height > 0.0 and air > PLANET_SIZE + 1.5:
+		_canvas.draw_arc(at, air, 0.0, TAU, 48, Color(AIR, colour.a), 1.0)
+
 	# The body's real size, once the map is close enough for it to be
 	# bigger than the marker standing in for it. At system scale a planet
 	# is a tenth of a pixel and the marker is all there is; zoomed to a
@@ -393,6 +415,19 @@ func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
 				false,
 				1.0,
 			)
+
+
+## A ring of short strokes. The gravity well is a boundary rather than a
+## surface, and a solid circle beside the solid circle of the ground
+## reads as a second ground.
+func _dotted_ring(at: Vector2, radius: float, colour: Color) -> void:
+	var step: float = DASH / maxf(radius, 1.0)
+	var gap: float = DASH_GAP / maxf(radius, 1.0)
+	var angle: float = 0.0
+	while angle < TAU:
+		var to: float = minf(angle + step, TAU)
+		_canvas.draw_arc(at, radius, angle, to, 3, colour, 1.0)
+		angle = to + gap
 
 
 ## Where the ship is going if it does nothing, dashed.

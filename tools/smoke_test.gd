@@ -979,6 +979,7 @@ func _evaluate_phase() -> void:
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
+			_check_reach_on_the_map()
 			_check_daylight()
 			_check_bindings()
 			_check_streaming()
@@ -4025,8 +4026,8 @@ func _check_star() -> void:
 		"and its reach covers the outermost orbit, so deep space is not a vacuum of force",
 	)
 	_expect(
-		GravityWell.pull_at(self, out).length() >= pull,
-		"a ship sums it with the rest rather than choosing between them",
+		is_equal_approx(GravityWell.pull_at(self, out).length(), pull),
+		"and out where nothing else reaches, the star is the whole of it",
 	)
 
 	_expect(
@@ -4281,6 +4282,56 @@ func _check_bindings() -> void:
 	)
 
 
+## What the map draws round a body is what the body is.
+##
+## The map is drawn from the model, for worlds that may never be built,
+## so the model has to carry the air -- and the moment two places hold the
+## same number, one of them starts lying. This checks they do not.
+func _check_reach_on_the_map() -> void:
+	var airless: int = 0
+	var breathing: int = 0
+	var wrong_air: int = 0
+	var wrong_well: int = 0
+	for seed_index: int in range(40):
+		var system: StarSystem = StarSystem.generate(seed_index)
+		for body: SystemBody in system.bodies:
+			if body.kind != SystemBody.Kind.PLANET and body.kind != SystemBody.Kind.MOON:
+				continue
+			if body.atmosphere_height > 0.0:
+				breathing += 1
+			else:
+				airless += 1
+			if body.well_radius <= body.radius:
+				wrong_well += 1
+	_expect(
+		wrong_well == 0 and breathing > 0 and airless > 0,
+		"every world in the model carries its own reach (%d with air, %d without)" % [
+			breathing, airless,
+		],
+	)
+
+	# And the built planet agrees with it, because the map would otherwise
+	# be drawing a ring the pilot flies through and finds nothing at.
+	var sample: StarSystem = StarSystem.generate(20260922)
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	root.add_child(planet)
+	for body: SystemBody in sample.planets():
+		planet.adopt(body)
+		if absf(planet.atmosphere_radius() - planet.surface_radius - body.atmosphere_height) > 0.01:
+			wrong_air += 1
+		if absf(planet.influence_radius - body.well_radius) > 0.01:
+			wrong_well += 1
+	_expect(
+		wrong_air == 0,
+		"the air the map draws is the air the planet turns out to have",
+	)
+	_expect(
+		wrong_well == 0,
+		"and so is the well",
+	)
+	planet.free()
+
+
 ## Which body the orbit readout belongs to, and the answer out in the dark.
 func _check_orbit_host() -> void:
 	var system: StarSystem = StarSystem.generate(20260922)
@@ -4293,53 +4344,91 @@ func _check_orbit_host() -> void:
 	planet.body = world
 	root.add_child(planet)
 
-	# Low over the planet, the planet is what you are flying round.
-	var low: Vector2 = planet.global_position + Vector2(planet.surface_radius * 1.4, 0.0)
-	_expect(
-		GravityWell.dominant_at(self, low) == planet,
-		"close in, the planet is what the readout is about",
-	)
-	# Out to where the well starts letting go, it still is -- and not one
-	# step further, which is the honest answer rather than the tidy one.
-	# WELL_DOMINANCE is set on the raw inverse square, but the field is
-	# faded to nothing over the outer tenth so that crossing the boundary
-	# is not a kick. Inside that last tenth the planet really has stopped
-	# holding on, so the star really is what the ship is falling round,
-	# and the readout says so. The handover lands in the fade, where the
-	# planet is already giving the ship up.
+	# Anywhere inside its well, the planet is what owns the ship -- right
+	# out to the edge, not just to where the fade begins. That is the
+	# whole of the patching rule: whose well you are in, not who pulls
+	# hardest at this exact pixel.
 	var out: Vector2 = (planet.global_position - star.global_position).normalized()
-	var holding: Vector2 = planet.global_position + out * planet.influence_radius * 0.89
+	for share: float in [0.2, 0.89, 0.995]:
+		var at: Vector2 = planet.global_position + out * planet.influence_radius * share
+		_expect(
+			GravityWell.local_at(self, at) == planet,
+			"at %.0f%% of the well the planet is still the one that owns the ship" % (
+				share * 100.0
+			),
+		)
+	var beyond: Vector2 = planet.global_position + out * planet.influence_radius * 1.02
 	_expect(
-		GravityWell.dominant_at(self, holding) == planet,
-		"and still is right out to where the well starts fading (0.89 of it)",
+		GravityWell.local_at(self, beyond) == star,
+		"and a step past the edge it is the star",
 	)
-	var fading: Vector2 = planet.global_position + out * planet.influence_radius * 0.995
-	_expect(
-		GravityWell.dominant_at(self, fading) == star,
-		"while in the last of the fade the star has it, because by then the planet has let go",
-	)
-	# Out between the orbits there is nothing but the star, and before this
-	# the panel simply went away and left an arrow.
+
+	# Out between the orbits the star owns the ship and really is what it
+	# is falling round -- and the orbit panel still does not appear,
+	# because there is nowhere in a system outside the star's reach and a
+	# readout that is always up is one nobody reads.
 	var between: Vector2 = Vector2(
 		(world.orbit_radius + system.planets()[1].orbit_radius) * 0.5, 0.0
 	)
 	_expect(
-		GravityWell.dominant_at(self, between) == star,
+		GravityWell.local_at(self, between) == star,
 		"out between the orbits it is the star, which is the only thing pulling",
 	)
 	_expect(
-		star.orbit_state(between, Vector2(0.0, star.circular_orbit_speed(between.length())))
-			== GravityWell.OrbitState.ORBIT,
-		"and a circular orbit of the star reads as an orbit, like any other",
-	)
-	_expect(
 		not star.has_ground() and planet.has_ground(),
-		"a star has nothing to land on and says so, so the readout drops the landing rows",
+		"a star has nothing to land on, so the orbit panel is not its business",
 	)
 	_expect(
 		is_equal_approx(star.atmosphere_radius(), star.surface_radius)
 		and is_equal_approx(star.terrain_ceiling(), star.surface_radius),
 		"and its ground and its air are both just its surface",
+	)
+
+	# The property the whole patching rule exists for: a ship can orbit a
+	# planet with the star in the sky. Integrated the way the solver does,
+	# through the same sum the solver uses.
+	for altitude: float in [1.6, 2.6]:
+		var radius: float = planet.surface_radius * altitude
+		var at: Vector2 = planet.global_position + Vector2(radius, 0.0)
+		var velocity: Vector2 = Vector2(0.0, planet.circular_orbit_speed(radius))
+		var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+		var low: float = INF
+		var high: float = 0.0
+		for tick: int in range(roundi(120.0 / step)):
+			velocity += GravityWell.pull_at(self, at) * step
+			at += velocity * step
+			var gap: float = planet.global_position.distance_to(at)
+			low = minf(low, gap)
+			high = maxf(high, gap)
+		_expect(
+			low > radius * 0.97 and high < radius * 1.03,
+			"a circular orbit at %.1f radii holds for two minutes with the star up (%+.1f%% / %+.1f%%)"
+				% [altitude, 100.0 * (low - radius) / radius, 100.0 * (high - radius) / radius],
+		)
+
+	# And the handover is smooth. A planet that gave the ship up to the
+	# star in one frame would kick it across the boundary, which is the
+	# thing the edge fade has always been for.
+	var crossing: Array[float] = []
+	for index: int in range(81):
+		var share: float = 0.80 + 0.005 * float(index)
+		crossing.append(GravityWell.pull_at(
+			self, planet.global_position + out * planet.influence_radius * share
+		).length())
+	var biggest: float = 0.0
+	var falling: bool = true
+	for i: int in range(1, crossing.size()):
+		biggest = maxf(biggest, absf(crossing[i] - crossing[i - 1]))
+		falling = falling and crossing[i] <= crossing[i - 1] + 0.0001
+	_expect(
+		falling,
+		"the pull only ever falls on the way out of a well -- nothing steps up at the seam",
+	)
+	_expect(
+		biggest < crossing[0] * 0.2,
+		"and the biggest step between samples is a gradient, not a cliff (%.3f of %.3f)" % [
+			biggest, crossing[0],
+		],
 	)
 
 	planet.free()

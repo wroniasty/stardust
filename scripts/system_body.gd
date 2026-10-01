@@ -46,6 +46,14 @@ var surface_gravity: float = 0.0
 ## gravity live here (IDEAS.md "Gwiazda: ciagnie wszedzie").
 var well_radius: float = 0.0
 
+## How deep this body's air is, in pixels, or zero for an airless rock.
+## Negative means nobody has decided yet and the body should roll its own.
+##
+## Here because an orbit asks about it -- air is what separates an orbit
+## that lasts from one that decays -- and because the map draws it for
+## worlds that have never been built.
+var atmosphere_height: float = -1.0
+
 ## What it goes round, or null for the star.
 ##
 ## Held weakly, and that is the whole reason it is behind a method. Bodies

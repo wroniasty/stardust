@@ -94,14 +94,79 @@ static func all(tree: SceneTree) -> Array[GravityWell]:
 	return wells
 
 
-## Sums the pull of every source that reaches `point`.
+## The pull at `point`: the body whose well it is in, and the ones further
+## out only to the extent that body has let go of it.
+##
+## **Not a sum, and the reason is that our planets do not move.** In a real
+## system a ship in orbit round a planet barely feels the star, because the
+## planet is falling towards the star at the same rate and only the
+## difference across the orbit -- the tide -- is left. Ours are nailed down
+## (IDEAS.md "Planety nie okrazaja gwiazdy"), so a plain sum gives the ship
+## the star's full pull while the planet takes none of it, and that is not
+## a perturbation, it is a steady shove in one direction.
+##
+## Measured, before this: a circular orbit at 1.6 planet radii came down
+## into the ground inside three minutes, and orbits at 2.6 and 4.0 radii
+## left the well entirely. The same orbits with the star taken out held to
+## a tenth of a per cent. A ship could not orbit a planet at all.
+##
+## So the wells are patched rather than added. Inside a body's well that
+## body pulls and the ones outside it do not, which is what "the planet is
+## carrying you" looks like when the planet cannot actually carry you. The
+## seam is the fade each well already has at its own edge: a body hands the
+## ship over exactly as fast as it lets go, so the field stays continuous
+## and nothing kicks on the way across.
 static func pull_at(tree: SceneTree, point: Vector2) -> Vector2:
+	return pull_from(all(tree), point)
+
+
+## The same, from a list gathered once. The trajectory predictor steps
+## hundreds of times and cannot afford a group lookup each step -- and has
+## to arrive at the same answer the ship does, so it calls the same code.
+static func pull_from(wells: Array[GravityWell], point: Vector2) -> Vector2:
+	var reaching: Array[GravityWell] = []
+	for well: GravityWell in wells:
+		if well.global_position.distance_to(point) < well.influence_radius:
+			reaching.append(well)
+	# Innermost first, by how far each reaches: a moon's well is inside its
+	# planet's, which is inside the star's. Sorting by reach rather than by
+	# distance is what makes that hold wherever in the well the ship is.
+	reaching.sort_custom(func(a: GravityWell, b: GravityWell) -> bool:
+		return a.influence_radius < b.influence_radius
+	)
+
 	var total: Vector2 = Vector2.ZERO
-	for source: Node in tree.get_nodes_in_group(GROUP):
-		var well: GravityWell = source as GravityWell
-		if well != null:
-			total += well.gravity_at(point)
+	var share: float = 1.0
+	for well: GravityWell in reaching:
+		total += well.gravity_at(point) * share
+		share *= 1.0 - well.hold_at(point)
+		if share <= 0.0:
+			break
 	return total
+
+
+## How firmly this well holds `point`: one well inside it, nought at its
+## edge and beyond. What is left over is what the next body out gets.
+func hold_at(point: Vector2) -> float:
+	var distance: float = global_position.distance_to(point)
+	if distance >= influence_radius:
+		return 0.0
+	return _edge_falloff(distance)
+
+
+## The innermost well `point` is inside, or null out in the dark.
+##
+## "Innermost" by reach, not by distance, for the same reason as above: a
+## ship low over a moon is nearer the moon than the planet, but it is the
+## narrower well that owns it either way.
+static func local_at(tree: SceneTree, point: Vector2) -> GravityWell:
+	var best: GravityWell = null
+	for well: GravityWell in all(tree):
+		if well.global_position.distance_to(point) >= well.influence_radius:
+			continue
+		if best == null or well.influence_radius < best.influence_radius:
+			best = well
+	return best
 
 
 ## Whether this body has a surface worth talking about: ground to land
@@ -122,28 +187,6 @@ func height_above_terrain(point: Vector2) -> float:
 ## and has a surface to speak of.
 func surface_velocity_at(_point: Vector2) -> Vector2:
 	return Vector2.ZERO
-
-
-## The well that pulls hardest at `point`, if `point` is inside its reach.
-##
-## Not the nearest body: the nearest is always *some* body, and a conic
-## drawn around one that is not pulling here is a picture of a path the
-## ship is not on. Hardest-pulling is the honest answer and it needs no
-## special case for the star -- inside a planet's well the planet wins by
-## WELL_DOMINANCE because the layout made sure of it, and out between the
-## orbits the star is the only thing left.
-static func dominant_at(tree: SceneTree, point: Vector2) -> GravityWell:
-	var best: GravityWell = null
-	var strongest: float = 0.0
-	for source: Node in tree.get_nodes_in_group(GROUP):
-		var well: GravityWell = source as GravityWell
-		if well == null:
-			continue
-		var pull: float = well.gravity_at(point).length()
-		if pull > strongest:
-			strongest = pull
-			best = well
-	return best
 
 
 ## Radius above which nothing solid can exist. The surface, unless the body

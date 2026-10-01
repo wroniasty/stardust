@@ -1363,7 +1363,71 @@ pokazuje miejsce, z którego statek odleciał. Wyglądało to dokładnie jak
 gwiazda, która się nie renderuje, i kosztowało godzinę zgadywania. Probe
 robiący zrzuty musi dać kamerze dojść.
 
-### HUD orbitalny należy do tego, co ciągnie najmocniej
+### Studnie są łatane, nie sumowane — bo planety stoją
+
+Zgłoszone z kokpitu: **nie da się wejść na orbitę planety.** Zmierzone, trzy
+minuty lotu wokół Calai b, całkowane tak jak liczy to solver:
+
+| orbita | bez gwiazdy | z gwiazdą (suma) |
+|---|---|---|
+| 1,6 promienia | trzyma ±0,1% | **uderza w grunt** |
+| 2,6 promienia | trzyma ±0,0% | **ucieka ze studni** |
+| 4,0 promienia | trzyma ±0,0% | **ucieka ze studni** |
+
+Przyczyna nie jest kwestią nastrojenia siły. W prawdziwym układzie statek na
+orbicie planety prawie nie czuje gwiazdy, bo **planeta spada ku gwieździe
+razem z nim** i zostaje tylko różnica w poprzek orbity, czyli pływ. Nasze
+planety są przybite do miejsca (patrz „Planety nie okrążają gwiazdy"), więc
+zwykła suma daje statkowi pełny ciąg gwiazdy, a planecie żaden. To nie jest
+perturbacja — to **stałe pchnięcie w jedną stronę**. Przy 1,43 px/s² i okresie
+54 s wychodzi z tego ponad 2000 px przesunięcia na jedno okrążenie, więcej niż
+promień orbity.
+
+Dlatego studnie są **łatane, a nie dodawane**. Wewnątrz studni ciała ciągnie
+to ciało, a te na zewnątrz nie — co jest tym, jak wygląda „planeta cię niesie"
+w świecie, w którym planeta fizycznie nieść nie może. Szwem jest wygaszanie,
+które każda studnia i tak ma na swojej krawędzi: ciało oddaje statek dokładnie
+tak szybko, jak puszcza, więc pole jest ciągłe i nic nie kopie przy przejściu.
+Zmierzone po zmianie: orbity trzymają ±0,1%, a największy skok pola między
+próbkami co 0,5% studni to 0,25 z 5,28 px/s² — gradient, nie urwisko.
+
+To jest też odpowiedź na „zmniejszmy strefę wpływu gwiazdy, żeby nie obejmowała
+planet": jednym promieniem się nie da, bo planety są na różnych odległościach,
+a promień mniejszy od pierwszej orbity usunąłby gwiazdę dokładnie stamtąd,
+gdzie ma ciągnąć. Strefa gwiazdy ma więc **dziury w kształcie studni planet**,
+co daje ten sam skutek i nie wymaga żadnej liczby.
+
+Skutek uboczny, przyjęty świadomie: **procy grawitacyjnej nadal nie ma**, i
+teraz nie ma jej podwójnie — przelot obok planety jest czystym dwuciałowym
+odchyleniem, bez nawet tego śladu trzeciego ciała, który dawała suma.
+
+**HUD orbitalny tylko nad gruntem.** Przez jeden commit panel gospodarzyła
+studnia ciągnąca najmocniej, więc między orbitami pokazywał gwiazdę — i pod
+łatanymi studniami był nawet prawdziwy, bo statek naprawdę spada tam wokół
+gwiazdy po dokładnym stożku. I bezużyteczny: wisiał cały czas, bo nie ma w
+układzie miejsca poza zasięgiem gwiazdy, a odczyt, który jest zawsze, to
+odczyt, którego nikt nie czyta. Diagram orbity zarabia na siebie, gdy jest
+dokąd dolecieć; w przelocie między planetami pytanie brzmi „w którą stronę i
+jak szybko", a to jest robota widżetu transferu.
+
+**Mapa rysuje zasięgi.** Atmosfera jako niebieski okrąg, studnia jako
+kreskowany — jedno i drugie to rzeczy, pod które się planuje, a nie na które
+się patrzy: studnia to miejsce, gdzie transfer przestaje być prostą i staje
+się przylotem, a atmosfera to miejsce, gdzie zaczyna się aerobraking i kończy
+trwała orbita. Pokazują się dopiero, gdy są większe od znacznika ciała, czyli
+w skali układu nigdy.
+
+Żeby to było możliwe, **wysokość atmosfery przeniosła się do modelu**, obok
+promienia, grawitacji i studni. Nie dlatego, że potrzebuje jej układanie
+orbit, tylko dlatego, że atmosfera jest wielkością orbitalną — to ona dzieli
+orbitę trwałą od zanikającej — a mapa rysuje światy, których nikt jeszcze nie
+zbudował. Zakresy losowania mają teraz nazwy (`Planet.AIRLESS_CHANCE`,
+`Planet.AIR_RATIO`) i jedno losowanie (`Planet.roll_air`), bo dwa miejsca
+losujące tę samą wielkość to dwa miejsca, które się rozjeżdżają.
+
+### HUD orbitalny: jak ta reguła wyglądała, zanim gwiazda z niej wypadła
+
+(Historia jednego commitu; obowiązującą regułę opisuje sekcja wyżej.)
 
 Panel orbity pytał wcześniej o **najbliższą planetę** i znikał, gdy statek
 wyszedł z jej studni. Między orbitami zostawał sam wskaźnik kierunku — choć

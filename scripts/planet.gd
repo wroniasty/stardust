@@ -208,6 +208,7 @@ func prepare(descriptor: SystemBody, at_time: float) -> void:
 		descriptor.radius,
 		descriptor.surface_gravity,
 		descriptor.well_radius,
+		descriptor.atmosphere_height,
 	)
 	_prebuilt = true
 
@@ -250,6 +251,7 @@ func adopt(descriptor: SystemBody, at_time: float = 0.0) -> void:
 		descriptor.radius,
 		descriptor.surface_gravity,
 		descriptor.well_radius,
+		descriptor.atmosphere_height,
 	)
 	rebuild()
 	global_position = descriptor.position_at(at_time)
@@ -443,6 +445,16 @@ const RADIUS_RANGE: Vector2 = Vector2(900.0, 1800.0)
 const GRAVITY_RANGE: Vector2 = Vector2(25.0, 60.0)
 const INFLUENCE_RATIO: Vector2 = Vector2(3.5, 6.0)
 
+## How often a world comes out airless, and how deep the air is otherwise
+## as a fraction of the surface radius.
+##
+## Named for the same reason as the three above: the system model rolls
+## this one too, because how much air a world has is a question an orbit
+## asks (it is what separates a decaying orbit from a lasting one) and the
+## map wants to draw it for worlds that have not been built yet.
+const AIRLESS_CHANCE: float = 0.2
+const AIR_RATIO: Vector2 = Vector2(0.25, 0.45)
+
 
 ## Rolls every parameter from a seed and builds the planet from them.
 ##
@@ -462,11 +474,21 @@ func generate(new_seed: int) -> void:
 ## thrown away when overridden, so the random stream stays aligned: the
 ## same seed gives the same terrain, weather and colours whether the size
 ## came from the system or from the roll.
+## How deep this world's air is, or zero for an airless rock. Static so
+## that the system model can roll it for a planet nobody has built yet --
+## the map draws the air of worlds that are still only descriptors.
+static func roll_air(rng: RandomNumberGenerator, radius: float) -> float:
+	if rng.randf() < AIRLESS_CHANCE:
+		return 0.0
+	return radius * rng.randf_range(AIR_RATIO.x, AIR_RATIO.y)
+
+
 func roll_parameters(
 	new_seed: int,
 	forced_radius: float = 0.0,
 	forced_gravity: float = 0.0,
 	forced_well: float = 0.0,
+	forced_air: float = -1.0,
 ) -> void:
 	planet_seed = new_seed
 
@@ -485,12 +507,12 @@ func roll_parameters(
 	)
 	influence_radius = rolled_well if forced_well <= 0.0 else forced_well
 
-	if rng.randf() < 0.2:
-		atmosphere_height = 0.0
-		atmosphere_density = 0.0
-	else:
-		atmosphere_height = surface_radius * rng.randf_range(0.25, 0.45)
-		atmosphere_density = rng.randf_range(0.4, 1.0)
+	var rolled_air: float = roll_air(rng, surface_radius)
+	var thickness: float = rng.randf_range(0.4, 1.0)
+	atmosphere_height = rolled_air if forced_air < 0.0 else forced_air
+	# Airless is one fact, not two: a world with no air has no density
+	# either, however the density roll came out.
+	atmosphere_density = 0.0 if atmosphere_height <= 0.0 else thickness
 
 	surface_color = Color.from_hsv(rng.randf(), rng.randf_range(0.15, 0.45), rng.randf_range(0.30, 0.55))
 	atmosphere_color = Color.from_hsv(rng.randf(), rng.randf_range(0.30, 0.70), rng.randf_range(0.60, 0.95))

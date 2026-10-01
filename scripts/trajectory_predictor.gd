@@ -103,9 +103,10 @@ static func coast(ship: Ship, count: int, scale: float) -> Dictionary:
 	path.append(at)
 
 	for i: int in range(count):
-		var acceleration: Vector2 = Vector2.ZERO
-		for well: GravityWell in wells:
-			acceleration += well.gravity_at(at)
+		# The ship's own sum, not a second one: the line on the screen and
+		# the path the solver takes have to come from one rule, and the
+		# patching in it is not something to reimplement by eye.
+		var acceleration: Vector2 = GravityWell.pull_from(wells, at)
 		# Semi-implicit Euler, matching the solver: velocity first, then use it.
 		velocity += acceleration * step
 		at += velocity * step

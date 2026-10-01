@@ -113,14 +113,22 @@ func _process(_delta: float) -> void:
 ## because outside that the conic it would draw is not the path the ship
 ## is on.
 ##
-## Any gravity source, not only a planet. Out between the orbits the star
-## is the one thing pulling, so the orbit panel belongs to it there -- and
-## before this it simply vanished, leaving the pilot with a direction
-## arrow while actually falling round something.
+## The body whose well the ship is in, and only if it is a body with
+## ground on it.
+##
+## The star is left out deliberately, and it was in for one commit. Under
+## patched wells a ship between the orbits really is falling round the
+## star on an exact conic, so the panel was honest -- and useless. It was
+## up the whole time, because there is nowhere in a system that is not
+## inside the star's reach, and a readout that is always on is a readout
+## nobody looks at. An orbit diagram earns its place when there is
+## something to arrive at; crossing between planets, the question is
+## which way and how fast, and that is the transfer widget's job.
 func host() -> GravityWell:
 	if _ship == null or not is_instance_valid(_ship):
 		return null
-	return GravityWell.dominant_at(get_tree(), _ship.global_position)
+	var local: GravityWell = GravityWell.local_at(get_tree(), _ship.global_position)
+	return local if local != null and local.has_ground() else null
 
 
 func _draw_hud() -> void:

@@ -267,6 +267,7 @@ func _add_planet(
 	planet.display_name = "%s %s" % [display_name, char(98 + index)]
 	planet.radius = rng.randf_range(Planet.RADIUS_RANGE.x, Planet.RADIUS_RANGE.y)
 	planet.surface_gravity = rng.randf_range(Planet.GRAVITY_RANGE.x, Planet.GRAVITY_RANGE.y)
+	planet.atmosphere_height = Planet.roll_air(rng, planet.radius)
 	planet.set_parent_body(star)
 	star.children.append(planet)
 	bodies.append(planet)
@@ -318,6 +319,7 @@ func _add_moon(rng: RandomNumberGenerator, planet: SystemBody) -> void:
 	moon.surface_gravity = rng.randf_range(
 		Planet.GRAVITY_RANGE.x, Planet.GRAVITY_RANGE.y * 0.6
 	)
+	moon.atmosphere_height = Planet.roll_air(rng, moon.radius)
 	moon.set_parent_body(planet)
 	moon.orbit_radius = planet.radius * rng.randf_range(MOON_ORBIT.x, MOON_ORBIT.y)
 	moon.orbit_phase = rng.randf() * TAU

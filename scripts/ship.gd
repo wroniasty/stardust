@@ -1797,7 +1797,8 @@ func get_applied_gravity() -> Vector2:
 	return _gravity
 
 
-## Sums the pull of every gravity source that reaches `point`.
+## The pull of whatever owns `point`: see GravityWell.pull_at, which is
+## patched rather than summed because our planets do not move.
 func gravity_acceleration_at(point: Vector2) -> Vector2:
 	return GravityWell.pull_at(get_tree(), point)
 
