@@ -17,12 +17,55 @@ cząstki bez tekstury.
 | tryb skalowania | `canvas_items`, `expand` | zasoby robimy w skali 1:1, silnik skaluje |
 | filtr tekstur | `Nearest` (0) | pixel art, bez rozmycia; krawędź musi być zamierzona |
 | rozmiar fontu w HUD | 8 px | ikona obok tekstu ma 7–9 px, nie więcej |
+| animacja | dozwolona wszędzie | **każdy sprite może być paskiem klatek**; format poniżej |
 
 Z tego wynika jedna rzecz, którą trzeba mieć z tyłu głowy przy każdej pozycji:
 **te obiekty są malutkie.** Statek to 16x22 px, skrzynka 12x12, znacznik na
 mapie 4–10 px średnicy, ikona gniazda w edytorze ~7 px. W tej skali ręcznie
 postawiony piksel wygrywa z każdą procedurą, bo łuk o promieniu 2 px narysowany
 `draw_arc` to kasza, a narysowany ręcznie to czytelny symbol.
+
+### Animacja
+
+Każdy sprite wolno animować i część z nich powinna być animowana. Format
+jednolity, żeby import był jedną regułą, a nie decyzją per plik:
+
+- **Poziomy pasek klatek** w jednym pliku (`nazwa_strip6.png`), kwadratowe
+  klatki, liczba klatek w nazwie. Godot czyta to jako `hframes` na
+  `Sprite2D` albo `SpriteFrames` na `AnimatedSprite2D`; w obu wypadkach
+  jeden plik na animację, nie katalog po klatce.
+- **Klatki na sekundę są daną, nie cechą pliku.** Pióropusz przy pełnej
+  przepustnicy biegnie szybciej niż na jednej czwartej — więc tempo jest
+  wyliczane z tego samego ułamka, którym skaluje się jasność i światło,
+  a nie zapisane w zasobie.
+- **Animacja ma coś znaczyć.** Dyszę, wiązkę i lampę stacji animujemy, bo
+  w ruchu niosą stan. Ikony w HUD i w edytorze **zostają statyczne**:
+  migające ikony na przyrządach to rozpraszanie, a ekran pomocy z
+  animowanymi symbolami to jarmark.
+
+## Wygląd wynika z cech, nie z osobnego rzutu
+
+Sprite'y i efekty nie są losowane obok statystyk — **wybiera je to, czym
+przedmiot jest**. Ta sama zasada, co z gwiazdą, której kolor wynika z masy:
+niebieska naprawdę jest ciężka, więc kolor na skanerze jest odczytem, a nie
+ozdobą. Dwa identyczne statystycznie silniki, które wyglądają inaczej bez
+powodu, to szum — i gracz przestaje patrzeć po godzinie.
+
+Wiązania są dwa i warto je rozróżniać:
+
+**Po wielkości.** Zasób podaje kilka wariantów, a wybiera się je progiem na
+nazwanej statystyce. Przykład podany przez pilota: trzy pióropusze na silnik,
+dobierane **mocą**. Słaby ciąg to wąska iskra, średni to stożek, mocny to
+rozwidlony płomień z dyszą świecącą do czerwoności.
+
+**Po afiksie.** Afiks może przynieść własny wygląd, bo tłumaczy, co widać.
+„steerable" dostaje dyszę na przegubie, „overbored" większy dzwon i brudniejszy
+płomień, „frugal" węższy i czystszy, „breaching" grubszą smugę pocisku. Jeśli
+dwa afiksy chcą tego samego miejsca, wygrywa ten rzadszy — i tylko on jest
+widoczny, bo sylwet nie skaluje się na cztery jednoczesne modyfikacje.
+
+Wynik jest taki sam, jak przy niezależnym losowaniu — dużo wariantów z
+niewielu plików — tylko każdy z nich coś mówi.
 
 ## Reguła decyzyjna
 
@@ -72,7 +115,8 @@ Doczepiane osobno, każde w punkcie, który kod już zna:
 
 | element | gdzie | rozmiar | uwagi |
 |---|---|---|---|
-| dysza silnika | `mount.position`, obrócona o `mount.rotation` | ~7 x 7 | trzy warianty wg `EngineData.Type`; wariant gimbala obracany dodatkowo o `gimbal` |
+| dysza silnika | `mount.position`, obrócona o `mount.rotation` | ~7 x 7 | trzy warianty wg `EngineData.Type`, plus wariant na przegubie dla afiksu „steerable", obracany o `gimbal` |
+| pióropusz | ta sama dysza | ~10 x 16, pasek 4–6 klatek | **trzy warianty dobierane mocą silnika**; tempo klatek z przepustnicy, nie z pliku |
 | działo | pozycja hardpointu, obrócone o `facing` | ~7 x 9 | wg `WeaponData.Type` |
 | podwozie | `leg_root()` z obrysu | goleń 3 x 9, stopka 6 x 3 | rozstaw nóg zostaje liczony, grafiką jest noga |
 | moduł zewnętrzny | pozycja gniazda | ~6 x 6 | tylko to, co widać z zewnątrz; zatoki wewnętrzne nie |

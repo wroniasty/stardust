@@ -1426,6 +1426,39 @@ po stronie CPU (7,93 przeciw 7,69 ms), przy najgorszej klatce wyższej o 0,17
 ms. Kosztu GPU ten pomiar nie obejmuje — to osiem małych addytywnych
 prostokątów przy 640x360.
 
+### Wariantowość: z cech, nie z trzeciego rzutu kostką
+
+Przedmioty mają powstawać jako **baza plus afiksy**, a wygląd ma z tego
+wynikać. Model afiksów stoi od M2 i jest dobry: mnożnik na jednym polu,
+opłacony pogorszeniem innego, magnitudo losowane i skalowane rzadkością,
+rzadkość znaczy „bardziej skrajny", nie „lepszy".
+
+Czego w nim brakuje, zmierzone zamiast obgadane. Pula afiksów jest wspólna
+dla kategorii i nie wie, czego baza nie ma, a `_scale` mnoży pole przez
+współczynnik — więc afiks na polu zerowym **ląduje, zajmuje slot i nie robi
+nic**. Na 8400 losowaniach legendarnych silników:
+
+| baza | martwe afiksy |
+|---|---|
+| gimballed_drive | 0% |
+| main_drive, braking_bell | 9% |
+| torque_jet, manewrówki, retro | 19% |
+| razem | **14%** |
+
+Do tego trzy rodzaje modułów są nazywane na trzy sposoby: broń zapisuje
+`affixes`, generator składa `display_name`, a silnik wyrzuca zwrotkę z
+`_apply_affixes` i zostaje przy „thruster engine 664". Afiksy są w liczbach,
+ale gracz nigdy się nie dowiaduje, które.
+
+**Wygląd jest odczytem, nie ozdobą** — ta sama reguła, co przy kolorze
+gwiazdy wynikającym z masy. Sprite i efekt wybiera to, czym przedmiot jest:
+po wielkości (trzy pióropusze dobierane mocą silnika) albo po afiksie
+(„steerable" dostaje dyszę na przegubie). Niezależne losowanie wyglądu dałoby
+tę samą liczbę wariantów i żadnej informacji — a wariant, który nic nie
+znaczy, gracz przestaje widzieć po godzinie.
+
+Rozpisane w PLAN.md jako M3.5; format zasobów w ASSETLIST.md.
+
 ### Pociski spadają, a kursor nic za pilota nie liczy
 
 Wszystko w świecie podlegało grawitacji — statek, skrzynki, linia

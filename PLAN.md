@@ -277,6 +277,51 @@ Gotowe, gdy: lot planeta-planeta jest płynny, a wyłączona planeta pamięta st
 
 ---
 
+## M3.5: Katalog przedmiotów i warianty
+
+Cel: baza przedmiotu jest zasobem, afiksy wiszą przy bazie, a wygląd wynika z
+cech. Bierze się po domknięciu M3, bo dotyka lootu, edytora i grafiki naraz.
+
+Powód jest zmierzony, nie estetyczny. Afiksy już są — baza plus 0–4 wg
+rzadkości, mnożnik na polu opłacony pogorszeniem innego — ale pula jest
+wspólna dla całej kategorii i nie wie, czego baza nie ma.
+
+- [ ] **Afiksy per baza, nie per kategoria.** `_scale` robi `wartość ×
+  współczynnik`, więc afiks na polu zerowym ląduje, zajmuje slot i nie robi
+  nic. Zmierzone na 8400 losowaniach: **14% afiksów jest martwych**, a na
+  dyszach obrotowych i manewrówkach **19%** — bo cała pula silnikowa może
+  wylosować „steerable" bazie, która nie ma gimbala. Baza **dziedziczy
+  wspólną pulę i wyklucza**, zamiast wyliczać własną listę od zera: inaczej
+  nowy afiks trzeba dopisywać w siedmiu plikach.
+- [ ] **Nazwy spójne dla wszystkich rodzajów.** Dziś są trzy traktowania:
+  broń zapisuje `affixes`, generator składa `display_name`, a silnik
+  **wyrzuca zwrotkę z `_apply_affixes`** i nazywa się „thruster engine 664".
+  Docelowo każdy przedmiot ma nazwę złożoną z afiksów i bazy.
+- [ ] **Długość nazwy.** „efficient wide precise rapid dumb rocket" to 38
+  znaków przy karcie 158 px i foncie 8 px — nie mieści się. Rozstrzygnąć
+  **zanim** nazwy urosną: albo tytuł bierze dwa najmocniejsze afiksy i reszta
+  schodzi do wierszy karty, albo karta się poszerza. Zmierzyć, nie zgadnąć.
+- [ ] **Kadłuby jako zasoby.** Dziś katalog jest w dwóch miejscach:
+  `CreativeTool.SHAPES` i presety w `ShipFitout`. Zasób niesie obrys,
+  rozkład mocowań, listę dozwolonych sprite'ów i parametry. Scala dwa
+  miejsca w jedno i otwiera katalog kadłubów w edytorze zamiast w menu debug.
+- [ ] **Wygląd wiązany z cechą** (ASSETLIST.md, „Wygląd wynika z cech").
+  Dwa wiązania: po wielkości (trzy pióropusze dobierane mocą silnika) i po
+  afiksie („steerable" dostaje dyszę na przegubie). Nie trzeci rzut kostką —
+  dwa identyczne statystycznie silniki wyglądające inaczej bez powodu to szum.
+- [ ] **Sprite'y animowane**, pasek klatek w jednym pliku, tempo liczone ze
+  stanu (przepustnica), nie zapisane w zasobie. Ikony HUD i edytora zostają
+  statyczne.
+- [ ] Test: żaden afiks nie ląduje na polu, którego baza nie ma; każdy
+  przedmiot ma nazwę mieszczącą się na karcie; każdy kadłub z katalogu ma
+  komplet sprite'ów albo jawnie ich nie ma.
+
+Gotowe, gdy: z siedmiu baz silnika i jednej puli afiksów wychodzi setka
+rozróżnialnych silników, każdy o nazwie, która mówi, co robi, i wyglądzie,
+który to potwierdza.
+
+---
+
 ## M4: Galaktyka, skaner, skok
 
 Cel: wiele systemów, podróż skokiem bez bramek.
