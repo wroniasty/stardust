@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/art_gallery.gd" id="1_gallery"]
+
+[node name="ArtGallery" type="Node2D"]
+script = ExtResource("1_gallery")
+
+[node name="Camera" type="Camera2D" parent="."]
