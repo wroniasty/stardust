@@ -1455,13 +1455,47 @@ coś, w czym może być dobry. Test pilnuje obu stron: że to, gdzie musi
 celować lufa, nie zmienia się od obecności planety, i że `aim_hud.gd` nigdy
 nie pyta o grawitację.
 
-Przy okazji zmierzone i **nie** naprawione: piętnaście pocisków w powietrzu
-kosztuje około **0,9 ms na pocisk na klatkę**. Sprawdzone A/B — to nie jest
-ani nowa grawitacja, ani światło pocisku, ani żłobienie kraterów przy
-trafieniu: w próżni, bez gruntu do trafienia, jest tak samo. Podejrzenie pada
-na `Area2D` pocisku sprawdzające nakładanie z kształtem kolizji planety, ale
-to jest hipoteza, nie diagnoza — i osobna robota z profilerem, nie zgadywanie
-w sondzie.
+### Pocisk kosztuje 7 mikrosekund, a nie 0,9 milisekundy
+
+Zgłosiłem był, że piętnaście pocisków w powietrzu kosztuje ~0,9 ms na pocisk
+na klatkę. **Ta liczba była zła o ponad dwa rzędy wielkości**, i warto
+zapisać, dlaczego — bo błąd był w metodzie, nie w arytmetyce.
+
+Mierzyłem `Performance.TIME_PROCESS` plus `TIME_PHYSICS_PROCESS` w zwykłym
+oknie z vsync. W pętli ograniczonej vsyncem te liczniki nie mierzą, ile pracy
+wykonano — mierzą, gdzie silnikowi akurat wypadło zaksięgować czekanie. Ten
+sam pomiar dał **42 ms przy zerze pocisków** i 8,9 ms przy czterdziestu, co
+samo w sobie było sygnałem, że mierzę szum, a ja i tak podałem z tego wniosek.
+
+Zmierzone porządnie — zegar ścienny, `--fixed-fps`, vsync wyłączony, 400
+klatek na przypadek, liczba pocisków ustawiana, nie wnioskowana:
+
+| pociski | klatka (µs) | przyrost na pocisk |
+|---|---|---|
+| 0 | 1624 | — |
+| 10 | 1787 | 16 µs |
+| 40 | 1977 | 8,8 µs |
+| 160 | 2948 | 8,3 µs |
+
+Koszt jest **liniowy, około 7–8 µs na pocisk na klatkę**. Piętnaście pocisków
+to 0,12 ms, czyli **0,7% klatki**. Sto sześćdziesiąt to 1,3 ms, czyli 8%. Nie
+ma tu czego naprawiać.
+
+Osobno sprawdzone, bo pod złym pomiarem siedziała jedna prawdziwa liczba —
+najgorsza klatka 75 ms przy strzelaniu w grunt. Zegarem: **strzelanie w grunt
+nie kosztuje nic ponad bezczynność** (1533 przeciw 1549 µs średnio), a
+najgorsza klatka wynosi 5,6–5,9 ms *we wszystkich* przypadkach, łącznie z
+bezczynnym zawisem. Żłobienie kraterów nie robi zacięcia; te 5,6 ms to coś
+okresowego w silniku i jest tam bez nas.
+
+Rozbicie po składnikach (`tools/frame_bench.gd` wyłącza po jednym): test
+zamiatany terenu i światło pocisku dokładają razem jakieś 1,5 µs na pocisk.
+Reszta to koszt samego węzła.
+
+**Lekcja metodologiczna, ta sama co zwykle w tym projekcie:** narzędzie, które
+zgadza się samo ze sobą, nie jest pomiarem. `TIME_PROCESS` zgadzał się sam ze
+sobą i był bez związku z rzeczywistością. Pomiar kosztu klatki idzie teraz
+przez `tools/frame_bench.gd`, który tę metodę ma zapisaną w komentarzu.
 
 ### Stacje: dokowanie bez klawisza, naprawa za czas
 
