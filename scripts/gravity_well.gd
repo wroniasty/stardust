@@ -31,6 +31,53 @@ enum OrbitState {
 ## Sources register here so that nothing has to know a scene path.
 const GROUP: StringName = &"gravity_sources"
 
+## Half-width of the terminator, as a dot product: the band round a body
+## that is neither day nor night.
+##
+## Here rather than in the shaders that use it, because the ship and the
+## crates are shaded off the same rule and a number written down in four
+## files is a terminator that moves depending on what you are looking at.
+## The planet pushes this into its materials; see `Planet._follow_the_star`.
+const TERMINATOR: float = 0.22
+
+## How dark a thing in the world gets on the night side, against the
+## ground's own floor of `Planet.NIGHT_GROUND`.
+##
+## A shade under the ground's, so a ship reads as sitting on the surface
+## rather than hovering in front of a backdrop -- it is a small object with
+## nothing lighting it from below, and the ground at least has its own
+## albedo. Not black, for the same reason the ground is not: you have to
+## be able to see what you are flying.
+const NIGHT_OBJECT: float = 0.42
+
+
+## How lit `point` is, 1.0 in full daylight and NIGHT_OBJECT on the far
+## side of whatever body owns it.
+##
+## The scalar twin of the `daylight()` in the shaders, and deliberately a
+## scalar: a planet is thousands of pixels across and needs the answer per
+## pixel, while a ship is thirty and is simply on one side or the other.
+## Running the per-pixel version on a ship would cost a shader to compute
+## the same number its own middle already has.
+##
+## Out in the dark with no star, or inside the star's own well, everything
+## is lit: there is no night side to be on.
+static func daylight_at(tree: SceneTree, point: Vector2) -> float:
+	var star: Star = Star.of(tree)
+	if star == null:
+		return 1.0
+	var local: GravityWell = local_at(tree, point)
+	if local == null or local == star:
+		return 1.0
+	var towards: Vector2 = star.global_position - local.global_position
+	var arm: Vector2 = point - local.global_position
+	if towards.is_zero_approx() or arm.is_zero_approx():
+		return 1.0
+	var facing: float = arm.normalized().dot(towards.normalized())
+	return lerpf(
+		NIGHT_OBJECT, 1.0, smoothstep(-TERMINATOR, TERMINATOR, facing)
+	)
+
 ## Radius of the nominal surface, in pixels.
 var surface_radius: float = 600.0
 

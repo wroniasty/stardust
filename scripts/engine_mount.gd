@@ -45,6 +45,19 @@ func module_mass() -> float:
 	return installed.bulk if installed != null else 0.0
 
 
+## How far a nozzle at full flow lights its surroundings, and how hard.
+##
+## Reach is in pixels and deliberately modest: this is the glow on the
+## hull and on the ground beneath a ship on short finals, not a
+## headlight. Eight of them on a stock ship add up, which is the other
+## reason each one is small.
+const GLOW_REACH: float = 140.0
+const GLOW_STRENGTH: float = 0.85
+const GLOW_COLOUR: Color = Color(1.00, 0.72, 0.42)
+
+var _glow: GlowLight = null
+
+
 ## Points the exhaust plume at `amount` of full flow, 0..1.
 ##
 ## The plume itself is configured in the scene, and one setting there matters
@@ -59,6 +72,16 @@ func set_exhaust(amount: float) -> void:
 		return
 	exhaust.emitting = amount > 0.02
 	exhaust.amount_ratio = clampf(amount, 0.0, 1.0)
+
+	# And the light the flame throws. Scaled with the flow rather than
+	# switched on, because an engine at a tenth of throttle is a glow and
+	# an engine at full is a landing light -- and because a light that
+	# snapped on would turn a gentle correction burn into a strobe.
+	if _glow == null:
+		_glow = GlowLight.make(GLOW_COLOUR, GLOW_REACH, 0.0)
+		add_child(_glow)
+	_glow.energy = GLOW_STRENGTH * clampf(amount, 0.0, 1.0)
+	_glow.visible = amount > 0.02
 
 
 ## True if this engine will physically go in: right kind, and small enough.

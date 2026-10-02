@@ -368,12 +368,26 @@ func _follow_the_star() -> void:
 		if shader != null:
 			shader.set_shader_parameter("sun_dir", towards)
 			shader.set_shader_parameter("sunlight", lit)
+			shader.set_shader_parameter("terminator", GravityWell.TERMINATOR)
 	for child: Node in _clouds.get_children():
 		var field: CloudField = child as CloudField
 		if field != null:
 			field.face_the_star(
 				star.global_position if star != null else Vector2.ZERO, star != null
 			)
+
+	# And whatever is standing on the ground, which is the crates. Done
+	# from here rather than by the crate itself because a settled crate
+	# switches its own processing off -- that is what makes a shelf full
+	# of them free -- and waking them up sixty times a second to ask what
+	# time of day it is would undo exactly the saving that bought.
+	for child: Node in get_children():
+		var crate: LootCrate = child as LootCrate
+		if crate != null:
+			var lit_here: float = GravityWell.daylight_at(
+				get_tree(), crate.global_position
+			)
+			crate.self_modulate = Color(lit_here, lit_here, lit_here)
 
 
 ## Radius of the ground below a world point, in the planet's local frame.

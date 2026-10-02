@@ -1132,6 +1132,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 
 	_resolve_terrain(state)
 	_update_heat(state.step)
+	_catch_the_light()
 
 
 ## Decides whether the engines run on emergency power this tick, and takes
@@ -1174,6 +1175,28 @@ func _resolve_boost(step: float) -> void:
 
 	for engine: EngineInstance in engines:
 		engine.boosting = boost_active
+
+
+## Darkens the painted parts of the ship on the night side of whatever
+## it is flying over.
+##
+## `self_modulate` rather than `modulate`, so the exhaust, the contrails
+## and the muzzle flashes hanging off the same ship stay as bright as they
+## were: they make their own light, and a flame that goes out at dusk is
+## worse than no shading at all.
+##
+## The same rule the ground under it uses, through the same function. A
+## ship that stayed lit over a dark planet read as a sticker on the
+## picture rather than a thing in it, and the one thing that could not fix
+## was being a slightly different shade of lit.
+func _catch_the_light() -> void:
+	var lit: float = GravityWell.daylight_at(get_tree(), global_position)
+	var shade: Color = Color(lit, lit, lit)
+	var hull: Polygon2D = get_node_or_null("Hull") as Polygon2D
+	if hull != null:
+		hull.self_modulate = shade
+	if gear != null:
+		gear.self_modulate = shade
 
 
 ## Hull heating, from braking against the air and from standing too close

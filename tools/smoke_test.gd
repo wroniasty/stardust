@@ -981,6 +981,7 @@ func _evaluate_phase() -> void:
 			_check_orbit_host()
 			_check_reach_on_the_map()
 			_check_daylight()
+			_check_lighting()
 			_check_bindings()
 			_check_streaming()
 			_check_system_map()
@@ -4541,6 +4542,125 @@ func _check_daylight() -> void:
 		"a world with no star in the scene is lit all the way round",
 	)
 	planet.free()
+
+
+## What is lit in the world, and what does the lighting.
+func _check_lighting() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var star: Star = (load("res://scenes/star.tscn") as PackedScene).instantiate() as Star
+	root.add_child(star)
+	star.adopt(system.star)
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	root.add_child(planet)
+	planet.adopt(system.planets()[0])
+
+	# The scalar the ship is shaded by is the rule the ground is shaded
+	# by. Both sides of the terminator, measured off the same body.
+	var sunward: Vector2 = (star.global_position - planet.global_position).normalized()
+	var high: float = planet.surface_radius * 1.5
+	var day: float = GravityWell.daylight_at(self, planet.global_position + sunward * high)
+	var night: float = GravityWell.daylight_at(self, planet.global_position - sunward * high)
+	_expect(
+		is_equal_approx(day, 1.0),
+		"the sunward side of a planet is full daylight (%.2f)" % day,
+	)
+	_expect(
+		is_equal_approx(night, GravityWell.NIGHT_OBJECT),
+		"and the far side is the night floor, not black and not lit (%.2f)" % night,
+	)
+	var edge: Vector2 = planet.global_position + sunward.orthogonal() * high
+	_expect(
+		absf(GravityWell.daylight_at(self, edge) - (1.0 + GravityWell.NIGHT_OBJECT) * 0.5) < 0.01,
+		"and the terminator itself is halfway between them",
+	)
+	_expect(
+		is_equal_approx(GravityWell.daylight_at(self, Vector2(1.0, 0.0)), 1.0),
+		"nothing is on the night side of the star it is standing next to",
+	)
+
+	# And the number the shaders use is the number GDScript used. This is
+	# the join that a help screen would call a lie: a terminator written
+	# down in four files is one that moves depending on what you look at.
+	var ground: ShaderMaterial = (planet.get_node("Terrain") as ColorRect).material
+	planet._follow_the_star()
+	_expect(
+		is_equal_approx(
+			float(ground.get_shader_parameter("terminator")), GravityWell.TERMINATOR
+		),
+		"the planet's shaders are shading to the same terminator the ship is",
+	)
+
+	# The ship takes it, and its flame does not.
+	var ship: Ship = _spawn_ship()
+	var hull: Polygon2D = ship.get_node("Hull")
+	ship.global_position = planet.global_position + sunward * high
+	ship._catch_the_light()
+	var lit_hull: Color = hull.self_modulate
+	ship.global_position = planet.global_position - sunward * high
+	ship._catch_the_light()
+	_expect(
+		hull.self_modulate.v < lit_hull.v - 0.1,
+		"a hull over the night side is darker than the same hull over the day side (%.2f against %.2f)"
+			% [hull.self_modulate.v, lit_hull.v],
+	)
+	_expect(
+		ship.modulate.is_equal_approx(Color.WHITE),
+		"and the shading is on the hull alone, so the exhaust and the tracers keep their own light",
+	)
+	ship.free()
+
+	# What casts light. Headless draws nothing, so what is checked is that
+	# the lights exist, belong to the thing casting them, and go out.
+	var round_scene: PackedScene = load("res://scenes/projectile.tscn") as PackedScene
+	var shot: Projectile = round_scene.instantiate() as Projectile
+	root.add_child(shot)
+	var glow: GlowLight = _first_glow(shot)
+	_expect(glow != null, "a round carries its own light")
+	_expect(
+		glow != null and glow.color.is_equal_approx((shot.get_node("Body") as Polygon2D).color),
+		"in the colour of the round, so a glow can always be traced to what is casting it",
+	)
+	_expect(
+		glow != null and glow.blend_mode == Light2D.BLEND_MODE_ADD,
+		"and it adds rather than mixes -- light arriving, not paint",
+	)
+	shot.free()
+
+	var blast: Explosion = (
+		load("res://scenes/explosion.tscn") as PackedScene
+	).instantiate() as Explosion
+	root.add_child(blast)
+	var flash: GlowLight = _first_glow(blast)
+	_expect(
+		flash != null and flash.energy > 1.0,
+		"an explosion starts with a flash brighter than anything else in the game",
+	)
+	var opening: float = flash.energy if flash != null else 0.0
+	blast._process(Explosion.FLASH_SECONDS * 0.5)
+	_expect(
+		flash != null and flash.energy < opening * 0.5,
+		"which is more than half gone by halfway (%.2f of %.2f)" % [
+			flash.energy if flash != null else 0.0, opening,
+		],
+	)
+	blast._process(Explosion.FLASH_SECONDS)
+	_expect(
+		_first_glow(blast) == null or not is_instance_valid(flash),
+		"and then goes out instead of leaving a lamp where the ship died",
+	)
+	blast.free()
+
+	planet.free()
+	star.free()
+
+
+## The first light hanging off `host`, or null.
+func _first_glow(host: Node) -> GlowLight:
+	for child: Node in host.get_children():
+		var glow: GlowLight = child as GlowLight
+		if glow != null and is_instance_valid(glow) and not glow.is_queued_for_deletion():
+			return glow
+	return null
 
 
 ## Parks `ship` at `at` and runs its heat model for `seconds` of game

@@ -34,6 +34,7 @@ func face_the_star(star_position: Vector2, lit: bool) -> void:
 		"sun_dir", Vector2.UP if arm.is_zero_approx() else arm.normalized()
 	)
 	shader.set_shader_parameter("sunlight", 1.0 if lit else 0.0)
+	shader.set_shader_parameter("terminator", GravityWell.TERMINATOR)
 
 
 ## Places `count` clouds in a band between `base_radius` and `base_radius +

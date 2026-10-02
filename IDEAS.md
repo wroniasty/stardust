@@ -1363,6 +1363,51 @@ pokazuje miejsce, z którego statek odleciał. Wyglądało to dokładnie jak
 gwiazda, która się nie renderuje, i kosztowało godzinę zgadywania. Probe
 robiący zrzuty musi dać kamerze dojść.
 
+### Światła 2D: co światło może, a czego nie
+
+Plan mówił „oświetlenie 2D właściwymi światłami (`Light2D`) dla statku,
+skrzynek i pocisków". Po przeczytaniu, jak światła 2D w Godocie faktycznie
+działają, wyszło, że to **dwie różne rzeczy**, i tylko jedna z nich jest
+światłem.
+
+**Czego światło 2D nie potrafi: terminatora.** Światło w 2D nie wie, w którą
+stronę zwrócona jest powierzchnia — bez map normalnych `DirectionalLight2D`
+rozjaśnia wszystko jednakowo, więc nie zrobi granicy dnia i nocy. Do tego
+potrzebny byłby `CanvasModulate`, a ten **przyciemnia całe płótno**, łącznie z
+shaderami planety, które już liczą własne światło. Odkręcenie tego oznaczałoby
+mnożenie ich przez 1/tint, czyli przepalanie jasnych kolorów. Dlatego dzień i
+noc dla rzeczy w świecie liczy ta sama reguła co dla gruntu
+(`GravityWell.daylight_at`), tylko **jako skalar, nie per piksel**: planeta ma
+tysiące pikseli średnicy i potrzebuje odpowiedzi w każdym, a statek ma
+trzydzieści i jest po prostu po jednej albo po drugiej stronie.
+
+Szerokość terminatora przestała przy okazji być stałą w trzech shaderach i
+jest teraz jedną stałą w GDScript (`GravityWell.TERMINATOR`), wpychaną do
+materiałów jako uniform. Liczba zapisana w czterech plikach to terminator,
+który się przesuwa zależnie od tego, na co patrzysz; test pilnuje, że shader
+planety cieniuje do tej samej, co statek.
+
+**Co światło 2D potrafi, i po co tu jest: kałużę jasności.** To dostają
+rzeczy, które świecą — pocisk, wybuch, dysza. Dodawane (`BLEND_MODE_ADD`), bo
+światło w kosmosie to coś, co dochodzi na wierzch, a mieszanie wypłukałoby
+kolor z tego, na co pada. Tekstura to gradient robiony w kodzie, nie plik: ten
+projekt nie ma sprite'ów, a spadek promieniowy to cztery linijki.
+
+Zmierzone: błysk wybuchu rozświetla grunt i kadłub w promieniu 320 px i gaśnie
+kwadratowo w 0,45 s (liniowo czytałoby się jak ściemniacz, nie jak detonacja);
+dysza na krótkiej prostej, 24 px nad gruntem, wyraźnie oświetla zbocze obok
+statku. Kadłub nad nocną stroną ma 0,42 jasności przeciw 1,00 nad dzienną —
+przedtem świecił tak samo i czytał się jak naklejka na obrazku.
+
+Cieniowany jest `self_modulate` kadłuba i podwozia, nie `modulate` statku: pióropusz,
+smugi i błyski wystrzału robią własne światło, a płomień gasnący o zmierzchu
+byłby gorszy niż brak cieniowania.
+
+Koszt, zmierzony: osiem świateł dysz stokowego statku to **0,24 ms na klatkę**
+po stronie CPU (7,93 przeciw 7,69 ms), przy najgorszej klatce wyższej o 0,17
+ms. Kosztu GPU ten pomiar nie obejmuje — to osiem małych addytywnych
+prostokątów przy 640x360.
+
 ### Studnie są łatane, nie sumowane — bo planety stoją
 
 Zgłoszone z kokpitu: **nie da się wejść na orbitę planety.** Zmierzone, trzy

@@ -78,12 +78,24 @@ var shooter: Node = null
 var _planet: Planet = null
 var _age: float = 0.0
 
+## How far a round lights the ground it passes over, in pixels, and how
+## hard. Small and brief: a tracer is a spark, and a spark that floodlit
+## the landscape would say the wrong thing about how much damage it does.
+const GLOW_REACH: float = 70.0
+const GLOW_STRENGTH: float = 0.9
+
 
 func _ready() -> void:
 	# Resolved once: a projectile lives for a few seconds and never outlives
 	# the planet it was fired near. M3 will have to re-check as systems stream.
 	_planet = Planet.nearest(get_tree(), global_position)
 	body_entered.connect(_on_body_entered)
+	# The round's own colour, so a glow always belongs to the thing that
+	# is casting it rather than to a palette nobody can trace back.
+	var body: Polygon2D = get_node_or_null("Body") as Polygon2D
+	add_child(GlowLight.make(
+		body.color if body != null else Color.WHITE, GLOW_REACH, GLOW_STRENGTH
+	))
 
 
 func _physics_process(delta: float) -> void:

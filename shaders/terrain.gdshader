@@ -40,12 +40,18 @@ uniform float night : hint_range(0.0, 1.0) = 0.50;
 
 /// Half-width of the terminator, as a dot product. The band where it is
 /// neither day nor night; wide enough to read as a curve rather than a cut.
-const float TERMINATOR = 0.22;
+///
+/// A uniform rather than a constant because the ship and the crates are
+/// shaded off the same rule in GDScript, and a number written down in
+/// four places is a terminator that moves depending on what you look at.
+/// `GravityWell.TERMINATOR` is the one that counts; this default only
+/// covers a material nobody has told yet.
+uniform float terminator : hint_range(0.05, 0.6) = 0.22;
 
 /// 1.0 in full daylight, `night` on the far side.
 float daylight(vec2 from_centre) {
 	float facing = dot(normalize(from_centre), sun_dir);
-	float lit = smoothstep(-TERMINATOR, TERMINATOR, facing);
+	float lit = smoothstep(-terminator, terminator, facing);
 	return mix(1.0, mix(night, 1.0, lit), sunlight);
 }
 
