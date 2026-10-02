@@ -1426,6 +1426,44 @@ po stronie CPU (7,93 przeciw 7,69 ms), przy najgorszej klatce wyższej o 0,17
 ms. Kosztu GPU ten pomiar nie obejmuje — to osiem małych addytywnych
 prostokątów przy 640x360.
 
+### Stacje: dokowanie bez klawisza, naprawa za czas
+
+Stacja nie jest studnią grawitacyjną i model mówił to od początku: dokuje się
+do niej, nie orbituje wokół niej, a źródło tak małe dodawałoby solverowi
+tylko szumu. Ma zamiast tego **promień, w którym trzeba być, i prędkość, pod
+którą trzeba być** — ten sam kształt co lądowanie, i celowo: pilot już umie
+przylatywać gdzieś powoli.
+
+**Dokowanie jest automatyczne, bez klawisza.** Pilot powiedział już, czego
+chce, przelatując nad stacją w tempie spacerowym; prompt do wciśnięcia byłby
+drugim sposobem powiedzenia tego samego. Odlot to ten sam gest co start z
+gruntu — poproś o ciąg i masz go.
+
+Odmowa podaje **powód**, nie „nie": `za daleko` albo `za szybko`. Z tego samego
+powodu, co przy lądowaniu — „nie" nie jest odpowiedzią, na której da się
+lecieć, a pilot potrzebuje wiedzieć, której z dwóch liczb nie spełnia.
+
+**Naprawa kosztuje czas, nie kliknięcie.** 0,12 kadłuba i 0,18 zdrowia
+silnika na sekundę, pula szybciej niż z własnego generatora — bo bycie
+podpiętym do czegoś większego od siebie właśnie to znaczy. Zmierzone: pół
+kadłuba w 1,6 s, komplet w okolicach dziesięciu. Długo na tyle, żeby to była
+decyzja („czy stać mnie teraz na postój"), krótko na tyle, żeby nikt nie
+czekał dwa razy. **To jest pierwszy raz, kiedy uszkodzenie da się cofnąć bez
+respawnu** — a uszkodzenie, które da się naprawić tylko przez respawn, jest
+albo śmiertelne, albo darmowe.
+
+**Zatrzask przy odlocie, trzeci raz ten sam kształt.** Chwilę po odłączeniu
+statek nadal jest w zasięgu i ma zerową prędkość — czyli dokładnie warunek
+dokowania — więc dok łapał go z powrotem w następnej klatce i nie dało się
+odlecieć. To ten sam błąd co akord trzymający klawisze i co zapłon dopalania
+nad pustą pulą, i to samo rozwiązanie: **zatrzask, nie zegar**. Dok, który
+się właśnie puściło, nie przyjmie statku, dopóki ten nie opuści jego zasięgu.
+Warunek końca to „odleciałeś", więc nie potrzeba żadnej liczby.
+
+Ubocznie: `builds_as_node` mówi teraz „wszystko poza gwiazdą" zamiast
+wyliczać kto może. Gwiazda jest wyjątkiem z przeciwnego powodu niż stacje
+były — nie dlatego, że nie ma sceny, tylko dlatego, że nigdy nie znika.
+
 ### Studnie są łatane, nie sumowane — bo planety stoją
 
 Zgłoszone z kokpitu: **nie da się wejść na orbitę planety.** Zmierzone, trzy

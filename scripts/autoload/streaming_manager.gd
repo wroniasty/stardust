@@ -61,6 +61,7 @@ const BUILDS_PER_FRAME: int = 1
 
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const STAR_SCENE: String = "res://scenes/star.tscn"
+const STATION_SCENE: String = "res://scenes/station.tscn"
 const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
 
 ## Crates are put on the landing shelves rather than scattered: the shelves
@@ -301,6 +302,12 @@ func _drain_queue() -> void:
 func _start_build(body: SystemBody) -> void:
 	if not builds_as_node(body):
 		return
+	if body.kind == SystemBody.Kind.STATION:
+		# Nothing to compute on a worker: a station is a few lines and a
+		# lamp, so it goes up whole on the spot rather than taking a
+		# frame's build slot to discover it has no crust.
+		_raise_to(body, Level.AWAKE)
+		return
 	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
 	planet.name = body.display_name.replace(" ", "_")
 	planet.prepare(body, visit_time)
@@ -388,16 +395,15 @@ func _lower_to(body: SystemBody, wanted: Level) -> void:
 
 ## Whether the distance sweep has anything to do about this kind of body.
 ##
-## The star is excluded for the opposite reason to everything else here:
-## not because it has no scene, but because it is never taken down, so
-## measuring how far away it is would only ever answer a question nobody
-## asked. Stations are still waiting for their own step. Both are skipped
-## rather than queued and refused: queued, a star sat at the head of the
-## queue, spent the frame's one build on discovering it had no scene, and
-## came back next sweep to do it again -- which is how the first planet
-## never got built at all.
+## Everything but the star, which is excluded for the opposite reason to
+## anything that has no scene: it is never taken down, so measuring how
+## far away it is would only ever answer a question nobody asked. It is
+## skipped rather than queued and refused, because a body that is queued
+## and then refused spends the frame's one build slot on discovering it
+## has nothing to do -- which is how, when stations were the refused
+## kind, the first planet never got built at all.
 static func builds_as_node(body: SystemBody) -> bool:
-	return body.kind == SystemBody.Kind.PLANET or body.kind == SystemBody.Kind.MOON
+	return body.kind != SystemBody.Kind.STAR
 
 
 ## The star of the bound system, if it is in the world. Always, in the
@@ -451,6 +457,14 @@ func _build(body: SystemBody) -> Node2D:
 		star.adopt(body)
 		_container.add_child(star)
 		return star
+	if body.kind == SystemBody.Kind.STATION:
+		var dock: Station = (
+			load(STATION_SCENE) as PackedScene
+		).instantiate() as Station
+		dock.name = body.display_name.replace(" ", "_")
+		_container.add_child(dock)
+		dock.adopt(body, visit_time)
+		return dock
 	if not builds_as_node(body):
 		return null
 	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet

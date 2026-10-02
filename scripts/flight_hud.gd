@@ -181,6 +181,28 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 			"BOOST" if _ship.boost_active else "BOOST --",
 			CAUTION if _ship.boost_active else BAD,
 		)
+	_draw_dock(font, left, frame.end.y + ROW)
+
+
+## Whether a dock will have you, beside the hull bar.
+##
+## On the left and a row under the hull reading: the right-hand side is
+## where boost and heat go, and those are things the pilot is doing,
+## while this is something the world is saying back. It appears only within reach of a station, and says which
+## of the two numbers is being failed -- "no" is not an answer anyone can
+## fly on.
+func _draw_dock(font: Font, left: float, top: float) -> void:
+	var says: String = ""
+	var colour: Color = GOOD
+	if _ship.flight_mode == Ship.FlightMode.DOCKED:
+		says = "DOK" if _ship.fully_serviced() else "DOK -- naprawa"
+		colour = GOOD if _ship.fully_serviced() else CAUTION
+	elif not _ship.last_dock_rejection.is_empty():
+		says = "DOK: %s" % _ship.last_dock_rejection
+		colour = CAUTION
+	if says.is_empty():
+		return
+	_text(font, Vector2(left - 6.0 - _width(font, says), top), says, colour)
 
 
 ## Heat, as a second bar under the hull, and only when there is any.

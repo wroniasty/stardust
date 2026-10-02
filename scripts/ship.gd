@@ -241,7 +241,20 @@ signal hull_impact(impact_speed: float, damage: float)
 ## Flight modes. Being landed is the only state that stops the solver; whether
 ## the ship is in orbit is read off its trajectory rather than switched on,
 ## because there is nothing for a mode to do about it (see IDEAS.md section 8).
-enum FlightMode { PHYSICAL, LANDED }
+enum FlightMode { PHYSICAL, LANDED, DOCKED }
+
+## What a dock mends, per second.
+##
+## Over time rather than on arrival, so docking is a pause in the flight
+## and not a button: a wrecked hull takes the best part of ten seconds to
+## put right, which is long enough to be a decision about whether you can
+## afford to sit still and short enough that nobody waits for it twice.
+##
+## Energy fills faster than the generator manages on its own, because that
+## is what being plugged into something bigger than you means.
+const DOCK_HULL_RATE: float = 0.12
+const DOCK_ENGINE_RATE: float = 0.18
+const DOCK_ENERGY_RATE: float = 3.0
 
 ## Emitted when the ship touches down or leaves the ground.
 signal flight_mode_changed(mode: FlightMode)
@@ -333,6 +346,25 @@ var active_commands: Dictionary = {}
 ## Assist holds, set from input or by an AI.
 var kill_rotation_command: bool = false
 var brake_command: bool = false
+
+## What the ship is tied up to, or null.
+var docked_at: Station = null
+
+## Why the last dock attempt was turned down, or "". The same shape as
+## `last_landing_rejection`, and for the same reason: "no" is not an
+## answer a pilot can act on.
+var last_dock_rejection: String = ""
+
+## The dock just left, which will not have the ship back until it has
+## gone.
+##
+## Docking is automatic, and the moment after undocking the ship is still
+## inside the reach at zero speed -- which is exactly the condition for
+## docking, so it was grabbed again on the next tick and the pilot could
+## not leave. The same shape as a chord holding its keys until they are
+## let go of, and the same fix: a latch rather than a timer, because the
+## condition that ends it is "you have gone", which needs no number.
+var _just_left: Station = null
 
 ## Held: the pilot is asking for emergency power.
 var boost_command: bool = false
@@ -907,6 +939,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			_hold_landed_pose()
 
+	_resolve_dock(delta)
 	_recharge(delta)
 
 	var container: Node = projectile_container()
@@ -1197,6 +1230,113 @@ func _catch_the_light() -> void:
 		hull.self_modulate = shade
 	if gear != null:
 		gear.self_modulate = shade
+
+
+## Ties up to a station, mends things while tied, and lets go.
+##
+## Here rather than in `_integrate_forces` for the same reason taking off
+## is: a frozen body gets no `_integrate_forces` at all, so a docked ship
+## that only listened there could never be told to leave.
+##
+## Docking is automatic once a ship is slow enough and close enough. No
+## key for it, deliberately: the pilot has already said what they want by
+## flying over at walking pace, and a prompt to press would be a second
+## way to say the same thing. Leaving is the same gesture as taking off
+## -- ask for thrust and you have it.
+func _resolve_dock(delta: float) -> void:
+	if flight_mode == FlightMode.DOCKED:
+		if _wants_translation(commands) or brake_command:
+			undock()
+			return
+		_mend(delta)
+		if docked_at != null and is_instance_valid(docked_at):
+			global_position = docked_at.global_position
+			linear_velocity = Vector2.ZERO
+			angular_velocity = 0.0
+		else:
+			# The dock streamed out from under us, which can only happen
+			# a very long way from anywhere. Being adrift beats being
+			# pinned to something that no longer exists.
+			undock()
+		return
+
+	if flight_mode != FlightMode.PHYSICAL:
+		return
+	var dock: Station = Station.nearest(get_tree(), global_position)
+	if dock == null:
+		last_dock_rejection = ""
+		_just_left = null
+		return
+	if _just_left != null:
+		if not is_instance_valid(_just_left):
+			_just_left = null
+		elif global_position.distance_to(
+			_just_left.global_position
+		) > _just_left.dock_radius():
+			_just_left = null
+		else:
+			last_dock_rejection = ""
+			return
+	# Only complain about a dock the pilot is plausibly trying for. A
+	# refusal shown from half a system away is noise, and noise on a HUD
+	# is a line pilots learn to stop reading.
+	if global_position.distance_to(dock.global_position) > dock.dock_radius() * 2.0:
+		last_dock_rejection = ""
+		return
+	var refused: String = dock.refusal(self)
+	last_dock_rejection = refused
+	if refused.is_empty():
+		dock_with(dock)
+
+
+## Puts the ship on the dock and freezes it there.
+func dock_with(station: Station) -> void:
+	if station == null or flight_mode == FlightMode.DOCKED:
+		return
+	docked_at = station
+	last_dock_rejection = ""
+	linear_velocity = Vector2.ZERO
+	angular_velocity = 0.0
+	set_deferred("freeze", true)
+	flight_mode = FlightMode.DOCKED
+	flight_mode_changed.emit(flight_mode)
+
+
+## Lets go, and hands the ship back to the solver.
+func undock() -> void:
+	if flight_mode != FlightMode.DOCKED:
+		return
+	_just_left = docked_at
+	docked_at = null
+	set_deferred("freeze", false)
+	freeze = false
+	flight_mode = FlightMode.PHYSICAL
+	flight_mode_changed.emit(flight_mode)
+
+
+## What a dock does while you sit on it.
+##
+## The same three things the sandbox button does, only paid for in
+## seconds instead of being free -- which is the whole point of there
+## being somewhere to fly to.
+func _mend(delta: float) -> void:
+	if hull_integrity < 1.0:
+		hull_integrity = minf(hull_integrity + DOCK_HULL_RATE * delta, 1.0)
+		hull_changed.emit(hull_integrity)
+	hull_heat = maxf(hull_heat - DOCK_HULL_RATE * delta, 0.0)
+	for engine: EngineInstance in engines:
+		engine.health = minf(engine.health + DOCK_ENGINE_RATE * delta, 1.0)
+	energy = minf(energy + energy_capacity() * DOCK_ENERGY_RATE * delta, energy_capacity())
+
+
+## True while everything a dock can mend is mended.
+func fully_serviced() -> bool:
+	if hull_integrity < 1.0 or energy < energy_capacity() - 0.01:
+		return false
+	for engine: EngineInstance in engines:
+		if engine.health < 1.0:
+			return false
+	return true
 
 
 ## Hull heating, from braking against the air and from standing too close
@@ -1773,6 +1913,9 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 	commands.clear()
 	active_commands.clear()
 	kill_rotation_command = false
+	docked_at = null
+	last_dock_rejection = ""
+	_just_left = null
 	boost_command = false
 	boost_active = false
 	_boost_spent = false

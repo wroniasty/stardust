@@ -982,6 +982,7 @@ func _evaluate_phase() -> void:
 			_check_reach_on_the_map()
 			_check_daylight()
 			_check_lighting()
+			_check_docking()
 			_check_bindings()
 			_check_streaming()
 			_check_system_map()
@@ -3935,11 +3936,25 @@ func _check_streaming() -> void:
 		manager.star_node().global_position.is_zero_approx(),
 		"and it is at the origin, which is what every orbit is measured from",
 	)
-	# Stations are the kind that still has no scene, and they say so.
+	# Stations stream like everything else now. This assertion used to say
+	# they had no scene and stayed in the model, and it would have gone on
+	# passing after they got one: the station in this system orbits a
+	# different planet from the one the test is flying at, so it was out
+	# of reach and absent for the wrong reason.
 	var dock: Array[SystemBody] = system.of_kind(SystemBody.Kind.STATION)
+	_expect(not dock.is_empty(), "the system has somewhere to dock")
+	pilot.global_position = manager.position_of(dock[0])
+	manager._sweep()
+	_stream_in(manager, dock[0])
 	_expect(
-		not dock.is_empty() and manager.node_for(dock[0]) == null,
-		"a station has no scene yet, so it stays in the model and says so",
+		manager.node_for(dock[0]) is Station,
+		"and flying to it builds it, like any other body",
+	)
+	_expect(
+		manager.node_for(dock[0]).global_position.distance_to(
+			manager.position_of(dock[0])
+		) < 1.0,
+		"where the visit's clock says it is",
 	)
 
 	manager.clear()
@@ -4704,6 +4719,104 @@ func _check_lighting() -> void:
 
 	planet.free()
 	star.free()
+
+
+## Somewhere to tie up: who a dock will have, what it mends, and letting go.
+func _check_docking() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var body: SystemBody = system.of_kind(SystemBody.Kind.STATION)[0]
+	var dock: Station = (
+		load("res://scenes/station.tscn") as PackedScene
+	).instantiate() as Station
+	root.add_child(dock)
+	dock.adopt(body)
+
+	var ship: Ship = _spawn_ship()
+	var reach: float = dock.dock_radius()
+	_expect(
+		reach > dock.radius,
+		"the dock reaches further than the structure, so arriving is not pixel-hunting (%.0f of %.0f)"
+			% [reach, dock.radius],
+	)
+
+	ship.global_position = dock.global_position + Vector2(reach * 2.0, 0.0)
+	ship.linear_velocity = Vector2.ZERO
+	_expect(dock.refusal(ship) == "za daleko", "from outside the reach it says so")
+	ship.global_position = dock.global_position + Vector2(reach * 0.5, 0.0)
+	ship.linear_velocity = Vector2(Station.DOCK_SPEED * 3.0, 0.0)
+	_expect(
+		dock.refusal(ship) == "za szybko",
+		"and inside it but too fast it says which of the two numbers is wrong",
+	)
+	ship.linear_velocity = Vector2(Station.DOCK_SPEED * 0.5, 0.0)
+	_expect(dock.refusal(ship).is_empty(), "slow and close enough, it will have you")
+
+	# Docking itself, and what it is for. A hull that can only be mended
+	# by respawning is a hull whose damage is either fatal or free.
+	ship.hull_integrity = 0.3
+	ship.energy = 0.0
+	for engine: EngineInstance in ship.engines:
+		engine.health = 0.25
+	ship.dock_with(dock)
+	_expect(
+		ship.flight_mode == Ship.FlightMode.DOCKED,
+		"flying in slowly ties the ship up, with no key to press",
+	)
+	_expect(
+		not ship.fully_serviced(),
+		"and it arrives needing the things a dock is for",
+	)
+
+	var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+	var half: float = 0.0
+	for tick: int in range(roundi(2.0 / step)):
+		ship._mend(step)
+		if half == 0.0 and ship.hull_integrity > 0.5:
+			half = float(tick) * step
+	_expect(
+		half > 0.5,
+		"mending takes seconds rather than happening on arrival (%.1f s to half a hull)" % half,
+	)
+	for tick: int in range(roundi(10.0 / step)):
+		ship._mend(step)
+	_expect(
+		ship.fully_serviced() and ship.hull_integrity == 1.0,
+		"and a long enough stay puts everything right: hull, engines and pool",
+	)
+
+	# Letting go, and the bug that was in the way of it. Docking is
+	# automatic, so the instant after undocking the ship is still inside
+	# the reach at no speed -- which is exactly the condition to dock --
+	# and it was grabbed again on the next tick.
+	ship.global_position = dock.global_position
+	ship.commands[ShipControl.Command.FORWARD] = 1.0
+	ship._resolve_dock(step)
+	_expect(
+		ship.flight_mode == Ship.FlightMode.PHYSICAL,
+		"asking for thrust lets go, the same gesture as taking off",
+	)
+	var grabbed: bool = false
+	for tick: int in range(120):
+		ship._resolve_dock(step)
+		grabbed = grabbed or ship.flight_mode == Ship.FlightMode.DOCKED
+	_expect(
+		not grabbed,
+		"and sitting in the dock's reach afterwards does not get the ship grabbed again",
+	)
+	# It will take the ship back once it has actually gone and come round.
+	ship.global_position = dock.global_position + Vector2(reach * 3.0, 0.0)
+	ship._resolve_dock(step)
+	ship.global_position = dock.global_position
+	ship.commands.clear()
+	ship.linear_velocity = Vector2.ZERO
+	ship._resolve_dock(step)
+	_expect(
+		ship.flight_mode == Ship.FlightMode.DOCKED,
+		"while leaving properly and coming back docks again",
+	)
+
+	ship.free()
+	dock.free()
 
 
 ## The first light hanging off `host`, or null.
