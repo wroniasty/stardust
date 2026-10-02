@@ -78,6 +78,17 @@ var shooter: Node = null
 var _planet: Planet = null
 var _age: float = 0.0
 
+## The aim cursor does **not** know about any of this, and that is a
+## decision rather than an omission.
+##
+## It reports whether the gun can bear on the point, which is a question
+## about the mount, and it draws no predicted path. Leading for gravity is
+## the pilot's job: a cursor that solved the arc would turn every shot
+## into pointing at a marker the game had already worked out, and the
+## whole reason rounds fall is to give the pilot something to be good at.
+## See IDEAS.md, "Pociski spadaja".
+
+
 ## How far a round lights the ground it passes over, in pixels, and how
 ## hard. Small and brief: a tracer is a spark, and a spark that floodlit
 ## the landscape would say the wrong thing about how much damage it does.
@@ -104,6 +115,17 @@ func _physics_process(delta: float) -> void:
 	if _age >= lifetime:
 		queue_free()
 		return
+
+	# Rounds fall. Everything else in the world already did -- the ship,
+	# the crates, the line the predictor draws -- and a shell that flew
+	# dead straight past a planet was the one thing in the game exempt
+	# from the rule the whole game is about.
+	#
+	# Semi-implicit Euler, matching the solver and the predictor: the new
+	# velocity moves this step. Three integrators disagreeing about the
+	# same field is how a round ends up somewhere the line said it would
+	# not.
+	velocity += GravityWell.pull_at(get_tree(), global_position) * delta
 
 	var start: Vector2 = global_position
 	var step: Vector2 = velocity * delta

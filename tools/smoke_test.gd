@@ -983,6 +983,7 @@ func _evaluate_phase() -> void:
 			_check_daylight()
 			_check_lighting()
 			_check_docking()
+			_check_round_fall()
 			_check_bindings()
 			_check_streaming()
 			_check_system_map()
@@ -4817,6 +4818,80 @@ func _check_docking() -> void:
 
 	ship.free()
 	dock.free()
+
+
+## Rounds fall, and the cursor does not do the arithmetic for you.
+func _check_round_fall() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	root.add_child(planet)
+	planet.adopt(system.planets()[0])
+
+	# Fired level, well clear of the ground, so the only thing bending it
+	# is the planet. Integrated the way the round itself is.
+	var up: Vector2 = Vector2.UP
+	var from: Vector2 = planet.global_position + up * (planet.surface_radius + 900.0)
+	var gravity: float = planet.gravity_at(from).length()
+	var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+	var speed: float = 600.0
+	var at: Vector2 = from
+	var velocity: Vector2 = up.orthogonal() * speed
+	var flown: float = 0.0
+	var seconds: float = 0.0
+	while flown < 1200.0 and seconds < 20.0:
+		velocity += GravityWell.pull_at(self, at) * step
+		at += velocity * step
+		flown = from.distance_to(at)
+		seconds += step
+	var fell: float = (from - at).dot(up)
+	_expect(
+		fell > 10.0,
+		"a round fired level over a planet comes down (%.0f px over %.0f px of flight)" % [
+			fell, flown,
+		],
+	)
+	# Against the schoolbook number, loosely: the field weakens as the
+	# round climbs away from straight-and-level, so this is a sanity
+	# bound, not an identity.
+	var schoolbook: float = 0.5 * gravity * seconds * seconds
+	_expect(
+		absf(fell - schoolbook) < schoolbook * 0.3,
+		"by about half g t squared (%.0f px against %.0f)" % [fell, schoolbook],
+	)
+
+	# And out where nothing pulls, it does not.
+	var empty: Vector2 = Vector2(5.0e6, 5.0e6)
+	_expect(
+		GravityWell.pull_at(self, empty).is_zero_approx(),
+		"a round out beyond everything keeps going straight, because nothing is pulling",
+	)
+
+	# The cursor is not allowed to help. Leading for gravity is the
+	# pilot's job, decided deliberately: a cursor that solved the arc
+	# would turn every shot into pointing at a marker the game had
+	# already worked out. What the mount answers is whether it can bear
+	# on the point, which is a question about the mount and about
+	# nothing else -- so the answer must not move when a planet is near.
+	var ship: Ship = _spawn_ship()
+	ship.global_position = from
+	ship.rotation = 0.0
+	var gun: Hardpoint = ship.hardpoints[0]
+	var mark: Vector2 = from + Vector2(400.0, 0.0)
+	var near_planet: float = gun.wanted_facing(mark)
+	planet.global_position += Vector2(1.0e7, 0.0)
+	var far_away: float = gun.wanted_facing(mark)
+	_expect(
+		is_equal_approx(near_planet, far_away),
+		"where the gun has to point does not change because a planet is there",
+	)
+	_expect(
+		not FileAccess.get_file_as_string(
+			"res://scripts/aim_hud.gd"
+		).contains("GravityWell"),
+		"and the aim cursor never asks about gravity at all",
+	)
+	ship.free()
+	planet.free()
 
 
 ## The first light hanging off `host`, or null.

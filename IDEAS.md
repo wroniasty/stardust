@@ -1426,6 +1426,43 @@ po stronie CPU (7,93 przeciw 7,69 ms), przy najgorszej klatce wyższej o 0,17
 ms. Kosztu GPU ten pomiar nie obejmuje — to osiem małych addytywnych
 prostokątów przy 640x360.
 
+### Pociski spadają, a kursor nic za pilota nie liczy
+
+Wszystko w świecie podlegało grawitacji — statek, skrzynki, linia
+przewidywanej trajektorii — **oprócz pocisków**, które leciały idealnie
+prosto. Jedyna rzecz w grze zwolniona z reguły, o którą cała gra chodzi.
+
+Zmierzone, strzał poziomy z 848 px nad gruntem (grawitacja lokalna 13,3
+px/s²), na dystansie 1600 px:
+
+| broń | prędkość | spadek | poprawka |
+|---|---|---|---|
+| pulse repeater | 900 px/s | 18,7 px | 0,7° |
+| autocannon | 600 px/s | 42,4 px | 1,5° |
+| burst shell | 520 px/s | 57,1 px | 2,0° |
+| dumb rocket | 180 px/s | 522,8 px | 18,1° |
+
+Czyli: szybkie działko na krótkim dystansie prawie nic nie traci, wolna
+rakieta staje się bronią nawesną. Charakter broni wychodzi z jednej liczby,
+której nikt nie musiał wpisywać.
+
+**Kursor celowania nie kompensuje, i to jest decyzja.** Melduje, czy działko
+może się wycelować w dany punkt — pytanie o mocowanie i o nic więcej — i nie
+rysuje żadnej przewidywanej drogi. Poprawka na grawitację należy do pilota.
+Kursor rozwiązujący łuk zamieniłby każdy strzał w celowanie w znacznik, który
+gra już policzyła, a cały powód, dla którego pociski spadają, to dać pilotowi
+coś, w czym może być dobry. Test pilnuje obu stron: że to, gdzie musi
+celować lufa, nie zmienia się od obecności planety, i że `aim_hud.gd` nigdy
+nie pyta o grawitację.
+
+Przy okazji zmierzone i **nie** naprawione: piętnaście pocisków w powietrzu
+kosztuje około **0,9 ms na pocisk na klatkę**. Sprawdzone A/B — to nie jest
+ani nowa grawitacja, ani światło pocisku, ani żłobienie kraterów przy
+trafieniu: w próżni, bez gruntu do trafienia, jest tak samo. Podejrzenie pada
+na `Area2D` pocisku sprawdzające nakładanie z kształtem kolizji planety, ale
+to jest hipoteza, nie diagnoza — i osobna robota z profilerem, nie zgadywanie
+w sondzie.
+
 ### Stacje: dokowanie bez klawisza, naprawa za czas
 
 Stacja nie jest studnią grawitacyjną i model mówił to od początku: dokuje się
