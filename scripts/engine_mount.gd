@@ -27,6 +27,18 @@ extends Node2D
 ## The engine currently fitted, or null for an empty mount.
 @export var installed: EngineData = null
 
+## The particle trail behind the flame.
+##
+## Scaled small in the scene on purpose: `particles/dot.png` is 24 texels
+## across and a puff of exhaust wants to be two to five design pixels, so
+## `scale_min` and `scale_max` are a tenth of what they would be for art
+## drawn at the particle's own size. Before that texture existed this
+## emitter had none at all, which in Godot means literal quads -- the
+## exhaust was a grid of squares.
+##
+## It is the trail, not the flame. The flame is `ShipSkin`'s plume sprite,
+## sitting at the nozzle exit; these are what it leaves behind, which is why
+## they keep 85% of the emitter's velocity rather than all of it.
 @onready var exhaust: GPUParticles2D = get_node_or_null("Exhaust") as GPUParticles2D
 
 

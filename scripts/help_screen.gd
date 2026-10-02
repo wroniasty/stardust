@@ -80,6 +80,7 @@ const LABELS: Array[Dictionary] = [
 	{"block": "DEBUG", "action": &"debug_carve", "says": "wytnij krater"},
 	{"block": "DEBUG", "action": &"debug_damage_engine", "says": "uszkodź silnik"},
 	{"block": "DEBUG", "action": &"debug_repair", "says": "napraw silniki"},
+	{"block": "DEBUG", "action": &"toggle_presentation", "says": "warstwa graficzna"},
 ]
 
 ## What each chord is for. Keyed by `ControlChords.Chord`.

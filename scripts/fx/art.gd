@@ -62,6 +62,16 @@ const WORLD_FILTER: CanvasItem.TextureFilter = (
 ## really the world borrowing a rule written for the panel.
 const UI_FILTER: CanvasItem.TextureFilter = CanvasItem.TEXTURE_FILTER_NEAREST
 
+## Empty texels round every world sprite, which is one design pixel.
+##
+## Not zero. A sprite with its silhouette hard against the edge of its frame
+## has nowhere for WORLD_FILTER to fade into, so it comes out with a bright
+## rim on two sides -- and that artefact reads as a drawing mistake rather
+## than as a packing one. Here rather than in the generator, because the skin
+## has to know it too: what sits a texel inside the frame is where a part
+## actually ends.
+const MARGIN: int = FACTOR
+
 ## Where the two kinds of art live, kept apart on disk because they are
 ## authored at different sizes and a file in the wrong folder is a file at the
 ## wrong resolution.

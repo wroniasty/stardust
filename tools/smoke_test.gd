@@ -990,6 +990,7 @@ func _evaluate_phase() -> void:
 			_check_fitout_presets()
 			_check_creative_tool()
 			_check_art()
+			_check_skin()
 			_check_rarity_travels()
 			_check_seeker_targets()
 			_check_system_model(_planet)
@@ -4623,13 +4624,19 @@ func _check_lighting() -> void:
 	)
 
 	# The ship takes it, and its flame does not.
+	#
+	# Asked of the skin rather than of the ship: shading used to be
+	# `Ship._catch_the_light()` and is `ShipSkin.refresh()` now. The hull
+	# polygon is still what is measured, because with the layer off --
+	# which is what headless is -- the polygon is still what is shown.
 	var ship: Ship = _spawn_ship()
 	var hull: Polygon2D = ship.get_node("Hull")
+	var skin: ShipSkin = ship.get_node("Presentation")
 	ship.global_position = planet.global_position + sunward * high
-	ship._catch_the_light()
+	skin.refresh(0.0)
 	var lit_hull: Color = hull.self_modulate
 	ship.global_position = planet.global_position - sunward * high
-	ship._catch_the_light()
+	skin.refresh(0.0)
 	_expect(
 		hull.self_modulate.v < lit_hull.v - 0.1,
 		"a hull over the night side is darker than the same hull over the day side (%.2f against %.2f)"
@@ -6655,6 +6662,130 @@ func _check_art() -> void:
 		"and the same node draws an interface glyph at 1:1, Nearest, opaque",
 	)
 	sprite.queue_free()
+
+
+## Skorka statku: czy buduje to, co trzeba, i czy oddaje widok na F8.
+##
+## Runs headless, which is worth being precise about. `Presentation.is_on()`
+## is false here and stays false -- the gate is on *showing* the layer, not
+## on building it, so the sprites exist and can be counted while nothing is
+## drawn. That split is deliberate: a layer that could not be inspected
+## without a window would be a layer with no tests.
+func _check_skin() -> void:
+	_expect(
+		not Presentation.is_on(),
+		"the presentation layer does not show itself headless",
+	)
+
+	var ship: Ship = (load(SHIP_SCENE) as PackedScene).instantiate() as Ship
+	root.add_child(ship)
+	var skin: ShipSkin = ship.get_node_or_null("Presentation") as ShipSkin
+	_expect(skin != null, "the stock ship carries a skin")
+	if skin == null:
+		ship.free()
+		return
+
+	var sprites: Array[StripSprite] = _strip_sprites(skin)
+	var hull: Polygon2D = ship.get_node_or_null("Hull") as Polygon2D
+	# One hull, one nozzle and one plume per fitted engine, one gun per
+	# armed hardpoint, and a strut plus a pad per leg.
+	var armed: int = 0
+	for hardpoint: Hardpoint in ship.hardpoints:
+		if hardpoint.weapon != null:
+			armed += 1
+	var wanted: int = 1 + ship.engines.size() * 2 + armed + ship.gear.legs.size() * 2
+	_expect(
+		sprites.size() == wanted,
+		"the skin builds a sprite for every part (%d of %d)" % [sprites.size(), wanted],
+	)
+
+	# The stock outline is a named hull, so it gets a picture and the
+	# polygon underneath stands down.
+	var named: HullData = HullData.matching(ship.hull_outline)
+	_expect(named != null and named.id == &"dart", "the stock outline is recognised as the dart")
+	var dart_strip: SpriteStrip = null
+	for sprite: StripSprite in sprites:
+		if sprite.z_index == ShipSkin.Z_HULL:
+			dart_strip = sprite.strip
+	_expect(dart_strip != null, "and wears the dart's picture")
+
+	# A plume starts at the nozzle's exit plane, not at the mount. Measured
+	# rather than trusted: the mount is inside the hull and a flame drawn
+	# there comes out of the middle of the ship.
+	var drive: EngineMount = ship.get_node_or_null("MainDrive") as EngineMount
+	var exhaust: Vector2 = -drive.force_direction()
+	var nozzle: SpriteStrip = (
+		load("res://resources/fx/looks/engine_nozzle.tres") as LookTable
+	).pick(drive.installed)
+	var flame: StripSprite = _sprite_at(
+		sprites, drive.position + exhaust * nozzle.exit
+	)
+	_expect(
+		nozzle.exit > 0.0 and flame != null,
+		"the main drive's flame starts %.1f px past the mount, at the bell's lip" % nozzle.exit,
+	)
+
+	# Refitting rebuilds it, off the ship's own announcement rather than off
+	# the skin watching the scene.
+	#
+	# Checked on which hull is being worn rather than on how many sprites
+	# there are, which is what the first version of this did -- and the
+	# freighter happens to have the same part count as the dart, so it
+	# passed while proving nothing.
+	var interceptor: Dictionary = {}
+	for preset: Dictionary in ShipFitout.all():
+		if String(preset["name"]) == "przechwytujący":
+			interceptor = preset
+	ShipFitout.apply(ship, interceptor)
+	_expect(
+		HullData.matching(ship.hull_outline) != null
+		and HullData.matching(ship.hull_outline).id == &"interceptor",
+		"a refit puts a different named hull on the ship",
+	)
+	var worn: SpriteStrip = null
+	for sprite: StripSprite in _strip_sprites(skin):
+		if sprite.z_index == ShipSkin.Z_HULL:
+			worn = sprite.strip
+	_expect(
+		worn != null and worn != dart_strip,
+		"and the skin rebuilt itself onto that hull's picture",
+	)
+
+	# And a shape nobody named gets no picture, so the polygon keeps the job.
+	var invented: PackedVector2Array = PackedVector2Array()
+	for point: Vector2 in ship.hull_outline:
+		invented.append(point * 1.7)
+	ship.hull_outline = invented
+	ship.rebuild_control_groups(false)
+	_expect(
+		HullData.matching(ship.hull_outline) == null,
+		"a hull the sandbox reshaped matches nothing in the catalogue",
+	)
+	var dressed: int = 0
+	for sprite: StripSprite in _strip_sprites(skin):
+		if sprite.z_index == ShipSkin.Z_HULL:
+			dressed += 1
+	_expect(dressed == 0, "so it gets no hull sprite, and the Polygon2D keeps the job")
+	_expect(hull != null and hull.visible, "which means the polygon is still visible")
+
+	ship.free()
+
+
+## Every StripSprite the skin built.
+func _strip_sprites(skin: ShipSkin) -> Array[StripSprite]:
+	var out: Array[StripSprite] = []
+	for child: Node in skin.get_children():
+		var sprite: StripSprite = child as StripSprite
+		if sprite != null and sprite.strip != null:
+			out.append(sprite)
+	return out
+
+
+func _sprite_at(sprites: Array[StripSprite], where: Vector2) -> StripSprite:
+	for sprite: StripSprite in sprites:
+		if sprite.position.distance_to(where) < 0.01:
+			return sprite
+	return null
 
 
 func _art_knows_outline(

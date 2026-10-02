@@ -12,24 +12,28 @@ script = ExtResource("1_vi0ow")
 texture = ExtResource("2_eal7s")
 pivot = Vector2(15, 3)
 full_rate = 0.0
+exit = 7.0
 
 [sub_resource type="Resource" id="Resource_jciuc"]
 script = ExtResource("1_vi0ow")
 texture = ExtResource("3_hbx5s")
 pivot = Vector2(12, 3)
 full_rate = 0.0
+exit = 3.5
 
 [sub_resource type="Resource" id="Resource_edci7"]
 script = ExtResource("1_vi0ow")
 texture = ExtResource("5_7owha")
 pivot = Vector2(15, 3)
 full_rate = 0.0
+exit = 7.0
 
 [sub_resource type="Resource" id="Resource_et3ha"]
 script = ExtResource("1_vi0ow")
 texture = ExtResource("6_7pksy")
 pivot = Vector2(9, 3)
 full_rate = 0.0
+exit = 4.0
 
 [resource]
 script = ExtResource("4_l40eu")

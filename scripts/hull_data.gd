@@ -38,9 +38,19 @@ extends Resource
 const DIRECTORY: String = "res://resources/hulls"
 
 
+## Every hull, by id, loaded once.
+##
+## Cached because the skin asks on every refit and the alternative is a
+## directory scan plus ten loads each time. Cleared by nothing: the
+## catalogue is files on disk, and those do not change while the game runs.
+static var _catalogue: Dictionary = {}
+
+
 ## Every hull resource on disk, by id. Sorted, so a menu built from this is
 ## in the same order every run.
 static func all() -> Dictionary:
+	if not _catalogue.is_empty():
+		return _catalogue
 	var out: Dictionary = {}
 	var names: PackedStringArray = ResourceLoader.list_directory(DIRECTORY)
 	var sorted: Array = Array(names)
@@ -51,7 +61,31 @@ static func all() -> Dictionary:
 		var hull: HullData = load("%s/%s" % [DIRECTORY, file_name]) as HullData
 		if hull != null:
 			out[hull.id] = hull
+	_catalogue = out
 	return out
+
+
+## The named hull with this exact outline, or null when the shape is one
+## nobody named.
+##
+## How a ship finds its own picture, and deliberately the cheap half of
+## M3.5's "kadluby jako zasoby": the expensive half is collapsing
+## CreativeTool.SHAPES and the ShipFitout presets onto these resources, and
+## until that happens a field on the ship would be a fourth copy of the
+## catalogue for three callers to forget to set.
+##
+## Exact, not approximate. A hull the creative tool scaled is a different
+## shape that would need a different picture, so it matches nothing and
+## falls back to being drawn as a polygon -- which is what a sandbox should
+## show for a shape it invented.
+static func matching(outline: PackedVector2Array) -> HullData:
+	if outline.is_empty():
+		return null
+	for id: Variant in all():
+		var hull: HullData = all()[id]
+		if hull.outline == outline:
+			return hull
+	return null
 
 
 ## Half the longest span of the outline, matching Ship.hull_extent().

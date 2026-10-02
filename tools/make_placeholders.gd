@@ -37,13 +37,9 @@ const FLAME: Color = Color(1.00, 0.72, 0.42)
 const EMBER: Color = Color(1.00, 0.44, 0.16)
 const PAPER: Color = Color(1.00, 1.00, 1.00, 1.00) ## icons, before modulate
 
-## Texels of empty space round every sprite.
-##
-## One design pixel, not zero. A sprite with its silhouette hard against the
-## edge of its frame has nowhere for the linear filter to fade into, so it
-## comes out with a bright rim on two sides and the artefact looks like a
-## drawing mistake rather than a packing one.
-const MARGIN: int = Art.FACTOR
+## Texels of empty space round every sprite. The rule and the reason for it
+## live on Art, because the skin has to know it too.
+const MARGIN: int = Art.MARGIN
 
 ## Short, file-safe names for the hulls the game already has, keyed by the
 ## display name the catalogues use.
@@ -389,12 +385,20 @@ func _plume(across: float, long: float) -> Image:
 
 
 ## White at the throat through orange to a dark fading tip.
+##
+## The white core is an eighth of the length, not half. Length is not area:
+## the root is the widest part, so at half the flame came out cream all
+## over and read as steam. A flame is orange with a white root, and the
+## root is short.
+const FLAME_CORE: float = 0.12
+
+
 func _flame_colour(along: float) -> Color:
 	var shade: Color = (
-		HOT.lerp(FLAME, along * 2.0) if along < 0.5
-		else FLAME.lerp(EMBER, (along - 0.5) * 2.0)
+		HOT.lerp(FLAME, along / FLAME_CORE) if along < FLAME_CORE
+		else FLAME.lerp(EMBER, (along - FLAME_CORE) / (1.0 - FLAME_CORE))
 	)
-	shade.a = 1.0 - along * 0.75
+	shade.a = 1.0 - along * 0.8
 	return shade
 
 
@@ -484,13 +488,18 @@ func _box_module(kind: String) -> Image:
 
 ## A leg is two sprites, because the strut lengthens as the gear comes down
 ## and the pad does not. One sprite for both would have to stretch the pad.
+##
+## Narrower than ASSETLIST first said. On the stock dart the feet sit three
+## design pixels off the hull, so a strut three wide came out square and
+## read as a block bolted on rather than as a leg -- the sprite has to be
+## thinner than the shortest travel it will ever be stretched over.
 func _draw_gear() -> void:
-	var strut: Image = _blank(3 * Art.FACTOR + 2, 9 * Art.FACTOR + 2)
+	var strut: Image = _blank(2 * Art.FACTOR, 9 * Art.FACTOR + 2)
 	_box(strut, Rect2i(1, 1, strut.get_width() - 2, strut.get_height() - 2), METAL)
 	_border(strut, EDGE)
 	_save(strut, "%s/gear/strut.png" % Art.WORLD_DIR)
 
-	var pad: Image = _blank(6 * Art.FACTOR + 2, 3 * Art.FACTOR + 2)
+	var pad: Image = _blank(6 * Art.FACTOR + 2, 2 * Art.FACTOR)
 	_box(pad, Rect2i(1, 1, pad.get_width() - 2, pad.get_height() - 2), SHADOW)
 	_border(pad, EDGE)
 	_save(pad, "%s/gear/pad.png" % Art.WORLD_DIR)
@@ -609,10 +618,10 @@ func _write_look_tables() -> void:
 	var nozzles: LookTable = LookTable.new()
 	nozzles.stat = &"type"
 	nozzles.thresholds = PackedFloat32Array([0.0, 1.0, 2.0])
-	nozzles.variants.append(_nozzle_strip("main", 8.0))
-	nozzles.variants.append(_nozzle_strip("torque", 4.0))
-	nozzles.variants.append(_nozzle_strip("thruster", 6.0))
-	nozzles.by_affix[&"steerable"] = _nozzle_strip("gimbal", 8.0)
+	nozzles.variants.append(_nozzle_strip("main", 8.0, 7.0))
+	nozzles.variants.append(_nozzle_strip("torque", 4.0, 4.0))
+	nozzles.variants.append(_nozzle_strip("thruster", 6.0, 3.5))
+	nozzles.by_affix[&"steerable"] = _nozzle_strip("gimbal", 8.0, 7.0)
 	nozzles.fallback = nozzles.variants[2]
 	_store(nozzles, "res://resources/fx/looks/engine_nozzle.tres")
 
@@ -652,11 +661,11 @@ func _write_look_tables() -> void:
 	var gear: LookTable = LookTable.new()
 	gear.by_key[&"strut"] = _strip(
 		"%s/gear/strut.png" % Art.WORLD_DIR, 1,
-		Vector2(float(3 * Art.FACTOR + 2) * 0.5, 1.0)
+		Vector2(float(2 * Art.FACTOR) * 0.5, 0.0)
 	)
 	gear.by_key[&"pad"] = _strip(
 		"%s/gear/pad.png" % Art.WORLD_DIR, 1,
-		Vector2(float(6 * Art.FACTOR + 2) * 0.5, float(3 * Art.FACTOR + 2) * 0.5)
+		Vector2(float(6 * Art.FACTOR + 2) * 0.5, float(2 * Art.FACTOR) * 0.5)
 	)
 	gear.fallback = gear.by_key[&"strut"]
 	_store(gear, "res://resources/fx/looks/gear_leg.tres")
@@ -696,11 +705,17 @@ func _write_look_tables() -> void:
 	_store(glyphs, "res://resources/fx/looks/module_icon.tres")
 
 
-func _nozzle_strip(kind: String, mouth: float) -> SpriteStrip:
-	return _strip(
+func _nozzle_strip(kind: String, mouth: float, length: float) -> SpriteStrip:
+	var strip: SpriteStrip = _strip(
 		"%s/nozzles/%s.png" % [Art.WORLD_DIR, kind], 1,
 		Vector2(float(int(ceilf(mouth * Art.FACTOR)) + MARGIN * 2) * 0.5, float(MARGIN))
 	)
+	if strip != null:
+		# Where the flame starts. The bell runs from the pivot to one
+		# margin short of the bottom edge, which is the one fact about
+		# these placeholders the skin is allowed to rely on.
+		strip.exit = length
+	return strip
 
 
 func _plume_strip(kind: String, across: float) -> SpriteStrip:

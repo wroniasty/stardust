@@ -8,13 +8,13 @@
 [sub_resource type="Resource" id="Resource_kr4il"]
 script = ExtResource("1_kog8e")
 texture = ExtResource("2_i4kvq")
-pivot = Vector2(5.5, 1)
+pivot = Vector2(3, 0)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_0bg1y"]
 script = ExtResource("1_kog8e")
 texture = ExtResource("3_q4crf")
-pivot = Vector2(10, 5.5)
+pivot = Vector2(10, 3)
 full_rate = 0.0
 
 [resource]

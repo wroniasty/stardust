@@ -34,9 +34,19 @@ extends Resource
 ## same speed at full either, and that difference belongs to the picture.
 @export var full_rate: float = 12.0
 
+## How far past the pivot, along the frame's own down, whatever hangs off
+## this part begins -- in design pixels.
+##
+## A nozzle's exit plane, in other words, and zero on anything nothing hangs
+## off. Stated by the part rather than measured off its pixels: the skin
+## would otherwise have to guess where a bell ends from where its opaque
+## texels stop, and the first piece of real art with a flared lip or a soft
+## edge would quietly move every flame on the ship.
+@export var exit: float = 0.0
+
 ## Whether this is drawn additively. True for anything that makes its own
 ## light -- flames, beams, muzzle flashes -- which is also the set of things
-## that must not be darkened by the night side (see Ship._catch_the_light).
+## that must not be darkened by the night side (see ShipSkin).
 @export var additive: bool = false
 
 ## True for world art authored at Art.FACTOR, false for interface art

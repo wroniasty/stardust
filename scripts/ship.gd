@@ -273,6 +273,15 @@ signal destroyed(at: Vector2, velocity: Vector2)
 ## Emitted whenever the hull changes, for the HUD.
 signal hull_changed(integrity: float)
 
+## Emitted when what is bolted to the hull changes: an engine fitted, a gun
+## swapped, a whole preset applied.
+##
+## A seam, in the sense VISUALS.md section 6 means: the simulation rebuilds
+## its control groups for its own reasons and now says so, and the thing
+## that draws the ship rebuilds its sprites off the same event instead of
+## comparing the scene against itself every tick.
+signal configuration_changed
+
 ## Emitted when the hold changes, so the loadout screen can redraw without
 ## polling.
 signal hold_changed(item: Resource)
@@ -782,6 +791,9 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 	# the new one can. Topping it up on a swap is the other way round and
 	# would make refitting a free reload.
 	energy = minf(energy, energy_capacity())
+	# After the rebuild, not before: whatever listens is entitled to read a
+	# ship that is finished rather than one halfway through a refit.
+	configuration_changed.emit()
 
 	if verbose:
 		var report: PackedStringArray = configuration().lines()
@@ -1165,7 +1177,6 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 
 	_resolve_terrain(state)
 	_update_heat(state.step)
-	_catch_the_light()
 
 
 ## Decides whether the engines run on emergency power this tick, and takes
@@ -1210,26 +1221,11 @@ func _resolve_boost(step: float) -> void:
 		engine.boosting = boost_active
 
 
-## Darkens the painted parts of the ship on the night side of whatever
-## it is flying over.
-##
-## `self_modulate` rather than `modulate`, so the exhaust, the contrails
-## and the muzzle flashes hanging off the same ship stay as bright as they
-## were: they make their own light, and a flame that goes out at dusk is
-## worse than no shading at all.
-##
-## The same rule the ground under it uses, through the same function. A
-## ship that stayed lit over a dark planet read as a sticker on the
-## picture rather than a thing in it, and the one thing that could not fix
-## was being a slightly different shade of lit.
-func _catch_the_light() -> void:
-	var lit: float = GravityWell.daylight_at(get_tree(), global_position)
-	var shade: Color = Color(lit, lit, lit)
-	var hull: Polygon2D = get_node_or_null("Hull") as Polygon2D
-	if hull != null:
-		hull.self_modulate = shade
-	if gear != null:
-		gear.self_modulate = shade
+## Shading the ship for the night side used to live here, as
+## `_catch_the_light()`: the simulation reaching into its own Polygon2D
+## every tick and setting `self_modulate`. It is `ShipSkin._hand_back()`
+## now, which is a presentation node reading `daylight_at()` the same way
+## it reads throttle and gear travel. Nothing about the picture changed.
 
 
 ## Ties up to a station, mends things while tied, and lets go.
