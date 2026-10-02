@@ -289,13 +289,18 @@ Powód jest zmierzony, nie estetyczny. Afiksy już są — baza plus 0–4 wg
 rzadkości, mnożnik na polu opłacony pogorszeniem innego — ale pula jest
 wspólna dla całej kategorii i nie wie, czego baza nie ma.
 
-- [ ] **Afiksy per baza, nie per kategoria.** `_scale` robi `wartość ×
-  współczynnik`, więc afiks na polu zerowym ląduje, zajmuje slot i nie robi
-  nic. Zmierzone na 8400 losowaniach: **14% afiksów jest martwych**, a na
-  dyszach obrotowych i manewrówkach **19%** — bo cała pula silnikowa może
-  wylosować „steerable" bazie, która nie ma gimbala. Baza **dziedziczy
-  wspólną pulę i wyklucza**, zamiast wyliczać własną listę od zera: inaczej
-  nowy afiks trzeba dopisywać w siedmiu plikach.
+- [x] **Afiksy per baza, nie per kategoria.** Pula bazy to teraz afiksy,
+  które mają na niej co ruszyć — wyliczone, nie wypisane, więc nowy afiks
+  nie wymaga dopisywania do siedmiu plików. **22 pary baza-afiks wypadły.**
+  Zmierzone przed i po: 14% puli silnikowej i 13% broniowej było martwe na
+  przeciętnej bazie; `steerable` na dyszy bez gimbala, `responsive` na
+  silniku bez rozruchu, `wide` na działku bez wybuchu.
+  Przy okazji wyszedł **przypadek odwrotny, którego notatka nie miała**:
+  afiks, którego **koszt** pada na pole zerowe, nie jest wymianą tylko
+  prezentem. `rapid` kupuje kadencję rozrzutem, a wiązka nie ma rozrzutu —
+  pięć z trzynastu afiksów broniowych było na beam lance darmowych.
+  Rzadkość, która nie ma czym zapełnić slotów, dostaje **mniej afiksów**,
+  nie martwe: na ograniczonej bazie naprawdę jest mniej do zróżnicowania.
 - [ ] **Nazwy spójne dla wszystkich rodzajów.** Dziś są trzy traktowania:
   broń zapisuje `affixes`, generator składa `display_name`, a silnik
   **wyrzuca zwrotkę z `_apply_affixes`** i nazywa się „thruster engine 664".

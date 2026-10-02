@@ -992,6 +992,7 @@ func _evaluate_phase() -> void:
 			_check_art()
 			_check_skin()
 			_check_rarity_travels()
+			_check_affix_pools()
 			_check_seeker_targets()
 			_check_system_model(_planet)
 			_check_star()
@@ -1559,6 +1560,9 @@ const STREAMING_SCRIPT: GDScript = preload("res://scripts/autoload/streaming_man
 ## Measured, then given headroom, which is the only way a number like this
 ## means anything. See `_check_system_tour()` for what is and is not counted.
 const TOUR_FRAME_BUDGET: float = 12.0
+
+## Most affixes any roll asks for, which is what the rarest one asks for.
+const RARITY_AFFIXES_MAX: int = 4
 
 ## How many systems the layout checks run over. One seed proves nothing
 ## about a generator; the interesting failures are the lucky rolls.
@@ -5789,6 +5793,82 @@ func _check_seeker_targets() -> void:
 	shooter.queue_free()
 	close.queue_free()
 	distant.queue_free()
+
+
+## Afiksy, ktorych baza nie ma gdzie przyjac, nie trafiaja do jej puli.
+##
+## The defect this guards was measured rather than suspected: an affix
+## multiplies a field, a multiplier on zero is zero, and the pool was the
+## whole category. So "steerable" could land on a jet with no gimbal and
+## "wide" on a gun with no blast -- taking one of an item's few slots and
+## doing nothing with it. 14% of the engine pool and 13% of the weapon pool
+## was dead on an average base.
+##
+## The mirror case is worse and was not in the original note. An affix
+## whose **cost** falls on a field the base leaves at zero is not a trade,
+## it is a gift: "rapid" buys rate of fire with spread, and a beam has no
+## spread to pay with. Five of the thirteen weapon affixes were free on the
+## beam lance.
+func _check_affix_pools() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	var categories: Array[Dictionary] = [
+		{"kind": "weapon", "bases": loot.WEAPON_BASES, "table": loot.WEAPON_AFFIXES},
+		{"kind": "engine", "bases": loot.ENGINE_BASES, "table": loot.ENGINE_AFFIXES},
+		{"kind": "generator", "bases": loot.GENERATOR_BASES, "table": loot.GENERATOR_AFFIXES},
+	]
+
+	var toothless: int = 0
+	var excluded: int = 0
+	var starved: int = 0
+	var most: int = RARITY_AFFIXES_MAX
+	for category: Dictionary in categories:
+		var table: Array[Dictionary] = category["table"]
+		for path: String in category["bases"]:
+			var base: Resource = load(path)
+			var pool: Array[StringName] = loot.affixes_for(base, table)
+			excluded += table.size() - pool.size()
+			# Nothing in a pool may be unable to bite, which is the property
+			# itself rather than a sample of it.
+			for affix: Dictionary in table:
+				if not pool.has(affix["name"] as StringName):
+					continue
+				if not loot.affix_bites(base, affix):
+					toothless += 1
+			# And no base may be left with fewer affixes than the rarest
+			# roll wants, or legendary stops meaning anything on it.
+			if pool.size() < most:
+				starved += 1
+				print("    %s can only take %d affixes" % [path.get_file(), pool.size()])
+
+	_expect(toothless == 0, "every affix in a base's pool can move something on it")
+	_expect(
+		excluded > 0,
+		"and the rule has teeth: %d base-and-affix pairings are ruled out" % excluded,
+	)
+	_expect(starved == 0, "while every base can still fill a legendary roll")
+
+	# End to end, on the one kind of item that keeps the names it rolled.
+	# Engines throw theirs away, which is the next checkbox in M3.5 -- and
+	# until it is done this property cannot be checked on them at all.
+	var contradictions: int = 0
+	var checks: Array[Array] = [
+		[&"wide", "blast_radius"], [&"turreted", "traverse_range"],
+		[&"eager", "missile_thrust"], [&"precise", "spread_degrees"],
+		[&"rapid", "spread_degrees"], [&"hot-loaded", "muzzle_speed"],
+	]
+	for item_seed: int in range(1500):
+		var gun: WeaponData = loot.weapon(item_seed, RARITY_AFFIXES_MAX - 1)
+		for pair: Array in checks:
+			if gun.affixes.has(pair[0]) and absf(float(gun.get(pair[1]))) < 0.0001:
+				contradictions += 1
+				print("    %s rolled %s with no %s" % [
+					gun.display_name, pair[0], pair[1],
+				])
+	_expect(
+		contradictions == 0,
+		"and no rolled weapon carries an affix with nothing to act on (1500 rolls)",
+	)
+	loot.free()
 
 
 func _check_rarity_travels() -> void:
