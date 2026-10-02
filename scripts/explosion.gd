@@ -16,8 +16,8 @@ extends Node2D
 ## that is supposed to light up the whole neighbourhood, and gone in a
 ## fraction of the time the debris takes -- a flash that faded with the
 ## sparks would read as a fire rather than a detonation.
-const FLASH_REACH: float = 320.0
-const FLASH_STRENGTH: float = 2.6
+const FLASH_REACH: float = 260.0
+const FLASH_STRENGTH: float = 1.8
 const FLASH_SECONDS: float = 0.45
 const FLASH_COLOUR: Color = Color(1.00, 0.78, 0.45)
 

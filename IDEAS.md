@@ -1393,9 +1393,27 @@ rzeczy, które świecą — pocisk, wybuch, dysza. Dodawane (`BLEND_MODE_ADD`), 
 kolor z tego, na co pada. Tekstura to gradient robiony w kodzie, nie plik: ten
 projekt nie ma sprite'ów, a spadek promieniowy to cztery linijki.
 
-Zmierzone: błysk wybuchu rozświetla grunt i kadłub w promieniu 320 px i gaśnie
+**Halo, czyli co się stało, gdy światło padło na powietrze.** Pierwsza wersja
+dawała wokół statku świecącą kulę — zgłoszone z kokpitu. Przyczyna: kwadrat
+atmosfery zakrywa całą okolicę planety, więc **każde** światło w pobliżu
+rozświetlało tarczę nieba zamiast cokolwiek oświetlić. Lampa poświecona w
+powietrze nie robi świecącej kuli; atmosfera i chmury są teraz `unshaded` —
+nie są powierzchnią, tylko tym, co przed nią wisi, a własne światło dnia
+liczą same. Grunt, kadłub i skrzynki światło przyjmują, bo na nie światło
+pada.
+
+**Druga przyczyna: każda dysza świeciła tak samo.** Osiem równych lamp na
+jednym kadłubie to halo, a nie statek z silnikami — manewrówka 160 N nie ma
+czego szukać tam, gdzie świeci napęd 900 N. Blask skaluje się teraz ciągiem:
+zasięg pierwiastkiem, moc liniowo, więc mały silnik robi **małą jasną
+plamkę**, a nie szeroką bladą. Zmierzone na stokowym statku: 160 N daje 0,09
+mocy i 46 px zasięgu przeciw 0,50 i 110 px napędu głównego. Spadek
+promieniowy podniesiony z 2,2 na 3,4, bo łagodny spędza większość promienia
+na jasności ledwo widocznej — i to właśnie jest wygląd halo.
+
+Zmierzone: błysk wybuchu rozświetla grunt i kadłub w promieniu 260 px i gaśnie
 kwadratowo w 0,45 s (liniowo czytałoby się jak ściemniacz, nie jak detonacja);
-dysza na krótkiej prostej, 24 px nad gruntem, wyraźnie oświetla zbocze obok
+dysza na krótkiej prostej, 22 px nad gruntem, wyraźnie oświetla zbocze obok
 statku. Kadłub nad nocną stroną ma 0,42 jasności przeciw 1,00 nad dzienną —
 przedtem świecił tak samo i czytał się jak naklejka na obrazku.
 

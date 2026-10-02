@@ -1,4 +1,11 @@
 shader_type canvas_item;
+render_mode unshaded;
+// Not lit by Light2D. It is not a surface: it is the air in front of one,
+// and a lamp shone at air does not make a glowing ball in the sky. Letting
+// lights land here was what turned every engine and every tracer into a
+// halo -- the quad covers the whole neighbourhood of the planet, so any
+// light anywhere near it brightened a disc of sky instead of brightening
+// something. The daylight this layer does have, it works out itself.
 // Atmosphere as one plain layer, drawn UNDERNEATH the terrain and reaching all
 // the way to the planet's centre.
 //

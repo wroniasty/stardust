@@ -23,7 +23,12 @@ const TEXTURE_SIZE: int = 64
 ## How sharply the pool falls off. Above one the middle stays bright and
 ## the edge gives up quickly, which is what a small intense source looks
 ## like; at one it is a flat ramp and reads as fog.
-const FALLOFF: float = 2.2
+##
+## Raised from 2.2 after the first version was reported as haloing. A
+## gentle falloff spends most of its radius at a brightness just high
+## enough to see, which is precisely the ring-of-glow look; a steep one
+## puts the light where the source is and gives up.
+const FALLOFF: float = 3.4
 
 static var _shared: Texture2D = null
 

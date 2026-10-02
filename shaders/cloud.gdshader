@@ -1,4 +1,8 @@
 shader_type canvas_item;
+render_mode unshaded;
+// Not lit by Light2D either, and for the same reason as the air it floats
+// in: a cloud deck is a few hundred soft quads, and a light landing on
+// them reads as fog lighting up rather than as something being lit.
 // ONE cloud, drawn into its own quad. A CloudField draws a few hundred of them
 // in a single batch, each with its own seed in INSTANCE_CUSTOM.
 //

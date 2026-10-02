@@ -4650,6 +4650,58 @@ func _check_lighting() -> void:
 	)
 	blast.free()
 
+	# A nozzle's light is its thrust. Equal lamps on every mount was the
+	# first version and it was reported as a halo -- eight of them on one
+	# hull, the manoeuvring pods as bright as the main drive.
+	var flyer: Ship = _spawn_ship()
+	var big: EngineMount = null
+	var small: EngineMount = null
+	for mount: EngineMount in flyer.engine_mounts():
+		if mount.installed == null:
+			continue
+		if big == null or mount.installed.max_thrust > big.installed.max_thrust:
+			big = mount
+		if small == null or mount.installed.max_thrust < small.installed.max_thrust:
+			small = mount
+	big.set_exhaust(1.0)
+	small.set_exhaust(1.0)
+	var bright: GlowLight = _first_glow(big)
+	var faint: GlowLight = _first_glow(small)
+	_expect(
+		bright != null and faint != null,
+		"every nozzle that is burning is throwing light",
+	)
+	_expect(
+		faint.energy < bright.energy * 0.5,
+		"a %0.f N pod burns dimmer than a %.0f N drive (%.2f against %.2f)" % [
+			small.installed.max_thrust, big.installed.max_thrust,
+			faint.energy, bright.energy,
+		],
+	)
+	_expect(
+		faint.texture_scale < bright.texture_scale * 0.8,
+		"and reaches less far with it, so a small engine is a small bright spot",
+	)
+	big.set_exhaust(0.0)
+	_expect(not _first_glow(big).visible, "a nozzle that is not burning throws nothing")
+	flyer.free()
+
+	# And the air is not something light lands on. This is what the halo
+	# was: the atmosphere quad covers the whole neighbourhood of a planet,
+	# so any light near it lit a disc of sky instead of lighting a thing.
+	for part: String in ["Atmosphere"]:
+		var sky: ShaderMaterial = (planet.get_node(part) as ColorRect).material
+		_expect(
+			sky.shader.code.contains("render_mode unshaded"),
+			"%s takes no light: it is the air in front of a surface, not one" % part.to_lower(),
+		)
+	_expect(
+		(planet.get_node("Terrain") as ColorRect).material.shader.code.contains(
+			"render_mode unshaded"
+		) == false,
+		"while the ground does take it, because the ground is what a light falls on",
+	)
+
 	planet.free()
 	star.free()
 

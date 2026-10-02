@@ -81,8 +81,8 @@ var _age: float = 0.0
 ## How far a round lights the ground it passes over, in pixels, and how
 ## hard. Small and brief: a tracer is a spark, and a spark that floodlit
 ## the landscape would say the wrong thing about how much damage it does.
-const GLOW_REACH: float = 70.0
-const GLOW_STRENGTH: float = 0.9
+const GLOW_REACH: float = 55.0
+const GLOW_STRENGTH: float = 0.6
 
 
 func _ready() -> void:

@@ -45,15 +45,28 @@ func module_mass() -> float:
 	return installed.bulk if installed != null else 0.0
 
 
-## How far a nozzle at full flow lights its surroundings, and how hard.
+## What a nozzle at full flow throws, measured against REFERENCE_THRUST.
 ##
-## Reach is in pixels and deliberately modest: this is the glow on the
-## hull and on the ground beneath a ship on short finals, not a
-## headlight. Eight of them on a stock ship add up, which is the other
-## reason each one is small.
-const GLOW_REACH: float = 140.0
-const GLOW_STRENGTH: float = 0.85
+## Scaled by the engine, which it was not at first and which is what made
+## the manoeuvring thrusters as bright as the main drive -- eight equal
+## lamps on one hull, which is a halo rather than a ship with engines.
+## A flame is its thrust: a 180 N pod has no business lighting the same
+## ground a 900 N drive does.
+##
+## Reach goes with the square root and strength goes linearly, so a small
+## engine makes a small bright spot rather than a wide faint one. A wide
+## faint one is exactly the look being avoided.
+const REFERENCE_THRUST: float = 900.0
+const GLOW_REACH: float = 110.0
+const GLOW_STRENGTH: float = 0.5
 const GLOW_COLOUR: Color = Color(1.00, 0.72, 0.42)
+
+
+## How much of the reference this engine is, 0..1.
+func _glow_share() -> float:
+	if installed == null or REFERENCE_THRUST <= 0.0:
+		return 0.0
+	return clampf(installed.max_thrust / REFERENCE_THRUST, 0.0, 1.0)
 
 var _glow: GlowLight = null
 
@@ -77,10 +90,13 @@ func set_exhaust(amount: float) -> void:
 	# switched on, because an engine at a tenth of throttle is a glow and
 	# an engine at full is a landing light -- and because a light that
 	# snapped on would turn a gentle correction burn into a strobe.
+	var share: float = _glow_share()
+	if share <= 0.0:
+		return
 	if _glow == null:
-		_glow = GlowLight.make(GLOW_COLOUR, GLOW_REACH, 0.0)
+		_glow = GlowLight.make(GLOW_COLOUR, GLOW_REACH * sqrt(share), 0.0)
 		add_child(_glow)
-	_glow.energy = GLOW_STRENGTH * clampf(amount, 0.0, 1.0)
+	_glow.energy = GLOW_STRENGTH * share * clampf(amount, 0.0, 1.0)
 	_glow.visible = amount > 0.02
 
 

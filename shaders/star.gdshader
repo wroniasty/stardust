@@ -1,4 +1,6 @@
 shader_type canvas_item;
+render_mode unshaded;
+// Nothing lights a star. It is the thing doing the lighting.
 // The face of a star: granulation, limb darkening, and an edge.
 //
 // It replaces a flat filled circle, which was honest about the physics and
