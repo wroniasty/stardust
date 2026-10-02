@@ -88,7 +88,13 @@ var grace: float = 0.0:
 		# rendered frame, which is more often than physics.
 		set_process(grace > 0.0)
 
-@onready var _body: Polygon2D = $Body
+## The box itself, and the halo of its grade behind it.
+##
+## The textbook hybrid from ASSETLIST.md: the silhouette is fixed, so it is
+## a sprite, and the colour is a datum the game already holds, so it is a
+## `modulate` rather than five files. The halo stays procedural for the same
+## reason -- it is the rarity colour at a quarter alpha and nothing else.
+@onready var _body: StripSprite = $Body
 @onready var _glow: Polygon2D = $Glow
 
 
@@ -103,6 +109,7 @@ func _ready() -> void:
 	var ground: Planet = get_parent() as Planet
 	if ground != null:
 		ground.carved.connect(_on_ground_carved)
+	_body.show_strip(Projectile.looks().pick(null, &"crate"))
 	_paint()
 
 
@@ -146,7 +153,7 @@ func _paint() -> void:
 	if _body == null:
 		return
 	var colour: Color = RARITY_COLORS[clampi(rarity(), 0, RARITY_COLORS.size() - 1)]
-	_body.color = colour
+	_body.self_modulate = colour
 	_glow.color = Color(colour.r, colour.g, colour.b, 0.25)
 
 

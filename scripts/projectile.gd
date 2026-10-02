@@ -95,6 +95,34 @@ var _age: float = 0.0
 const GLOW_REACH: float = 55.0
 const GLOW_STRENGTH: float = 0.6
 
+## What this round is painted, and the colour of the light it throws.
+##
+## One field for both, because a glow should always be traceable to the
+## thing casting it. It used to be read off the body polygon's colour,
+## which worked right up until the body stopped being a polygon.
+@export var tint: Color = Color(1.0, 0.86, 0.45)
+
+## Which picture in `round.tres` this round wears. On the scene rather than
+## in code, because what a round looks like is the scene's business -- and a
+## test checks that every key here resolves to something.
+@export var look_key: StringName = &"slug"
+
+const ROUND_LOOKS: String = "res://resources/fx/looks/round.tres"
+
+static var _looks: LookTable = null
+
+
+## The table every round reads its picture from, loaded once.
+##
+## Cached rather than loaded per spawn. `load()` hits the resource cache
+## after the first call and would probably be fine, but a round costs about
+## seven microseconds and a dictionary lookup in the loader is a real share
+## of that -- measured once already, and not worth measuring again.
+static func looks() -> LookTable:
+	if _looks == null:
+		_looks = load(ROUND_LOOKS) as LookTable
+	return _looks
+
 
 func _ready() -> void:
 	# Resolved once: a projectile lives for a few seconds and never outlives
@@ -103,10 +131,11 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	# The round's own colour, so a glow always belongs to the thing that
 	# is casting it rather than to a palette nobody can trace back.
-	var body: Polygon2D = get_node_or_null("Body") as Polygon2D
-	add_child(GlowLight.make(
-		body.color if body != null else Color.WHITE, GLOW_REACH, GLOW_STRENGTH
-	))
+	var body: StripSprite = get_node_or_null("Body") as StripSprite
+	if body != null:
+		body.show_strip(looks().pick(null, look_key))
+		body.self_modulate = tint
+	add_child(GlowLight.make(tint, GLOW_REACH, GLOW_STRENGTH))
 
 
 func _physics_process(delta: float) -> void:

@@ -4656,7 +4656,7 @@ func _check_lighting() -> void:
 	var glow: GlowLight = _first_glow(shot)
 	_expect(glow != null, "a round carries its own light")
 	_expect(
-		glow != null and glow.color.is_equal_approx((shot.get_node("Body") as Polygon2D).color),
+		glow != null and glow.color.is_equal_approx(shot.tint),
 		"in the colour of the round, so a glow can always be traced to what is casting it",
 	)
 	_expect(
@@ -5562,6 +5562,15 @@ func _check_rarity_travels() -> void:
 	_expect(
 		crate.rarity_color_of() == ModuleData.RARITY_COLORS[4],
 		"and painted the colour that grade is painted",
+	)
+	# Painted on the sprite rather than baked into five files. The crate is
+	# the textbook hybrid from ASSETLIST: a fixed silhouette carrying a
+	# colour the game already knows.
+	var box: StripSprite = crate.get_node("Body") as StripSprite
+	_expect(box != null and box.strip != null, "the crate wears the crate picture")
+	_expect(
+		box != null and box.self_modulate.is_equal_approx(crate.rarity_color_of()),
+		"and the picture is tinted by it, so one white sprite covers all five grades",
 	)
 
 	# The grades have to be told apart on screen, which is the whole job of
@@ -6769,6 +6778,36 @@ func _check_skin() -> void:
 	_expect(hull != null and hull.visible, "which means the polygon is still visible")
 
 	ship.free()
+
+	# What the guns throw is a sprite now as well. Walked over the weapon
+	# catalogue rather than over the two scenes, because what has to hold is
+	# that every weapon in the game resolves to a picture -- a scene nobody
+	# fires would pass a check written against the scenes.
+	var unpainted: int = 0
+	var untinted: int = 0
+	var rounds: int = 0
+	for path: String in LootGenerator.WEAPON_BASES:
+		var weapon: WeaponData = load(path) as WeaponData
+		if weapon.projectile_scene == null:
+			continue
+		var shot: Projectile = weapon.projectile_scene.instantiate() as Projectile
+		root.add_child(shot)
+		rounds += 1
+		var body: StripSprite = shot.get_node_or_null("Body") as StripSprite
+		if body == null or body.strip == null:
+			unpainted += 1
+			print("    %s throws an unpainted round (%s)" % [
+				weapon.display_name, shot.look_key,
+			])
+		elif not body.self_modulate.is_equal_approx(shot.tint):
+			untinted += 1
+		shot.free()
+	_expect(rounds > 0, "the weapon catalogue throws things (%d kinds)" % rounds)
+	_expect(unpainted == 0, "and every one of them resolves to a picture")
+	_expect(
+		untinted == 0,
+		"each painted its own tint, which is also the colour of the light it throws",
+	)
 
 
 ## Every StripSprite the skin built.

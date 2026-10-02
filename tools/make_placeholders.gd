@@ -37,6 +37,13 @@ const FLAME: Color = Color(1.00, 0.72, 0.42)
 const EMBER: Color = Color(1.00, 0.44, 0.16)
 const PAPER: Color = Color(1.00, 1.00, 1.00, 1.00) ## icons, before modulate
 
+## Crates and rounds are painted in greys, because what colours them is a
+## fact the game already holds: a crate is painted by what is inside it and
+## a round by the gun that fired it. A hue baked into the file would be a
+## second opinion about both.
+const SHELL: Color = Color(0.92, 0.94, 0.97)
+const SHELL_DARK: Color = Color(0.45, 0.47, 0.52)
+
 ## Texels of empty space round every sprite. The rule and the reason for it
 ## live on Art, because the skin has to know it too.
 const MARGIN: int = Art.MARGIN
@@ -519,16 +526,16 @@ func _draw_rounds() -> void:
 		Vector2(float(body) - 2.0, float(missile.get_height()) - 2.0),
 		Vector2(2.0, float(missile.get_height()) - 2.0),
 		Vector2(2.0, 8.0),
-	]), METAL)
-	_box(missile, Rect2i(0, missile.get_height() - 10, 3, 8), SHADOW)
-	_box(missile, Rect2i(body - 3, missile.get_height() - 10, 3, 8), SHADOW)
+	]), SHELL)
+	_box(missile, Rect2i(0, missile.get_height() - 10, 3, 8), SHELL_DARK)
+	_box(missile, Rect2i(body - 3, missile.get_height() - 10, 3, 8), SHELL_DARK)
 	_border(missile, EDGE)
 	_save(missile, "%s/rounds/missile.png" % Art.WORLD_DIR)
 
 	var crate: Image = _blank(12 * Art.FACTOR + 2, 12 * Art.FACTOR + 2)
-	_box(crate, Rect2i(1, 1, crate.get_width() - 2, crate.get_height() - 2), METAL)
+	_box(crate, Rect2i(1, 1, crate.get_width() - 2, crate.get_height() - 2), SHELL)
 	_box(crate, Rect2i(1, crate.get_height() / 2 - 2, crate.get_width() - 2, 4),
-		SHADOW)
+		SHELL_DARK)
 	_border(crate, EDGE)
 	_save(crate, "%s/rounds/crate.png" % Art.WORLD_DIR)
 
