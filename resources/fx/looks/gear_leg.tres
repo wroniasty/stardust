@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_kog8e"]
+[ext_resource type="Texture2D" path="res://assets/art/world/gear/strut.png" id="2_i4kvq"]
+[ext_resource type="Texture2D" path="res://assets/art/world/gear/pad.png" id="3_q4crf"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="4_ecmsr"]
+
+[sub_resource type="Resource" id="Resource_kr4il"]
+script = ExtResource("1_kog8e")
+texture = ExtResource("2_i4kvq")
+pivot = Vector2(5.5, 1)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_0bg1y"]
+script = ExtResource("1_kog8e")
+texture = ExtResource("3_q4crf")
+pivot = Vector2(10, 5.5)
+full_rate = 0.0
+
+[resource]
+script = ExtResource("4_ecmsr")
+thresholds = PackedFloat32Array()
+by_key = {
+&"pad": SubResource("Resource_0bg1y"),
+&"strut": SubResource("Resource_kr4il")
+}
+fallback = SubResource("Resource_kr4il")

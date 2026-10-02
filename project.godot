@@ -30,6 +30,17 @@ window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[importer_defaults]
+
+; Mipmaps on every imported texture, because world art is minified.
+; Art.WORLD_FILTER samples mipmaps and a texture imported without them has
+; none to sample: the filter silently falls back to plain bilinear and the
+; ship sparkles when the camera pulls out. Set here rather than per file so
+; a new PNG cannot be dropped in missing it.
+texture={
+"mipmaps/generate": true
+}
+
 [input]
 
 thrust_forward={

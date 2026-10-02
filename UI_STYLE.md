@@ -36,6 +36,16 @@ Jedno zdanie do zapamiętania: **to nie jest menu, to jest przyrząd.**
 
 ## 2. Prawo siatki
 
+**To prawo rządzi interfejsem, nie światem.** Rozróżnienie wyglądało kiedyś na
+sprzeczność i nią nie było: świat pożyczał regułę napisaną dla panelu. HUD się
+nie obraca, nie zjeżdża z kamerą i stoi w skali 1.0 — tam design pixel naprawdę
+jest pikselem i wszystko poniżej obowiązuje dosłownie. Kadłub obraca się
+swobodnie przez 360 stopni, a kamera chodzi od 1.7 do 0.385, więc żadna siatka
+pikseli się na nim nie utrzyma i nie ma czego bronić. Kontrakt na grafikę
+świata — skala 3x, filtr `LINEAR_WITH_MIPMAPS` — stoi w ASSETLIST.md,
+„Dlaczego świat i interfejs mają osobne reguły", i jest w kodzie jako
+`scripts/fx/art.gd`.
+
 Ekran ma 640x360 i skaluje się tylko całkowicie. Interfejs to szanuje:
 
 - Wszystkie współrzędne rysowania są całkowite. `snap()` na wejściu każdego
@@ -48,7 +58,10 @@ Ekran ma 640x360 i skaluje się tylko całkowicie. Interfejs to szanuje:
 - Font bez antyaliasingu, bez pozycjonowania subpikselowego, w rozmiarze
   będącym wielokrotnością rozmiaru projektowego.
 - Żaden element interfejsu nie ma skali innej niż 1.0. Nie ma „małego okna"
-  zrobionego przez `scale = 0.5`.
+  zrobionego przez `scale = 0.5`. Sprite'y świata **mają** skalę 1/3, i to
+  jest ta sama reguła widziana z drugiej strony: tam skala nie jest sposobem
+  na zmianę rozmiaru elementu, tylko przelicznikiem jednostki, i jest jedna
+  dla wszystkiego.
 
 Konsekwencja, którą trzeba przyjąć: **mamy mało miejsca**. 640x360 to około 45
 znaków szerokości na panel przyrządowy. Każda liczba na ekranie musi zarabiać

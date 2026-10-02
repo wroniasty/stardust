@@ -2897,7 +2897,7 @@ Save = seed galaktyki plus słownik delt.
   (stąd ostrzeżenie w konsoli, jest oczekiwane). Węzły podążające za statkiem
   muszą się aktualizować w `_physics_process`, nie w `_process`: odczyt
   transformacji z klatki renderowania zwraca pozycję nieinterpolowaną.
-- Pixel-art: bazowa rozdzielczość 640x360, skalowanie przez tryb rozciągania `canvas_items` z aspektem `expand` (ustawienia projektu), filtr tekstur Nearest. SubViewport nie jest potrzebny: `canvas_items` renderuje w niskiej rozdzielczości i skaluje całość, a `expand` pozwala na szersze ekrany bez czarnych pasów. SubViewport dopiero wtedy, gdy HUD będzie musiał być w pełnej rozdzielczości.
+- Pixel-art: bazowa rozdzielczość 640x360, skalowanie przez tryb rozciągania `canvas_items` z aspektem `expand` (ustawienia projektu). SubViewport nie jest potrzebny, a `expand` pozwala na szersze ekrany bez czarnych pasów. **Filtr nie jest już jeden na całą grę** — patrz niżej, „Rozdzielczość: jednostka układu, nie budżet texeli".
 - Silniki: GPUParticles2D, intensywność od ciągu, zmiana przy warpie i awariach.
   `inherit_velocity_ratio = 0.85` jest tu kluczowe: cząsteczki lecą w układzie
   świata z prędkością 70..110 px/s, więc na postoju wyglądają jak płomień, a
@@ -2914,6 +2914,50 @@ Save = seed galaktyki plus słownik delt.
   0.65) dają czytelne poczucie głębi. Offset mnożony przez zoom kamery, inaczej
   gwiazdy dryfują w złym tempie przy oddaleniu.
 - Oświetlenie 2D od gwiazdy, cień strony nocnej planety.
+
+### Rozdzielczość: jednostka układu, nie budżet texeli
+
+Pytanie brzmiało „czy 24x32 na statek to dość detalu", a odpowiedź okazała się
+nie być decyzją o sprite. Jest to decyzja o tym, czym w ogóle jest 640x360.
+
+**Zostaje jednostką układu i przestaje być budżetem texeli.** Powód jest w
+trybie skalowania, który projekt ma od M0: `canvas_items` renderuje w
+rozdzielczości okna, a dokumentacja Godota mówi o nim wprost, że nie ma już
+odpowiedniości 1:1 między pikselem sprite'a a pikselem ekranu. Sprite z
+większą liczbą texeli naprawdę pokazuje więcej. Statek dostaje przy 1080p
+72x96 prawdziwych pikseli i miał dotąd 24x32 na ich wypełnienie.
+
+**Grafika świata rysowana jest w skali 3x** (`Art.FACTOR`) i wyświetlana w 1/3.
+Trójka, bo 1080p to dokładnie trzykrotność 640x360, więc na najczęstszym
+ekranie jeden texel to jeden piksel i nic nie jest przepróbkowywane.
+
+**Przesądził obrót, nie rozdzielczość.** Statek obraca się swobodnie i nie
+robimy pre-renderowanych klatek obrotu, więc nie istnieje kąt, przy którym
+niskorozdzielczy sprite siada na siatce pikseli — i tak jest przepróbkowywany
+co klatkę. Pytanie nie brzmi „czy zachować pixel art", tylko „z ilu texeli
+przepróbkowujemy".
+
+**Z tego wynika filtr, i to jest część, która mogłaby zaskoczyć.** Zmierzone:
+kamera chodzi od 1.7 do 0.385 (`ZOOM_LEVELS` razy człon prędkości), okno mnoży
+to przez 2 przy 720p i przez 6 przy 4K, więc jeden texel trafia na od ćwierci
+do trzech i pół piksela ekranu — trzynastokrotny zakres na jednym sprite, w
+jednej sesji. `Nearest` nie ma odpowiedzi na żadnym końcu. Świat dostaje
+`LINEAR_WITH_MIPMAPS`, a mipmapy muszą być włączone przy imporcie
+(`[importer_defaults]` w `project.godot`), bo bez nich filtr cicho degraduje
+do zwykłego dwuliniowego i statek skrzy się przy oddalaniu.
+
+**Interfejs zostaje prawdziwym pixel artem**: 1:1, `Nearest`, skala 1.0. Nie
+obraca się i nie zjeżdża, więc jedyne miejsce, w którym prawo siatki z
+UI_STYLE.md §2 jest dosłownie prawdziwe, jest też jedynym, dla którego je
+napisano. To, co wyglądało na sprzeczność w tym prawie, było światem
+pożyczającym regułę panelu.
+
+Koszt tej decyzji to przeliczenie rozmiarów grafiki świata w ASSETLIST.md.
+Zapłacony w momencie, w którym nie istniał ani jeden docelowy zasób
+graficzny, czyli najtaniej, jak się dało. Czego **nie** kosztuje: fontu.
+Przy jednej skali na całą grę font bitmapowy trzeba by rysować jako 24 px
+zamiast 8, co jest zupełnie inną robotą; podział na świat i interfejs
+zostawia go dokładnie tam, gdzie był.
 
 ### Śmierć i restart (M1.7)
 

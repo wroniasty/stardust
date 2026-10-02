@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="HullData" format=3]
+
+[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_vrcit"]
+
+[resource]
+script = ExtResource("1_vrcit")
+id = &"sliver"
+display_name = "sliver (bad)"
+outline = PackedVector2Array(0, -22, -3, 16, 3, 16)

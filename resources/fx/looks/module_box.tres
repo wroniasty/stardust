@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_so6ew"]
+[ext_resource type="Texture2D" path="res://assets/art/world/modules/generator.png" id="2_chu8l"]
+[ext_resource type="Texture2D" path="res://assets/art/world/modules/computer.png" id="3_4rp6g"]
+[ext_resource type="Texture2D" path="res://assets/art/world/modules/cargo.png" id="4_fi3jm"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="5_1mr63"]
+
+[sub_resource type="Resource" id="Resource_aq4cy"]
+script = ExtResource("1_so6ew")
+texture = ExtResource("2_chu8l")
+pivot = Vector2(13.5, 13.5)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_8qtyi"]
+script = ExtResource("1_so6ew")
+texture = ExtResource("3_4rp6g")
+pivot = Vector2(13.5, 13.5)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_j1pmb"]
+script = ExtResource("1_so6ew")
+texture = ExtResource("4_fi3jm")
+pivot = Vector2(13.5, 13.5)
+full_rate = 0.0
+
+[resource]
+script = ExtResource("5_1mr63")
+thresholds = PackedFloat32Array()
+by_key = {
+&"cargo": SubResource("Resource_j1pmb"),
+&"computer": SubResource("Resource_8qtyi"),
+&"generator": SubResource("Resource_aq4cy")
+}
+fallback = SubResource("Resource_aq4cy")

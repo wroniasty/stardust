@@ -14,6 +14,21 @@ const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
 const STARFIELD_SCENE: String = "res://scenes/starfield.tscn"
 
+## Every look table on disk. A const list rather than a directory walk,
+## because a table that stops being written is a table that stops being
+## checked, and a directory walk would quietly agree.
+const ART_LOOK_TABLES: Array[String] = [
+	"res://resources/fx/looks/hull.tres",
+	"res://resources/fx/looks/engine_nozzle.tres",
+	"res://resources/fx/looks/engine_plume.tres",
+	"res://resources/fx/looks/weapon_muzzle.tres",
+	"res://resources/fx/looks/module_box.tres",
+	"res://resources/fx/looks/gear_leg.tres",
+	"res://resources/fx/looks/round.tres",
+	"res://resources/fx/looks/particle.tres",
+	"res://resources/fx/looks/module_icon.tres",
+]
+
 ## A seed known to produce a planet with air. Picked once, kept fixed so the
 ## numbers below stay meaningful.
 const TEST_SEED: int = 20260922
@@ -974,6 +989,7 @@ func _evaluate_phase() -> void:
 			_check_ship_fitouts()
 			_check_fitout_presets()
 			_check_creative_tool()
+			_check_art()
 			_check_rarity_travels()
 			_check_seeker_targets()
 			_check_system_model(_planet)
@@ -6394,6 +6410,260 @@ func _clear_phase() -> void:
 	if _planet != null:
 		_planet.free()
 		_planet = null
+
+
+## Sprite'y i zasoby wygladu: czy sa, czy pasuja i czy cokolwiek rozrozniaja.
+##
+## Three things are guarded here and they are worth separating.
+##
+## The first is drift. The hull catalogue now lives in three places --
+## CreativeTool.SHAPES, the presets in ShipFitout.all(), and the HullData
+## resources the art is cut from -- because the first two are being migrated
+## onto the third and the migration is not finished (PLAN.md M3.5). Three
+## copies with nothing between them is how a hull ends up flying one shape
+## and wearing another.
+##
+## The second is the resolution contract. Art.FACTOR only means anything if
+## the files obey it, and nothing about a PNG says what scale it was drawn
+## at: a world sprite flagged as interface art comes out three times too big
+## and does not error.
+##
+## The third is whether the look tables separate anything. A table that
+## resolves every engine in the game to the same picture is not a binding,
+## it is a default with extra steps -- and it would pass every other check
+## here.
+func _check_art() -> void:
+	var hulls: Dictionary = HullData.all()
+	_expect(not hulls.is_empty(), "there are hull resources at all (%d)" % hulls.size())
+
+	var outlines: Array[PackedVector2Array] = []
+	for id: Variant in hulls:
+		var known: HullData = hulls[id]
+		outlines.append(known.outline)
+
+	var missing: int = 0
+	for shape: Dictionary in CreativeTool.SHAPES:
+		if not _art_knows_outline(outlines, PackedVector2Array(shape["outline"])):
+			missing += 1
+			print("    no hull resource for shape %s" % shape["name"])
+	for preset: Dictionary in ShipFitout.all():
+		if not _art_knows_outline(outlines, PackedVector2Array(preset["hull"])):
+			missing += 1
+			print("    no hull resource for preset %s" % preset["name"])
+	_expect(missing == 0, "every shape and preset hull has a resource with the same outline")
+
+	var hull_looks: LookTable = load("res://resources/fx/looks/hull.tres") as LookTable
+	_expect(hull_looks != null, "the hull look table loads")
+	var undressed: int = 0
+	var too_small: int = 0
+	for id: Variant in hulls:
+		var hull: HullData = hulls[id]
+		var strip: SpriteStrip = hull_looks.pick(hull, hull.id)
+		if strip == null or not strip.is_valid():
+			undressed += 1
+			continue
+		# The picture has to cover the shape. Not an aesthetic test: a sprite
+		# narrower than its own collision outline leaves the ship visibly
+		# bouncing off air.
+		var drawn: Vector2 = strip.design_size()
+		var box: Rect2 = hull.bounds()
+		if drawn.x < box.size.x or drawn.y < box.size.y:
+			too_small += 1
+			print("    %s sprite is %s for an outline of %s" % [hull.id, drawn, box.size])
+	_expect(undressed == 0, "every hull resource resolves to a sprite")
+	_expect(too_small == 0, "and every hull sprite is at least as big as its outline")
+
+	# Every strip in every table, checked for the things that are invisible
+	# in a file listing: a frame width that does not divide, a pivot outside
+	# its own frame, and a scale flag that disagrees with where the file sits.
+	var broken: int = 0
+	var astray: int = 0
+	var mislabelled: int = 0
+	var counted: int = 0
+	for path: String in ART_LOOK_TABLES:
+		var table: LookTable = load(path) as LookTable
+		if table == null:
+			_expect(false, "look table %s loads" % path)
+			continue
+		for strip: SpriteStrip in table.every_strip():
+			if strip == null or not strip.is_valid():
+				broken += 1
+				continue
+			counted += 1
+			if strip.texture.get_width() % strip.frames != 0:
+				broken += 1
+			if not strip.pivot_is_sane():
+				astray += 1
+				print("    pivot %s outside %s" % [strip.pivot, strip.frame_size()])
+			var under_world: bool = strip.texture.resource_path.begins_with(Art.WORLD_DIR)
+			if strip.in_world != under_world:
+				mislabelled += 1
+				print("    %s is marked in_world=%s" % [
+					strip.texture.resource_path, strip.in_world,
+				])
+	_expect(counted > 0, "the look tables hand out sprites (%d)" % counted)
+	_expect(broken == 0, "every sprite has a texture that divides into its frames")
+	_expect(astray == 0, "and a pivot inside its own frame")
+	_expect(mislabelled == 0, "and the scale flag agrees with which folder the file is in")
+
+	# The bindings, against the catalogue they have to separate.
+	var nozzles: LookTable = load("res://resources/fx/looks/engine_nozzle.tres") as LookTable
+	var plumes: LookTable = load("res://resources/fx/looks/engine_plume.tres") as LookTable
+	var seen_nozzles: Array[SpriteStrip] = []
+	var seen_plumes: Array[SpriteStrip] = []
+	var undrawn: int = 0
+	for path: String in LootGenerator.ENGINE_BASES:
+		var engine: EngineData = load(path) as EngineData
+		var nozzle: SpriteStrip = nozzles.pick(engine)
+		var plume: SpriteStrip = plumes.pick(engine)
+		if nozzle == null or plume == null:
+			undrawn += 1
+			continue
+		if not seen_nozzles.has(nozzle):
+			seen_nozzles.append(nozzle)
+		if not seen_plumes.has(plume):
+			seen_plumes.append(plume)
+	_expect(undrawn == 0, "every engine base resolves to a nozzle and a plume")
+	_expect(
+		seen_nozzles.size() >= 3,
+		"the nozzle table tells the three engine types apart (%d looks)" % seen_nozzles.size(),
+	)
+	_expect(
+		seen_plumes.size() >= 3,
+		"and the plume table sorts the catalogue by thrust (%d looks)" % seen_plumes.size(),
+	)
+
+	var muzzles: LookTable = load("res://resources/fx/looks/weapon_muzzle.tres") as LookTable
+	var seen_guns: Array[SpriteStrip] = []
+	var unarmed: int = 0
+	for path: String in LootGenerator.WEAPON_BASES:
+		var weapon: WeaponData = load(path) as WeaponData
+		var muzzle: SpriteStrip = muzzles.pick(weapon)
+		if muzzle == null:
+			unarmed += 1
+			continue
+		if not seen_guns.has(muzzle):
+			seen_guns.append(muzzle)
+	_expect(unarmed == 0, "every weapon base resolves to a gun sprite")
+	_expect(
+		seen_guns.size() >= 4,
+		"and the gun table tells the weapon types apart (%d looks)" % seen_guns.size(),
+	)
+
+	# The affix binding, on the one kind of item that currently carries
+	# affixes at all.
+	#
+	# This check was written against an engine first and failed, which is
+	# the useful part: `EngineData` has no `affixes` field, because the
+	# generator throws the rolled list away instead of keeping it (PLAN.md
+	# M3.5, "Nazwy spójne dla wszystkich rodzajów"). So the "steerable"
+	# entry in the nozzle table is written, correct, and inert -- and the
+	# mechanism had to be proved somewhere it can actually fire.
+	var carrier: WeaponData = (
+		load("res://resources/weapons/autocannon.tres") as WeaponData
+	).duplicate() as WeaponData
+	carrier.affixes = [&"breaching"] as Array[StringName]
+	var bench: LookTable = LookTable.new()
+	bench.stat = &"type"
+	bench.thresholds = muzzles.thresholds
+	bench.variants = muzzles.variants
+	bench.by_affix[&"breaching"] = seen_guns[seen_guns.size() - 1]
+	_expect(
+		bench.pick(carrier) == seen_guns[seen_guns.size() - 1],
+		"an affix changes the picture, and beats the threshold that would not have",
+	)
+	_expect(
+		bench.pick(load("res://resources/weapons/autocannon.tres")) == seen_guns[0],
+		"and an item without that affix falls back to the measurement",
+	)
+
+	# Asserted as inert rather than left unsaid, so the day engines start
+	# keeping their affixes this is what notices.
+	var gimballed: EngineData = (
+		load("res://resources/engines/gimballed_drive.tres") as EngineData
+	)
+	_expect(
+		not ("affixes" in gimballed),
+		"engines carry no affixes yet, so the nozzle table's affix entry is inert (M3.5)",
+	)
+
+	# And the interface family is the one place still authored 1:1.
+	var glyphs: LookTable = load("res://resources/fx/looks/module_icon.tres") as LookTable
+	var flat: bool = true
+	for strip: SpriteStrip in glyphs.every_strip():
+		if strip != null and strip.in_world:
+			flat = false
+	_expect(flat, "interface glyphs are authored at the design size, not at Art.FACTOR")
+
+	# The node itself. Everything above is tables and files; this is the one
+	# piece of running code, and it is the piece that turns "the pivot is
+	# right in the resource" into "the part is bolted on straight".
+	var sprite: StripSprite = StripSprite.new()
+	root.add_child(sprite)
+	var plume: SpriteStrip = plumes.by_value(900.0)
+	sprite.show_strip(plume)
+	_expect(
+		sprite.offset == -plume.pivot and not sprite.centered,
+		"a strip sprite hangs off its own pivot, not off the middle of the frame",
+	)
+	_expect(
+		is_equal_approx(sprite.scale.x, Art.WORLD_SCALE)
+		and sprite.texture_filter == Art.WORLD_FILTER,
+		"and takes its scale and its filter from the strip, not from the scene",
+	)
+	_expect(
+		sprite.hframes == plume.frames and sprite.material is CanvasItemMaterial,
+		"a plume is a strip of %d frames, drawn additively" % plume.frames,
+	)
+
+	# Throttle shut, frame held. This is the rule the whole animation design
+	# rests on: the rate is a reading off the ship, so an engine that is not
+	# burning has a flame that is not moving -- and nothing had to be told
+	# to stop it.
+	sprite.drive(0.0)
+	for tick: int in range(30):
+		sprite.advance(1.0 / 60.0)
+	_expect(sprite.frame == 0, "a shut throttle holds the first frame")
+
+	sprite.drive(1.0)
+	var before: int = sprite.frame
+	var moved: bool = false
+	for tick: int in range(30):
+		sprite.advance(1.0 / 60.0)
+		if sprite.frame != before:
+			moved = true
+	_expect(moved, "and a full one runs the strip (%.0f fps)" % sprite.rate)
+	_expect(
+		sprite.frame >= 0 and sprite.frame < plume.frames,
+		"never off the end of the strip",
+	)
+
+	# Half throttle, half the speed, because the rate is the strip's own
+	# times the fraction and nothing else gets a say.
+	sprite.drive(0.5)
+	_expect(
+		is_equal_approx(sprite.rate, plume.full_rate * 0.5),
+		"half a throttle flickers at half the rate",
+	)
+
+	var glyph: SpriteStrip = glyphs.pick(null, &"engine")
+	sprite.show_strip(glyph)
+	_expect(
+		is_equal_approx(sprite.scale.x, 1.0)
+		and sprite.texture_filter == Art.UI_FILTER
+		and sprite.material == null,
+		"and the same node draws an interface glyph at 1:1, Nearest, opaque",
+	)
+	sprite.queue_free()
+
+
+func _art_knows_outline(
+	known: Array[PackedVector2Array], outline: PackedVector2Array
+) -> bool:
+	for shape: PackedVector2Array in known:
+		if shape == outline:
+			return true
+	return false
 
 
 func _finish() -> bool:

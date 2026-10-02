@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_c44es"]
+[ext_resource type="Texture2D" path="res://assets/art/world/particles/dot.png" id="2_lw27i"]
+[ext_resource type="Texture2D" path="res://assets/art/world/particles/debris_strip3.png" id="3_00sx0"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="4_d0nb6"]
+
+[sub_resource type="Resource" id="Resource_euo41"]
+script = ExtResource("1_c44es")
+texture = ExtResource("2_lw27i")
+pivot = Vector2(12, 12)
+full_rate = 0.0
+additive = true
+
+[sub_resource type="Resource" id="Resource_dp115"]
+script = ExtResource("1_c44es")
+texture = ExtResource("3_00sx0")
+frames = 3
+pivot = Vector2(4.5, 4.5)
+
+[resource]
+script = ExtResource("4_d0nb6")
+thresholds = PackedFloat32Array()
+by_key = {
+&"debris": SubResource("Resource_dp115"),
+&"dot": SubResource("Resource_euo41")
+}
+fallback = SubResource("Resource_euo41")

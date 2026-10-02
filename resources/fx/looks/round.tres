@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_nno4i"]
+[ext_resource type="Texture2D" path="res://assets/art/world/rounds/slug.png" id="2_x2r31"]
+[ext_resource type="Texture2D" path="res://assets/art/world/rounds/missile.png" id="3_nit38"]
+[ext_resource type="Texture2D" path="res://assets/art/world/rounds/crate.png" id="4_40lag"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="5_fsqwv"]
+
+[sub_resource type="Resource" id="Resource_xkyi2"]
+script = ExtResource("1_nno4i")
+texture = ExtResource("2_x2r31")
+pivot = Vector2(5.5, 11.5)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_bw3ac"]
+script = ExtResource("1_nno4i")
+texture = ExtResource("3_nit38")
+pivot = Vector2(8.5, 17.5)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_88hp7"]
+script = ExtResource("1_nno4i")
+texture = ExtResource("4_40lag")
+pivot = Vector2(19, 19)
+full_rate = 0.0
+
+[resource]
+script = ExtResource("5_fsqwv")
+thresholds = PackedFloat32Array()
+by_key = {
+&"crate": SubResource("Resource_88hp7"),
+&"missile": SubResource("Resource_bw3ac"),
+&"slug": SubResource("Resource_xkyi2")
+}
+fallback = SubResource("Resource_xkyi2")

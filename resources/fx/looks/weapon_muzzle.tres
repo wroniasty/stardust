@@ -1,0 +1,53 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_kswoi"]
+[ext_resource type="Texture2D" path="res://assets/art/world/guns/projectile.png" id="2_t57qx"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="3_n8bub"]
+[ext_resource type="Texture2D" path="res://assets/art/world/guns/laser.png" id="4_kyk60"]
+[ext_resource type="Texture2D" path="res://assets/art/world/guns/dumb_missile.png" id="5_hbohk"]
+[ext_resource type="Texture2D" path="res://assets/art/world/guns/homing_missile.png" id="6_kbfa2"]
+[ext_resource type="Texture2D" path="res://assets/art/world/guns/aoe.png" id="7_wwiwv"]
+[ext_resource type="Texture2D" path="res://assets/art/world/guns/pulse.png" id="8_rxxbr"]
+
+[sub_resource type="Resource" id="Resource_vb64j"]
+script = ExtResource("1_kswoi")
+texture = ExtResource("2_t57qx")
+pivot = Vector2(12, 20)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_n0vo0"]
+script = ExtResource("1_kswoi")
+texture = ExtResource("4_kyk60")
+pivot = Vector2(12, 20)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_i5kgn"]
+script = ExtResource("1_kswoi")
+texture = ExtResource("5_hbohk")
+pivot = Vector2(12, 20)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_a5yai"]
+script = ExtResource("1_kswoi")
+texture = ExtResource("6_kbfa2")
+pivot = Vector2(12, 20)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_tsu82"]
+script = ExtResource("1_kswoi")
+texture = ExtResource("7_wwiwv")
+pivot = Vector2(12, 20)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_4xgw8"]
+script = ExtResource("1_kswoi")
+texture = ExtResource("8_rxxbr")
+pivot = Vector2(12, 20)
+full_rate = 0.0
+
+[resource]
+script = ExtResource("3_n8bub")
+stat = &"type"
+thresholds = PackedFloat32Array(0, 1, 2, 3, 4, 5)
+variants = Array[ExtResource("1_kswoi")]([SubResource("Resource_vb64j"), SubResource("Resource_n0vo0"), SubResource("Resource_i5kgn"), SubResource("Resource_a5yai"), SubResource("Resource_tsu82"), SubResource("Resource_4xgw8")])
+fallback = SubResource("Resource_vb64j")

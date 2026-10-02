@@ -4,26 +4,75 @@ Spis tego, co trzeba narysować. **Co** ma powstać i **dlaczego akurat jako
 sprite** — bo „jak ma wyglądać" jest w UI_STYLE.md, a „kiedy to wchodzi" w
 VISUALS.md.
 
-Stan na dziś: **gra nie ma ani jednego zasobu graficznego.** `icon.svg` to
-domyślna ikona Godota, a `mockups/` ma `.gdignore` i nie jest importowane.
-Wszystko, co widać, jest rysowane w locie — `Polygon2D`, `_draw()`, shadery i
-cząstki bez tekstury.
+Stan na dziś: **jest komplet placeholderów, nie ma ani jednego docelowego
+zasobu.** 41 plików w `assets/art/`, wygenerowanych przez
+`tools/make_placeholders.gd`, plus zasoby `resources/fx/looks/*.tres` i
+`resources/hulls/*.tres`, które je wiążą z przedmiotami. Wszystko, co widać
+**w grze**, jest nadal rysowane w locie — `Polygon2D`, `_draw()`, shadery i
+cząstki bez tekstury — bo podmiana rysowania na sprite'y to osobna robota,
+rozpisana w VISUALS.md („VS: Przejście na sprite'y").
+
+Placeholdery są generowane, nie rysowane, i to jest celowe: chodzi o właściwą
+**liczbę** plików, we właściwych **rozmiarach**, z właściwymi **punktami
+zaczepienia**, żeby migrację dało się napisać i przetestować, zanim powstanie
+pierwszy prawdziwy piksel. Kadłub-placeholder to dosłownie jego własny obrys
+kolizyjny wypełniony kolorem, więc nie może mieć złego kształtu. Prawdziwa
+grafika podmienia pliki jeden do jednego; zasoby, pivoty i kod zostają.
 
 ## Ramy techniczne
 
 | rzecz | wartość | skutek |
 |---|---|---|
-| rozdzielczość bazowa | 640 x 360 | sprite 16 px to 1/40 szerokości ekranu |
-| tryb skalowania | `canvas_items`, `expand` | zasoby robimy w skali 1:1, silnik skaluje |
-| filtr tekstur | `Nearest` (0) | pixel art, bez rozmycia; krawędź musi być zamierzona |
-| rozmiar fontu w HUD | 8 px | ikona obok tekstu ma 7–9 px, nie więcej |
+| jednostka układu | 640 x 360 | wymiary w tym spisie są **w tej jednostce**, nie w texelach |
+| tryb skalowania | `canvas_items`, `expand` | silnik renderuje w rozdzielczości okna, nie w 640x360 |
+| **świat: skala rysowania** | **3x** (`Art.FACTOR`) | statek 18x24 jedn. rysujemy jako **54x72 px**, wyświetlamy w skali 1/3 |
+| **świat: filtr** | `LINEAR_WITH_MIPMAPS` | kadłub obraca się swobodnie i kamera zjeżdża — patrz niżej |
+| **interfejs: skala** | **1:1** | ikona 11x11 jedn. to plik 11x11 px |
+| **interfejs: filtr** | `Nearest` | HUD się nie obraca i stoi w skali 1.0; prawo siatki działa tu dosłownie |
+| mipmapy przy imporcie | `true` globalnie | `[importer_defaults]` w `project.godot`; bez nich filtr świata cicho degraduje |
+| rozmiar fontu w HUD | 8 jedn. | ikona obok tekstu ma 7–9 jedn., nie więcej |
 | animacja | dozwolona wszędzie | **każdy sprite może być paskiem klatek**; format poniżej |
 
-Z tego wynika jedna rzecz, którą trzeba mieć z tyłu głowy przy każdej pozycji:
-**te obiekty są malutkie.** Statek to 16x22 px, skrzynka 12x12, znacznik na
-mapie 4–10 px średnicy, ikona gniazda w edytorze ~7 px. W tej skali ręcznie
-postawiony piksel wygrywa z każdą procedurą, bo łuk o promieniu 2 px narysowany
-`draw_arc` to kasza, a narysowany ręcznie to czytelny symbol.
+### Dlaczego świat i interfejs mają osobne reguły
+
+Wyglądało to na sprzeczność w UI_STYLE.md §2 i nią nie jest — to świat
+pożyczał regułę napisaną dla panelu.
+
+**640x360 zostaje jednostką układu i przestaje być budżetem texeli.** Powód
+jest w trybie skalowania, który projekt już ma: `canvas_items` renderuje w
+rozdzielczości okna, a dokumentacja Godota mówi o nim wprost, że *„nie ma już
+odpowiedniości 1:1 między pikselem sprite'a a pikselem ekranu"*. Statek
+dostaje przy 1080p **72x96 prawdziwych pikseli** i miał dotąd 24x32 na ich
+wypełnienie.
+
+**Trójka, bo 1080p to dokładnie trzykrotność 640x360.** Na najczęstszym
+ekranie jeden texel to jeden piksel i nic nie jest przepróbkowywane.
+
+**I dlatego świat nie może być filtrowany przez `Nearest`.** To jest zmierzone,
+nie przyjęte: `ShipCamera.ZOOM_LEVELS` daje 1.7 do 0.55, człon prędkości mnoży
+to jeszcze przez 0.7, więc sama kamera chodzi w zakresie **1.7 .. 0.385**. Okno
+mnoży to przez 2 przy 720p i przez 6 przy 4K. Jeden texel trafia więc na
+**ćwierć piksela ekranu albo na trzy i pół** — trzynastokrotny zakres, w jednej
+sesji, na jednym sprite. `Nearest` nie ma odpowiedzi na żadnym końcu: gubi
+texele w dół i robi nierówne klocki w górę, a na obracającym się kadłubie robi
+jedno i drugie naraz, w dodatku pełzająco. Mipmapy są odpowiedzią na dół,
+a na górze nie ma już żadnej siatki pikseli do obrony.
+
+**Przesądził obrót.** Statek obraca się swobodnie przez pełne 360 stopni i
+**nie robimy pre-renderowanych klatek obrotu** (decyzja pilota). Nie ma więc
+kąta, przy którym niskorozdzielczy sprite siada na siatce pikseli — i tak jest
+przepróbkowywany co klatkę. Jedyne pytanie brzmi, czy jest przepróbkowywany z
+dość materiału.
+
+**HUD zostaje prawdziwym pixel artem.** Nie obraca się, nie zmienia skali i
+stoi w skali 1.0 z mocy prawa siatki. Tam design pixel naprawdę jest pikselem,
+więc rysujemy 1:1, filtrujemy `Nearest`, i UI_STYLE.md §2 znaczy dokładnie to,
+co mówi.
+
+Jedna rzecz zostaje w mocy mimo potrojenia: **te obiekty są malutkie.** Statek
+to 18x24 jednostki, skrzynka 12x12, znacznik na mapie 4–10, ikona gniazda ~7.
+Trzykrotna skala daje miejsce na detal, nie na ilustrację — a w interfejsie, w
+skali 1:1, ręcznie postawiony piksel dalej wygrywa z każdą procedurą.
 
 ### Animacja
 
@@ -101,15 +150,26 @@ plus kadłuby z presetów `ShipFitout`. Edytor statku (`I`) obrysu **nie
 zmienia** — tylko go czyta, żeby narysować schemat. Sprite wybiera się więc tą
 samą nazwą, którą wybiera się obrys.
 
-| kadłub | obrys | sprite |
-|---|---|---|
-| dart (stock) | 16 x 22 | 16 x 24 |
-| wide delta | 36 x 19 | 36 x 20 |
-| long lance | 12 x 48 | 12 x 48 |
-| hexagon | ~20 x 20 | 20 x 20 |
-| brick | ~22 x 18 | 24 x 20 |
-| sliver (bad) | 6 x 38 | 8 x 38 |
-| romb (para sił) | 18 x 30 | 20 x 32 |
+Jest ich dziesięć, nie siedem: sześć z `CreativeTool.SHAPES` i cztery kadłuby,
+które mają tylko presety w `ShipFitout`. Każdy ma teraz zasób
+`resources/hulls/<id>.tres` i wpis w `resources/fx/looks/hull.tres` pod tym
+samym `id`. Rozmiar pliku to obrys plus 1 jednostka marginesu, razy `Art.FACTOR`.
+
+| id | kadłub | obrys (jedn.) | plik (px) |
+|---|---|---|---|
+| `dart` | dart (stock) | 16 x 22 | 54 x 72 |
+| `wide_delta` | wide delta | 36 x 19 | 114 x 63 |
+| `long_lance` | long lance | 12 x 48 | 42 x 150 |
+| `hexagon` | hexagon | 24 x 28 | 78 x 90 |
+| `brick` | brick | 28 x 36 | 90 x 114 |
+| `sliver` | sliver (bad) | 6 x 38 | 24 x 120 |
+| `rhombus` | gimbal podwójny (para sił) | 18 x 30 | 60 x 96 |
+| `broad_dart` | gimbal pojedynczy (dryfuje) | 18 x 26 | 60 x 84 |
+| `interceptor` | przechwytujący | 14 x 24 | 48 x 78 |
+| `freighter` | frachtowiec | 32 x 22 | 102 x 72 |
+
+Margines nie jest ozdobą: sprite z sylwetą wciśniętą w krawędź ramki nie ma
+dokąd wygasić filtru liniowego i wychodzi z jasnym rąbkiem z dwóch stron.
 
 Doczepiane osobno, każde w punkcie, który kod już zna:
 
@@ -223,6 +283,40 @@ progu, w którym `draw_arc` cokolwiek znaczy.
 |---|---|
 | rodzaj modułu: silnik, broń, generator, komputer, podwozie, mod | 11 x 11, ta sama rodzina co gniazda w edytorze, ale większa |
 | ramka rzadkości | 5 poziomów; **jedna ramka** `modulate` kolorem z `rarity_color()`, nie pięć plików |
+
+---
+
+## Placeholdery, które już są
+
+41 plików, generowanych przez `tools/make_placeholders.gd` (uruchamiane dwa
+razy, z `--import` pomiędzy: zasób nie może wskazywać na teksturę, której
+jeszcze nie zaimportowano). Wymiary w pikselach pliku, czyli już po `Art.FACTOR`.
+
+| rodzina | plików | rozmiar pliku | wiąże je | wybierane po |
+|---|---|---|---|---|
+| kadłuby | 10 | 24x120 .. 114x63 | `looks/hull.tres` | `HullData.id` |
+| dysze | 4 | 18x18 .. 30x27 | `looks/engine_nozzle.tres` | `EngineData.type`, plus afiks „steerable" |
+| pióropusze | 3 | paski 6 klatek, 126x30 .. 198x63 | `looks/engine_plume.tres` | `EngineData.max_thrust`, progi 250 i 600 |
+| działa | 6 | 24x30 | `looks/weapon_muzzle.tres` | `WeaponData.type` |
+| moduły zewnętrzne | 3 | 27x27 | `looks/module_box.tres` | klucz: generator / computer / cargo |
+| podwozie | 2 | 11x29, 20x11 | `looks/gear_leg.tres` | klucz: strut / pad |
+| pociski i skrzynka | 3 | 11x23 .. 38x38 | `looks/round.tres` | klucz |
+| cząstki | 2 | 24x24, pasek 27x9 | `looks/particle.tres` | klucz: dot / debris |
+| ikony interfejsu | 8 | 11x11, ramka 13x13 | `looks/module_icon.tres` | klucz, **skala 1:1** |
+
+Czego w placeholderach celowo nie ma: stacji, wiązki, smugi kondensacyjnej,
+fontu bitmapowego oraz ikon HUD, mapy i skanera (sekcje 4b–4d). Pierwsze trzy
+to hybrydy albo rzeczy proceduralne, których placeholder niczego nie
+przyspiesza; font to osobna robota narzędziowa; ikony HUD czekają, aż będzie
+wiadomo, które przyrządy zostają po V6.
+
+Co pilnuje, że to się nie rozjedzie: `_check_art()` w smoke teście. Sprawdza,
+że każdy kadłub z obu starych katalogów ma zasób o tym samym obrysie, że każdy
+pasek ma teksturę dzielącą się przez liczbę klatek i pivot wewnątrz ramki, że
+flaga skali zgadza się z katalogiem, w którym plik leży, i — to jest ta
+ciekawa część — że tablice wyglądu **cokolwiek rozróżniają**: tablica
+sprowadzająca wszystkie siedem silników do jednego obrazka nie jest wiązaniem,
+tylko domyślną wartością w przebraniu, i przeszłaby każdy inny test.
 
 ---
 

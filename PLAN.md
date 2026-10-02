@@ -301,17 +301,25 @@ wspólna dla całej kategorii i nie wie, czego baza nie ma.
   znaków przy karcie 158 px i foncie 8 px — nie mieści się. Rozstrzygnąć
   **zanim** nazwy urosną: albo tytuł bierze dwa najmocniejsze afiksy i reszta
   schodzi do wierszy karty, albo karta się poszerza. Zmierzyć, nie zgadnąć.
-- [ ] **Kadłuby jako zasoby.** Dziś katalog jest w dwóch miejscach:
-  `CreativeTool.SHAPES` i presety w `ShipFitout`. Zasób niesie obrys,
-  rozkład mocowań, listę dozwolonych sprite'ów i parametry. Scala dwa
-  miejsca w jedno i otwiera katalog kadłubów w edytorze zamiast w menu debug.
+- [ ] **Kadłuby jako zasoby.** Zasób `HullData` i dziesięć kadłubów w
+  `resources/hulls/` **już są**, razem z testem, który pilnuje, żeby zgadzały
+  się z `CreativeTool.SHAPES` i presetami w `ShipFitout`. Zostało to, co
+  trudne: `Ship.hull: HullData` obok `hull_outline`, przestawienie obu
+  katalogów na zasoby i skasowanie ich — czyli zejście z trzech kopii do
+  jednej. Dopiero wtedy statek wie, jakim jest kadłubem, a bez tego nie da
+  się wybrać dla niego sprite'a (VISUALS.md, VS krok 3).
 - [ ] **Wygląd wiązany z cechą** (ASSETLIST.md, „Wygląd wynika z cech").
-  Dwa wiązania: po wielkości (trzy pióropusze dobierane mocą silnika) i po
-  afiksie („steerable" dostaje dyszę na przegubie). Nie trzeci rzut kostką —
-  dwa identyczne statystycznie silniki wyglądające inaczej bez powodu to szum.
+  Mechanizm stoi: `LookTable` wybiera obrazek po kluczu, po afiksie albo po
+  progu na nazwanej statystyce, i mieszka w warstwie prezentacji — żaden
+  zasób przedmiotu nie niesie tekstury, więc generator lootu nic o tym nie
+  wie. Dziewięć tablic w `resources/fx/looks/`. Wiązanie po afiksie dla
+  silników jest **napisane i bezczynne**, bo `EngineData` nie przechowuje
+  afiksów — odblokuje je checkbox o nazwach wyżej.
 - [ ] **Sprite'y animowane**, pasek klatek w jednym pliku, tempo liczone ze
-  stanu (przepustnica), nie zapisane w zasobie. Ikony HUD i edytora zostają
-  statyczne.
+  stanu (przepustnica), nie zapisane w zasobie. Format to `SpriteStrip`,
+  węzeł to `StripSprite`, a `drive(ułamek)` jest jedynym miejscem, w którym
+  tempo powstaje. Ikony HUD i edytora zostają statyczne. Podmiana
+  rysowania na te sprite'y to osobny tor: VISUALS.md, „VS".
 - [ ] Test: żaden afiks nie ląduje na polu, którego baza nie ma; każdy
   przedmiot ma nazwę mieszczącą się na karcie; każdy kadłub z katalogu ma
   komplet sprite'ów albo jawnie ich nie ma.

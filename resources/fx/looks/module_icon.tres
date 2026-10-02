@@ -1,0 +1,75 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_g2rfc"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/engine.png" id="2_mvmuc"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/weapon.png" id="3_cbvu1"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/generator.png" id="4_lyhvj"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/computer.png" id="5_rkirm"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/gear.png" id="6_qv3uy"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/mod.png" id="7_pwuyk"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/empty.png" id="8_jlon3"]
+[ext_resource type="Texture2D" path="res://assets/art/ui/icons/rarity_frame.png" id="9_h60mp"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="10_37lea"]
+
+[sub_resource type="Resource" id="Resource_ns52e"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("2_mvmuc")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_iltjd"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("3_cbvu1")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_c4x2s"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("4_lyhvj")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_4n6wp"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("5_rkirm")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_sqkno"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("6_qv3uy")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_ae6nd"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("7_pwuyk")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_0qs3i"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("8_jlon3")
+full_rate = 0.0
+in_world = false
+
+[sub_resource type="Resource" id="Resource_oghs6"]
+script = ExtResource("1_g2rfc")
+texture = ExtResource("9_h60mp")
+full_rate = 0.0
+in_world = false
+
+[resource]
+script = ExtResource("10_37lea")
+thresholds = PackedFloat32Array()
+by_key = {
+&"computer": SubResource("Resource_4n6wp"),
+&"empty": SubResource("Resource_0qs3i"),
+&"engine": SubResource("Resource_ns52e"),
+&"gear": SubResource("Resource_sqkno"),
+&"generator": SubResource("Resource_c4x2s"),
+&"mod": SubResource("Resource_ae6nd"),
+&"rarity_frame": SubResource("Resource_oghs6"),
+&"weapon": SubResource("Resource_iltjd")
+}
+fallback = SubResource("Resource_0qs3i")

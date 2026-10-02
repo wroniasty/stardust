@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_vi0ow"]
+[ext_resource type="Texture2D" path="res://assets/art/world/nozzles/gimbal.png" id="2_eal7s"]
+[ext_resource type="Texture2D" path="res://assets/art/world/nozzles/thruster.png" id="3_hbx5s"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="4_l40eu"]
+[ext_resource type="Texture2D" path="res://assets/art/world/nozzles/main.png" id="5_7owha"]
+[ext_resource type="Texture2D" path="res://assets/art/world/nozzles/torque.png" id="6_7pksy"]
+
+[sub_resource type="Resource" id="Resource_47c1o"]
+script = ExtResource("1_vi0ow")
+texture = ExtResource("2_eal7s")
+pivot = Vector2(15, 3)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_jciuc"]
+script = ExtResource("1_vi0ow")
+texture = ExtResource("3_hbx5s")
+pivot = Vector2(12, 3)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_edci7"]
+script = ExtResource("1_vi0ow")
+texture = ExtResource("5_7owha")
+pivot = Vector2(15, 3)
+full_rate = 0.0
+
+[sub_resource type="Resource" id="Resource_et3ha"]
+script = ExtResource("1_vi0ow")
+texture = ExtResource("6_7pksy")
+pivot = Vector2(9, 3)
+full_rate = 0.0
+
+[resource]
+script = ExtResource("4_l40eu")
+stat = &"type"
+thresholds = PackedFloat32Array(0, 1, 2)
+variants = Array[ExtResource("1_vi0ow")]([SubResource("Resource_edci7"), SubResource("Resource_et3ha"), SubResource("Resource_jciuc")])
+by_affix = {
+&"steerable": SubResource("Resource_47c1o")
+}
+fallback = SubResource("Resource_jciuc")

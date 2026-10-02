@@ -102,6 +102,135 @@ linii głównej.
 Gotowe, gdy: smoke test przechodzi z warstwą włączoną i wyłączoną, a `gallery`
 wypluwa komplet zrzutów jednym poleceniem.
 
+### VS: Przejście na sprite'y
+
+Cel: to, co dziś jest `Polygon2D` i `_draw()`, staje się animowanym spritem —
+bez zmiany jednej liczby w symulacji.
+
+Idzie **równolegle do V1**, nie przed nim ani po nim: światło dotyka shaderów
+terenu i atmosfery, sprite'y dotykają statku i drobnych obiektów, i te zbiory
+się nie przecinają.
+
+#### Co już stoi
+
+- [x] **Decyzja o rozdzielczości i filtrze** (`scripts/fx/art.gd`). Świat
+  rysowany w skali 3x i wyświetlany w 1/3, filtrowany
+  `LINEAR_WITH_MIPMAPS`; interfejs 1:1 i `Nearest`. Uzasadnienie i pomiar w
+  ASSETLIST.md, „Dlaczego świat i interfejs mają osobne reguły". Mipmapy
+  włączone globalnie przez `[importer_defaults]`, bo filtr świata ich
+  wymaga, a bez nich degraduje po cichu.
+- [x] **Format zasobu**: `SpriteStrip` (pasek klatek, pivot, tempo przy
+  pełnej mocy, flaga świat/interfejs) i `LookTable` (który obrazek dostaje
+  rzecz — po kluczu, po afiksie, po progu na statystyce).
+- [x] **Węzeł**: `StripSprite extends Sprite2D`. Nie `AnimatedSprite2D` — bo
+  `SpriteFrames` trzyma fps w zasobie, a ASSETLIST mówi, że tempo jest
+  odczytem ze statku; i bo każdy `AnimatedSprite2D` chodzi na własnym
+  zegarze, a tu zegar jest jeden, w skórce.
+- [x] **`HullData`** i dziesięć kadłubów jako zasoby, na razie jako trzecia
+  kopia katalogu — z testem, który pilnuje, żeby trzy kopie się zgadzały.
+- [x] **41 placeholderów** i dziewięć tablic wyglądu, generowanych przez
+  `tools/make_placeholders.gd`.
+
+#### Krok 1: poddrzewo i wyłącznik
+
+- [ ] Węzeł `Presentation` w `ship.tscn` (sekcja 1, punkt 5) i jeden
+  wyłącznik na całą warstwę. `--headless` jej nie uruchamia, smoke test
+  przechodzi z wyłączoną.
+- [ ] `scripts/fx/ship_skin.gd`: jeden `_process`, który obchodzi statek i
+  tyka wszystkie `StripSprite`. Czyta wielkości ciągłe, nie dostaje ich
+  podanych — `Ship` nie dowiaduje się, że skórka istnieje.
+- [ ] Porządek rysowania jako jawne `z_index` na rodzinę: dysze pod
+  kadłubem, pióropusze pod dyszami, działa i podwozie nad. Domyślny
+  porządek drzewa to porządek dodawania węzłów, czyli przypadek.
+
+#### Krok 2: dysze i pióropusze
+
+Najtańsza prawdziwa wygrana i zerowe ryzyko regresji: **dysz dziś po prostu
+nie widać** (`EngineMount` ma sam `GPUParticles2D`), więc ten krok nic nie
+zastępuje, tylko dodaje.
+
+- [ ] Dysza na każdym `EngineMount`, wybierana z `engine_nozzle.tres` po
+  `EngineData.type`, obracana dodatkowo o `gimbal`.
+- [ ] Pióropusz wybierany z `engine_plume.tres` po `max_thrust`, napędzany
+  `EngineInstance.effective_output()` przez `StripSprite.drive()`.
+  To jest cała implementacja reguły „tempo klatek jest daną".
+- [ ] Tekstura cząstek (`particles/dot.png`) do wydechu. Bez niej płomień
+  jest siatką kwadratów, bo `GPUParticles2D` bez tekstury rysuje quady.
+- [ ] Zmierzyć koszt `tools/frame_bench.gd`. Osiem mocowań razy dwa sprite'y
+  to ~16 węzłów na statek; jeśli to widać w klatce, trzeba wiedzieć **teraz**,
+  a nie po kadłubach.
+
+#### Krok 3: kadłub
+
+Ten krok ma zależność i warto ją nazwać: **statek nie wie, jakim jest
+kadłubem.** `Ship.hull_outline` to goła tablica punktów, a sprite wybiera
+się nazwą.
+
+- [ ] `Ship.hull: HullData` obok `hull_outline`, ustawiane przez
+  `ShipFitout` i `CreativeTool`. To jest jednocześnie checkbox „Kadłuby jako
+  zasoby" z M3.5 — trzy katalogi schodzą do jednego i test, który dziś
+  pilnuje zgodności, zmienia się w test, że pozostałe dwa już nie istnieją.
+- [ ] `StripSprite` z `hull.tres` zamiast `Hull` jako `Polygon2D`.
+- [ ] **Kadłub przebudowany w narzędziu kreatywnym nie ma `id`, więc nie ma
+  sprite'a** — i wtedy `Polygon2D` zostaje widoczny. To nie jest awaria,
+  to jest poprawna odpowiedź: piaskownica ma pokazywać kształt, który
+  naprawdę dostała.
+- [ ] Schemat w edytorze dalej rysuje wielokąt (ASSETLIST, sekcja 2): jego
+  zadaniem jest pokazać prawdę o kształcie zderzeniowym.
+
+#### Krok 4: cieniowanie przenosi się do skórki
+
+- [ ] `Ship._catch_the_light()` wychodzi z `ship.gd`. Dziś symulacja sięga
+  po `get_node("Hull")` i ustawia `self_modulate` — czyli rysuje. Po
+  przeniesieniu skórka czyta `GravityWell.daylight_at()` sama.
+- [ ] Pióropusze i błyski **nie** są przygaszane: są addytywne i robią
+  własne światło. `SpriteStrip.additive` jest tym znacznikiem, więc skórka
+  nie potrzebuje listy wyjątków.
+
+#### Krok 5: działa i podwozie
+
+- [ ] Działo na każdym `Hardpoint`, z `weapon_muzzle.tres` po
+  `WeaponData.type`, obracane o `facing`.
+- [ ] Noga: `gear/strut` rozciągany wzdłuż Y przez `LandingGear.extension`,
+  `gear/pad` na stopie. `_draw()` zostaje jako zapas, dopóki sprite nie
+  wygląda lepiej od kreski.
+
+#### Krok 6: drobne obiekty świata
+
+- [ ] Skrzynka: sprite plus **proceduralna** obwódka rzadkości. Wzorcowa
+  hybryda — sylwet jest stały, kolor jest daną z `rarity_color()`.
+- [ ] Pocisk i rakieta z `round.tres`.
+- [ ] Odłamki (`particles/debris_strip3.png`) przy trafieniu, razem z V3.
+
+#### Krok 7: interfejs
+
+- [ ] Ikony gniazd w edytorze z `module_icon.tres` zamiast
+  `_draw_slot_glyph()`. Biel plus `modulate`, więc pięć poziomów rzadkości
+  to jedna ramka, nie pięć plików.
+- [ ] `tools/gallery.tscn` (wspólne z V0): wszystkie paski obok siebie, z
+  zaznaczonym pivotem. **Pivot przesunięty o dwa piksele czyta się jak błąd
+  fizyki**, a nie jak błąd grafiki, i nie da się go zobaczyć inaczej niż
+  patrząc.
+
+#### Czego ten tor nie rusza
+
+Stacja, wiązka, smuga kondensacyjna i wszystko proceduralne z sekcji 2
+ASSETLIST. Stacja to hybryda z klocków i najwięcej roboty na jednostkę
+efektu; reszta ma kształt, który jest daną.
+
+#### Co na pewno ugryzie
+
+- **Pivoty.** Dysza przesunięta o dwa texele nie wygląda na przesuniętą,
+  wygląda na przykręconą krzywo.
+- **Kolejność rysowania.** Bez jawnego `z_index` jest to kolejność dodawania
+  węzłów, czyli kolejność przypadkowa.
+- **Przebudowany kadłub.** Narzędzie kreatywne zmienia obrys w locie —
+  skórka musi się przebudować i umieć nie mieć sprite'a.
+- **Koszt.** Dwadzieścia węzłów na statek to nie jest zero. Mierzyć, nie
+  zgadywać — raz już zgadliśmy, że pocisk kosztuje 0.9 ms, a kosztuje 7 us.
+
+---
+
 ### V1: Światło
 
 Największy skok wrażenia na najmniej kodu, i dotyka wyłącznie shaderów.

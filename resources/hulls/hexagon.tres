@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="HullData" format=3]
+
+[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_5xv8t"]
+
+[resource]
+script = ExtResource("1_5xv8t")
+id = &"hexagon"
+display_name = "hexagon"
+outline = PackedVector2Array(0, -14, -12, -7, -12, 7, 0, 14, 12, 7, 12, -7)

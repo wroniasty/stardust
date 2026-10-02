@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="HullData" format=3]
+
+[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_agbqw"]
+
+[resource]
+script = ExtResource("1_agbqw")
+id = &"rhombus"
+display_name = "gimbal podwójny (para sił)"
+outline = PackedVector2Array(0, -15, -9, 0, 0, 15, 9, 0)
+legs = Array[Vector2]([Vector2(-8, 14), Vector2(8, 14)])

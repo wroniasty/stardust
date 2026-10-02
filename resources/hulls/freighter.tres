@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="HullData" format=3]
+
+[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_0of6c"]
+
+[resource]
+script = ExtResource("1_0of6c")
+id = &"freighter"
+display_name = "frachtowiec"
+outline = PackedVector2Array(-13, -16, 13, -16, 16, 6, -16, 6)
+legs = Array[Vector2]([Vector2(-15, 9), Vector2(15, 9)])

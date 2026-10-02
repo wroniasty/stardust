@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="HullData" format=3]
+
+[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_lxc8t"]
+
+[resource]
+script = ExtResource("1_lxc8t")
+id = &"wide_delta"
+display_name = "wide delta"
+outline = PackedVector2Array(0, -10, -18, 9, 18, 9)

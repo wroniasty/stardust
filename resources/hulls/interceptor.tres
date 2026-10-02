@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="HullData" format=3]
+
+[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_kskiy"]
+
+[resource]
+script = ExtResource("1_kskiy")
+id = &"interceptor"
+display_name = "przechwytujący"
+outline = PackedVector2Array(0, -15, -7, 9, 7, 9)
+legs = Array[Vector2]([Vector2(-7, 11), Vector2(7, 11)])

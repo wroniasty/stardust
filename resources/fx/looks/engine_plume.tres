@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="LookTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_k6gqq"]
+[ext_resource type="Texture2D" path="res://assets/art/world/plumes/spark_strip6.png" id="2_4k7av"]
+[ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="3_m3r5w"]
+[ext_resource type="Texture2D" path="res://assets/art/world/plumes/cone_strip6.png" id="4_fp1i4"]
+[ext_resource type="Texture2D" path="res://assets/art/world/plumes/flame_strip6.png" id="5_pfvre"]
+
+[sub_resource type="Resource" id="Resource_yrk0a"]
+script = ExtResource("1_k6gqq")
+texture = ExtResource("2_4k7av")
+frames = 6
+pivot = Vector2(10.5, 0)
+full_rate = 18.0
+additive = true
+
+[sub_resource type="Resource" id="Resource_fncym"]
+script = ExtResource("1_k6gqq")
+texture = ExtResource("4_fp1i4")
+frames = 6
+pivot = Vector2(13.5, 0)
+full_rate = 18.0
+additive = true
+
+[sub_resource type="Resource" id="Resource_n1pdq"]
+script = ExtResource("1_k6gqq")
+texture = ExtResource("5_pfvre")
+frames = 6
+pivot = Vector2(16.5, 0)
+full_rate = 18.0
+additive = true
+
+[resource]
+script = ExtResource("3_m3r5w")
+stat = &"max_thrust"
+thresholds = PackedFloat32Array(0, 250, 600)
+variants = Array[ExtResource("1_k6gqq")]([SubResource("Resource_yrk0a"), SubResource("Resource_fncym"), SubResource("Resource_n1pdq")])
+fallback = SubResource("Resource_yrk0a")
