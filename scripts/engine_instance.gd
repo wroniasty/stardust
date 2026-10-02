@@ -163,6 +163,24 @@ func advance(delta: float) -> void:
 			throttle = clampf(target_throttle, 0.0, 1.0)
 
 
+## What is coming out of the nozzle, as a share of this engine's rating.
+##
+## **This one can exceed one, and that is the whole point of it.** Boost is
+## three times the thrust, so three times as much is leaving the bell, and
+## everything that shows the exhaust -- the plume, the particles, the light
+## it throws -- has to be allowed to say so. `effective_output()` cannot:
+## it is the throttle fraction the allocator reasons with, and widening its
+## range would widen a contract the control maths depends on.
+##
+## So the split is: `effective_output()` is what the engine was asked for,
+## this is what the nozzle is throwing, and `current_force()` already
+## multiplied the two the same way for the physics. Presentation now reads
+## the same product the physics does, which is why boost could be invisible
+## for as long as it was -- the picture was reading the other number.
+func exhaust_flow() -> float:
+	return effective_output() * boost_factor()
+
+
 ## Set by the ship each tick: whether this engine is running on emergency
 ## power. Owned here rather than read from the ship, because what an
 ## engine is doing is an engine's business -- and because the ship has to

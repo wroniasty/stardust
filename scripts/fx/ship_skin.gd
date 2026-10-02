@@ -34,6 +34,12 @@ const PLUME_SHORTEST: float = 0.45
 ## Throttle below which a plume is not drawn at all.
 const PLUME_CUTOFF: float = 0.02
 
+## How much wider a plume gets per unit of emergency power, against how much
+## longer. A boosted drive is mostly a longer flame, not a fatter one: the
+## square root keeps three times the thrust at under twice the width, which
+## is what stops it reading as a cloud round the stern.
+const PLUME_BOOST_WIDTH: float = 0.5
+
 ## How dim a half-open leg is. Gear part-way down must not read as gear you
 ## could land on, which is exactly what `contact_points()` refuses to hand
 ## out until the timer finishes.
@@ -192,12 +198,11 @@ func _physics_process(delta: float) -> void:
 	refresh(delta)
 
 
-## One tick of the whole skin.
+## One tick of the whole skin, gated on the switch.
 ##
-## Public so a headless test can take a single step of it. The layer does
-## not show itself without a window, but it is still built and still
-## computes -- and a layer that could only be checked by looking at it
-## would be a layer with no tests.
+## The light is read either way, because where the ship is standing is a
+## fact about the world rather than about which layer is painting it, and
+## with the layer off the `Polygon2D` underneath is what needs shading.
 func refresh(delta: float) -> void:
 	Presentation.read_toggle()
 	var on: bool = Presentation.is_on()
@@ -211,7 +216,18 @@ func refresh(delta: float) -> void:
 	_hand_back(on, shade)
 	if not on:
 		return
+	paint(delta, shade)
 
+
+## The per-frame work itself, with no gate on it.
+##
+## Split out from `refresh()` so a headless test can take one step of it.
+## The layer is never shown without a window, so `refresh()` returns before
+## reaching any of this -- which meant the first version of the boost test
+## measured a plume that had never been ticked and reported the scale
+## `show_strip()` had left on it. A skin whose ticking cannot be tested is
+## a skin whose ticking is not tested.
+func paint(delta: float, shade: Color) -> void:
 	if _hull != null:
 		_hull.self_modulate = shade
 	_tick_engines(delta, shade)
@@ -248,25 +264,32 @@ func _tick_engines(delta: float, shade: Color) -> void:
 		var plume: StripSprite = _plumes.get(engine.mount.name) as StripSprite
 		if plume == null:
 			continue
-		var output: float = engine.effective_output()
-		plume.visible = output > PLUME_CUTOFF
+		# What is leaving the bell, which on emergency power is more than the
+		# engine's rating -- see EngineInstance.exhaust_flow(). Reading the
+		# throttle here instead is exactly how boost managed to look the same
+		# as not boosting for a whole milestone.
+		var flow: float = engine.exhaust_flow()
+		plume.visible = flow > PLUME_CUTOFF
 		if not plume.visible:
 			continue
 		plume.rotation = aim
 		plume.position = (
 			engine.mount.position + exhaust * float(_exits.get(engine.mount.name, 0.0))
 		)
-		# Three readings of one number, which is the point of driving a look
-		# off the machine: the flame is as long, as bright and as fast as the
-		# engine is working. Length is scaled along the sprite's own down, so
-		# a quarter throttle is a short flame rather than a faint full-length
-		# one -- and a faint full-length one is the halo this project has
-		# already been told once it does not want.
+		# Four readings of one number, which is the point of driving a look
+		# off the machine: the flame is as long, as wide, as bright and as
+		# fast as the engine is working. Length is scaled along the sprite's
+		# own down, so a quarter throttle is a short flame rather than a
+		# faint full-length one -- and a faint full-length one is the halo
+		# this project has already been told once it does not want.
+		var throttle: float = minf(flow, 1.0)
+		var over: float = maxf(flow, 1.0)
 		plume.scale = Vector2(
-			Art.WORLD_SCALE, Art.WORLD_SCALE * lerpf(PLUME_SHORTEST, 1.0, output)
+			Art.WORLD_SCALE * pow(over, PLUME_BOOST_WIDTH),
+			Art.WORLD_SCALE * lerpf(PLUME_SHORTEST, 1.0, throttle) * over
 		)
-		plume.self_modulate = Color(1.0, 1.0, 1.0, output)
-		plume.drive(output)
+		plume.self_modulate = Color(1.0, 1.0, 1.0, throttle)
+		plume.drive(flow)
 		plume.advance(delta)
 
 

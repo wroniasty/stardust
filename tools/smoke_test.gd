@@ -1003,6 +1003,7 @@ func _evaluate_phase() -> void:
 			_check_round_fall()
 			_check_bindings()
 			_check_streaming()
+			_check_system_tour()
 			_check_system_map()
 			_check_flight_hud(_planet)
 			_check_aiming()
@@ -1553,6 +1554,12 @@ const LOOT_SCRIPT: GDScript = preload("res://scripts/autoload/loot_generator.gd"
 const GALAXY_SCRIPT: GDScript = preload("res://scripts/autoload/galaxy.gd")
 const STREAMING_SCRIPT: GDScript = preload("res://scripts/autoload/streaming_manager.gd")
 
+## Most main-thread milliseconds one body may cost to bring into the world.
+##
+## Measured, then given headroom, which is the only way a number like this
+## means anything. See `_check_system_tour()` for what is and is not counted.
+const TOUR_FRAME_BUDGET: float = 12.0
+
 ## How many systems the layout checks run over. One seed proves nothing
 ## about a generator; the interesting failures are the lucky rolls.
 const SYSTEMS_SAMPLED: int = 300
@@ -1882,6 +1889,18 @@ func _check_editor() -> void:
 
 	ship.flight_mode = Ship.FlightMode.LANDED
 	_expect(editor.can_refit(), "a landed ship may be refitted")
+
+	# And so may a docked one, which is what gives a station a job beyond
+	# mending the hull. The quick swap on Tab stays available in flight on
+	# purpose -- see ShipEditor.can_refit() for why the two differ.
+	ship.flight_mode = Ship.FlightMode.DOCKED
+	_expect(editor.can_refit(), "and so may one tied up at a station")
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	_expect(
+		not editor.can_refit(),
+		"but letting go of the station takes the workshop away again",
+	)
+	ship.flight_mode = Ship.FlightMode.LANDED
 	editor._fit()
 	_expect(mount.installed == stronger, "and then the module actually goes on")
 	_expect(
@@ -3982,6 +4001,166 @@ func _check_streaming() -> void:
 	pilot.free()
 
 
+
+## Przelot przez caly uklad: slad na kazdej planecie, powrot na pierwsza.
+##
+## M3's own closing criterion, and the one thing `_check_streaming` does not
+## reach: that test proves one world remembers one hole. This flies the
+## whole system, marks every planet it passes, and comes back to the first
+## -- which is the case where the manager has had to forget and rebuild
+## everything in between, and where a delta keyed on the wrong thing would
+## hand back the wrong crust.
+##
+## "No hitches" is measured rather than taken on feel. The crust is built on
+## a worker thread; what a frame actually pays is `_start_build` plus
+## `_collect_finished` -- instantiate, prepare, texture upload, visuals --
+## and both of those are on the main thread. The ceiling below is the
+## measured worst case with headroom, so a regression that doubles the
+## upload fails here instead of being noticed as a stutter one day.
+func _check_system_tour() -> void:
+	var manager: Node = STREAMING_SCRIPT.new()
+	root.add_child(manager)
+	var container: Node2D = Node2D.new()
+	root.add_child(container)
+	var pilot: Node2D = Node2D.new()
+	root.add_child(pilot)
+	var dice: Node = LOOT_SCRIPT.new()
+	var system: StarSystem = StarSystem.generate(TEST_SEED)
+	manager.loot = dice
+	manager.bind(system, container, 0.0)
+	manager.track(pilot)
+
+	var worlds: Array[SystemBody] = system.planets()
+	_expect(worlds.size() >= 3, "the test system is worth touring (%d worlds)" % worlds.size())
+
+	# One mark per world, at a different angle on each so a crust handed
+	# back for the wrong body shows up as a missing hole rather than as a
+	# hole that happens to match.
+	var marks: Dictionary = {}
+	var worst: float = 0.0
+	var slowest: String = ""
+	var missed: int = 0
+	var shallow: int = 0
+
+	for i: int in range(worlds.size()):
+		var body: SystemBody = worlds[i]
+		pilot.global_position = manager.position_of(body)
+		manager._sweep()
+		var cost: float = _time_to_stream(manager, body)
+		if cost > worst:
+			worst = cost
+			slowest = body.display_name
+		var planet: Planet = manager.node_for(body) as Planet
+		if planet == null:
+			missed += 1
+			continue
+		var mark: float = 0.3 + 0.2 * float(i)
+		var before: float = planet.terrain.surface_radius_at(mark)
+		planet.carve(planet.polar_to_world(mark, before - 10.0), 80.0)
+		var after: float = planet.terrain.surface_radius_at(mark)
+		# Asserted, not assumed. Without this the "still has the hole"
+		# check below passes vacuously on a world where the shot did
+		# nothing: unchanged equals unchanged.
+		if after >= before - 5.0:
+			shallow += 1
+			print("    %s took no damage (%.1f from %.1f)" % [
+				body.display_name, before - after, before,
+			])
+		marks[body.seed] = {"at": mark, "depth": after}
+
+	_expect(missed == 0, "every world in the system builds when it is flown to")
+	_expect(shallow == 0, "and every one of them can be shot a hole in")
+	_expect(
+		worst < TOUR_FRAME_BUDGET,
+		"and the worst main-thread cost of one is %.1f ms (%s), under %.0f" % [
+			worst, slowest, TOUR_FRAME_BUDGET,
+		],
+	)
+
+	# Back to the first, the long way round: everything else has been built
+	# and thrown away since, so nothing about this one is still in memory.
+	var kept: int = 0
+	var lost: int = 0
+	for body: SystemBody in worlds:
+		pilot.global_position = manager.position_of(body)
+		manager._sweep()
+		_time_to_stream(manager, body)
+		var planet: Planet = manager.node_for(body) as Planet
+		var noted: Dictionary = marks.get(body.seed, {})
+		if planet == null or noted.is_empty():
+			lost += 1
+			continue
+		var now: float = planet.terrain.surface_radius_at(float(noted["at"]))
+		if absf(now - float(noted["depth"])) < 1.0:
+			kept += 1
+		else:
+			lost += 1
+			print("    %s forgot its hole (%.0f against %.0f)" % [
+				body.display_name, now, noted["depth"],
+			])
+	_expect(lost == 0, "and every one of them still has the hole you left in it (%d)" % kept)
+
+	# The deltas are the memory, and they have to be only of what was
+	# touched: a manager that remembered every world it ever built would
+	# grow without bound over a long flight.
+	#
+	# Asked with the system empty, which the first version of this check
+	# forgot. A world still in the scene keeps its crust in the node, so
+	# the delta has not been written yet and asking for it there is asking
+	# the wrong question -- which is what it looked like when the last
+	# world of the tour reported itself unremembered while plainly holding
+	# its hole.
+	pilot.global_position = manager.position_of(worlds[0]) + Vector2(500000.0, 0.0)
+	manager._sweep()
+	var loaded: int = 0
+	for body: SystemBody in system.bodies:
+		if manager.level_of(body) != manager.Level.GONE and body.kind != SystemBody.Kind.STAR:
+			loaded += 1
+	_expect(loaded == 0, "flying out of the system empties it (%d left)" % loaded)
+
+	var remembered: int = 0
+	for body: SystemBody in system.bodies:
+		var has_crust: bool = manager.deltas.get(body.seed, {}).has("crust")
+		if has_crust:
+			remembered += 1
+		elif marks.has(body.seed):
+			print("    %s was shot at but is not remembered (level %d)" % [
+				body.display_name, manager.level_of(body),
+			])
+	_expect(
+		remembered == worlds.size(),
+		"the manager remembers the %d worlds that were shot at and no others (%d)" % [
+			worlds.size(), remembered,
+		],
+	)
+
+	manager.clear()
+	manager.free()
+	dice.free()
+	container.free()
+	pilot.free()
+
+
+## Streams `body` in and hands back the milliseconds the main thread spent
+## doing it.
+##
+## The wait between turns of the handle is not counted: that is the worker
+## computing the crust, which in the game is a frame going past rather than
+## a frame being blocked. What is counted is the manager's own two steps.
+func _time_to_stream(manager: Node, body: SystemBody) -> float:
+	var spent: int = 0
+	for tries: int in range(2000):
+		if manager.node_for(body) != null:
+			break
+		var at: int = Time.get_ticks_usec()
+		manager._drain_queue()
+		manager._collect_finished()
+		spent += Time.get_ticks_usec() - at
+		if manager.node_for(body) != null:
+			break
+		OS.delay_msec(1)
+	return float(spent) / 1000.0
+
 ## Drives an asynchronous build to the point where the planet is in the
 ## world. In the game a frame goes by and the manager collects it; a test
 ## with no frames has to turn the handle itself.
@@ -4245,7 +4424,87 @@ func _check_boost() -> void:
 		not ship.boost_active and is_equal_approx(ship.energy, ship.energy_capacity()),
 		"a ship with its engines idle burns nothing, however hard the key is held",
 	)
+
+	# And it has to be possible to see it.
+	#
+	# This was broken for a milestone and the shape of the bug is worth
+	# keeping: everything that drew the exhaust read `effective_output()`,
+	# which is the throttle fraction and tops out at one, so three times
+	# the thrust came out looking exactly like one times the thrust. The
+	# number that can say so is `exhaust_flow()`.
+	var drive: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.data.can_boost():
+			drive = engine
+	_expect(drive != null, "the stock hull has a drive with an emergency setting")
+
+	drive.throttle = 1.0
+	drive.boosting = false
+	var calm: float = drive.exhaust_flow()
+	var calm_force: float = drive.current_force().length()
+	drive.boosting = true
+	var surging: float = drive.exhaust_flow()
+	_expect(
+		is_equal_approx(surging, calm * drive.data.boost_thrust),
+		"the flow out of a boosted nozzle is the boost multiple (%.1fx)" % (surging / calm),
+	)
+	_expect(
+		is_equal_approx(drive.effective_output(), 1.0),
+		"while the throttle fraction itself is untouched, because the allocator reads it",
+	)
+	_expect(
+		is_equal_approx(drive.current_force().length(), calm_force * surging / calm),
+		"and the flow is the same multiple the physics already applied",
+	)
+
+	# The light the nozzle throws follows it. Clamping this is what made
+	# the first version of boost invisible even with the ground lit.
+	drive.mount.set_exhaust(calm)
+	var quiet_glow: float = _first_glow(drive.mount).energy
+	drive.mount.set_exhaust(surging)
+	var loud_glow: float = _first_glow(drive.mount).energy
+	_expect(
+		loud_glow > quiet_glow * 2.0,
+		"a boosted nozzle lights the ground harder (%.2f against %.2f)" % [
+			loud_glow, quiet_glow,
+		],
+	)
+
+	# As does the flame, which gets longer rather than merely brighter: at
+	# full throttle there is no brightness left to add.
+	# `paint()` rather than `refresh()`: the gate is in `refresh`, and
+	# headless it returns before any of this happens.
+	var skin: ShipSkin = ship.get_node_or_null("Presentation") as ShipSkin
+	drive.boosting = false
+	skin.paint(0.0, Color.WHITE)
+	var short_flame: Vector2 = _plume_of(skin, drive).scale
+	drive.boosting = true
+	skin.paint(0.0, Color.WHITE)
+	var long_flame: Vector2 = _plume_of(skin, drive).scale
+	_expect(
+		long_flame.y > short_flame.y * 2.0,
+		"and throws a longer flame (%.2f against %.2f)" % [long_flame.y, short_flame.y],
+	)
+	_expect(
+		long_flame.x > short_flame.x and long_flame.x < long_flame.y,
+		"wider too, but much less so: a boosted drive is a spear, not a cloud",
+	)
 	ship.free()
+
+
+## The plume sprite the skin built for one engine, found by where it sits.
+func _plume_of(skin: ShipSkin, engine: EngineInstance) -> StripSprite:
+	var deepest: StripSprite = null
+	for child: Node in skin.get_children():
+		var sprite: StripSprite = child as StripSprite
+		if sprite == null or sprite.z_index != ShipSkin.Z_PLUME:
+			continue
+		if sprite.position.distance_to(engine.mount.position) < 24.0:
+			if deepest == null or sprite.position.distance_to(engine.mount.position) < (
+				deepest.position.distance_to(engine.mount.position)
+			):
+				deepest = sprite
+	return deepest
 
 
 ## Every binding the game answers to is one the help screen knows about.

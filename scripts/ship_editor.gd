@@ -189,10 +189,41 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-## Whether the ship is somewhere a module can be changed. Docking joins this
-## when there is anything to dock to.
+## Whether the ship is somewhere a module can be changed.
+##
+## Standing still counts, however the ship came to be standing still: on its
+## legs on a planet, or tied up at a station. The second half of that was
+## written down here as a promise before there was anything to dock to, and
+## now there is.
+##
+## The quick swap on Tab is deliberately **not** gated the same way, and the
+## difference is the point of having both screens. That one is a single
+## carried module into a single compatible slot, with the world still
+## running -- a decision made while something is going wrong, which is the
+## whole reason LoadoutScreen does not pause. This one is every slot at
+## once, on a paused schematic, and that is yard work.
 func can_refit() -> bool:
-	return _ship != null and _ship.flight_mode == Ship.FlightMode.LANDED
+	if _ship == null:
+		return false
+	return (
+		_ship.flight_mode == Ship.FlightMode.LANDED
+		or _ship.flight_mode == Ship.FlightMode.DOCKED
+	)
+
+
+## What the corner of the panel says about why fitting is or is not
+## available. Three states rather than two: "montaż po wylądowaniu" was a
+## half-truth the moment a dock would also do.
+func _where_it_stands() -> String:
+	if _ship == null:
+		return "BRAK STATKU"
+	match _ship.flight_mode:
+		Ship.FlightMode.DOCKED:
+			return "W DOKU — montaż dostępny"
+		Ship.FlightMode.LANDED:
+			return "NA ZIEMI — montaż dostępny"
+		_:
+			return "W LOCIE — montaż w doku albo po wylądowaniu"
 
 
 ## Everything the pilot can act on, hold first. One list rather than two
@@ -916,7 +947,7 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	if not _notice.is_empty() and y <= floor_y:
 		_text(font, Vector2(x, y), _notice.left(96), WARN)
 
-	var state: String = "NA ZIEMI — montaż dostępny" if can_refit() else "W LOCIE — montaż po wylądowaniu"
+	var state: String = _where_it_stands()
 	_text(
 		font,
 		Vector2(rect.end.x - PAD - _width(font, state), rect.position.y + PAD + float(FONT_SIZE)),

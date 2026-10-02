@@ -83,7 +83,13 @@ func _glow_share() -> float:
 var _glow: GlowLight = null
 
 
-## Points the exhaust plume at `amount` of full flow, 0..1.
+## Points the exhaust plume at `amount` of full flow.
+##
+## Over one on emergency power, and the two things this drives treat that
+## differently on purpose. `amount_ratio` is a ratio and genuinely cannot
+## exceed one, so it saturates. The light can, and must: a drive at three
+## times its rating lights the ground three times as hard, and clamping
+## that was the reason boost looked exactly like not boosting.
 ##
 ## The plume itself is configured in the scene, and one setting there matters
 ## more than the rest: `inherit_velocity_ratio`. Particles are emitted in world
@@ -108,7 +114,7 @@ func set_exhaust(amount: float) -> void:
 	if _glow == null:
 		_glow = GlowLight.make(GLOW_COLOUR, GLOW_REACH * sqrt(share), 0.0)
 		add_child(_glow)
-	_glow.energy = GLOW_STRENGTH * share * clampf(amount, 0.0, 1.0)
+	_glow.energy = GLOW_STRENGTH * share * maxf(amount, 0.0)
 	_glow.visible = amount > 0.02
 
 

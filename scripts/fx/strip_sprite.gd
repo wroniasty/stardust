@@ -63,12 +63,16 @@ func advance(delta: float) -> void:
 	frame = int(_phase)
 
 
-## Points the animation at `fraction` of whatever drives it, 0..1.
+## Points the animation at `fraction` of whatever drives it.
 ##
 ## The one place where "the rate is a reading, not a setting" is actually
 ## implemented: the strip says how fast it runs at full, the caller says how
 ## full it is, and nothing else gets an opinion.
+##
+## Not clamped at the top. One is full for most things and the ceiling was
+## free, right up against an engine on emergency power -- which is at three,
+## and whose flame has to look like it.
 func drive(fraction: float) -> void:
 	if strip == null:
 		return
-	rate = strip.full_rate * clampf(fraction, 0.0, 1.0)
+	rate = strip.full_rate * maxf(fraction, 0.0)

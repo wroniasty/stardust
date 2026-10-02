@@ -1146,7 +1146,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	control.apply_commands(engines, active_commands)
 	for engine: EngineInstance in engines:
 		engine.advance(state.step)
-		engine.mount.set_exhaust(engine.effective_output())
+		engine.mount.set_exhaust(engine.exhaust_flow())
 	_resolve_boost(state.step)
 
 	_applied_force = Vector2.ZERO
