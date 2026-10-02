@@ -28,9 +28,11 @@ postawiony piksel wygrywa z każdą procedurą, bo łuk o promieniu 2 px narysow
 
 Trzy pytania, w tej kolejności:
 
-1. **Czy kształt jest daną?** Generowany z seeda (teren, chmury, gwiazda) albo
-   edytowany przez gracza (obrys kadłuba)? → **zostaje proceduralny**, zawsze.
-   Sprite nie potrafi być parametrem.
+1. **Czy kształt jest daną?** Generowany z seeda — teren, chmury, gwiazda? →
+   **zostaje proceduralny**, zawsze. Sprite nie potrafi być parametrem.
+   Kadłub statku *wygląda* na taki przypadek i nie jest: obrys nie jest
+   dowolny, tylko wybierany z nazwanego katalogu, więc sprite wybiera się tą
+   samą nazwą. Patrz sekcja 1a.
 2. **Czy rzecz jest mniejsza niż jakieś 16 px na ekranie?** → **sprite**, bo w
    tej skali proceduralne prymitywy nie czytają.
 3. **Czy ma stały sylwet, ale zmienną informację** (rzadkość, stan, kolor
@@ -39,14 +41,56 @@ Trzy pytania, w tej kolejności:
 
 ---
 
-## 1. Rysowane dziś, powinny być spritem
+## 1a. Statek
+
+**Jeden sprite na kadłub, plus osobne sprite'y na to, co do niego
+przykręcone.** Nie składanka z kafelków i nie tekstura na wielokącie.
+
+Kolizja zostaje przy `hull_outline` — z niego liczą się kształt zderzeniowy,
+punkty styku, masa i moment bezwładności. **Sprite może się od tego obrysu
+trochę różnić i to jest w porządku**: dopasowanie jednego do drugiego to
+odpowiedzialność autora grafiki, nie kodu. Rozdzielenie „czym się zderza" od
+„jak wygląda" jest tu świadome — próba trzymania ich w jednym kształcie
+kosztowałaby albo brzydki sprite, albo dziwną fizykę.
+
+Obrysów jest skończenie wiele i **mają nazwy**: katalog `CreativeTool.SHAPES`
+plus kadłuby z presetów `ShipFitout`. Edytor statku (`I`) obrysu **nie
+zmienia** — tylko go czyta, żeby narysować schemat. Sprite wybiera się więc tą
+samą nazwą, którą wybiera się obrys.
+
+| kadłub | obrys | sprite |
+|---|---|---|
+| dart (stock) | 16 x 22 | 16 x 24 |
+| wide delta | 36 x 19 | 36 x 20 |
+| long lance | 12 x 48 | 12 x 48 |
+| hexagon | ~20 x 20 | 20 x 20 |
+| brick | ~22 x 18 | 24 x 20 |
+| sliver (bad) | 6 x 38 | 8 x 38 |
+| romb (para sił) | 18 x 30 | 20 x 32 |
+
+Doczepiane osobno, każde w punkcie, który kod już zna:
+
+| element | gdzie | rozmiar | uwagi |
+|---|---|---|---|
+| dysza silnika | `mount.position`, obrócona o `mount.rotation` | ~7 x 7 | trzy warianty wg `EngineData.Type`; wariant gimbala obracany dodatkowo o `gimbal` |
+| działo | pozycja hardpointu, obrócone o `facing` | ~7 x 9 | wg `WeaponData.Type` |
+| podwozie | `leg_root()` z obrysu | goleń 3 x 9, stopka 6 x 3 | rozstaw nóg zostaje liczony, grafiką jest noga |
+| moduł zewnętrzny | pozycja gniazda | ~6 x 6 | tylko to, co widać z zewnątrz; zatoki wewnętrzne nie |
+
+`Hull` jako `Polygon2D` przestaje być tym, co widać — zostaje źródłem obrysu
+dla kolizji i dla schematu w edytorze. Schemat **ma** dalej rysować wielokąt,
+bo jego zadaniem jest pokazać prawdę o kształcie zderzeniowym, a nie ładny
+obrazek.
+
+## 1b. Rysowane dziś, powinny być spritem
+
+To, co nie jest częścią statku — części statku są wyżej.
 
 | rzecz | dziś | docelowo | rozmiar | uwagi |
 |---|---|---|---|---|
 | **skrzynka lootu** | dwa `Polygon2D` (`Body` + `Glow`) | **hybryda**: sprite skrzyni + proceduralna obwódka rzadkości | 12 x 12 | przykład podany przez pilota i wzorcowy: sylwet jest stały, rzadkość jest daną z `ModuleData.rarity_color()`. Sprite biały, `modulate` od zawartości, obwódka rysowana |
 | **pocisk** | `Polygon2D` „Body" | sprite smugi | 3 x 7 | cztery warianty wg broni (działko, impuls, slug, odłamek) albo jeden biały + `modulate` kolorem broni |
 | **rakieta** | `Polygon2D` „Body" + „Fin" | sprite z płetwami | 5 x 11 | ma dziób i stery — to jest sylwet, nie kształt z danych |
-| **podwozie** | `_draw()`, nogi i stopki z linii | **hybryda**: sprite goleni i stopki, stawiany w policzonych punktach | goleń 3 x 9, stopka 6 x 3 | korzenie nóg liczy `leg_root()` z obrysu kadłuba, więc **rozstaw zostaje proceduralny**, a grafiką jest sama noga |
 | **stacja** | `_draw()`: pierścień, szprychy, piasta | **hybryda**: kafle modułów (segment pierścienia, szprycha, piasta, dok) składane wg seeda | segment ~24 x 24 | wariantowość ma zostać (liczba szprych, kolor), ale z klocków, nie z `draw_arc` |
 | **beam** | dwie `draw_line` | sprite rozciągany wzdłuż strzału | 8 x 3, kafelkowany | dziś to dwie kreski jedna na drugiej; wiązka chce rdzenia i poświaty |
 | **smuga kondensacyjna** | `Line2D` + `Gradient` | ta sama `Line2D`, ale z teksturą | 8 x 8 kafel | `Line2D` przyjmuje `texture` z `texture_mode`; nie trzeba zmieniać węzła |
@@ -61,11 +105,11 @@ Nie dlatego, że tak wyszło — dlatego, że **kształt jest daną**.
 | atmosfera, chmury | shadery z seeda | pogoda jest losowana i ma być rozpoznawalna per świat |
 | gwiazda i korona | shadery | granulacja i pociemnienie brzegowe to ciągłe pole, nie obrazek |
 | starfield | shader paralaksy | trzy warstwy generowane z pozycji |
-| **obrys kadłuba** | `Polygon2D` z `hull_outline` | **kształt jest edytowalny** — presety i sandbox go podmieniają, a z niego liczą się kolizja, punkty styku, masa i moment. Patrz sekcja 3: płytowanie wchodzi jako tekstura na tym samym wielokącie |
+| **obrys kadłuba jako dana** | `hull_outline` | zostaje źródłem kolizji, punktów styku, masy i momentu — ale przestaje być tym, co widać. Patrz 1a |
 | orbity, stożki, przerywana trajektoria | `_draw` z całkowania | krzywa jest wynikiem symulacji każdej klatki |
 | pierścienie zasięgu na mapie | `_draw` | promienie są liczbami z modelu |
 | nakładki debugowe | `_draw` | narzędzia deweloperskie, celowo inne (UI_STYLE.md §8) |
-| schemat statku w edytorze | `_draw` z obrysu | rysuje ten sam edytowalny wielokąt |
+| schemat statku w edytorze | `_draw` z obrysu | ma pokazywać prawdę o kształcie zderzeniowym, a nie sprite'a |
 
 ## 3. Nie rysowane wcale — brakujące zasoby
 
@@ -77,8 +121,6 @@ To są dziury, nie upiększenia.
 | **tekstura cząstek pióropusza** | brak — domyślne kwadraty | miękka kropka 8 x 8 z gradientem; bez niej płomień to siatka kwadratów |
 | **tekstura cząstek debris** | brak | odłamek 3 x 3, 2–3 warianty |
 | **czcionka bitmapowa** | `SystemFont` (Consolas / DejaVu) | font pikselowy o wysokości 8 px. Największa pojedyncza wygrana wizualna w całym spisie: **każdy ekran** jest z niego zbudowany, a systemowy font przy `Nearest` i skalowaniu niecałkowitym rozjeżdża się na kratę |
-| **płytowanie kadłuba** | kadłub to jednolity kolor | tekstura kafelkowa na `Polygon2D` (`texture` + `texture_scale`), żeby obrys z danych dostał powierzchnię bez tracenia edytowalności |
-| **kokpit / detal statku** | brak | mały sprite nakładany w środku masy — jedyny element statku, który może być stały, bo nie zależy od obrysu |
 
 ## 4. Ikony i symbole do narysowania
 
@@ -142,10 +184,12 @@ progu, w którym `draw_arc` cokolwiek znaczy.
 
 ## Czego świadomie nie ma na liście
 
-- **Statek jako jeden sprite.** Obrys jest edytowalny i z niego liczy się
-  fizyka; sprite kadłuba byłby drugim źródłem prawdy o kształcie i rozjechałby
-  się z kolizją przy pierwszej zmianie w edytorze. Zamiast tego: tekstura na
-  wielokącie plus osobne sprite'y dysz, podwozia i kokpitu.
+- **Statek składany z wielu kafelków.** Jeden sprite na kadłub, i tyle; patrz
+  1a. Pierwsza wersja tego spisu odrzucała sprite kadłuba w ogóle, bo
+  rozjechałby się z kształtem kolizyjnym — co było przeszacowaniem problemu z
+  dwóch powodów. Obrysy nie są dowolne, tylko nazwane, więc sprite wybiera się
+  tą samą nazwą; a drobna różnica między sylwetą a kształtem zderzeniowym jest
+  normalną ceną w grach 2D i należy do autora grafiki, nie do kodu.
 - **Planety jako sprite'y.** Cały sens generatora jest taki, że świat jest
   bitmapą, w której można wykopać dziurę.
 - **Warianty kolorystyczne plików.** Wszędzie biały sprite plus `modulate`.
@@ -158,5 +202,6 @@ progu, w którym `draw_arc` cokolwiek znaczy.
 4. **Ikony mapy i skanera** — tam, gdzie proceduralne prymitywy są najmniejsze.
 5. **Ikony gniazd w edytorze** — ekran jest gotowy, czeka na symbole.
 6. **Skrzynka, pocisk, rakieta** — małe obiekty świata.
-7. **Płytowanie kadłuba i stacja** — hybrydy, najwięcej roboty na jednostkę
-   efektu.
+7. **Kadłuby** — siedem sprite'ów, ale dopiero gdy dysze i podwozie już są,
+   bo dopiero wtedy widać, ile kadłub ma pokazywać, a ile dokładają doczepki.
+8. **Stacja** — hybryda, najwięcej roboty na jednostkę efektu.
