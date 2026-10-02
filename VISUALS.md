@@ -133,15 +133,20 @@ się nie przecinają.
 
 #### Krok 1: poddrzewo i wyłącznik
 
-- [ ] Węzeł `Presentation` w `ship.tscn` (sekcja 1, punkt 5) i jeden
-  wyłącznik na całą warstwę. `--headless` jej nie uruchamia, smoke test
-  przechodzi z wyłączoną.
-- [ ] `scripts/fx/ship_skin.gd`: jeden `_process`, który obchodzi statek i
-  tyka wszystkie `StripSprite`. Czyta wielkości ciągłe, nie dostaje ich
-  podanych — `Ship` nie dowiaduje się, że skórka istnieje.
-- [ ] Porządek rysowania jako jawne `z_index` na rodzinę: dysze pod
-  kadłubem, pióropusze pod dyszami, działa i podwozie nad. Domyślny
-  porządek drzewa to porządek dodawania węzłów, czyli przypadek.
+- [x] Węzeł `Presentation` w `ship.tscn` (sekcja 1, punkt 5) i jeden
+  wyłącznik: **F8**. Headless warstwa jest **budowana, ale nigdy
+  pokazywana** — bramka stoi na pokazywaniu, nie na budowaniu, więc test
+  liczy sprite'y i taktuje skórkę bez okna, a tekstura, która się nie
+  wczyta, dalej nie może wywrócić testu lotu.
+- [x] `scripts/fx/ship_skin.gd`: jeden `refresh(delta)`, który obchodzi
+  statek i tyka wszystkie `StripSprite`. W `_physics_process`, nie w
+  `_process`: czytane wielkości zmieniają się w tempie fizyki, a
+  transformacja pisana z klatki renderowania bije się z interpolatorem.
+- [x] Porządek rysowania jako jawne `z_index` na rodzinę: pióropusze -20,
+  dysze -10, kadłub 0, podwozie 5, działa 10.
+- [x] **Szew**: `Ship.configuration_changed`, emitowane po przebudowie
+  grup sterowania. Skórka przebudowuje się z tego, zamiast porównywać
+  scenę ze sobą co klatkę.
 
 #### Krok 2: dysze i pióropusze
 
@@ -149,16 +154,26 @@ Najtańsza prawdziwa wygrana i zerowe ryzyko regresji: **dysz dziś po prostu
 nie widać** (`EngineMount` ma sam `GPUParticles2D`), więc ten krok nic nie
 zastępuje, tylko dodaje.
 
-- [ ] Dysza na każdym `EngineMount`, wybierana z `engine_nozzle.tres` po
-  `EngineData.type`, obracana dodatkowo o `gimbal`.
-- [ ] Pióropusz wybierany z `engine_plume.tres` po `max_thrust`, napędzany
-  `EngineInstance.effective_output()` przez `StripSprite.drive()`.
-  To jest cała implementacja reguły „tempo klatek jest daną".
-- [ ] Tekstura cząstek (`particles/dot.png`) do wydechu. Bez niej płomień
-  jest siatką kwadratów, bo `GPUParticles2D` bez tekstury rysuje quady.
-- [ ] Zmierzyć koszt `tools/frame_bench.gd`. Osiem mocowań razy dwa sprite'y
-  to ~16 węzłów na statek; jeśli to widać w klatce, trzeba wiedzieć **teraz**,
-  a nie po kadłubach.
+- [x] Dysza na każdym `EngineMount`, obracana o `gimbal`. Liczona z
+  `-thrust_direction()`, nie z konwencji zapisanej w scenie — dysza
+  narysowana w stronę, w którą działa siła, jest dyszą przykręconą tyłem.
+- [x] Pióropusz z `engine_plume.tres`, napędzany
+  `EngineInstance.effective_output()`. **Jedna liczba robi trzy rzeczy**:
+  długość, jasność i tempo klatek. Długość, nie samą jasność — pióropusz
+  pełnej długości przy ćwierci przepustnicy to szeroka blada poświata,
+  czyli dokładnie to halo, o którym pilot już raz powiedział, że go nie
+  chce.
+- [x] Pióropusz zaczyna się w **płaszczyźnie wylotu dyszy**, podanej przez
+  `SpriteStrip.exit`. Podanej, nie zgadywanej z tego, gdzie kończą się
+  nieprzezroczyste texele: pierwszy prawdziwy sprite z rozkloszowaną
+  krawędzią przesunąłby po cichu każdy płomień na statku.
+- [x] Tekstura cząstek (`particles/dot.png`) do wydechu. Bez niej płomień
+  był siatką kwadratów, bo `GPUParticles2D` bez tekstury rysuje quady.
+- [x] **Zmierzone.** Metoda z `frame_bench.gd`: zegar ścienny, vsync off,
+  `--fixed-fps`, 600 klatek na przypadek, statek z zapalonymi wszystkimi
+  silnikami. Wyłączenie skórki oszczędza **62 us na klatkę** przy
+  tle 786 us — czyli rysowanie i aktualizacja dwudziestu sprite'ów to
+  **0,37% budżetu klatki**. Nie ma problemu i teraz to wiadomo.
 
 #### Krok 3: kadłub
 
@@ -166,51 +181,76 @@ Ten krok ma zależność i warto ją nazwać: **statek nie wie, jakim jest
 kadłubem.** `Ship.hull_outline` to goła tablica punktów, a sprite wybiera
 się nazwą.
 
-- [ ] `Ship.hull: HullData` obok `hull_outline`, ustawiane przez
-  `ShipFitout` i `CreativeTool`. To jest jednocześnie checkbox „Kadłuby jako
-  zasoby" z M3.5 — trzy katalogi schodzą do jednego i test, który dziś
-  pilnuje zgodności, zmienia się w test, że pozostałe dwa już nie istnieją.
-- [ ] `StripSprite` z `hull.tres` zamiast `Hull` jako `Polygon2D`.
-- [ ] **Kadłub przebudowany w narzędziu kreatywnym nie ma `id`, więc nie ma
-  sprite'a** — i wtedy `Polygon2D` zostaje widoczny. To nie jest awaria,
-  to jest poprawna odpowiedź: piaskownica ma pokazywać kształt, który
-  naprawdę dostała.
-- [ ] Schemat w edytorze dalej rysuje wielokąt (ASSETLIST, sekcja 2): jego
+- [x] `HullData.matching(outline)` zamiast pola na statku. Tańsza połowa
+  checkboxa „Kadłuby jako zasoby" z M3.5: statek znajduje swój obrazek po
+  własnym obrysie, więc nie trzeba niczego ustawiać w trzech miejscach.
+  **Droga połowa dalej czeka** — zejście `CreativeTool.SHAPES` i presetów
+  `ShipFitout` na zasoby, czyli z trzech kopii do jednej. Dopóki tego nie
+  ma, pole na statku byłoby czwartą kopią.
+- [x] `StripSprite` z `hull.tres` zamiast `Hull` jako `Polygon2D`.
+- [x] **Kadłub przebudowany w narzędziu kreatywnym nie pasuje do niczego,
+  więc nie ma sprite'a** — i wtedy `Polygon2D` zostaje widoczny. To nie
+  jest dziura, to poprawna odpowiedź: piaskownica ma pokazywać kształt,
+  który naprawdę dostała.
+- [x] Schemat w edytorze dalej rysuje wielokąt (ASSETLIST, sekcja 2): jego
   zadaniem jest pokazać prawdę o kształcie zderzeniowym.
 
 #### Krok 4: cieniowanie przenosi się do skórki
 
-- [ ] `Ship._catch_the_light()` wychodzi z `ship.gd`. Dziś symulacja sięga
-  po `get_node("Hull")` i ustawia `self_modulate` — czyli rysuje. Po
-  przeniesieniu skórka czyta `GravityWell.daylight_at()` sama.
-- [ ] Pióropusze i błyski **nie** są przygaszane: są addytywne i robią
+- [x] `Ship._catch_the_light()` wyszedł z `ship.gd`. Symulacja sięgała po
+  `get_node("Hull")` i ustawiała `self_modulate` w środku
+  `_integrate_forces` — czyli malowała. Teraz robi to `ShipSkin.refresh()`,
+  a obrazek jest co do piksela ten sam.
+- [x] Pióropusze i błyski **nie** są przygaszane: są addytywne i robią
   własne światło. `SpriteStrip.additive` jest tym znacznikiem, więc skórka
   nie potrzebuje listy wyjątków.
+- [x] Z wyłączoną warstwą cieniowany jest `Polygon2D`, bo to on jest wtedy
+  widoczny. Światło jest faktem o tym, gdzie statek stoi, a nie o tym,
+  która warstwa go maluje.
 
 #### Krok 5: działa i podwozie
 
-- [ ] Działo na każdym `Hardpoint`, z `weapon_muzzle.tres` po
+- [x] Działo na każdym `Hardpoint`, z `weapon_muzzle.tres` po
   `WeaponData.type`, obracane o `facing`.
-- [ ] Noga: `gear/strut` rozciągany wzdłuż Y przez `LandingGear.extension`,
-  `gear/pad` na stopie. `_draw()` zostaje jako zapas, dopóki sprite nie
-  wygląda lepiej od kreski.
+- [x] Noga: `gear/strut` rozciągany dokładnie do stopy, `gear/pad` na niej.
+  Rozciągany, a nie podmieniany na dłuższy obrazek, bo pokazywane jest
+  podwozie **w połowie drogi**, a na to nie ma sensownej liczby obrazków.
+  `LandingGear._draw()` zostaje jako to, co widać po F8.
 
 #### Krok 6: drobne obiekty świata
 
-- [ ] Skrzynka: sprite plus **proceduralna** obwódka rzadkości. Wzorcowa
-  hybryda — sylwet jest stały, kolor jest daną z `rarity_color()`.
-- [ ] Pocisk i rakieta z `round.tres`.
+- [x] Skrzynka: sprite plus **proceduralna** obwódka rzadkości. Wzorcowa
+  hybryda — sylwet jest stały, kolor jest daną z `rarity_color()`. Jeden
+  biały sprite obsługuje pięć poziomów zamiast pięciu plików.
+- [x] Pocisk i rakieta z `round.tres`, przez `Projectile.tint` i
+  `look_key` ustawiane w scenie. `tint` robi dwie rzeczy naraz celowo:
+  maluje sprite i nadaje barwę światłu, które pocisk rzuca, więc poświatę
+  zawsze da się odnieść do tego, co ją rzuca.
 - [ ] Odłamki (`particles/debris_strip3.png`) przy trafieniu, razem z V3.
 
 #### Krok 7: interfejs
 
-- [ ] Ikony gniazd w edytorze z `module_icon.tres` zamiast
-  `_draw_slot_glyph()`. Biel plus `modulate`, więc pięć poziomów rzadkości
-  to jedna ramka, nie pięć plików.
-- [ ] `tools/gallery.tscn` (wspólne z V0): wszystkie paski obok siebie, z
-  zaznaczonym pivotem. **Pivot przesunięty o dwa piksele czyta się jak błąd
-  fizyki**, a nie jak błąd grafiki, i nie da się go zobaczyć inaczej niż
-  patrząc.
+- [x] `tools/art_gallery.tscn` (wspólne z V0): wszystkie paski obok siebie,
+  w rozmiarze docelowym, z krzyżykiem na punkcie zaczepienia i ramką
+  klatki, animacje chodzą. **Pivot przesunięty o dwa texele czyta się jak
+  błąd fizyki**, a nie jak błąd grafiki, i nie da się go zobaczyć inaczej
+  niż patrząc.
+- [ ] ~~Ikony gniazd w edytorze z `module_icon.tres`~~ — **tego nie
+  robimy, i to jest decyzja, nie zaległość.** Glif silnika w edytorze to
+  strzałka wzdłuż `force_direction()`: niesie **daną**, a nie sylwetę, więc
+  podmiana na statyczny sprite odebrałaby informację. To jest reguła
+  decyzyjna z ASSETLIST, punkt 1, zastosowana do czegoś, co wyglądało na
+  ikonę. Glify generatora, komputera i podwozia mogłyby być spritami i są
+  już czytelne, więc zysk jest zerowy.
+- [ ] Właściwym domem dla `module_icon.tres` są **karty i ładownia**
+  (ASSETLIST 4e), a te należą do V6 — który sam mówi, że robione przed
+  paletą i `ui_draw.gd` byłyby robione dwa razy. Ikony czekają tam.
+
+#### Co zostało
+
+Dwie rzeczy, obie świadomie przeniesione, nie zapomniane: odłamki przy
+trafieniu (idą z V3, bo tam jest reszta efektów zderzenia) i ikony kart
+(idą z V6, bo przed paletą byłyby robione dwa razy).
 
 #### Czego ten tor nie rusza
 
@@ -221,13 +261,18 @@ efektu; reszta ma kształt, który jest daną.
 #### Co na pewno ugryzie
 
 - **Pivoty.** Dysza przesunięta o dwa texele nie wygląda na przesuniętą,
-  wygląda na przykręconą krzywo.
+  wygląda na przykręconą krzywo. Stąd galeria.
 - **Kolejność rysowania.** Bez jawnego `z_index` jest to kolejność dodawania
   węzłów, czyli kolejność przypadkowa.
 - **Przebudowany kadłub.** Narzędzie kreatywne zmienia obrys w locie —
   skórka musi się przebudować i umieć nie mieć sprite'a.
-- **Koszt.** Dwadzieścia węzłów na statek to nie jest zero. Mierzyć, nie
-  zgadywać — raz już zgadliśmy, że pocisk kosztuje 0.9 ms, a kosztuje 7 us.
+- **Koszt.** Dwadzieścia węzłów na statek to nie jest zero. Zmierzone: 62 us
+  na klatkę, 0,37% budżetu.
+
+Z tego ugryzły dwie, obie złapane patrzeniem, nie testem: goleń podwozia
+szeroka na trzy piksele rozciągnięta na trzypikselowej nodze czyta się jak
+przykręcony klocek, a płomień z białym rdzeniem na połowie długości czyta
+się jak para. Długość to nie powierzchnia — rdzeń jest najszerszą częścią.
 
 ---
 

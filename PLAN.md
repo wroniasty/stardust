@@ -308,18 +308,19 @@ wspólna dla całej kategorii i nie wie, czego baza nie ma.
   katalogów na zasoby i skasowanie ich — czyli zejście z trzech kopii do
   jednej. Dopiero wtedy statek wie, jakim jest kadłubem, a bez tego nie da
   się wybrać dla niego sprite'a (VISUALS.md, VS krok 3).
-- [ ] **Wygląd wiązany z cechą** (ASSETLIST.md, „Wygląd wynika z cech").
-  Mechanizm stoi: `LookTable` wybiera obrazek po kluczu, po afiksie albo po
-  progu na nazwanej statystyce, i mieszka w warstwie prezentacji — żaden
-  zasób przedmiotu nie niesie tekstury, więc generator lootu nic o tym nie
-  wie. Dziewięć tablic w `resources/fx/looks/`. Wiązanie po afiksie dla
-  silników jest **napisane i bezczynne**, bo `EngineData` nie przechowuje
-  afiksów — odblokuje je checkbox o nazwach wyżej.
-- [ ] **Sprite'y animowane**, pasek klatek w jednym pliku, tempo liczone ze
-  stanu (przepustnica), nie zapisane w zasobie. Format to `SpriteStrip`,
-  węzeł to `StripSprite`, a `drive(ułamek)` jest jedynym miejscem, w którym
-  tempo powstaje. Ikony HUD i edytora zostają statyczne. Podmiana
-  rysowania na te sprite'y to osobny tor: VISUALS.md, „VS".
+- [x] **Wygląd wiązany z cechą** (ASSETLIST.md, „Wygląd wynika z cech").
+  `LookTable` wybiera obrazek po kluczu, po afiksie albo po progu na
+  nazwanej statystyce, i mieszka w warstwie prezentacji — żaden zasób
+  przedmiotu nie niesie tekstury, więc generator lootu nic o tym nie wie.
+  Działa na ekranie: silnik dostaje pióropusz wg `max_thrust`, dysza wg
+  `type`. Wiązanie po afiksie dla silników jest **napisane i bezczynne**,
+  bo `EngineData` nie przechowuje afiksów — odblokuje je checkbox o
+  nazwach wyżej, i jest test, który to zauważy.
+- [x] **Sprite'y animowane**, pasek klatek w jednym pliku, tempo liczone ze
+  stanu. `SpriteStrip` to format, `StripSprite` to węzeł, a `drive(ułamek)`
+  jest jedynym miejscem, w którym tempo powstaje: pióropusz przy ćwierci
+  przepustnicy miga cztery razy wolniej, bo silnik pracuje na ćwierć. Ikony
+  HUD i edytora zostają statyczne.
 - [ ] Test: żaden afiks nie ląduje na polu, którego baza nie ma; każdy
   przedmiot ma nazwę mieszczącą się na karcie; każdy kadłub z katalogu ma
   komplet sprite'ów albo jawnie ich nie ma.

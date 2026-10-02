@@ -4,13 +4,17 @@ Spis tego, co trzeba narysować. **Co** ma powstać i **dlaczego akurat jako
 sprite** — bo „jak ma wyglądać" jest w UI_STYLE.md, a „kiedy to wchodzi" w
 VISUALS.md.
 
-Stan na dziś: **jest komplet placeholderów, nie ma ani jednego docelowego
-zasobu.** 41 plików w `assets/art/`, wygenerowanych przez
-`tools/make_placeholders.gd`, plus zasoby `resources/fx/looks/*.tres` i
-`resources/hulls/*.tres`, które je wiążą z przedmiotami. Wszystko, co widać
-**w grze**, jest nadal rysowane w locie — `Polygon2D`, `_draw()`, shadery i
-cząstki bez tekstury — bo podmiana rysowania na sprite'y to osobna robota,
-rozpisana w VISUALS.md („VS: Przejście na sprite'y").
+Stan na dziś: **sprite'y są na ekranie, ale wszystkie są placeholderami.**
+41 plików w `assets/art/`, wygenerowanych przez
+`tools/make_placeholders.gd`, wiązanych z przedmiotami przez
+`resources/fx/looks/*.tres` i `resources/hulls/*.tres`. Kadłub, dysze,
+pióropusze, działa, podwozie, skrzynka, pocisk i rakieta są już rysowane z
+nich (VISUALS.md, „VS"). Proceduralne zostało to, co ma zostać — teren,
+chmury, gwiazda, orbity, schemat w edytorze — plus stacja, wiązka i smuga,
+których jeszcze nie ruszaliśmy.
+
+Oglądać: `godot --path . tools/art_gallery.tscn`. Wyłączyć całą warstwę:
+**F8** w grze.
 
 Placeholdery są generowane, nie rysowane, i to jest celowe: chodzi o właściwą
 **liczbę** plików, we właściwych **rozmiarach**, z właściwymi **punktami
@@ -190,14 +194,14 @@ obrazek.
 
 To, co nie jest częścią statku — części statku są wyżej.
 
-| rzecz | dziś | docelowo | rozmiar | uwagi |
-|---|---|---|---|---|
-| **skrzynka lootu** | dwa `Polygon2D` (`Body` + `Glow`) | **hybryda**: sprite skrzyni + proceduralna obwódka rzadkości | 12 x 12 | przykład podany przez pilota i wzorcowy: sylwet jest stały, rzadkość jest daną z `ModuleData.rarity_color()`. Sprite biały, `modulate` od zawartości, obwódka rysowana |
-| **pocisk** | `Polygon2D` „Body" | sprite smugi | 3 x 7 | cztery warianty wg broni (działko, impuls, slug, odłamek) albo jeden biały + `modulate` kolorem broni |
-| **rakieta** | `Polygon2D` „Body" + „Fin" | sprite z płetwami | 5 x 11 | ma dziób i stery — to jest sylwet, nie kształt z danych |
-| **stacja** | `_draw()`: pierścień, szprychy, piasta | **hybryda**: kafle modułów (segment pierścienia, szprycha, piasta, dok) składane wg seeda | segment ~24 x 24 | wariantowość ma zostać (liczba szprych, kolor), ale z klocków, nie z `draw_arc` |
-| **beam** | dwie `draw_line` | sprite rozciągany wzdłuż strzału | 8 x 3, kafelkowany | dziś to dwie kreski jedna na drugiej; wiązka chce rdzenia i poświaty |
-| **smuga kondensacyjna** | `Line2D` + `Gradient` | ta sama `Line2D`, ale z teksturą | 8 x 8 kafel | `Line2D` przyjmuje `texture` z `texture_mode`; nie trzeba zmieniać węzła |
+| rzecz | stan | rozmiar | uwagi |
+|---|---|---|---|
+| ~~**skrzynka lootu**~~ | **zrobione** jako hybryda: `StripSprite` plus proceduralna obwódka rzadkości | 12 x 12 | wzorcowy przypadek: sylwet jest stały, rzadkość jest daną z `ModuleData.rarity_color()`. Jeden szary sprite, `modulate` od zawartości, obwódka dalej rysowana |
+| ~~**pocisk**~~ | **zrobione** — `Projectile.look_key` wybiera obrazek, `tint` go maluje | 3 x 7 | `tint` maluje też światło, które pocisk rzuca: jedno pole, żeby poświatę dało się odnieść do tego, co ją rzuca |
+| ~~**rakieta**~~ | **zrobione** — ten sam mechanizm, `look_key = missile` | 5 x 11 | dziób i stery w jednym sprite zamiast `Body` + `Fin` |
+| **stacja** | dalej `_draw()`: pierścień, szprychy, piasta | segment ~24 x 24 | docelowo hybryda z kafli składanych wg seeda; wariantowość ma zostać, ale z klocków, nie z `draw_arc`. Najwięcej roboty na jednostkę efektu, więc ostatnia |
+| **beam** | dalej dwie `draw_line` | 8 x 3, kafelkowany | dziś to dwie kreski jedna na drugiej; wiązka chce rdzenia i poświaty |
+| **smuga kondensacyjna** | dalej `Line2D` + `Gradient` | 8 x 8 kafel | `Line2D` przyjmuje `texture` z `texture_mode`; nie trzeba zmieniać węzła |
 
 ## 2. Rysowane dziś, zostają proceduralne
 
@@ -221,9 +225,9 @@ To są dziury, nie upiększenia.
 
 | rzecz | stan | co trzeba |
 |---|---|---|
-| **dysze silników** | **niewidoczne** — `EngineMount` ma tylko `GPUParticles2D`, zero grafiki | sprite dyszy, 3 warianty wg `EngineData.Type` (MAIN duża z dzwonem, TORQUE mała, THRUSTER płaska), ~7 x 7; dodatkowo wariant wychylany dla gimbala, obracany o `gimbal` |
-| **tekstura cząstek pióropusza** | brak — domyślne kwadraty | miękka kropka 8 x 8 z gradientem; bez niej płomień to siatka kwadratów |
-| **tekstura cząstek debris** | brak | odłamek 3 x 3, 2–3 warianty |
+| ~~**dysze silników**~~ | **zrobione** — `ShipSkin` rysuje dyszę na każdym mocowaniu, obracaną o `gimbal` | — |
+| ~~**tekstura cząstek pióropusza**~~ | **zrobione** — `particles/dot.png` w `engine_mount.tscn` | — |
+| **tekstura cząstek debris** | plik jest (`particles/debris_strip3.png`), nikt go jeszcze nie wyrzuca | podpięcie przy trafieniu idzie z V3 |
 | **czcionka bitmapowa** | `SystemFont` (Consolas / DejaVu) | font pikselowy o wysokości 8 px. Największa pojedyncza wygrana wizualna w całym spisie: **każdy ekran** jest z niego zbudowany, a systemowy font przy `Nearest` i skalowaniu niecałkowitym rozjeżdża się na kratę |
 
 ## 4. Ikony i symbole do narysowania
@@ -334,12 +338,23 @@ tylko domyślną wartością w przebraniu, i przeszłaby każdy inny test.
 
 ## Kolejność, gdyby robić po jednym
 
-1. **Font bitmapowy** — dotyka każdego ekranu.
-2. **Dysze silników** — jedyna rzecz w grze, której po prostu nie widać.
-3. **Tekstury cząstek** — płomień i odłamki są dziś kwadratami.
-4. **Ikony mapy i skanera** — tam, gdzie proceduralne prymitywy są najmniejsze.
-5. **Ikony gniazd w edytorze** — ekran jest gotowy, czeka na symbole.
-6. **Skrzynka, pocisk, rakieta** — małe obiekty świata.
-7. **Kadłuby** — siedem sprite'ów, ale dopiero gdy dysze i podwozie już są,
-   bo dopiero wtedy widać, ile kadłub ma pokazywać, a ile dokładają doczepki.
+Mechanika jest zrobiona dla wszystkiego poniżej — zostało **narysowanie**.
+Każdy prawdziwy plik podmienia placeholder jeden do jednego; zasoby, pivoty
+i kod zostają.
+
+1. **Font bitmapowy** — dotyka każdego ekranu i jako jedyny nie ma jeszcze
+   nawet placeholdera. Największa pojedyncza wygrana w całym spisie.
+2. **Dysze i pióropusze** — pierwsze, co widać na statku, i jedyne, co
+   odpowiada na przepustnicę.
+3. **Kadłuby** — dziesięć sztuk; dopiero po dyszach, bo dopiero wtedy
+   widać, ile kadłub ma pokazywać, a ile dokładają doczepki.
+4. **Skrzynka, pocisk, rakieta** — małe, dużo ich na ekranie.
+5. **Tekstury cząstek** — kropka wydechu jest, odłamki czekają na V3.
+6. **Ikony mapy i skanera** — tam, gdzie proceduralne prymitywy są
+   najmniejsze; nie mają jeszcze placeholderów.
+7. **Ikony kart i ładowni** — placeholdery są, podpięcie idzie z V6.
 8. **Stacja** — hybryda, najwięcej roboty na jednostkę efektu.
+
+Czego świadomie **nie** ma w tej kolejce: glify gniazd w edytorze. Strzałka
+silnika niesie `force_direction()`, czyli daną — sprite odebrałby
+informację. Patrz reguła decyzyjna, punkt 1.
