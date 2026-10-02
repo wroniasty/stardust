@@ -121,20 +121,14 @@ func card_lines(against: ModuleData = null) -> PackedStringArray:
 ## numbers come out ragged and a column of values cannot be read down. Either
 ## the padding goes or the font is fixed-width, and a card is a table.
 ##
-## Next to the format strings that assume it, so a screen cannot pick up the
-## card and quietly drop the thing that makes it legible. Cached because a
-## SystemFont asks the OS to resolve the family.
-static var _card_font: Font = null
-
-
+## It used to build a SystemFont here and ask the OS for Consolas, which
+## made the look of every screen in the game depend on what happened to be
+## installed. The answer lives in `UiFont` now -- one face, three sizes --
+## and this stays only because the format strings above are the reason the
+## face has to be fixed-width, and a rule should be stated where it is
+## relied on.
 static func card_font() -> Font:
-	if _card_font == null:
-		var mono: SystemFont = SystemFont.new()
-		mono.font_names = PackedStringArray(
-			["Consolas", "Courier New", "DejaVu Sans Mono", "monospace"]
-		)
-		_card_font = mono
-	return _card_font
+	return UiFont.face()
 
 
 ## A row, and how it differs from the same row on the module it replaces.

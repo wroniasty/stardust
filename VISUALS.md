@@ -328,7 +328,10 @@ przyrządy, monospace), nowoczesność w ruchu i świetle (wygładzanie, poświa
 tylko na akcencie, reakcja w 80 ms) — i żadnego kostiumu CRT. Tutaj zostaje
 tylko kolejność prac.
 
-- [ ] Paleta jako zasób `resources/ui/palette.tres` i pikselowy font monospace w theme. Dziś HUD ma font proporcjonalny, więc cyfry drgają — to jest najtańsza poprawka o największym skutku. Wspólne z V0.
+- [ ] Paleta jako zasób `resources/ui/palette.tres`. **Font jest zrobiony**:
+  `UiFont.face()` podaje jeden krój każdemu ekranowi, dwa rozmiary (8 i 16,
+  bo bitmapa skaluje się tylko całkowicie), a `ModuleData.card_font()`
+  przestał prosić system o Consolas. Sam krój to jeszcze placeholder. Dziś HUD ma font proporcjonalny, więc cyfry drgają — to jest najtańsza poprawka o największym skutku. Wspólne z V0.
 - [ ] `scripts/ui/ui_draw.gd`: wiersz odczytu i narożny nawias, plus `tools/gallery.tscn` do ich oglądania.
 - [ ] Oprawa kart modułów: ramki, ikony, **kolor wiersza wg kierunku zmiany** zamiast słów „lepiej / gorzej”. Treść karty jest zrobiona i mieszka na `ModuleData.card_lines()` (M2.3); zostało samo malowanie, więc siedzi tu, a nie w M2 — robione przed paletą i `ui_draw.gd` byłoby robione dwa razy.
 - [ ] Układ w czterech narożnikach, środek 400x220 pusty (UI_STYLE.md sekcja 5). Przeniesienie tego, co już jest, na ramę.

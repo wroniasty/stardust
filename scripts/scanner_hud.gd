@@ -215,7 +215,10 @@ func loot_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 
 
 func _draw_markers() -> void:
-	var font: Font = _canvas.get_theme_default_font()
+	# The interface face, not whatever theme the canvas happens to inherit:
+	# the scanner draws distances, and a distance in a proportional font
+	# is a number that changes width as it counts down.
+	var font: Font = UiFont.face()
 	var to_screen: Transform2D = get_viewport().get_canvas_transform()
 	_labels.clear()
 	for contact: Dictionary in contacts(to_screen, _canvas.size):

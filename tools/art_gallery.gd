@@ -59,6 +59,24 @@ const CROSS: float = 3.0
 ## frame rather than to see an idling engine.
 const DRIVE: float = 1.0
 
+## The font, shown on the kind of text the game actually sets: a column of
+## readings, a rolled item name, and a sentence in Polish with every
+## accented letter in it.
+##
+## Here rather than in a tool of its own, because this is the place you
+## come to look at what the game is made of, and a typeface is one of the
+## things it is made of. The pangram is the test that matters: a font whose
+## alphabet looks fine can still fall apart the moment an ogonek meets a
+## descender.
+const SPECIMEN: Array[String] = [
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZ  0123456789",
+	"abcdefghijklmnopqrstuvwxyz  !?,.:;-+/()[]",
+	"ĄĆĘŁŃÓŚŹŻ  ągćzęłńóśźż  — zażółć gęślą jaźń",
+	"PERI  -1107   APO  1400   ALT  1414   V/S  +0.0",
+	"efficient wide precise rapid dumb rocket",
+	"W DOKU — montaż dostępny.  Odmowa: za szybko",
+]
+
 var _shown: Array[Dictionary] = []
 var _output_dir: String = ""
 
@@ -140,6 +158,10 @@ func _frame_everything() -> void:
 		box = box.expand(Vector2(entry["at"]) + CELL * 0.5)
 		box = box.expand(Vector2(entry["at"]) - CELL * 0.5)
 	_frame = box.grow(8.0)
+	# Room under the sprites for the type specimen.
+	_frame.size.y += float(SPECIMEN.size()) * float(UiFont.BODY + 3) + float(
+		UiFont.HEADLINE
+	) + 16.0
 	_camera.position = _frame.get_center()
 	var view: Vector2 = get_viewport().get_visible_rect().size
 	_camera.zoom = Vector2.ONE * minf(
@@ -164,7 +186,8 @@ func _corner_of(entry: Dictionary) -> Vector2:
 
 func _draw() -> void:
 	draw_rect(_frame, BACKDROP, true)
-	var font: Font = ThemeDB.fallback_font
+	var font: Font = UiFont.face()
+	_draw_specimen(font)
 	for entry: Dictionary in _shown:
 		var at: Vector2 = entry["at"]
 		var strip: SpriteStrip = entry["strip"]
@@ -182,6 +205,22 @@ func _draw() -> void:
 			],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 5, LABEL_COLOUR
 		)
+
+
+## The font, under everything else.
+func _draw_specimen(font: Font) -> void:
+	var at: Vector2 = Vector2(_frame.position.x + 10.0, _frame.end.y - 4.0)
+	at.y -= float(SPECIMEN.size()) * float(UiFont.BODY + 3) + float(UiFont.HEADLINE) + 10.0
+	draw_string(
+		font, at, "STARDUST", HORIZONTAL_ALIGNMENT_LEFT, -1,
+		UiFont.HEADLINE, LABEL_COLOUR
+	)
+	at.y += float(UiFont.HEADLINE) + 6.0
+	for line: String in SPECIMEN:
+		draw_string(
+			font, at, line, HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, LABEL_COLOUR
+		)
+		at.y += float(UiFont.BODY + 3)
 
 
 func _save() -> void:

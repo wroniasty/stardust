@@ -1009,6 +1009,7 @@ func _evaluate_phase() -> void:
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
+			_check_font()
 			_check_scanner(_planet)
 			_check_crate_physics(_planet)
 			_check_ejection()
@@ -6094,6 +6095,101 @@ func _check_aiming() -> void:
 	big.queue_free()
 	ship.queue_free()
 
+
+
+## Font interfejsu: czy ma wszystkie znaki, ktore gra naprawde pisze.
+##
+## The guard that matters is coverage, and it is checked against the text
+## the game actually sets rather than against an alphabet. A missing glyph
+## does not fail anything -- Godot draws a box with a hex code in it -- so
+## the first anyone would know is a screenshot with a box in the middle of
+## a Polish word. Counted once over the real strings: every non-ASCII
+## character in the interface is Polish except the em dash, which appears
+## eleven times and which a font built from ASCII would have missed.
+##
+## Monospace is the other half, and it is UI_STYLE's reason for having a
+## font rule at all: in a proportional face `ALT 11111` and `ALT 88888`
+## are different widths, and a number that changes width as it counts is
+## unreadable however good the rest of the screen is.
+func _check_font() -> void:
+	var face: Font = UiFont.face()
+	_expect(
+		face != null and face != ThemeDB.fallback_font,
+		"the interface has a face of its own, not the engine's fallback",
+	)
+
+	# The corpus: every line the game is known to put on screen, from the
+	# objects that own them rather than copied here.
+	var corpus: PackedStringArray = PackedStringArray()
+	for entry: Dictionary in HelpScreen.LABELS:
+		corpus.append(String(entry["says"]))
+	for says: Variant in HelpScreen.CHORD_SAYS.values():
+		corpus.append(String(says))
+	var loot: Node = LOOT_SCRIPT.new()
+	for item_seed: int in range(40):
+		var item: ModuleData = loot.generate(item_seed * 37, item_seed % 5) as ModuleData
+		if item == null:
+			continue
+		for line: String in item.card_lines():
+			corpus.append(line)
+		corpus.append(item.blurb())
+	loot.free()
+	var ship: Ship = _spawn_ship()
+	for line: String in ship.configuration().lines():
+		corpus.append(line)
+	var post: Station = (load("res://scenes/station.tscn") as PackedScene).instantiate() as Station
+	root.add_child(post)
+	corpus.append(post.refusal(ship))
+	post.free()
+	ship.free()
+
+	var missing: Dictionary = {}
+	var letters: int = 0
+	for line: String in corpus:
+		for i: int in range(line.length()):
+			var code: int = line.unicode_at(i)
+			letters += 1
+			if not face.has_char(code):
+				missing[code] = line
+	_expect(letters > 500, "there is a corpus to check (%d characters)" % letters)
+	for code: Variant in missing:
+		print("    no glyph for U+%04X in: %s" % [code, missing[code]])
+	_expect(
+		missing.is_empty(),
+		"and the font has a glyph for every character in it (%d lines)" % corpus.size(),
+	)
+
+	# Polish by name, because the corpus above is only as good as the
+	# strings that happen to exist today.
+	var polish: String = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ—"
+	var absent: int = 0
+	for i: int in range(polish.length()):
+		if not face.has_char(polish.unicode_at(i)):
+			absent += 1
+	_expect(absent == 0, "every Polish letter and the em dash are drawn, not boxed")
+
+	# Monospace, measured on the two extremes rather than declared.
+	var narrow: Vector2 = face.get_string_size("iiiiiiii", 0, -1, UiFont.BODY)
+	var wide: Vector2 = face.get_string_size("MMMMMMMM", 0, -1, UiFont.BODY)
+	_expect(
+		is_equal_approx(narrow.x, wide.x),
+		"eight narrow letters are as wide as eight wide ones (%.0f against %.0f)" % [
+			narrow.x, wide.x,
+		],
+	)
+
+	# And it scales by whole numbers, which is the grid law enforced by the
+	# font rather than by everyone remembering it. Found by looking: the
+	# first version had no scale mode set, so a 16 px heading came out the
+	# same size as the 8 px body and nothing complained.
+	var small: Vector2 = face.get_string_size("ALT 1414", 0, -1, UiFont.BODY)
+	var large: Vector2 = face.get_string_size("ALT 1414", 0, -1, UiFont.HEADLINE)
+	_expect(
+		is_equal_approx(large.x, small.x * 2.0) and is_equal_approx(large.y, small.y * 2.0),
+		"and a heading is exactly twice a label, not nearly twice (%.0f against %.0f)" % [
+			large.x, small.x,
+		],
+	)
 
 ## A module has to be able to say what it is made of, in a form two of them
 ## can be subtracted from each other.

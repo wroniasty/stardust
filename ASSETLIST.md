@@ -228,7 +228,7 @@ To są dziury, nie upiększenia.
 | ~~**dysze silników**~~ | **zrobione** — `ShipSkin` rysuje dyszę na każdym mocowaniu, obracaną o `gimbal` | — |
 | ~~**tekstura cząstek pióropusza**~~ | **zrobione** — `particles/dot.png` w `engine_mount.tscn` | — |
 | **tekstura cząstek debris** | plik jest (`particles/debris_strip3.png`), nikt go jeszcze nie wyrzuca | podpięcie przy trafieniu idzie z V3 |
-| **czcionka bitmapowa** | `SystemFont` (Consolas / DejaVu) | font pikselowy o wysokości 8 px. Największa pojedyncza wygrana wizualna w całym spisie: **każdy ekran** jest z niego zbudowany, a systemowy font przy `Nearest` i skalowaniu niecałkowitym rozjeżdża się na kratę |
+| ~~**czcionka bitmapowa**~~ | **placeholder jest** — `tools/make_font.gd` rysuje 115 glifów 5x8 i składa z nich `FontFile`; `UiFont.face()` podaje go każdemu ekranowi | docelowo *Departure Mono* (CC0) wg UI_STYLE §4 — podmiana jednego zasobu |
 
 ## 4. Ikony i symbole do narysowania
 
@@ -342,8 +342,10 @@ Mechanika jest zrobiona dla wszystkiego poniżej — zostało **narysowanie**.
 Każdy prawdziwy plik podmienia placeholder jeden do jednego; zasoby, pivoty
 i kod zostają.
 
-1. **Font bitmapowy** — dotyka każdego ekranu i jako jedyny nie ma jeszcze
-   nawet placeholdera. Największa pojedyncza wygrana w całym spisie.
+1. **Font bitmapowy** — ma już placeholder i całą instalację (`UiFont`,
+   trzy rozmiary, test pokrycia znaków), ale to dalej **nie jest docelowy
+   krój**. UI_STYLE §4 wybrał *Departure Mono* (CC0); wrzucenie go to
+   podmiana `resources/ui/pixel_font.tres` i nic więcej.
 2. **Dysze i pióropusze** — pierwsze, co widać na statku, i jedyne, co
    odpowiada na przepustnicę.
 3. **Kadłuby** — dziesięć sztuk; dopiero po dyszach, bo dopiero wtedy

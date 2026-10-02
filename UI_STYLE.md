@@ -119,15 +119,24 @@ jest nieczytelna bez względu na resztę.
 
 - **Monospace obowiązkowo na wszystkich liczbach.** Cyfry tabelaryczne, stała
   szerokość kolumny, wartość wyrównana do prawej.
-- **Font pikselowy, nie zeskalowany zwykły.** Propozycja: *Departure Mono*
+- **Font pikselowy, nie zeskalowany zwykły.** Docelowo: *Departure Mono*
   (2024, CC0, pikselowy monospace zaprojektowany dokładnie do tego zastosowania)
   jako główny, *Pixel Operator Mono* (CC0) jako zapas. Oba są bitmapowo czyste
-  w swoim rozmiarze bazowym.
+  w swoim rozmiarze bazowym. **Żadnego z nich nie ma jeszcze w repozytorium** —
+  do tego czasu stoi placeholder 5x8 generowany przez `tools/make_font.gd`.
+  Jedno miejsce, w którym się to wybiera: `UiFont.face()`.
 - **Trzy rozmiary, ani jednego więcej:**
   - `7 px` — overlay debugowy i tylko on (sekcja 8),
   - `8 px` — etykiety i wartości przyrządów, chleb powszedni,
   - `16 px` — nagłówek ekranu modalnego i jedna duża liczba, gdy naprawdę jest
     tylko jedna ważna (np. wysokość przy końcowym podejściu).
+
+  Font bitmapowy skaluje się **tylko całkowicie**
+  (`FIXED_SIZE_SCALE_INTEGER_ONLY`), więc 16 px to dokładnie dwa razy 8 px i
+  nie da się poprosić o nic pomiędzy. To jest ta sama reguła co wyżej,
+  wymuszona przez krój zamiast przez pamiętanie o niej. Konsekwencja: **7 px
+  z tego kroju nie istnieje** — i nie szkodzi, bo sekcja 8 i tak chce, żeby
+  overlay debugowy wyglądał inaczej niż gra.
 - **Wersaliki w etykietach, mieszane w zdaniach.** `ALT`, `V/S`, `GEAR` to
   etykiety. `Wave off: slope too steep` to zdanie i tak ma zostać — wersaliki w
   całym komunikacie czytają się wolniej, a to jest tekst, który pilot ma
