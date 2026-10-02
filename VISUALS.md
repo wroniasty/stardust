@@ -15,6 +15,10 @@ tutaj, żeby oba tory jak najrzadziej dotykały tych samych plików.
 
 ---
 
+Spis tego, **co** trzeba narysować i co ma być spritem, a co zostaje
+proceduralne, jest w **ASSETLIST.md**. Ten plik mówi kiedy; UI_STYLE.md mówi
+jak to ma wyglądać.
+
 ## 1. Kontrakt z linią główną
 
 To jest cała treść tego pomysłu. Reszta dokumentu to zawartość.
