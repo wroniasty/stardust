@@ -1,38 +1,37 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene format=3 uid="uid://b1hpmmhjwke58"]
 
-[ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
-[ext_resource type="Script" path="res://scripts/player.gd" id="2_player"]
+[ext_resource type="Script" uid="uid://dk1riqo6yijbx" path="res://scripts/world.gd" id="1_world"]
+[ext_resource type="Script" uid="uid://ibmgpgd5l4id" path="res://scripts/player.gd" id="2_player"]
 [ext_resource type="PackedScene" path="res://scenes/ship.tscn" id="3_ship"]
-[ext_resource type="Script" path="res://scripts/ship_camera.gd" id="4_camera"]
+[ext_resource type="Script" uid="uid://dict7hsfwxaqu" path="res://scripts/ship_camera.gd" id="4_camera"]
 [ext_resource type="PackedScene" path="res://scenes/debug_overlay.tscn" id="5_overlay"]
 [ext_resource type="PackedScene" path="res://scenes/starfield.tscn" id="6_starfield"]
 [ext_resource type="PackedScene" path="res://scenes/debug_vectors.tscn" id="7_vectors"]
 [ext_resource type="PackedScene" path="res://scenes/trajectory_predictor.tscn" id="8_trajectory"]
 
-[node name="World" type="Node2D"]
+[node name="World" type="Node2D" unique_id=920262928]
 script = ExtResource("1_world")
 
-[node name="Starfield" parent="." instance=ExtResource("6_starfield")]
+[node name="Starfield" parent="." unique_id=698607096 instance=ExtResource("6_starfield")]
 
-[node name="Systems" type="Node2D" parent="."]
+[node name="Systems" type="Node2D" parent="." unique_id=1267344365]
 
-[node name="Projectiles" type="Node2D" parent="." groups=["projectile_container"]]
+[node name="Projectiles" type="Node2D" parent="." unique_id=766634045 groups=["projectile_container"]]
 
-[node name="Player" type="Node2D" parent="."]
+[node name="Player" type="Node2D" parent="." unique_id=1848389889]
 script = ExtResource("2_player")
 
-[node name="Ship" parent="Player" instance=ExtResource("3_ship")]
+[node name="Ship" parent="Player" unique_id=1795592995 instance=ExtResource("3_ship")]
 
-[node name="Camera" type="Camera2D" parent="."]
+[node name="Camera" type="Camera2D" parent="." unique_id=1231777705]
 script = ExtResource("4_camera")
 target_path = NodePath("../Player/Ship")
 
-[node name="TrajectoryPredictor" parent="." instance=ExtResource("8_trajectory")]
+[node name="TrajectoryPredictor" parent="." unique_id=2032585381 instance=ExtResource("8_trajectory")]
 ship_path = NodePath("../Player/Ship")
 
-[node name="DebugVectors" parent="." instance=ExtResource("7_vectors")]
+[node name="DebugVectors" parent="." unique_id=2081862755 instance=ExtResource("7_vectors")]
 ship_path = NodePath("../Player/Ship")
 
-[node name="DebugOverlay" parent="." instance=ExtResource("5_overlay")]
+[node name="DebugOverlay" parent="." unique_id=1665694628 instance=ExtResource("5_overlay")]
 ship_path = NodePath("../Player/Ship")
-
