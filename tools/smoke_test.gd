@@ -987,6 +987,7 @@ func _evaluate_phase() -> void:
 			_check_creative_tool()
 			_check_art()
 			_check_skin()
+			_check_camera_shake()
 			_check_rarity_travels()
 			_check_affix_pools()
 			_check_item_names()
@@ -7334,6 +7335,112 @@ func _check_art() -> void:
 		"and the same node draws an interface glyph at 1:1, Nearest, opaque",
 	)
 	sprite.queue_free()
+
+
+## Wstrzas kamery: pierwszy odbiornik zdarzenia, czyli dowod, ze szew dziala.
+##
+## VISUALS.md section 6 asked for exactly one thing here and asked for it
+## as a proof rather than as a feature: an effect added by a new file and
+## one connection, with nothing written into `ship.gd`. `hull_impact` had
+## been emitted since M1 and nothing had ever listened to it.
+##
+## What is checked is the shape of the scaling, not a number. An impact is
+## kinetic, so the shake goes as the square of the speed -- a graze is
+## nothing and an arrival that nearly kills you is a slam -- and that is a
+## property a test can hold on to while the constants are still being
+## tuned by eye.
+func _check_camera_shake() -> void:
+	var stage: Node2D = Node2D.new()
+	root.add_child(stage)
+	var ship: Ship = (load(SHIP_SCENE) as PackedScene).instantiate() as Ship
+	ship.name = "Ship"
+	ship.use_player_input = false
+	stage.add_child(ship)
+	var eye: Camera2D = Camera2D.new()
+	eye.name = "Eye"
+	eye.zoom = Vector2.ONE
+	stage.add_child(eye)
+
+	var shake: CameraShake = CameraShake.new()
+	shake.ship_path = NodePath("../Ship")
+	shake.camera_path = NodePath("../Eye")
+	stage.add_child(shake)
+	_expect(
+		ship.hull_impact.get_connections().size() == 1,
+		"one new file and one connection, with nothing added to the ship",
+	)
+
+	# A graze against a crash. Squared, so the gap is wider than the
+	# speeds: a third of the reference should be about a ninth as much.
+	ship.hull_impact.emit(100.0, 0.05)
+	var graze: float = shake.energy
+	shake.energy = 0.0
+	ship.hull_impact.emit(300.0, 0.5)
+	var slam: float = shake.energy
+	_expect(graze > 0.0 and slam > 0.0, "an impact shakes the view at all")
+	_expect(
+		absf(slam / maxf(graze, 0.0001) - 9.0) < 0.5,
+		"and three times the speed is nine times the shake (%.1fx)" % [slam / graze],
+	)
+
+	# Two bounces in a row are not three. A ship skidding down a slope
+	# emits on every contact, and a shake that accumulated would work
+	# itself up into something the landing never justified.
+	shake.energy = 0.0
+	for bounce: int in range(6):
+		ship.hull_impact.emit(300.0, 0.1)
+	_expect(
+		is_equal_approx(shake.energy, slam),
+		"six bounces are no worse than the hardest of them (%.2f)" % shake.energy,
+	)
+
+	# Constant on screen rather than in the world: `Camera2D.offset` is in
+	# world units and the view runs from 0.385 to 1.7 of them to the pixel,
+	# so without dividing by the zoom the same impact is a twitch close in
+	# and a lurch far out.
+	# `throw()` rather than the tick, because the gate is in the tick and
+	# headless it clears the offset instead of setting one -- which the
+	# first version of this measured as zero against zero and called a
+	# failed ratio rather than a test driving the wrong function.
+	#
+	# Seeded identically for both, so the only thing differing between the
+	# two samples is the zoom. A random direction compared by length is a
+	# test that fails on an unlucky frame.
+	eye.zoom = Vector2.ONE
+	shake.energy = 1.0
+	shake._rng.seed = 4242
+	shake.throw()
+	var near: float = eye.offset.length()
+	eye.zoom = Vector2(0.5, 0.5)
+	shake.energy = 1.0
+	shake._rng.seed = 4242
+	shake.throw()
+	var far: float = eye.offset.length()
+	_expect(
+		near > 0.0 and absf(far / maxf(near, 0.0001) - 2.0) < 0.01,
+		"half the zoom throws twice as far in world units (%.2f against %.2f)" % [far, near],
+	)
+
+	# And it stops. A camera still ringing after the ship has settled reads
+	# as a camera fault rather than as an impact.
+	shake.energy = 1.0
+	for tick: int in range(120):
+		shake._physics_process(1.0 / 60.0)
+	_expect(
+		shake.energy == 0.0 and eye.offset.is_zero_approx(),
+		"two seconds later the view is exactly where it belongs (%.4f)" % shake.energy,
+	)
+
+	# With the layer off there is no shake, and no shake left over either.
+	Presentation.wanted = false
+	shake.energy = 1.0
+	shake._physics_process(1.0 / 60.0)
+	_expect(
+		eye.offset.is_zero_approx() and shake.energy < 1.0,
+		"F8 stops the shaking without stopping it running down",
+	)
+	Presentation.wanted = true
+	stage.free()
 
 
 ## Skorka statku: czy buduje to, co trzeba, i czy oddaje widok na F8.

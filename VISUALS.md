@@ -94,9 +94,21 @@ hardpointu, wyrwanie dziury w terenie, przekroczenie granicy atmosfery.
 Cel: nic nie wygląda inaczej, ale wszystko dalej da się robić bez dotykania
 linii głównej.
 
-- [ ] Poddrzewo `Presentation` w `ship.tscn` i `world.tscn`, globalny wyłącznik.
-- [ ] `scripts/fx/` i pierwszy odbiornik zdarzeń podpięty do istniejących sygnałów (wstrząs kamery od `hull_impact`) — jako dowód, że szew działa.
-- [ ] `tools/gallery.tscn`: renderuje każdy podsystem wizualny do PNG, rozszerzenie `cloud_preview.tscn` (sekcja 5).
+- [x] Poddrzewo `Presentation` w `ship.tscn` i `world.tscn`, globalny
+  wyłącznik: **F8**, zatrzaśnięty na numerze klatki, bo
+  `is_action_just_pressed` odpowiada „tak" każdemu pytającemu w tym samym
+  ticku.
+- [x] **`scripts/fx/` i pierwszy odbiornik zdarzeń — dowód, że szew działa.**
+  `CameraShake` słucha `hull_impact`, który był emitowany od M1 i którego
+  **nikt nigdy nie słuchał**. Jeden nowy plik, jedno podłączenie, zero
+  linijek dopisanych do `ship.gd` — test sprawdza dokładnie to, licząc
+  połączenia sygnału. Jedno źródło skalowane energią, nie liczba na
+  zdarzenie: uderzenie jest kinetyczne, więc idzie z kwadratem prędkości
+  (trzy razy szybciej to dziewięć razy mocniej), a sześć odbić pod rząd
+  nie jest gorsze od najmocniejszego z nich. Dzielone przez zoom, bo
+  `Camera2D.offset` jest w jednostkach świata, a wstrząs należy do ekranu.
+- [x] `tools/art_gallery.tscn`: wszystkie sprite'y i specimen fontu do PNG,
+  obok `cloud_preview.tscn`.
 - [ ] Paleta jako zasób, nie jako stałe rozsiane po shaderach.
 
 Gotowe, gdy: smoke test przechodzi z warstwą włączoną i wyłączoną, a `gallery`
