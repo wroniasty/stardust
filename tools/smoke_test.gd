@@ -4873,6 +4873,28 @@ func _check_lighting() -> void:
 		"nothing is on the night side of the star it is standing next to",
 	)
 
+	# The limb is brightest where the light grazes it, which is the one
+	# thing that makes a planet read as a ball with air on it rather than a
+	# lit disc with a ring drawn round it.
+	#
+	# Checked as a uniform the shader really declares, not as a parameter
+	# that was set. `set_shader_parameter` with a name the shader does not
+	# have succeeds and does nothing, which is a silent way to ship an
+	# effect that never runs -- and is close enough to how the first
+	# screenshot of this came out identical to the control.
+	var air: ShaderMaterial = (planet.get_node("Atmosphere") as ColorRect).material
+	var declared: Array[String] = []
+	for entry: Dictionary in air.shader.get_shader_uniform_list():
+		declared.append(String(entry["name"]))
+	_expect(
+		declared.has("graze_gain"),
+		"the air has a terminator arc to turn up or down",
+	)
+	_expect(
+		declared.has("sun_dir") and declared.has("sunlight"),
+		"and knows which way the star is, so the arc has somewhere to be",
+	)
+
 	# And the number the shaders use is the number GDScript used. This is
 	# the join that a help screen would call a lie: a terminator written
 	# down in four files is one that moves depending on what you look at.

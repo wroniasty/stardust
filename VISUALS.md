@@ -278,11 +278,33 @@ się jak para. Długość to nie powierzchnia — rdzeń jest najszerszą częś
 
 Największy skok wrażenia na najmniej kodu, i dotyka wyłącznie shaderów.
 
-- [ ] Kierunek gwiazdy na system, losowany z seeda jak wszystko inne.
-- [ ] Cieniowanie terenu: jasna strona, ciemna strona, terminator jako gradient, nie jako krawędź.
-- [ ] Chmury oświetlone z tego samego kierunku (dziś mają sztywne „góra jasna, dół ciemny").
-- [ ] Atmosfera jaśniejsza od strony gwiazdy, rozświetlony rąbek na terminatorze.
-- [ ] Kadłub i teren dostają wspólny kierunek światła, żeby statek nie wyglądał na wycięty z innego obrazka.
+- [x] ~~Kierunek gwiazdy na system, losowany z seeda~~ — **rozwiązane
+  inaczej i lepiej.** Gwiazda jest ciałem w środku układu, więc kierunek
+  światła jest **geometryczny**: liczony z pozycji, osobny dla każdej
+  planety, i obracający się razem z jej orbitą. Losowanie go z seeda
+  dawałoby stały kierunek, który po pół okrążenia byłby po prostu zły.
+- [x] **Cieniowanie terenu: terminator jako gradient, nie krawędź.**
+  `daylight()` w shaderze i `GravityWell.daylight_at()` w GDScript liczą
+  to samo z tej samej szerokości terminatora (`GravityWell.TERMINATOR`,
+  wpychanej do shaderów), bo liczba zapisana w czterech plikach to
+  terminator, który przesuwa się zależnie od tego, na co się patrzy.
+  Podłoga nocy 0,50 na gruncie, 0,30 na chmurach, 0,22 w powietrzu.
+- [x] **Chmury oświetlone z tego samego kierunku.** `cloud_daylight`
+  liczone raz na kwadrat w stopniu wierzchołkowym, bo chmura jest mała
+  względem planety i każdy jej piksel jest o tej samej porze dnia.
+  „Góra jasna, dół ciemny" **zostało** i to jest w porządku: to jest
+  cieniowanie **bryły**, a nie pora dnia, i dopiero razem dają puszystość.
+- [x] **Atmosfera jaśniejsza od strony gwiazdy, rozświetlony rąbek na
+  terminatorze.** Pierwsza połowa była; druga to `graze_gain` — dzwon na
+  terminatorze, bo powietrze oświetlone stycznie rozprasza do przodu.
+  Mnożone przez `sunlight`, więc świat bez gwiazdy w scenie (M1 i
+  większość testów) dostaje równy pierścień zamiast łuku wskazującego na
+  nic. Zmierzone różnicą obrazów: 3649 pikseli, szczyt 18%.
+- [x] **Kadłub i teren dostają wspólny kierunek światła.** Przez tę samą
+  funkcję: `ShipSkin` czyta `GravityWell.daylight_at()`, grunt czyta
+  `daylight()` z tych samych uniformów. Statek, który zostawał jasny nad
+  ciemną planetą, czytał się jak naklejka na obrazku — i jedyne, czego to
+  nie dało się naprawić, to bycie *trochę innym* odcieniem oświetlenia.
 
 Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez patrzenia na nią.
 

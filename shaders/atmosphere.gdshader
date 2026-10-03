@@ -36,6 +36,18 @@ uniform float shell_falloff = 0.70;
 /// A thin brighter band hugging the nominal surface.
 uniform float rim_strength : hint_range(0.0, 1.0) = 0.25;
 
+/// How much brighter that band gets where the light grazes it.
+///
+/// Air lit edge-on scatters forward, so the limb is brightest along the
+/// terminator rather than in the middle of the day side -- which is the
+/// one thing that makes a planet read as a ball with air on it instead of
+/// a lit disc with a ring drawn round it.
+///
+/// Zero restores the even ring the first version had, which is the useful
+/// comparison: the arc is worth having, and worth being able to switch off
+/// to see that it is.
+uniform float graze_gain : hint_range(0.0, 4.0) = 1.8;
+
 /// Depth below the surface, as a fraction of this quad's radius, over which the
 /// layer goes fully opaque. A hole dug past it reads as a hole in the planet
 /// rather than as a window onto the starfield.
@@ -65,10 +77,15 @@ uniform float night : hint_range(0.0, 1.0) = 0.22;
 /// covers a material nobody has told yet.
 uniform float terminator : hint_range(0.05, 0.6) = 0.22;
 
+/// How square-on to the star this part of the disc is: 1 at noon, -1 at
+/// midnight, 0 along the terminator.
+float facing_star(vec2 from_centre) {
+	return dot(normalize(from_centre), sun_dir);
+}
+
 /// 1.0 in full daylight, `night` on the far side.
 float daylight(vec2 from_centre) {
-	float facing = dot(normalize(from_centre), sun_dir);
-	float lit = smoothstep(-terminator, terminator, facing);
+	float lit = smoothstep(-terminator, terminator, facing_star(from_centre));
 	return mix(1.0, mix(night, 1.0, lit), sunlight);
 }
 
@@ -88,7 +105,13 @@ void fragment() {
 		float altitude = (radius - surface_ratio) / max(1.0 - surface_ratio, 0.001);
 		alpha = shell_haze * pow(1.0 - altitude, shell_falloff);
 		float rim = smoothstep(0.0, 0.02, altitude) * (1.0 - smoothstep(0.02, 0.18, altitude));
-		alpha = (alpha + rim * rim_strength) * thickness;
+		// A bell on the terminator, a couple of terminator-widths across.
+		// Multiplied by `sunlight` so a world with no star in the scene --
+		// M1's single planet, and most of the tests -- keeps the plain even
+		// ring rather than growing an arc pointing at nothing.
+		float graze = facing_star(centered) / max(terminator * 2.0, 0.001);
+		float arc = exp(-graze * graze) * graze_gain * sunlight;
+		alpha = (alpha + rim * rim_strength * (1.0 + arc)) * thickness;
 	} else {
 		// Below the surface it only gets denser, so however deep the player
 		// digs there is always more of it underneath.
