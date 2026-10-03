@@ -110,6 +110,43 @@ var star: SystemBody = null
 var bodies: Array[SystemBody] = []
 
 
+## How far an interstellar sector reaches, in pixels.
+##
+## It has no star and nothing orbiting, so there is nothing to measure
+## against and the number is simply chosen: about a quarter of a small
+## system, which is far enough that arriving at one edge and leaving
+## from the other is a flight rather than a formality.
+const VOID_REACH: float = 24000.0
+
+## Nothing, somewhere between two somewheres.
+##
+## IDEAS.md section 10's misjump: an interstellar sector, a "system"
+## with no star. Everything that asks a system a question has to cope
+## with one of these, which is less work than it sounds -- the streaming
+## manager already null-checked `star`, because a system with none was
+## always going to turn up eventually.
+##
+## No star means no mass lock, which is the one mercy here: a pilot who
+## has fallen out of the lane is stranded by their tank, not by a
+## gravity well. Whether there is enough left to leave is a different
+## question, and the one the sector is actually about.
+static func deep_space(sector_seed: int) -> StarSystem:
+	var system: StarSystem = StarSystem.new()
+	system.seed = sector_seed
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = sector_seed
+	system.display_name = "pustka %s%s" % [
+		NAME_HEAD[rng.randi() % NAME_HEAD.size()],
+		NAME_TAIL[rng.randi() % NAME_TAIL.size()],
+	]
+	return system
+
+
+## Whether this is a real system or the gap between two of them.
+func is_deep_space() -> bool:
+	return star == null
+
+
 ## Builds a system from its seed. The only way to make one.
 static func generate(system_seed: int) -> StarSystem:
 	var system: StarSystem = StarSystem.new()
@@ -251,6 +288,8 @@ func find(wanted: String) -> SystemBody:
 ## whether a system needs a moving origin is a question about this number
 ## and nothing else.
 func outer_radius() -> float:
+	if star == null:
+		return VOID_REACH
 	var out: float = star.radius
 	for body: SystemBody in star.children:
 		out = maxf(out, body.extent())
@@ -264,7 +303,10 @@ func outer_radius() -> float:
 ## which is what makes a compact system a convenient one to be based in
 ## and a sprawling one a nuisance to leave.
 func mass_lock_radius() -> float:
-	return outer_radius() * MASS_LOCK_RATIO
+	# Zero where there is no star. Nothing is holding you; the question
+	# out here is whether the tank will reach anywhere, which is a
+	# different kind of trapped.
+	return 0.0 if star == null else outer_radius() * MASS_LOCK_RATIO
 
 
 ## Whether a point in this system is still held down by the star.

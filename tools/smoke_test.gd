@@ -1011,6 +1011,7 @@ func _evaluate_phase() -> void:
 			_check_jump_hud()
 			_check_jump_sequence()
 			_check_transit_veil()
+			_check_misjump()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -4458,6 +4459,177 @@ func _check_transit_veil() -> void:
 	)
 
 	veil.free()
+	pilot.free()
+	galaxy.free()
+	ship.queue_free()
+
+
+## Misjump: niedobór paliwa to ryzyko, nie ściana.
+##
+## The rule IDEAS.md section 10 is most explicit about, and the one
+## easiest to get wrong by being kind: a jump the tank cannot quite pay
+## for is **allowed**, and the missing fraction is the chance of coming
+## out somewhere else. Refusing it instead would turn "I have almost
+## enough" from a decision into a wall, and the wall is the thing the
+## section says not to build.
+##
+## The place you come out is a system with no star. Everything that asks
+## a system a question has to cope with one, which turned out to be less
+## work than it sounds -- the streaming manager had null-checked `star`
+## since M3, because a system without one was always going to turn up.
+func _check_misjump() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(20260922)
+	var here: int = map.start_index()
+	var system: StarSystem = StarSystem.generate(20260922)
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(20260922)
+
+	var ship: Ship = _spawn_ship()
+	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	var pilot: JumpController = JumpController.new()
+	pilot.use_player_input = false
+	root.add_child(pilot)
+	pilot.bind(ship, system, map, here, galaxy)
+
+	# Pick a near neighbour and a far one, so that both halves of the
+	# rule have somewhere to be measured.
+	var reachable: PackedInt32Array = map.neighbours(here, ship.jump_drive().reach)
+	_expect(reachable.size() >= 2, "there are two places to go (%d)" % reachable.size())
+	var near: int = reachable[0]
+	var far: int = reachable[reachable.size() - 1]
+
+	_expect(
+		is_equal_approx(pilot.misjump_risk(near), 0.0),
+		"a full tank and a short hop is no gamble at all (%.2f)" % pilot.misjump_risk(near),
+	)
+
+	# Fuel. Half the fare is half the risk, which is the whole of the
+	# rule: the missing fraction *is* the chance.
+	var fare: float = pilot.bill_for(near)
+	ship.fuel = fare * 0.5
+	_expect(
+		absf(pilot.misjump_risk(near) - 0.5) < 0.01,
+		"half the fare is an even chance (%.2f)" % pilot.misjump_risk(near),
+	)
+	ship.fuel = 0.0
+	_expect(
+		is_equal_approx(pilot.misjump_risk(near), 1.0),
+		"and nothing in the tank is a certainty of going astray",
+	)
+	ship.fuel = ship.fuel_capacity()
+
+	# Range. Only the last part of a drive's reach counts: a drive asked
+	# for nine tenths of what it can do is being used, not abused.
+	var stretched: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
+	var span: float = map.positions[here].distance_to(map.positions[far])
+	stretched.reach = span / 0.95
+	ship.jump_bay.installed = stretched
+	var at_the_edge: float = pilot.misjump_risk(far)
+	stretched.reach = span / 0.5
+	var well_within: float = pilot.misjump_risk(far)
+	_expect(
+		at_the_edge > 0.3 and is_equal_approx(well_within, 0.0),
+		"the last stretch of a drive's range is a gamble and the rest is not (%.2f, %.2f)" % [
+			at_the_edge, well_within,
+		],
+	)
+
+	# The worse of the two, never the sum. A pilot short of fuel at the
+	# edge of the reach is in one kind of trouble, and adding the figures
+	# would make the rim of the map unflyable for a reason nobody could
+	# read off a HUD.
+	stretched.reach = span / 0.95
+	ship.fuel = pilot.bill_for(far) * 0.7
+	var both: float = pilot.misjump_risk(far)
+	_expect(
+		both < 0.31 + at_the_edge and both >= maxf(0.3, at_the_edge) - 0.01,
+		"two ways to court it count once, not twice (%.2f)" % both,
+	)
+	ship.jump_bay.installed = ship.jump_drive()
+	ship.fuel = ship.fuel_capacity()
+
+	# And now one that fails. The roll is seeded so the test can be run
+	# twice and mean the same thing.
+	var astray: Array[Dictionary] = []
+	pilot.misjumped.connect(
+		func(toward: int, adrift_at: Vector2) -> void:
+			astray.append({"toward": toward, "at": adrift_at})
+	)
+	ship.fuel = pilot.bill_for(near) * 0.2
+	var out: Vector2 = (map.positions[near] - map.positions[here]).normalized()
+	ship.global_rotation = out.angle() - Vector2.UP.angle()
+	pilot.rolls_with(4242)
+	pilot.holding = true
+	for tick: int in range(900):
+		pilot.advance(1.0 / 60.0)
+		if pilot.phase == JumpController.Phase.IDLE and not astray.is_empty():
+			break
+	pilot.holding = false
+	_expect(
+		astray.size() == 1 and pilot.went_astray() and pilot.here() == -1,
+		"an almost-paid-for jump can drop you in the gap instead",
+	)
+	if astray.is_empty():
+		pilot.free()
+		galaxy.free()
+		ship.queue_free()
+		return
+
+	# Partway along the lane it was trying to fly, and nearer the start
+	# than the end: a misjump that dropped you most of the way there
+	# would be a cheaper jump rather than a failed one.
+	var fell: Vector2 = astray[0]["at"]
+	var along: float = (
+		(fell - map.positions[here]).length()
+		/ map.positions[here].distance_to(map.positions[near])
+	)
+	_expect(
+		along >= JumpController.FELL_SHORT.x - 0.01
+		and along <= JumpController.FELL_SHORT.y + 0.01,
+		"it fell out on the lane it was flying, part of the way (%.0f%%)" % [along * 100.0],
+	)
+	_expect(
+		is_equal_approx(pilot.at().distance_to(fell), 0.0),
+		"and the controller knows where it is by the point, not by an index",
+	)
+
+	# The place itself. No star, so nothing holding you: out here the
+	# only thing between a pilot and leaving is the tank, which is a
+	# different kind of trapped and the one the sector is about.
+	var gap: StarSystem = galaxy.sector_at(fell)
+	_expect(
+		gap.is_deep_space() and gap.star == null and gap.bodies.is_empty(),
+		"the gap is a system with nothing in it (%s)" % gap.display_name,
+	)
+	_expect(
+		is_equal_approx(gap.mass_lock_radius(), 0.0)
+		and not gap.is_mass_locked(Vector2.ZERO)
+		and gap.outer_radius() > 0.0,
+		"with no star to hold you down and still somewhere to be (%.0f px)" % [
+			gap.outer_radius(),
+		],
+	)
+	_expect(
+		galaxy.sector_at(fell).display_name == gap.display_name
+		and galaxy.sector_at(fell + Vector2(0.001, 0.0)).display_name == gap.display_name,
+		"and it is the same gap when you come back to it",
+	)
+
+	# A scanner still works out there, because it works off a point.
+	pilot.bind(ship, gap, map, -1, galaxy, fell)
+	ship.fuel = ship.fuel_capacity()
+	_expect(
+		pilot.blocked_by(near) == "",
+		"nothing out here stops a drive with fuel in it (%s)" % pilot.blocked_by(near),
+	)
+	_expect(
+		pilot.bill_for(near) < fare,
+		"and the way on is shorter than the way you came (%.1f against %.1f)" % [
+			pilot.bill_for(near), fare,
+		],
+	)
+
 	pilot.free()
 	galaxy.free()
 	ship.queue_free()

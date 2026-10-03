@@ -164,10 +164,11 @@ func _build_jump_hud() -> void:
 	var ship: Ship = (player as Player).ship
 	_jump = JumpController.new()
 	add_child(_jump)
-	_jump.bind(ship, Galaxy.system(Galaxy.here), Galaxy.map, Galaxy.here, Galaxy)
+	_jump.bind(ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at)
 	_jump.crossed.connect(_on_crossed)
 	_jump.refused.connect(_on_jump_refused)
 	_jump.arrived.connect(_on_jump_arrived)
+	_jump.misjumped.connect(_on_misjumped)
 
 	_veil = TransitVeil.new()
 	add_child(_veil)
@@ -176,7 +177,7 @@ func _build_jump_hud() -> void:
 	_jump_hud = JumpHud.new()
 	add_child(_jump_hud)
 	_jump_hud.bind(
-		ship, Galaxy.system(Galaxy.here), Galaxy.map, Galaxy.here, Galaxy, _jump
+		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, _jump, Galaxy.at
 	)
 
 
@@ -190,11 +191,20 @@ func _build_jump_hud() -> void:
 ## child of either system and survives both.
 func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -> void:
 	var ship: Ship = (player as Player).ship
-	Galaxy.here = to_index
-	var landing: StarSystem = Galaxy.system(to_index)
+	if to_index >= 0:
+		Galaxy.here = to_index
+		Galaxy.at = Galaxy.map.positions[to_index]
+	var landing: StarSystem = Galaxy.current()
 	StreamingManager.bind(landing, systems, Galaxy.time)
 	StreamingManager.track(ship)
-	planet = StreamingManager.force_awake(landing.planets()[0]) as Planet
+	# An interstellar sector has nothing in it, which is the point of
+	# one. Nothing to force awake, and nothing for the landing camera to
+	# be near -- the handle has to be cleared or the next thing to read
+	# it reads a planet from a system that no longer exists.
+	planet = (
+		StreamingManager.force_awake(landing.planets()[0]) as Planet
+		if not landing.planets().is_empty() else null
+	)
 
 	ship.global_position = at
 	ship.global_rotation = heading
@@ -204,11 +214,24 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	ship.linear_velocity *= JumpController.SPEED_KEPT
 	ship.angular_velocity = 0.0
 
-	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy)
-	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump)
+	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at)
+	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)
 	_map.bind(landing, ship, StreamingManager)
-	print("jumped to %s (#%d), out at %.0f px" % [
-		landing.display_name, to_index, at.length(),
+	print("jumped to %s (%s), out at %.0f px" % [
+		landing.display_name,
+		"adrift" if to_index < 0 else "#%d" % to_index,
+		at.length(),
+	])
+
+
+## A jump that fell short. The sector is made before the crossing is
+## handled, because the crossing is going to ask for the system the ship
+## is now in and there has to be one.
+func _on_misjumped(toward: int, adrift_at: Vector2) -> void:
+	Galaxy.here = -1
+	Galaxy.at = adrift_at
+	print("misjump: fell short of %s, adrift at %.1f, %.1f ly" % [
+		Galaxy.system(toward).display_name, adrift_at.x, adrift_at.y,
 	])
 
 

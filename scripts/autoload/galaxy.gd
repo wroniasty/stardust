@@ -17,10 +17,18 @@ var galaxy_seed: int = 0
 ## Where the systems are, and which can reach which. Built from the seed.
 var map: GalaxyMap = null
 
-## Which system the player is in. An index into `map`, and the address a
-## save file stores -- not a scene path, because the scene is only the
-## part of the system the pilot happens to be near.
+## Which system the player is in, or -1 out in the gap between two.
+##
+## An index into `map`, and the address a save file stores -- not a
+## scene path, because the scene is only the part of the system the
+## pilot happens to be near.
 var here: int = 0
+
+## Where the player is, in light years. The **real** address, of which
+## `here` is a convenience: a misjump can put a ship somewhere that is
+## not on the map at all, and a scanner still works out there because it
+## works off a point rather than off an entry in a list.
+var at: Vector2 = Vector2.ZERO
 
 ## Persisted changes that cannot be regenerated from a seed
 ## (terrain edits, looted crates, killed enemies). Keyed by object id.
@@ -37,6 +45,9 @@ var time: float = 0.0
 ## Generated systems, keyed by index. Cached rather than regenerated,
 ## because generation is deterministic and therefore pointless to repeat.
 var _systems: Dictionary = {}
+
+## And the empty places, keyed by where they are.
+var _sectors: Dictionary = {}
 
 
 func _process(delta: float) -> void:
@@ -63,6 +74,29 @@ func distance_between(from: int, to: int) -> float:
 	return position_of(from).distance_to(position_of(to))
 
 
+## The interstellar sector at a point: nothing, somewhere between two
+## somewheres.
+##
+## Keyed by the place rather than by an index, because it has none.
+## Rounded to a tenth of a light year first, so that asking twice about
+## the same gap gives the same empty sector with the same name -- a
+## misjump the player can fly back out of and return to.
+func sector_at(point: Vector2) -> StarSystem:
+	var key: Vector2i = Vector2i(roundi(point.x * 10.0), roundi(point.y * 10.0))
+	if not _sectors.has(key):
+		_sectors[key] = StarSystem.deep_space(
+			StarSystem.derive(galaxy_seed, key.x * 7919 + key.y)
+		)
+	return _sectors[key]
+
+
+## Where the player is, as a system: a real one, or the gap they fell
+## into. The one call anything that needs "the system I am in" should
+## make, so that nothing has to remember that -1 is a place too.
+func current() -> StarSystem:
+	return sector_at(at) if here < 0 else system(here)
+
+
 ## Reseeds the galaxy and drops everything derived from the old seed.
 ##
 ## Everything, which includes the layout: a new seed is a new galaxy, and
@@ -72,5 +106,7 @@ func reset(new_seed: int) -> void:
 	galaxy_seed = new_seed
 	deltas.clear()
 	_systems.clear()
+	_sectors.clear()
 	map = GalaxyMap.generate(new_seed)
 	here = map.start_index()
+	at = map.positions[here]

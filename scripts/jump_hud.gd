@@ -52,6 +52,10 @@ var _system: StarSystem = null
 var _map: GalaxyMap = null
 var _here: int = 0
 
+## Where the ship is in the galaxy. The real address, because a misjump
+## can leave it somewhere `_here` cannot name.
+var _at: Vector2 = Vector2.ZERO
+
 ## Who can turn an index into a system. The galaxy autoload in the game,
 ## a bare instance of the same script in a test -- handed in, because
 ## fetching it by path is the habit this file's own docstring warns
@@ -85,6 +89,7 @@ func bind(
 	here: int,
 	galaxy: Node = null,
 	jump: JumpController = null,
+	at: Vector2 = Vector2.INF,
 ) -> void:
 	_ship = ship
 	_system = system
@@ -92,6 +97,10 @@ func bind(
 	_here = here
 	_galaxy = galaxy
 	_jump = jump
+	if at != Vector2.INF:
+		_at = at
+	elif map != null and here >= 0 and here < map.count():
+		_at = map.positions[here]
 
 
 func _process(_delta: float) -> void:
@@ -134,7 +143,7 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 	if extent.x <= 0.0 or extent.y <= 0.0:
 		return found
 
-	var home: Vector2 = _map.positions[_here]
+	var home: Vector2 = _at
 	for index: int in _map.within(home, eyes.reach):
 		if index == _here or found.size() >= MOST_SHOWN:
 			continue

@@ -414,7 +414,12 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   wschód, wychodzisz przy południowo-zachodniej krawędzi celu z gwiazdą
   przed dziobem. Kurs zachowany, prędkość ścięta do ¼ — nie do zera, bo
   zatrzymanie statku unie ważniłoby kurs, który się właśnie zachowało.
-- [ ] Misjump: sektor międzygwiezdny bez gwiazdy, ryzyko od niedoboru paliwa i zasięgu.
+- [x] Misjump: sektor międzygwiezdny bez gwiazdy, ryzyko od niedoboru paliwa i zasięgu.
+  Ryzyko to **gorszy z dwóch** czynników, nie suma. Adresem stała się
+  **pozycja w latach świetlnych**, a nie indeks na mapie — bez tego nie da się
+  być w miejscu, którego na mapie nie ma. `StarSystem.deep_space()`: bez
+  gwiazdy, bez ciał, bez mass locka. Zawartość sektora (wraki, piraci,
+  porzucony tanker) idzie z M5, bo tam mieszka. Szczegóły w IDEAS.md sekcja 10.
 - [ ] Zapis gry: seed plus delty, autosave przy skoku.
 
 Gotowe, gdy: wylot z jednego systemu i wlot do drugiego czuje się jak jeden lot.

@@ -3025,6 +3025,38 @@ na rzeczy, które idą źle.
 
 Skok z niedoborem paliwa nie jest zablokowany, tylko ryzykowny. Brakujący procent to szansa na misjump: pusty sektor międzygwiezdny (typ "systemu" bez gwiazdy: wraki, piraci, porzucony tanker z paliwem) albo dotarcie z uszkodzonym napędem. Analogicznie skok na styku zasięgu.
 
+**Realizacja (M4).** Ryzyko to **gorszy z dwóch** czynników, nie ich suma:
+brakujący ułamek opłaty i to, jak blisko krawędzi zasięgu napędu leży cel
+(liczone dopiero od 85% — napęd poproszony o dziewięć dziesiątych tego, co
+umie, jest używany, a nie nadużywany). Suma zrobiłaby obrzeże mapy
+nielotnym z powodu, którego nikt nie odczyta z HUD-u.
+
+Rzut zapada **w połowie tranzytu**, nie na starcie: całe ładowanie jest
+opłacone, zanim ktokolwiek się dowie, i to jest to, co sprawia, że zakład
+kosztuje niezależnie od wyniku. Odkąd niedobór jest ryzykiem, ładowanie
+**nie przerywa się na pustym baku** — bierze, ile jest.
+
+Najważniejsza konsekwencja jest architektoniczna: **adresem przestał być
+indeks, a stała się pozycja w latach świetlnych.** Nie da się być „w systemie
+numer -1"; da się być w punkcie. `Galaxy.at` jest prawdziwym adresem,
+`Galaxy.here` wygodą (-1 w przerwie), a skaner działa w pustce bez żadnej
+zmiany, bo zawsze pytał o punkt, nie o pozycję na liście.
+
+`StarSystem.deep_space()` — bez gwiazdy, bez ciał, bez mass locka. Brak
+gwiazdy to jedyna łaska tego miejsca: nic cię nie trzyma, trzyma cię bak, i
+to jest inny rodzaj uwięzienia. Okazało się mniejszą robotą, niż brzmi:
+`StreamingManager` sprawdzał `star != null` od M3, bo system bez gwiazdy i
+tak kiedyś musiał się pojawić.
+
+Sektor jest **kluczowany pozycją** (zaokrągloną do dziesiątej części roku
+świetlnego), więc ten sam skok w przepaść dwa razy daje tę samą pustkę o tej
+samej nazwie — miejsce, do którego da się wrócić.
+
+Z dwóch wyników, które wymienia ta sekcja, zrobiony jest sektor. „Dotarcie
+z uszkodzonym napędem" czeka na to, aż moduły będą miały stan techniczny
+— dziś ma go tylko silnik. Zawartość pustki (wraki, piraci, porzucony
+tanker) idzie z M5, bo pusty sektor bez niczego w środku to kara bez treści.
+
 ### Generacja galaktyki
 
 Jeden seed galaktyki. Systemy rozłożone przez Poisson disk sampling, odległości zbliżone do zasięgów skoku. Seed systemu = hash(galaxy_seed, index), seed planety = hash(seed_systemu, index). Sprawdzenie spójności grafu (BFS) dla bazowego zasięgu napędu, żeby startowy statek nie utknął. Wyspy poza grafem jako late game za lepszym napędem. Dane w autoloadzie `Galaxy` z gridem do zapytań o sąsiedztwo.
