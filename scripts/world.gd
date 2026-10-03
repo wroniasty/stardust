@@ -59,6 +59,7 @@ var _configurator: PlanetConfigurator = null
 var _landing_site: int = 0
 var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
+var _jump_hud: JumpHud = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
 var _help: HelpScreen = null
@@ -88,6 +89,7 @@ func _ready() -> void:
 	_build_aim_hud()
 	_build_energy_hud()
 	_build_scanner()
+	_build_jump_hud()
 
 
 ## The planet configurator edits the planet; putting the ship somewhere that
@@ -149,6 +151,19 @@ func _build_scanner() -> void:
 	_scanner = ScannerHud.new()
 	add_child(_scanner)
 	_scanner.bind((player as Player).ship)
+
+
+## The outward-looking half of the scanner: where else there is to be.
+##
+## Built after the system is open, because it has to be handed the system
+## it is in -- the mass lock is the system's own number, and a HUD that
+## fetched it from an autoload would be a HUD with no tests.
+func _build_jump_hud() -> void:
+	_jump_hud = JumpHud.new()
+	add_child(_jump_hud)
+	_jump_hud.bind(
+		(player as Player).ship, Galaxy.system(Galaxy.here), Galaxy.map, Galaxy.here, Galaxy
+	)
 
 
 func _build_loadout() -> void:

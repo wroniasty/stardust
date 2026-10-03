@@ -2917,6 +2917,31 @@ zasięgu — moduł mogący tę liczbę podnieść byłby modułem obiecującym
 kontakty, których świat jeszcze nie zbudował. Dwa czujniki zostają dwoma
 czujnikami: jeden patrzy w układ, drugi na zewnątrz.
 
+**HUD (M4).** `JumpHud`, osobny węzeł od `ScannerHud` — ta sama krawędź
+ekranu, ale inny przyrząd, więc i inny znak: szewron zamiast trójkąta, bo
+dwa rodzaje rzeczy na jednym pierścieniu trzeba odróżnić przy trzech
+pikselach. Trzy wejścia i żadne z nich nie jest tym samym, co inne:
+
+- zasięg skanera → **które** systemy w ogóle są rysowane,
+- `depth` → **co** jest pod nimi napisane (sam dystans / nazwa / + liczba
+  światów / + doków),
+- zasięg napędu i stan baku → **jakim kolorem** (szary poza zasięgiem,
+  bursztyn w zasięgu bez paliwa, nawigacyjny, gdy stać).
+
+**Trzy rozróżnialne obrazy braku**, nie pusty ekran: „brak skanera",
+„mass lock, jeszcze N px" i normalna praca. HUD, który nic nie rysuje w
+trzech różnych sytuacjach, powiedział pilotowi trzy razy to samo i za
+każdym razem co innego.
+
+Sześć znaczników naraz, najbliższe — ta sama reguła, co przy skrzynkach:
+dziewięć nazw dookoła ramki 640x360 zlewa się w jedną szarą plamę.
+Etykieta, która weszłaby na już napisaną, jest **pomijana, nie
+przesuwana**: nazwa obok cudzego szewronu jest gorsza niż szewron bez
+nazwy, który przynajmniej nadal mówi „coś tam jest". Wybrany cel pisze
+się pierwszy, więc zawsze wygrywa. Przy krawędzi bocznej etykieta idzie
+**obok** znacznika, a nie pod nim — wyśrodkowana szła przez własny
+szewron, bo „do środka" znaczy tam w bok.
+
 **Paliwo** to nowy zasób i odpowiada regule z sekcji 14: energia mierzy
 walkę w sekundach i sama się odnawia wszędzie, paliwo mierzy zasięg w
 skokach i bierze się tylko z doku. Koszt skoku jest liniowy w dystansie i

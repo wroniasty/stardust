@@ -390,7 +390,12 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   afiks. Paliwo jako pula na statku, liniowe w dystansie i masie, niedobór
   nie jest odmową. Stockowy kadłub dostaje wszystkie trzy — +20% masy,
   zmierzone. Szczegóły w IDEAS.md sekcja 10.
-- [ ] HUD: wskaźniki systemów na krawędzi ekranu, kolor wg osiągalności, informacje wg jakości skanera.
+- [x] HUD: wskaźniki systemów na krawędzi ekranu, kolor wg osiągalności, informacje wg jakości skanera.
+  `JumpHud` — osobny od `ScannerHud`, bo to drugi czujnik, nie ten sam
+  dalej. Trzy niezależne wejścia: zasięg skanera wybiera, co widać,
+  `depth` — co jest podpisane, zasięg napędu i stan baku — w jakim kolorze.
+  Trzy rozróżnialne obrazy braku zamiast pustego ekranu. Sześć znaczników
+  naraz, nazwy, które się nie nakładają. Szczegóły w IDEAS.md sekcja 10.
 - [ ] Maszyna stanów skoku: Idle, Charging, Transit, Arrival.
 - [ ] Shader tranzytu, wymiana sceny systemu pod graczem w trakcie efektu.
 - [ ] Pozycja przylotu na krawędzi celu od strony źródła.

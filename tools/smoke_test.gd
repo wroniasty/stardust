@@ -1008,6 +1008,7 @@ func _evaluate_phase() -> void:
 			_check_galaxy()
 			_check_mass_lock()
 			_check_jump_kit()
+			_check_jump_hud()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -4008,6 +4009,189 @@ func _check_jump_kit() -> void:
 	)
 
 	loot.free()
+	ship.queue_free()
+
+
+## Wskazniki systemów na krawędzi: co widać, w jakim kolorze i z czym pod spodem.
+##
+## Three separate things decide what a pilot sees, and the whole reason
+## the modules came apart is that they are separate: the scanner's reach
+## decides which systems appear, its depth decides what is written under
+## them, and the drive's reach and the tank decide the colour. Each is
+## checked on its own here, because a HUD where any two of them were
+## secretly one number would pass a test that only looked at the result.
+##
+## Geometry through `contacts()` and a handed-in transform, the way
+## `ScannerHud` does it: a marker worked out from a rendered frame is a
+## marker no headless test can place.
+func _check_jump_hud() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(20260922)
+	var here: int = map.start_index()
+	var system: StarSystem = StarSystem.generate(20260922)
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(20260922)
+
+	var ship: Ship = _spawn_ship()
+	var hud: JumpHud = JumpHud.new()
+	root.add_child(hud)
+	hud.bind(ship, system, map, here, galaxy)
+
+	var view: Vector2 = Vector2(640.0, 360.0)
+	var flat: Transform2D = Transform2D.IDENTITY
+
+	# Held down: the star is in the way and the scanner says so rather
+	# than drawing nothing. Three distinguishable images of absence, which
+	# is the rule UI_STYLE asks for and the one a blank screen breaks.
+	ship.global_position = system.planets()[0].position_at(0.0)
+	_expect(
+		hud.silence().begins_with("mass lock") and hud.contacts(flat, view).is_empty(),
+		"inside the lock there is nothing to pick and a reason given (%s)" % hud.silence(),
+	)
+	var kept: ScannerData = ship.scanner()
+	ship.scanner_bay.installed = null
+	ship.rebuild_control_groups(false)
+	_expect(
+		hud.silence() == "brak skanera",
+		"no scanner is a different silence from mass lock (%s)" % hud.silence(),
+	)
+	ship.scanner_bay.installed = kept
+	ship.rebuild_control_groups(false)
+
+	# Out past the lock, where the scanner starts working.
+	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	_expect(hud.silence().is_empty(), "outside it, the instrument is simply on")
+	var seen: Array[Dictionary] = hud.contacts(flat, view)
+	_expect(not seen.is_empty(), "and there is somewhere to go (%d systems)" % seen.size())
+
+	# Reach decides what appears, and nothing else does.
+	var beyond: int = 0
+	var mine: int = 0
+	for contact: Dictionary in seen:
+		if float(contact["distance"]) > kept.reach + 0.001:
+			beyond += 1
+		if int(contact["index"]) == here:
+			mine += 1
+	_expect(
+		beyond == 0 and mine == 0,
+		"everything shown is inside the scanner's reach, and never this system",
+	)
+	# Capped, and capped at the near end. A scanner that drew every
+	# contact turns the edge of the screen into a picket fence -- the same
+	# rule the loot markers already live under -- and the ones worth
+	# dropping are the far ones, which are also the ones nobody is
+	# choosing between right now.
+	var in_range: PackedInt32Array = map.within(map.positions[here], kept.reach)
+	_expect(
+		seen.size() == mini(JumpHud.MOST_SHOWN, in_range.size() - 1),
+		"it shows as many as it is allowed and no more (%d of %d in range)" % [
+			seen.size(), in_range.size() - 1,
+		],
+	)
+	var out_of_order: int = 0
+	for step: int in range(1, seen.size()):
+		if float(seen[step - 1]["distance"]) > float(seen[step]["distance"]) + 0.001:
+			out_of_order += 1
+	_expect(
+		out_of_order == 0,
+		"and the ones it keeps are the near ones, in order",
+	)
+
+	# Every marker lands on the ring, which is where the edge of the
+	# screen is and not where the system is.
+	var off: int = 0
+	for contact: Dictionary in seen:
+		var at: Vector2 = contact["at"]
+		if at.x < 0.0 or at.y < 0.0 or at.x > view.x or at.y > view.y:
+			off += 1
+	_expect(off == 0, "and every marker is on the screen it is drawn on")
+
+	# Colour is the drive and the tank, in that order. Something out of
+	# reach is grey however full the tank; something in reach is amber
+	# when the tank cannot pay and blue when it can.
+	var ink: Palette = Palette.current()
+	# A deliberately short drive, so that some of the six nearest are out
+	# of its reach. With the stock one they all are within it, which would
+	# have made the grey branch below a branch no test ever took.
+	var stubby: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
+	stubby.reach = 7.0
+	ship.jump_bay.installed = stubby
+	seen = hud.contacts(flat, view)
+	var far_off: Dictionary = {}
+	var near_by: Dictionary = {}
+	for contact: Dictionary in seen:
+		if not bool(contact["crossable"]) and far_off.is_empty():
+			far_off = contact
+		if bool(contact["crossable"]) and near_by.is_empty():
+			near_by = contact
+	_expect(
+		not far_off.is_empty() and not near_by.is_empty(),
+		"the scanner outsees the drive, which is the point of them being two",
+	)
+	if far_off.is_empty() or near_by.is_empty():
+		hud.free()
+		galaxy.free()
+		ship.queue_free()
+		return
+	_expect(
+		Color(far_off["colour"]) == ink.inert,
+		"out of the drive's reach is grey (%.1f ly against %.1f)" % [
+			far_off["distance"], ship.jump_drive().reach,
+		],
+	)
+	_expect(
+		Color(near_by["colour"]) == ink.nav and bool(near_by["affordable"]),
+		"in reach and paid for is the navigation colour",
+	)
+	ship.fuel = 0.0
+	var dry: Array[Dictionary] = hud.contacts(flat, view)
+	var amber: int = 0
+	for contact: Dictionary in dry:
+		if bool(contact["crossable"]) and Color(contact["colour"]) == ink.caution:
+			amber += 1
+	_expect(
+		amber > 0,
+		"and an empty tank turns the reachable ones amber rather than hiding them (%d)" % amber,
+	)
+	ship.fuel = ship.fuel_capacity()
+
+	# Depth decides the words, and each step is a different sentence
+	# rather than a longer one.
+	var bearing_only: ScannerData = kept.duplicate() as ScannerData
+	bearing_only.depth = ScannerData.Depth.BEARING
+	ship.scanner_bay.installed = bearing_only
+	var blind: String = hud.contacts(flat, view)[0]["label"]
+	var deep: ScannerData = kept.duplicate() as ScannerData
+	deep.depth = ScannerData.Depth.DEEP
+	ship.scanner_bay.installed = deep
+	var told: String = hud.contacts(flat, view)[0]["label"]
+	_expect(
+		blind.length() < told.length() and told.contains("p"),
+		"a bearing scanner gives a number and a deep one gives a system (%s / %s)" % [
+			blind, told,
+		],
+	)
+	ship.scanner_bay.installed = kept
+
+	# And the nose picks the target. Nearest to dead ahead inside the
+	# cone, not the first one found: two markers a few degrees apart would
+	# otherwise be chosen between by the order the grid returned them, and
+	# a target that changes while you hold still is not a target.
+	var wanted: Dictionary = hud.contacts(flat, view)[0]
+	var at_it: Vector2 = Vector2(wanted["heading"])
+	ship.global_rotation = at_it.angle() - Vector2.UP.angle()
+	_expect(
+		hud.target(flat, view) == int(wanted["index"]),
+		"pointing the nose at a marker selects it",
+	)
+	ship.global_rotation = (-at_it).angle() - Vector2.UP.angle()
+	_expect(
+		hud.target(flat, view) != int(wanted["index"]),
+		"and turning away from it lets it go",
+	)
+
+	hud.free()
+	galaxy.free()
 	ship.queue_free()
 
 

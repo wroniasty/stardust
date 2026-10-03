@@ -6,5 +6,5 @@
 script = ExtResource("1_scanner")
 display_name = "survey array"
 reach = 14.0
-depth = 0
+depth = 1
 bulk = 1.2
