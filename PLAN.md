@@ -402,11 +402,13 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   przerwanie kosztuje bez drugiej reguły; przerywa puszczenie klawisza i
   trafienie. Cel zatrzaśnięty na starcie ładowania, bo dziób służy do
   wybrania celu, a nie do trzymania go.
-- [ ] Shader tranzytu, wymiana sceny systemu pod graczem w trakcie efektu.
-  **Wymiana zrobiona**: `StreamingManager.bind()` i tak zaczyna od `clear()`,
-  więc skok to związanie nowego systemu w połowie tranzytu plus przestawienie
-  statku, który nie jest dzieckiem żadnego z nich. Sprawdzone w prawdziwym
-  świecie, nie tylko w teście. Został sam shader.
+- [x] Shader tranzytu, wymiana sceny systemu pod graczem w trakcie efektu.
+  `StreamingManager.bind()` i tak zaczyna od `clear()`, więc skok to związanie
+  nowego systemu w połowie tranzytu plus przestawienie statku, który nie jest
+  dzieckiem żadnego z nich. Sprawdzone w prawdziwym świecie, nie tylko w
+  teście. `TransitVeil` + `shaders/transit.gdshader`: rozmycie radialne do
+  środka, smugi i przesunięcie koloru w chłód. Kształt krzywej jest projektem,
+  nie gustem — pełna przed wymianą i trzymana do końca tranzytu.
 - [x] Pozycja przylotu na krawędzi celu od strony źródła.
   `outer_radius * (źródło - cel)` wprost z IDEAS.md: lecisz na północny
   wschód, wychodzisz przy południowo-zachodniej krawędzi celu z gwiazdą

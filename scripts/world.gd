@@ -61,6 +61,7 @@ var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
 var _jump_hud: JumpHud = null
 var _jump: JumpController = null
+var _veil: TransitVeil = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
 var _help: HelpScreen = null
@@ -167,6 +168,10 @@ func _build_jump_hud() -> void:
 	_jump.crossed.connect(_on_crossed)
 	_jump.refused.connect(_on_jump_refused)
 	_jump.arrived.connect(_on_jump_arrived)
+
+	_veil = TransitVeil.new()
+	add_child(_veil)
+	_veil.bind(_jump)
 
 	_jump_hud = JumpHud.new()
 	add_child(_jump_hud)

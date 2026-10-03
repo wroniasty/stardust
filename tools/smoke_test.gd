@@ -1010,6 +1010,7 @@ func _evaluate_phase() -> void:
 			_check_jump_kit()
 			_check_jump_hud()
 			_check_jump_sequence()
+			_check_transit_veil()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -4359,6 +4360,104 @@ func _check_jump_sequence() -> void:
 		"an empty tank refuses before it starts (%s)" % excuses[excuses.size() - 1],
 	)
 
+	pilot.free()
+	galaxy.free()
+	ship.queue_free()
+
+
+## Zasłona tranzytu: kształt krzywej jest projektem, nie gustem.
+##
+## This is the one effect in the game with a job rather than a look. The
+## old system is freed and the next one built halfway through the
+## crossing, so what matters is that the veil is already at full when
+## that happens and does not start clearing until the pilot has
+## arrived. Everything else about it is taste; this is not.
+##
+## Driven through `strength()`, which is ungated for the usual reason:
+## the gate belongs in the tick, and a curve that could only be read
+## with a window open is a curve with no tests. Sixth time in this
+## project, and by now a rule.
+func _check_transit_veil() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(20260922)
+	var here: int = map.start_index()
+	var system: StarSystem = StarSystem.generate(20260922)
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(20260922)
+
+	var ship: Ship = _spawn_ship()
+	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	var pilot: JumpController = JumpController.new()
+	pilot.use_player_input = false
+	root.add_child(pilot)
+	pilot.bind(ship, system, map, here, galaxy)
+	var veil: TransitVeil = TransitVeil.new()
+	root.add_child(veil)
+	veil.bind(pilot)
+
+	_expect(
+		is_equal_approx(veil.strength(), 0.0),
+		"nothing over the screen when nothing is happening",
+	)
+	_expect(
+		TransitVeil.FULL_BY <= JumpController.SWAP_AT,
+		"the veil is full by the time the worlds change over (%.2f against %.2f)" % [
+			TransitVeil.FULL_BY, JumpController.SWAP_AT,
+		],
+	)
+
+	# Walk a whole jump and watch the curve, rather than poking states by
+	# hand: what matters is what the pilot sees in sequence.
+	var neighbour: int = map.neighbours(here, GalaxyMap.BASE_REACH)[0]
+	var out: Vector2 = (map.positions[neighbour] - map.positions[here]).normalized()
+	ship.global_rotation = out.angle() - Vector2.UP.angle()
+	pilot.holding = true
+
+	var charging_peak: float = 0.0
+	var at_swap: float = -1.0
+	var after_swap: float = 2.0
+	var arriving: Array[float] = []
+	var seen_transit: bool = false
+	for tick: int in range(900):
+		pilot.advance(1.0 / 60.0)
+		var how: float = veil.strength()
+		match pilot.phase:
+			JumpController.Phase.CHARGING:
+				charging_peak = maxf(charging_peak, how)
+			JumpController.Phase.TRANSIT:
+				seen_transit = true
+				if pilot.progress() >= JumpController.SWAP_AT:
+					if at_swap < 0.0:
+						at_swap = how
+					after_swap = minf(after_swap, how)
+			JumpController.Phase.ARRIVAL:
+				arriving.append(how)
+		if pilot.phase == JumpController.Phase.IDLE and seen_transit:
+			break
+
+	_expect(
+		charging_peak > 0.0 and charging_peak <= TransitVeil.CHARGE_PEAK + 0.001,
+		"spooling is visible and still flyable through (%.2f)" % charging_peak,
+	)
+	_expect(
+		at_swap > 0.999 and after_swap > 0.999,
+		"it is full across the swap and stays there (%.2f, then never under %.2f)" % [
+			at_swap, after_swap,
+		],
+	)
+	_expect(
+		not arriving.is_empty()
+		and arriving[0] > 0.9 and arriving[arriving.size() - 1] < 0.05,
+		"and clears over the arrival rather than snapping away (%.2f to %.2f)" % [
+			arriving[0], arriving[arriving.size() - 1],
+		],
+	)
+	_expect(
+		is_equal_approx(veil.strength(), 0.0),
+		"with nothing left over once the pilot has the controls back",
+	)
+
+	veil.free()
 	pilot.free()
 	galaxy.free()
 	ship.queue_free()

@@ -3005,6 +3005,22 @@ pytała przez `canvas_transform` i dawała dobrą odpowiedź z złego powodu:
 galaktyka i system leżą na tej samej płaszczyźnie, więc „dziób w to celuje"
 to pytanie o dwa kursy i kamera nie ma tu nic do powiedzenia.
 
+**Zasłona tranzytu** (`TransitVeil` + `shaders/transit.gdshader`) to jedyny
+efekt w tej grze, który ma **zadanie, a nie wygląd**: pod nią znika stary
+system i powstaje nowy, więc kształt krzywej jest projektem, nie gustem.
+Rośnie przy ładowaniu (do 0,22 — widać, że napęd się kręci, a dalej da się
+lecieć i anulować), jest **pełna przed wymianą** i trzymana do końca
+tranzytu, gasnie dopiero na przylocie — i to jest powód, dla którego
+Arrival jest stanem, a nie chwilą.
+
+Rozmycie radialne liczone **do środka**, nie na zewnątrz: próbkowanie w
+stronę środka ciągnie środek kadru po krawędziach, czyli w tę stronę, w którą
+widok ciągnie statek, który gdzieś leci. Smugi to jedna wartość na kąt,
+stała wzdłuż promienia — przy 180 sektorach wyszły kliny po dwadzieścia
+pikseli i ekran czytał się jak tablica testowa, a nie jak prędkość; przy 900
+są smugami. Kolor idzie w chłód, bo ciepło i czerwień ta gra ma już zajęte
+na rzeczy, które idą źle.
+
 ### Paliwo jako ryzyko
 
 Skok z niedoborem paliwa nie jest zablokowany, tylko ryzykowny. Brakujący procent to szansa na misjump: pusty sektor międzygwiezdny (typ "systemu" bez gwiazdy: wraki, piraci, porzucony tanker z paliwem) albo dotarcie z uszkodzonym napędem. Analogicznie skok na styku zasięgu.
