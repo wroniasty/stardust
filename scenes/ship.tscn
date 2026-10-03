@@ -93,10 +93,12 @@ installed = ExtResource("10_retro")
 [node name="ComputerBay" type="Node2D" parent="."]
 position = Vector2(0, -2)
 script = ExtResource("15_computer_bay")
+size = 1.5
 
 [node name="GeneratorBay" type="Node2D" parent="."]
 position = Vector2(0, 1.75)
 script = ExtResource("13_generator_bay")
+size = 3.0
 installed = ExtResource("14_cell")
 
 [node name="NoseHardpoint" type="Node2D" parent="."]

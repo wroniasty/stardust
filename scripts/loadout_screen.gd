@@ -272,10 +272,8 @@ func _fitted_in(slot: Node) -> ModuleData:
 		return (slot as Hardpoint).weapon
 	if slot is EngineMount:
 		return (slot as EngineMount).installed
-	if slot is GeneratorBay:
-		return (slot as GeneratorBay).installed
-	if slot is ComputerBay:
-		return (slot as ComputerBay).installed
+	if slot is ModuleBay:
+		return (slot as ModuleBay).installed
 	if slot is LandingGear:
 		return (slot as LandingGear).installed
 	return null

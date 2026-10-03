@@ -982,6 +982,7 @@ func _evaluate_phase() -> void:
 			_check_gimbal()
 			_check_gear_module()
 			_check_weapon_types(_planet)
+			_check_bays()
 			_check_ship_fitouts()
 			_check_fitout_presets()
 			_check_creative_tool()
@@ -7769,6 +7770,72 @@ func _cutoff() -> float:
 		AudioServer.get_bus_effect(sfx, 0) as AudioEffectLowPassFilter
 	)
 	return muffle.cutoff_hz if muffle != null else 0.0
+
+
+## Gniazda: jedna klasa, i teraz pilnują rodzaju same.
+##
+## Five slots that were five classes, sixteen of whose seventeen lines
+## were the same. What actually differed was which modules each takes,
+## and none of them checked: each was typed to its own data class, so the
+## kind test was done by whoever called it and anything that arrived was
+## already the right sort. That worked while the editor held its own list
+## of which kind goes where -- a second copy of something the hull knew.
+##
+## So the capability here is new, not just rearranged, and it is what
+## this checks: a slot refuses the wrong machine on its own, without
+## being told by the thing holding it.
+func _check_bays() -> void:
+	var ship: Ship = _spawn_ship()
+	_expect(
+		ship.bays.size() >= 2,
+		"the hull reports its slots as one list (%d)" % ship.bays.size(),
+	)
+	_expect(
+		ship.generator_bay != null and ship.computer_bay != null
+		and ship.bays.has(ship.generator_bay) and ship.bays.has(ship.computer_bay),
+		"and the named lookups point into it rather than beside it",
+	)
+
+	# Through the script, not the autoload: the smoke test has none.
+	var loot: Node = LOOT_SCRIPT.new()
+	var cell: GeneratorData = loot.generator(7, 0)
+	var box: FlightComputerData = loot.computer(7, 0)
+	var gun: WeaponData = loot.weapon(7, 0)
+	loot.free()
+	_expect(
+		ship.generator_bay.fits(cell) and not ship.generator_bay.fits(box)
+		and not ship.generator_bay.fits(gun),
+		"a generator bay takes a generator and refuses a computer or a gun",
+	)
+	_expect(
+		ship.computer_bay.fits(box) and not ship.computer_bay.fits(cell),
+		"and the computer bay the other way round",
+	)
+	_expect(not ship.generator_bay.fits(null), "neither takes nothing at all")
+
+	# Size is still size. The kind test is in addition to the bulk test,
+	# not instead of it.
+	var fat: GeneratorData = cell.duplicate() as GeneratorData
+	fat.bulk = ship.generator_bay.size + 0.1
+	_expect(
+		not ship.generator_bay.fits(fat),
+		"and a generator too big for the hole still does not go in (%.1f of %.1f)" % [
+			fat.bulk, ship.generator_bay.size,
+		],
+	)
+
+	# The hole is the hull's, not the slot class's. That is the part the
+	# fold changed on purpose: two ships with a generator bay are allowed
+	# to disagree about how much generator fits, and a default baked into
+	# the subclass made that impossible to express.
+	var bare: ModuleBay = ModuleBay.new()
+	bare.size = 0.5
+	_expect(
+		bare.accepts(cell) and not bare.fits(cell) and bare.module_mass() == 0.0,
+		"a plain slot takes any kind, weighs nothing, and still has a size",
+	)
+	bare.free()
+	ship.queue_free()
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.

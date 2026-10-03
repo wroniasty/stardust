@@ -281,12 +281,6 @@ func _targets() -> Array[Node]:
 		for mount: EngineMount in _ship.engine_mounts():
 			if _ship.mount_accepts(mount, item as EngineData):
 				out.append(mount)
-	elif item is GeneratorData:
-		if _ship.generator_bay != null and _ship.generator_bay.fits(item as GeneratorData):
-			out.append(_ship.generator_bay)
-	elif item is FlightComputerData:
-		if _ship.computer_bay != null and _ship.computer_bay.fits(item as FlightComputerData):
-			out.append(_ship.computer_bay)
 	elif item is GearData:
 		if _ship.gear != null:
 			out.append(_ship.gear)
@@ -296,6 +290,14 @@ func _targets() -> Array[Node]:
 		for mount: Hardpoint in _ship.hardpoints:
 			if mount.weapon != null and mount.mods.size() < mount.weapon.mod_slots:
 				out.append(mount)
+	else:
+		# Everything that goes in a bay. One pass rather than one branch
+		# per kind: the bay already knows what it takes, and the editor
+		# deciding instead was the editor keeping a second copy of a list
+		# the hull was already holding.
+		for bay: ModuleBay in _ship.bays:
+			if bay.fits(item as ModuleData):
+				out.append(bay)
 	return out
 
 
@@ -308,10 +310,8 @@ func _all_mounts() -> Array[Node]:
 		out.append(mount)
 	for mount: Hardpoint in _ship.hardpoints:
 		out.append(mount)
-	if _ship.generator_bay != null:
-		out.append(_ship.generator_bay)
-	if _ship.computer_bay != null:
-		out.append(_ship.computer_bay)
+	for bay: ModuleBay in _ship.bays:
+		out.append(bay)
 	if _ship.gear != null:
 		out.append(_ship.gear)
 	return out
@@ -350,14 +350,10 @@ func _fit() -> void:
 		removed = (slot as Hardpoint).fit(item as WeaponData)
 	elif slot is EngineMount:
 		removed = _ship.fit_engine(slot as EngineMount, item as EngineData)
-	elif slot is GeneratorBay:
-		var bay: GeneratorBay = slot as GeneratorBay
+	elif slot is ModuleBay:
+		var bay: ModuleBay = slot as ModuleBay
 		removed = bay.installed
-		bay.installed = item as GeneratorData
-	elif slot is ComputerBay:
-		var box: ComputerBay = slot as ComputerBay
-		removed = box.installed
-		box.installed = item as FlightComputerData
+		bay.installed = item as ModuleData
 	elif slot is LandingGear:
 		var legs: LandingGear = slot as LandingGear
 		removed = legs.installed
@@ -1013,10 +1009,8 @@ func _fitted_in(slot: Node) -> Resource:
 		return (slot as Hardpoint).weapon
 	if slot is EngineMount:
 		return (slot as EngineMount).installed
-	if slot is GeneratorBay:
-		return (slot as GeneratorBay).installed
-	if slot is ComputerBay:
-		return (slot as ComputerBay).installed
+	if slot is ModuleBay:
+		return (slot as ModuleBay).installed
 	if slot is LandingGear:
 		return (slot as LandingGear).installed
 	return null

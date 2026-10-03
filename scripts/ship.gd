@@ -527,7 +527,16 @@ var stat_sources: Dictionary = {}
 var energy: float = 0.0
 var _since_spend: float = 0.0
 
-## The bay, if the hull has one. Found at ready like the other mounts.
+## Every slot on this hull, in the order the children are walked.
+##
+## One list rather than one field per kind, because every list that used
+## to name them individually -- mass, inertia, the fitted inventory, the
+## editor's schematic -- wanted all of them and none wanted a particular
+## one. The named fields below are lookups into this, kept because the
+## code that asks for the generator wants the generator.
+var bays: Array[ModuleBay] = []
+
+## The generator bay, if the hull has one. Found at ready like the mounts.
 var generator_bay: GeneratorBay = null
 
 ## The flight computer bay, if the hull has one.
@@ -568,18 +577,22 @@ var _terrain_contacts: int = 0
 ## crashes the next time anything pulls a trigger.
 func collect_parts() -> void:
 	hardpoints.clear()
+	bays.clear()
 	generator_bay = null
 	computer_bay = null
 	gear = null
 	for child: Node in get_children():
 		if child is Hardpoint:
 			hardpoints.append(child as Hardpoint)
-		elif child is GeneratorBay:
-			generator_bay = child as GeneratorBay
-		elif child is ComputerBay:
-			computer_bay = child as ComputerBay
+		elif child is ModuleBay:
+			bays.append(child as ModuleBay)
 		elif child is LandingGear:
 			gear = child as LandingGear
+	for bay: ModuleBay in bays:
+		if bay is GeneratorBay:
+			generator_bay = bay as GeneratorBay
+		elif bay is ComputerBay:
+			computer_bay = bay as ComputerBay
 
 
 func _ready() -> void:
@@ -836,12 +849,12 @@ func _recompute_mass_properties() -> void:
 	total_mass += load
 	weighted += CARGO_BAY * load
 
-	for bay: Node2D in [generator_bay, computer_bay, gear]:
-		if bay == null:
-			continue
-		var bay_mass: float = bay.call("module_mass")
-		total_mass += bay_mass
-		weighted += bay.position * bay_mass
+	for bay: ModuleBay in bays:
+		total_mass += bay.module_mass()
+		weighted += bay.position * bay.module_mass()
+	if gear != null:
+		total_mass += gear.module_mass()
+		weighted += gear.position * gear.module_mass()
 
 	var centre: Vector2 = weighted / maxf(total_mass, 0.0001)
 
@@ -851,11 +864,10 @@ func _recompute_mass_properties() -> void:
 	for engine: EngineInstance in engines:
 		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
 	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
-	for bay: Node2D in [generator_bay, computer_bay, gear]:
-		if bay != null:
-			total_inertia += float(bay.call("module_mass")) * bay.position.distance_squared_to(
-				centre
-			)
+	for bay: ModuleBay in bays:
+		total_inertia += bay.module_mass() * bay.position.distance_squared_to(centre)
+	if gear != null:
+		total_inertia += gear.module_mass() * gear.position.distance_squared_to(centre)
 
 	mass = total_mass
 	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
@@ -992,12 +1004,9 @@ func fitted_modules() -> Array[Dictionary]:
 		var hardpoint: Hardpoint = child as Hardpoint
 		if hardpoint != null and hardpoint.weapon != null:
 			out.append({"name": child.name, "module": hardpoint.weapon})
-		var bay: GeneratorBay = child as GeneratorBay
+		var bay: ModuleBay = child as ModuleBay
 		if bay != null and bay.installed != null:
 			out.append({"name": child.name, "module": bay.installed})
-		var box: ComputerBay = child as ComputerBay
-		if box != null and box.installed != null:
-			out.append({"name": child.name, "module": box.installed})
 		var legs: LandingGear = child as LandingGear
 		if legs != null and legs.installed != null:
 			out.append({"name": child.name, "module": legs.installed})
@@ -1047,12 +1056,12 @@ func _record_stat(key: StringName, source: String, kind: String, value: float) -
 ## The flight computer fitted, or null when the ship flies on the built-in
 ## weight heuristic.
 func computer() -> FlightComputerData:
-	return computer_bay.installed if computer_bay != null else null
+	return computer_bay.installed as FlightComputerData if computer_bay != null else null
 
 
 ## The generator fitted, or null when running on the hull's own rail.
 func generator() -> GeneratorData:
-	return generator_bay.installed if generator_bay != null else null
+	return generator_bay.installed as GeneratorData if generator_bay != null else null
 
 
 func energy_capacity() -> float:
