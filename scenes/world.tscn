@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/ship.tscn" id="3_ship"]
 [ext_resource type="Script" uid="uid://dict7hsfwxaqu" path="res://scripts/ship_camera.gd" id="4_camera"]
 [ext_resource type="Script" path="res://scripts/fx/camera_shake.gd" id="9_shake"]
+[ext_resource type="Script" path="res://scripts/fx/soundscape.gd" id="10_sound"]
 [ext_resource type="PackedScene" path="res://scenes/debug_overlay.tscn" id="5_overlay"]
 [ext_resource type="PackedScene" path="res://scenes/starfield.tscn" id="6_starfield"]
 [ext_resource type="PackedScene" path="res://scenes/debug_vectors.tscn" id="7_vectors"]
@@ -43,3 +44,7 @@ ship_path = NodePath("../Player/Ship")
 script = ExtResource("9_shake")
 ship_path = NodePath("../../Player/Ship")
 camera_path = NodePath("../../Camera")
+
+[node name="Soundscape" type="Node" parent="Presentation"]
+script = ExtResource("10_sound")
+ship_path = NodePath("../../Player/Ship")

@@ -21,6 +21,10 @@ Galaxy="*res://scripts/autoload/galaxy.gd"
 StreamingManager="*res://scripts/autoload/streaming_manager.gd"
 LootGenerator="*res://scripts/autoload/loot_generator.gd"
 
+[audio]
+
+buses/default_bus_layout="res://resources/audio/bus_layout.tres"
+
 [display]
 
 window/size/viewport_width=640

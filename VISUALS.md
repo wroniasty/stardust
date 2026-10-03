@@ -426,14 +426,36 @@ tutaj jest tylko zapisany ich styl, żeby powstały od razu w tym języku.
 
 Zero dźwięku dzisiaj, więc pierwszy krok jest duży, a każdy następny mały.
 
-### S0: Fundament
+### S0: Fundament — **zamknięte**
 
-- [ ] Magistrale: `Master`, `Sfx`, `Ambient`, `Ui`, z filtrem dolnoprzepustowym na `Sfx` sterowanym gęstością powietrza.
-- [ ] Spawner dźwięków jednorazowych: `(strumień, pozycja, głośność, wysokość)`, pula `AudioStreamPlayer2D`.
-- [ ] Reguła próżni: w `air_density == 0` słychać wyłącznie dźwięki przewodzone konstrukcją (silniki, uderzenia w kadłub), reszta wyciszona.
-- [ ] `tools/soundcheck.tscn`: odpala po kolei każde zdarzenie i wypisuje, co zagrało.
+- [x] **Magistrale** `Master`, `Sfx`, `Ambient`, `Ui`, z filtrem
+  dolnoprzepustowym na `Sfx`. Układ generowany przez
+  `tools/make_audio.gd`: ustawia się żywy serwer i prosi go o layout,
+  zamiast pisać zasób ręcznie — ręczna wersja to gniazdo indeksów, a
+  serwer już zna kształt.
+- [x] **Spawner jednorazowych** z pulą szesnastu głosów. Pula, bo gra,
+  która alokuje odtwarzacz na strzał, alokuje odtwarzacz na strzał — test
+  puszcza 48 dźwięków i sprawdza, że węzeł nie urósł.
+- [x] **Reguła próżni**, i to jest decyzja projektowa, nie ustawienie
+  miksera. Trzy drogi: `CONDUCTED` przez konstrukcję (silniki, uderzenia
+  w kadłub) słychać zawsze, `AIRBORNE` sprzedaje się gęstością powietrza,
+  `INTERFACE` nie jest w świecie i nie podlega jego pogodzie — menu,
+  które milknie w kosmosie, to menu, które źle zrozumiało regułę.
+  Odcięcie filtru rośnie **wykładniczo** z powietrzem (320 Hz w próżni,
+  20 kHz w gęstym), bo tak słyszy ucho: w połowie drogi po częstotliwości
+  nie jest w połowie drogi po słuchu. Rzadkie powietrze **ścisza**, nie
+  wycina — urwisko na granicy atmosfery słychać jako przełącznik.
+- [x] `tools/soundcheck.tscn`: tabela każdy dźwięk × każda droga × trzy
+  gęstości powietrza, z `+` i `.`. Cel to tabela, nie hałas — regułę,
+  której dwa z trzech przypadków to cisza, da się sprawdzić tylko pytając.
+- [x] **Wyłącznik** (`F8`) wycisza magistralę Master, a nie każde wywołanie
+  z osobna: łapie wtedy wszystko, co zagra z pominięciem `play()`, i
+  zostawia samo `play()` czystym zapisem reguły, który test może pogonić.
 
-Gotowe, gdy: przelot przez atmosferę słychać jako wejście świata, a nie jako zmianę głośności.
+Gotowe, gdy: przelot przez atmosferę słychać jako wejście świata, a nie
+jako zmianę głośności. **Mechanizm stoi; same dźwięki to placeholdery** —
+cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
+żeby każde zdarzenie z S1 wzwyż miało co pożyczyć, zanim dostanie swoje.
 
 ### S1: Silniki
 

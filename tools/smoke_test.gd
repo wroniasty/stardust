@@ -989,6 +989,7 @@ func _evaluate_phase() -> void:
 			_check_skin()
 			_check_camera_shake()
 			_check_ship_wear()
+			_check_soundscape()
 			_check_rarity_travels()
 			_check_affix_pools()
 			_check_item_names()
@@ -7400,6 +7401,128 @@ func _check_art() -> void:
 		"and the same node draws an interface glyph at 1:1, Nearest, opaque",
 	)
 	sprite.queue_free()
+
+
+## Próznia jest cicha, i to jest regula, nie ustawienie miksera.
+##
+## VISUALS.md section 2 makes this a design decision rather than a mixing
+## preference: in space you hear only what travels through the ship's own
+## structure, so entering an atmosphere is the moment the world starts to
+## sound. A pilot learns the air model by ear before reading it off the
+## HUD, and `air_density` -- computed every tick since M1 -- does a second
+## job for nothing.
+##
+## Checked by asking, not by listening. Headless there is no sound at all,
+## so `play()` reports whether it spent a voice and the rule is read off
+## that; which is also why the layer switch is applied at the master bus
+## rather than inside `play()`, where it would have made every answer here
+## the same one.
+func _check_soundscape() -> void:
+	# The buses, in the order the layout declares them.
+	for wanted: String in ["Master", "Sfx", "Ambient", "Ui"]:
+		_expect(
+			AudioServer.get_bus_index(wanted) >= 0,
+			"there is a %s bus" % wanted,
+		)
+	var sfx: int = AudioServer.get_bus_index("Sfx")
+	_expect(
+		sfx >= 0 and AudioServer.get_bus_effect(sfx, 0) is AudioEffectLowPassFilter,
+		"and the one carrying the world has something to muffle it with",
+	)
+
+	var sound: Soundscape = Soundscape.new()
+	root.add_child(sound)
+
+	# The cutoff rises with the air, and rises exponentially, because
+	# hearing does: halfway between 320 Hz and 20 kHz by frequency is
+	# nowhere near halfway by ear.
+	sound.set_muffle(0.0)
+	var vacuum: float = _cutoff()
+	sound.set_muffle(0.5)
+	var thin: float = _cutoff()
+	sound.set_muffle(1.0)
+	var thick: float = _cutoff()
+	_expect(
+		is_equal_approx(vacuum, Soundscape.MUFFLED_HZ)
+		and is_equal_approx(thick, Soundscape.OPEN_HZ),
+		"vacuum is a dull thud and thick air is wide open (%.0f to %.0f Hz)" % [
+			vacuum, thick,
+		],
+	)
+	_expect(
+		thin < (vacuum + thick) * 0.5,
+		"and half the air is far less than half the brightness (%.0f Hz)" % thin,
+	)
+
+	# The rule itself. A thump through the frame is audible in vacuum; the
+	# same thump out in the world is not; and the interface is not in the
+	# world at all, so a menu that went quiet in space would be a menu that
+	# had misunderstood.
+	var thump: AudioStream = load("res://resources/audio/thump.tres")
+	_expect(thump != null, "there is a sound to try")
+	sound.density = 0.0
+	var in_vacuum: Array[bool] = [
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.CONDUCTED),
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.AIRBORNE),
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.INTERFACE),
+	]
+	sound.density = 1.0
+	var in_air: Array[bool] = [
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.CONDUCTED),
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.AIRBORNE),
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.INTERFACE),
+	]
+	# Element by element rather than against an array literal: `as` binds
+	# looser than `==`, so `a == [...] as Array[bool]` casts the comparison
+	# instead of the literal and will not even parse.
+	_expect(
+		in_vacuum[0] and not in_vacuum[1] and in_vacuum[2],
+		"in vacuum only the hull and the interface are heard (%s)" % [in_vacuum],
+	)
+	_expect(
+		in_air[0] and in_air[1] and in_air[2],
+		"and in air everything is (%s)" % [in_air],
+	)
+
+	# Thin air is quieter, not silent: the rule is a slope, and a cliff at
+	# the atmosphere's edge would be heard as a switch being thrown.
+	sound.density = 0.3
+	_expect(
+		sound.carries(Soundscape.Path.AIRBORNE) > 0.0
+		and sound.carries(Soundscape.Path.AIRBORNE) < 1.0,
+		"thin air carries a sound faintly rather than not at all (%.2f)" % [
+			sound.carries(Soundscape.Path.AIRBORNE),
+		],
+	)
+	_expect(
+		is_equal_approx(sound.carries(Soundscape.Path.CONDUCTED), 1.0),
+		"while what comes up through the frame does not care about the air",
+	)
+
+	# And the pool is a pool: more sounds than voices must not grow the
+	# node, because the thing it replaces is an allocation per gunshot.
+	var before: int = sound.get_child_count()
+	for shot: int in range(Soundscape.VOICES * 3):
+		sound.play(thump, Vector2.ZERO, Soundscape.Path.CONDUCTED)
+	_expect(
+		sound.get_child_count() == before,
+		"%d sounds share %d voices and allocate nothing" % [
+			Soundscape.VOICES * 3, before,
+		],
+	)
+
+	for voice: Node in sound.get_children():
+		(voice as AudioStreamPlayer2D).stream = null
+	sound.free()
+
+
+## What the low-pass on the world bus is set to.
+func _cutoff() -> float:
+	var sfx: int = AudioServer.get_bus_index("Sfx")
+	var muffle: AudioEffectLowPassFilter = (
+		AudioServer.get_bus_effect(sfx, 0) as AudioEffectLowPassFilter
+	)
+	return muffle.cutoff_hz if muffle != null else 0.0
 
 
 ## Statek nosi na sobie swój stan: cieplo, uszkodzenia, kulejacy silnik.
