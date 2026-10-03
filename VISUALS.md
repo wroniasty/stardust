@@ -245,7 +245,11 @@ się nazwą.
   `look_key` ustawiane w scenie. `tint` robi dwie rzeczy naraz celowo:
   maluje sprite i nadaje barwę światłu, które pocisk rzuca, więc poświatę
   zawsze da się odnieść do tego, co ją rzuca.
-- [ ] Odłamki (`particles/debris_strip3.png`) przy trafieniu, razem z V3.
+- [x] Odłamki (`particles/debris_strip3.png`) przy trafieniu, razem z V3.
+  Pasek jest paskiem: każde ziarno bierze z niego **losową klatkę** i
+  trzyma ją (`anim_offset` losowy, `anim_speed` zero, `particles_anim_h_frames`
+  na materiale), bo burza jednego odłamka powtórzonego dwadzieścia razy
+  czyta się jak błąd kafelkowania, a nie jak odłamki.
 
 #### Krok 7: interfejs
 
@@ -360,10 +364,68 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 
 ### V3: Zderzenia, kopanie, kurz
 
-- [ ] Iskry i odłamki przy trafieniu, skalowane prędkością z `hull_impact`.
-- [ ] Krater ma obrzeże: jaśniejszy pierścień świeżo odsłoniętej skały, ciemniejszy w środku.
-- [ ] Pył wyrzucany przy kopaniu, opadający zgodnie z lokalnym „w dół".
-- [ ] Kurz spod dysz przy podejściu, gęstość od gęstości powietrza i wysokości.
+- [x] Iskry i odłamki przy trafieniu, skalowane prędkością z `hull_impact`.
+  `DebrisField`, pula ośmiu jednostrzałowych emiterów — statek zjeżdżający
+  po zboczu woła `hull_impact` co kontakt, więc emiter na zdarzenie byłby
+  alokacją na zdarzenie. Rzucane **pod prąd wektora prędkości**: to jest
+  kierunek, w którym odepchnęło to, w co statek uderzył. Delikatne
+  postawienie na nóżki nie sypie iskrami — próg jest tam, gdzie w
+  `CameraShake`. **Dwa rzuty na jedno uderzenie, nie jeden**: gorący
+  addytywny punkt i pasek trzech odłamków (ASSETLIST chce obu). To nie
+  jest to samo zdarzenie widziane dwa razy — światło idzie od razu, a
+  kawałki, które oświetliło, zostają, i dlatego odłamki żyją dłużej.
+- [x] Krater ma obrzeże: jaśniejszy pierścień świeżo odsłoniętej skały, ciemniejszy w środku.
+  Środek był ciemniejszy **za darmo**: `terrain.gdshader` koloruje
+  głębokością pod aktualną powierzchnią (`under_crust`, `under_rock`), więc
+  dno świeżego dołu jest z definicji niżej niż skorupa obok. Doszedł sam
+  pierścień: `rim_width` / `rim_gain`, ściana wykryta przez próbkowanie
+  tego samego promienia kilka pikseli w bok **po kącie**, a nie po X —
+  teren jest bitmapą polarną i „w bok" znaczy tu co innego niż na ekranie.
+  Szerokość kroku dzielona przez obwód, żeby pierścień miał tę samą
+  grubość w pikselach na księżycu i na gazowym olbrzymie. Łapie też
+  naturalne urwiska, i to jest w porządku: ściana urwiska to też
+  odsłonięta skała. Sprawdzone zrzutem przy `rim_gain` 1.0 i 1.7, bo
+  inaczej nie da się odróżnić nowego efektu od obrysu, który już był.
+- [x] Pył wyrzucany przy kopaniu, opadający zgodnie z lokalnym „w dół".
+  Ten sam `DebrisField`, bo to ten sam kształt zdarzenia: coś ustępuje w
+  punkcie i kawałki wychodzą w pośpiechu. Różni się kierunkiem i jasnością,
+  czyli dwoma argumentami, a nie drugim systemem. Wyrzucany wzdłuż
+  lokalnej normalnej (`GravityWell.local_at`), nie wzdłuż strzału — i to
+  jest ta sama droga, którą opadnie.
+- [x] Kurz spod dysz przy podejściu, gęstość od gęstości powietrza i wysokości.
+  **Trzy czynniki, iloczyn, każdy gasi sam**: bliskość gruntu, powietrze i
+  to, czy cokolwiek faktycznie dmucha w dół. Trzeci jest tym, który
+  najłatwiej pominąć — statek wiszący dwa metry nad ziemią z zgaszonymi
+  silnikami nie rusza gruntu, a statek strafujący bokiem nie rusza go
+  silnikami bocznymi. Udział jest więc ważony `thrust_direction()`
+  obróconym do świata **i siłą ciągu**, odniesioną do najmocniejszego
+  silnika na pokładzie: pierwsza wersja dzieliła przez silniki skierowane
+  w dobrą stronę i czytała jeden sterek poprawiający dziób jak pełne
+  lądowanie — proporcja była dobra, a wielkość znikła. Rysowany **przy
+  gruncie pod statkiem**, nie przy dyszach: to powierzchnia jest
+  wzburzana, a nie silnik dymi. Punkt znaleziony przez zejście w dół o
+  zgłoszoną wysokość, nie na nominalny promień — nad górami to są dwa
+  różne miejsca.
+- Dwie rzeczy, które wyszły dopiero ze zrzutu, nie z asercji: **rozmiar
+  ziarna liczony z paska** (`GRIT` w pikselach projektowych dzielone przez
+  to, jak pasek jest narysowany — kropka ma 24 teksele, odłamek 9, więc
+  jedna ręcznie dobrana skala nie może pasować do obu i pierwsza wersja
+  zrobiła odłamki niewidzialnymi) oraz **tint w górę, nie w dół** — pasek
+  jest narysowany w kolorze blachy, a odłamek to blacha **łapiąca
+  światło**; przyciemniony ląduje o ton od nieba i czyta się jak brud na
+  monitorze. Do tego `explosiveness = 1.0` (jednostrzałowy emiter domyślnie
+  rozkręca się przez całe życie cząstki, więc wybuch był sączeniem) i
+  wspólna krzywa zanikania, ustawiana **przy budowie emitera**, a nie przy
+  pierwszym strzale — inaczej błąd wychodzi dopiero na dziewiątym
+  uderzeniu w sesji.
+- Wyciągnięte z tego: **bramka prezentacji nie może siedzieć w środku
+  decyzji.** W `DebrisField` stoi na `visible` całego węzła — jeden
+  przełącznik, który łapie też wybuch już lecący, czego bramka przy
+  wywołaniu by nie złapała. Piąty raz ten sam podział w tym projekcie
+  (`ShipSkin.paint()`, `CameraShake.throw()`, `Soundscape.play()`,
+  `Soundscape.set_muffle()`, teraz `DebrisField.stir()` i `burst()`), i za
+  piątym razem jest to reguła, a nie zbieg okoliczności: co jest bramkowane
+  w ticku, tego test bezgłowy nie zmierzy.
 - [x] ~~Wstrząs kamery~~ — **zrobione w V0**, gdzie był jednocześnie
   dowodem, że szew prezentacji działa. Jedno źródło (`CameraShake`),
   skalowane energią uderzenia, nie liczbą na zdarzenie. Zostaje wpisane

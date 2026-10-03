@@ -23,6 +23,21 @@ uniform vec3 core_color : source_color = vec3(0.18, 0.16, 0.17);
 uniform float crust_depth = 7.0;
 uniform float rock_depth = 30.0;
 
+/// How wide the bright edge on a cut face is, in pixels, and how much
+/// brighter it goes.
+///
+/// A crater floor is already darker than the ground, for free: it is
+/// deeper, so the depth test above finds rock and then core under it.
+/// What was missing is the **wall**, which is at the same depth as the
+/// ground beside it and differs only in having nothing next to it.
+///
+/// So the wall is found by looking sideways rather than outwards -- two
+/// samples at the same radius, a few pixels round the circle. That also
+/// catches natural cliffs, which is right: a cliff face is exposed rock
+/// for the same reason a crater wall is.
+uniform float rim_width = 3.0;
+uniform float rim_gain : hint_range(1.0, 3.0) = 1.7;
+
 /// Direction of the star, as a unit vector in this quad's own frame, and how
 /// much of a difference it makes. The planet turns under it, so the quad is
 /// told afresh every frame; `sunlight` is zero for a world with no star in
@@ -86,6 +101,16 @@ void fragment() {
 	vec3 color = core_color;
 	color = mix(rock_color, color, under_rock);
 	color = mix(crust_color, color, under_crust);
+
+	// Freshly cut faces catch the light. `rim_width` pixels converted to
+	// an angle at this radius, so the band is the same width on a moon
+	// and on a gas giant rather than the same fraction of a turn.
+	float across = rim_width / max(TAU_C * radius, 1.0);
+	float exposed = clamp(
+		2.0 - solid_at(angle01 - across, radius) - solid_at(angle01 + across, radius),
+		0.0, 1.0
+	);
+	color = min(color * mix(1.0, rim_gain, exposed), vec3(1.0));
 
 	COLOR = vec4(color * daylight(local), 1.0);
 }

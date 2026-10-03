@@ -990,6 +990,7 @@ func _evaluate_phase() -> void:
 			_check_camera_shake()
 			_check_ship_wear()
 			_check_soundscape()
+			_check_debris()
 			_check_rarity_travels()
 			_check_affix_pools()
 			_check_item_names()
@@ -7523,6 +7524,325 @@ func _cutoff() -> float:
 		AudioServer.get_bus_effect(sfx, 0) as AudioEffectLowPassFilter
 	)
 	return muffle.cutoff_hz if muffle != null else 0.0
+
+
+## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.
+##
+## Three VISUALS V3 items share one node, because they are one shape:
+## something gives way at a point and bits of it leave in a hurry. What
+## differs is which way they leave and how bright they are, and that is two
+## arguments rather than three systems.
+##
+## Every number here is read back from the layer rather than looked at. The
+## gate sits on the node's `visible`, not inside the decisions -- the fifth
+## time this project has had to make that split, and the reason the whole
+## thing can be checked with no window open.
+func _check_debris() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	var world: SystemBody = null
+	for body: SystemBody in system.planets():
+		if body.atmosphere_height > 0.0:
+			world = body
+			break
+	_expect(world != null, "the seed grows a planet with air to land on")
+	if world == null:
+		return
+
+	var stage: Node2D = Node2D.new()
+	root.add_child(stage)
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	planet.name = "Planet"
+	stage.add_child(planet)
+	planet.adopt(world)
+
+	var ship: Ship = (load(SHIP_SCENE) as PackedScene).instantiate() as Ship
+	ship.name = "Ship"
+	ship.use_player_input = false
+	stage.add_child(ship)
+
+	var field: DebrisField = DebrisField.new()
+	field.name = "DebrisField"
+	field.ship_path = NodePath("../Ship")
+	stage.add_child(field)
+
+	# One new file, and the two things it listens to were both already
+	# being announced: `hull_impact` since M1 and `carved` since M1.3,
+	# neither with a listener until now. Nothing was added to either.
+	_expect(
+		ship.hull_impact.get_connections().size() == 1
+		and planet.carved.get_connections().size() == 1,
+		"the hull and the ground are listened to, and neither had to change",
+	)
+	_expect(
+		field.get_child_count() == DebrisField.BURSTS + 1,
+		"%d pooled bursts and the one standing cloud" % DebrisField.BURSTS,
+	)
+
+	# A graze throws less than a crash, and a tap throws nothing at all --
+	# a ship settling onto its feet must not spray sparks.
+	var sparks: Callable = func(speed: float) -> int:
+		for pooled: Node in field._pool:
+			(pooled as GPUParticles2D).emitting = false
+		ship.linear_velocity = Vector2(0.0, -speed)
+		ship.hull_impact.emit(speed, 0.2)
+		var most: int = 0
+		for pooled: Node in field._pool:
+			var one: GPUParticles2D = pooled as GPUParticles2D
+			if one.emitting:
+				most = maxi(most, one.amount)
+		return most
+	var crash: int = sparks.call(DebrisField.REFERENCE_SPEED)
+	var graze: int = sparks.call(DebrisField.REFERENCE_SPEED * 0.25)
+	var tap: int = sparks.call(DebrisField.REFERENCE_SPEED * 0.02)
+	_expect(
+		crash == DebrisField.MOST_SPARKS,
+		"a hit at the reference speed throws everything it has (%d)" % crash,
+	)
+	_expect(
+		graze > 0 and graze < crash,
+		"a quarter of the speed throws a quarter of the grit (%d of %d)" % [graze, crash],
+	)
+	_expect(tap == 0, "and setting down gently throws none of it (%d)" % tap)
+
+	# Backwards, because that is the way the thing it hit pushed.
+	for pooled: Node in field._pool:
+		(pooled as GPUParticles2D).emitting = false
+	ship.linear_velocity = Vector2(200.0, 0.0)
+	ship.hull_impact.emit(200.0, 0.2)
+	var thrown: Vector2 = _spray_of(field)
+
+	# Two throws per strike. ASSETLIST asks for both a hot dot and a strip
+	# of chips at an impact, and they are not the same event seen twice:
+	# the light goes instantly and the pieces it lit are still there
+	# afterwards, which is why the chips are given the longer life.
+	var busy: Array[GPUParticles2D] = []
+	for pooled: Node in field._pool:
+		if (pooled as GPUParticles2D).emitting:
+			busy.append(pooled as GPUParticles2D)
+	_expect(
+		busy.size() == 2,
+		"a strike throws light and pieces, not one standing for both (%d)" % busy.size(),
+	)
+	var additive: int = 0
+	var lit: int = 0
+	var cut: int = 0
+	for one: GPUParticles2D in busy:
+		var skin: CanvasItemMaterial = one.material as CanvasItemMaterial
+		if skin == null:
+			continue
+		if skin.blend_mode == CanvasItemMaterial.BLEND_MODE_ADD:
+			additive += 1
+			lit = one.amount
+		if skin.particles_animation and skin.particles_anim_h_frames > 1:
+			cut += 1
+	_expect(additive == 1, "the hot one burns through what is behind it, the other does not")
+	_expect(
+		cut == 1,
+		"and the three frame strip is cut into three, so the chips are not all one chip",
+	)
+	_expect(
+		lit > 0 and busy[0].explosiveness == 1.0 and busy[1].explosiveness == 1.0,
+		"everything leaves at once rather than trickling out over the lifetime",
+	)
+
+	# And nothing vanishes. A grain at full strength for its whole life and
+	# then gone between two frames reads as the effect being switched off,
+	# and at a sixtieth of a second a flicker is the one thing a pixel
+	# screen shows most clearly.
+	var abrupt: int = 0
+	for pooled: Node in field._pool:
+		var how: ParticleProcessMaterial = (pooled as GPUParticles2D).process_material
+		if how.alpha_curve == null:
+			abrupt += 1
+	var cloud: ParticleProcessMaterial = field._dust.process_material
+	_expect(
+		abrupt == 0 and cloud.alpha_curve != null,
+		"every bit of this fades out instead of being taken away (%d abrupt)" % abrupt,
+	)
+
+	# Size from the strip, not from the call. The dot is authored at 24
+	# texels and the chips at 9, so one hand-tuned scale range cannot suit
+	# both -- the first version used one and made the chips invisible.
+	var reach: Callable = func(one: GPUParticles2D) -> float:
+		var how: ParticleProcessMaterial = one.process_material
+		return how.scale_max * float(one.texture.get_height())
+	_expect(
+		absf(reach.call(busy[0]) - reach.call(busy[1])) < 0.01
+		and absf(reach.call(busy[0]) - DebrisField.GRIT.y) < 0.01,
+		"two strips authored at different sizes land at the same %.1f px on screen" % [
+			DebrisField.GRIT.y,
+		],
+	)
+	_expect(
+		thrown.dot(ship.linear_velocity.normalized()) < -0.9,
+		"grit comes off against the way the ship was going (%.2f, %.2f)" % [
+			thrown.x, thrown.y,
+		],
+	)
+
+	# Dust out of a hole leaves along the local up, not along the shot.
+	# On a round world that is the surface normal, and it is also the way
+	# it will fall back.
+	var out: Vector2 = Vector2.RIGHT.rotated(0.7)
+	var hole: Vector2 = planet.global_position + out * planet.surface_radius
+	for pooled: Node in field._pool:
+		(pooled as GPUParticles2D).emitting = false
+	planet.carved.emit(hole, 24.0)
+	_expect(
+		_spray_of(field).dot(out) > 0.99,
+		"and rock out of a fresh crater leaves straight up from the surface",
+	)
+
+	# The pool is a pool. The one place a run of impacts is certain is a
+	# ship skidding down a slope, which is exactly when allocating an
+	# emitter per contact would be worst.
+	var before: int = field.get_child_count()
+	for bounce: int in range(DebrisField.BURSTS * 4):
+		ship.hull_impact.emit(250.0, 0.1)
+	_expect(
+		field.get_child_count() == before,
+		"%d impacts share %d emitters and allocate nothing" % [
+			DebrisField.BURSTS * 4, DebrisField.BURSTS,
+		],
+	)
+
+	_check_nozzle_dust(planet, ship, field)
+
+	Presentation.wanted = false
+	field._physics_process(1.0 / 60.0)
+	_expect(
+		not field.visible,
+		"F8 takes the whole lot away, bursts already in flight included",
+	)
+	Presentation.wanted = true
+	stage.free()
+
+
+## Kurz spod dysz: trzy warunki naraz, kazdy sam w sobie go gasi.
+##
+## The rule VISUALS V3 asks for is "density from air density and height",
+## and the third factor is the one that is easy to leave out: a ship can be
+## two metres over thick ground with its engines shut, and the ground does
+## not care. So the share is a product of three, and the test kills each
+## one separately -- a sum, or a pair, would pass most of these.
+func _check_nozzle_dust(planet: Planet, ship: Ship, field: DebrisField) -> void:
+	var up: Vector2 = Vector2.UP.rotated(0.35)
+	var ground: float = planet.surface_radius_at(planet.global_position + up * 1000.0)
+
+	# Pointed so the main drive pushes away from the planet, which is what
+	# throws its exhaust at it. Found rather than assumed: which way a hull
+	# carries its drive is the hull's business.
+	var drive: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 1.0
+		if drive == null or engine.data.max_thrust > drive.data.max_thrust:
+			drive = engine
+	_expect(drive != null, "the ship has an engine to land on")
+	if drive == null:
+		return
+
+	# The main drive alone, with everything else shut. Not every engine at
+	# full: a ship firing all of them at once really is blasting the ground
+	# whichever way up it is, which the first version of the inverted check
+	# below measured and called a failure of the geometry it was aiming at.
+	var settle: Callable = func(height: float, air: float, power: float) -> float:
+		ship.global_position = planet.global_position + up * (ground + height)
+		ship.global_rotation = up.angle() - drive.thrust_direction().angle()
+		for engine: EngineInstance in ship.engines:
+			engine.throttle = power if engine == drive else 0.0
+		ship.air_density = air
+		return field.stir()
+
+	var landing: float = settle.call(6.0, 1.0, 1.0)
+	_expect(landing > 0.0, "a landing burn in thick air raises dust (%.2f)" % landing)
+	_expect(
+		field._dust.emitting and field._dust.amount_ratio > 0.0,
+		"and the cloud is actually asked for (%.2f)" % field._dust.amount_ratio,
+	)
+	# Under the ship, on the ground -- not at the nozzles. The dust is the
+	# surface being disturbed, not the engine making smoke.
+	_expect(
+		absf(planet.height_above_terrain(field._dust.global_position)) < 1.0
+		and field._dust.global_position.distance_to(ship.global_position) < 8.0,
+		"thrown from the ground under the ship rather than from the nozzle",
+	)
+
+	# Each of the three, on its own.
+	var airless: float = settle.call(6.0, 0.0, 1.0)
+	var coasting: float = settle.call(6.0, 1.0, 0.0)
+	var high: float = settle.call(DebrisField.DUST_REACH * 1.5, 1.0, 1.0)
+	_expect(
+		airless == 0.0,
+		"the same burn over an airless rock raises nothing (%.2f)" % airless,
+	)
+	_expect(
+		coasting == 0.0,
+		"nor does hovering with the engines shut (%.2f)" % coasting,
+	)
+	_expect(
+		high == 0.0,
+		"nor does burning hard out of reach of the ground (%.2f)" % high,
+	)
+	_expect(
+		not field._dust.emitting,
+		"and the cloud is put away when any of the three fails",
+	)
+
+	# A slope, not a step. Twice as high is less dust, and the two ends
+	# agree with the middle -- an effect that switched on at a threshold
+	# would read as a bug in the altimeter.
+	var close: float = settle.call(DebrisField.DUST_REACH * 0.2, 1.0, 1.0)
+	var far: float = settle.call(DebrisField.DUST_REACH * 0.8, 1.0, 1.0)
+	_expect(
+		close > far and far > 0.0,
+		"dust thins out with height instead of stopping (%.2f against %.2f)" % [
+			close, far,
+		],
+	)
+	var thin: float = settle.call(DebrisField.DUST_REACH * 0.2, 0.4, 1.0)
+	_expect(
+		thin < close and thin > 0.0,
+		"and with the air, the same way (%.2f against %.2f)" % [thin, close],
+	)
+
+	# Upside down. The exhaust is pointed at the sky, so the ground is not
+	# being blown about however hard the drive is working.
+	settle.call(6.0, 1.0, 1.0)
+	ship.global_rotation = (-up).angle() - drive.thrust_direction().angle()
+	var inverted: float = field.stir()
+	_expect(
+		inverted == 0.0,
+		"a ship burning away from the ground does not stir it at all (%.2f)" % inverted,
+	)
+
+	# And size counts, not just aim. Dividing by the engines that happen to
+	# face the right way read one attitude thruster nudging the nose as a
+	# full landing burn -- the ratio was right and the magnitude had gone.
+	var nudge: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if nudge == null or engine.data.max_thrust < nudge.data.max_thrust:
+			nudge = engine
+	var burn: float = settle.call(6.0, 1.0, 1.0)
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 1.0 if engine == nudge else 0.0
+	ship.global_rotation = up.angle() - nudge.thrust_direction().angle()
+	var poke: float = field.stir()
+	_expect(
+		nudge != drive and poke < burn,
+		"a %.0f N thruster raises less than a %.0f N drive (%.2f against %.2f)" % [
+			nudge.data.max_thrust, drive.data.max_thrust, poke, burn,
+		],
+	)
+
+
+## Which way the most recent burst threw things.
+func _spray_of(field: DebrisField) -> Vector2:
+	for pooled: Node in field._pool:
+		var one: GPUParticles2D = pooled as GPUParticles2D
+		if one.emitting:
+			var how: ParticleProcessMaterial = one.process_material
+			return Vector2(how.direction.x, how.direction.y).normalized()
+	return Vector2.ZERO
 
 
 ## Statek nosi na sobie swój stan: cieplo, uszkodzenia, kulejacy silnik.
