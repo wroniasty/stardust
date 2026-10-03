@@ -75,7 +75,17 @@ var _aim: AimHud = null
 const DEBUG_CRATER_RADIUS: float = 28.0
 
 
+## The save this run is picking up, or empty for a fresh start. Read
+## before anything is built, because which system to open is the first
+## question the world asks and the save is what answers it.
+var _resuming: Dictionary = {}
+
+
 func _ready() -> void:
+	if OS.get_cmdline_user_args().has("resume"):
+		var saved: Dictionary = SaveGame.read()
+		if SaveGame.is_valid(saved):
+			_resuming = saved
 	_open_system()
 	_place_ship()
 	var ship: Ship = (player as Player).ship
@@ -92,6 +102,7 @@ func _ready() -> void:
 	_build_energy_hud()
 	_build_scanner()
 	_build_jump_hud()
+	_finish_resume()
 
 
 ## The planet configurator edits the planet; putting the ship somewhere that
@@ -169,6 +180,10 @@ func _build_jump_hud() -> void:
 	_jump.refused.connect(_on_jump_refused)
 	_jump.arrived.connect(_on_jump_arrived)
 	_jump.misjumped.connect(_on_misjumped)
+	# A misjump is an arrival too, and the one most worth having
+	# written down: the pilot may be about to find out they cannot
+	# leave.
+	_jump.misjumped.connect(func(_toward: int, _adrift_at: Vector2) -> void: _autosave())
 
 	_veil = TransitVeil.new()
 	add_child(_veil)
@@ -239,8 +254,46 @@ func _on_jump_refused(reason: String) -> void:
 	print("jump: %s" % reason)
 
 
+## Arriving is the autosave point.
+##
+## IDEAS.md section 10 puts it here and the reason is the shape of the
+## game rather than convenience: a jump is the only thing that changes
+## which universe you are in, so it is the only moment where losing
+## progress costs more than a flight back. Everything else -- a crate
+## picked up, a hole dug -- is a delta that the next jump writes down.
 func _on_jump_arrived(index: int) -> void:
-	print("arrived at %s" % Galaxy.system(index).display_name)
+	print("arrived at %s" % Galaxy.current().display_name)
+	_autosave()
+
+
+func _autosave() -> void:
+	var ship: Ship = (player as Player).ship
+	if SaveGame.write(SaveGame.capture(Galaxy, ship)):
+		print("saved to %s" % SaveGame.PATH)
+
+
+## The rest of picking up where a save left off: the ship.
+##
+## The galaxy half already happened, in `_open_system`, because which
+## system to build is the first question the world asks. This is what
+## is left once there is a hull to put the loadout back into.
+##
+## Not automatic. There is no menu until M6, and a game that silently
+## resumed would be a game a developer cannot start fresh without
+## finding a file -- so it is asked for, with `-- resume` on the command
+## line, and M6's menu will call the same function.
+func _finish_resume() -> void:
+	if _resuming.is_empty():
+		return
+	var ship: Ship = (player as Player).ship
+	SaveGame.restore_ship(_resuming, ship)
+	_jump.bind(ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at)
+	_jump_hud.bind(
+		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, _jump, Galaxy.at
+	)
+	print("resumed in %s, %.0f px out, fuel %.0f" % [
+		Galaxy.current().display_name, ship.global_position.length(), ship.fuel,
+	])
 
 
 func _build_loadout() -> void:
@@ -425,7 +478,20 @@ func _open_system() -> void:
 	# so setting it without rebuilding would leave the layout belonging to
 	# the previous one.
 	Galaxy.reset(world_seed)
-	var here: StarSystem = Galaxy.system(Galaxy.here)
+	# And the saved address on top of it, before anything is built. The
+	# first version restored after the world was up, which opened the
+	# starting system, generated its terrain and threw it away -- a
+	# visible flash of the wrong place, in a feature whose whole job is
+	# putting the pilot back where they were.
+	if not _resuming.is_empty():
+		var sky: Dictionary = _resuming["galaxy"]
+		Galaxy.reset(int(sky["seed"]))
+		Galaxy.here = int(sky["here"])
+		Galaxy.at = sky["at"] as Vector2
+		Galaxy.time = float(sky["time"])
+		for key: Variant in sky["deltas"]:
+			Galaxy.deltas[key] = (sky["deltas"][key] as Dictionary).duplicate(true)
+	var here: StarSystem = Galaxy.current()
 	StreamingManager.loot = LootGenerator
 	# The one delta store, where the design puts it and where a save file
 	# will look for it.
@@ -433,10 +499,19 @@ func _open_system() -> void:
 	StreamingManager.bind(here, systems, Galaxy.time)
 	StreamingManager.track((player as Player).ship)
 	StreamingManager.crate_placed.connect(_on_crate_placed)
-	planet = StreamingManager.force_awake(here.planets()[0]) as Planet
-	print("system %s (#%d of %d): arriving at %s, %.0f px out" % [
-		here.display_name, Galaxy.here, Galaxy.map.count(),
-		planet.body.display_name, planet.body.orbit_radius,
+	planet = (
+		StreamingManager.force_awake(here.planets()[0]) as Planet
+		if not here.planets().is_empty() else null
+	)
+	print("system %s (%s of %d): %s" % [
+		here.display_name,
+		"adrift" if Galaxy.here < 0 else "#%d" % Galaxy.here,
+		Galaxy.map.count(),
+		(
+			"arriving at %s, %.0f px out" % [
+				planet.body.display_name, planet.body.orbit_radius,
+			] if planet != null else "nothing here"
+		),
 	])
 
 

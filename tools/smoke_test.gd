@@ -1012,6 +1012,7 @@ func _evaluate_phase() -> void:
 			_check_jump_sequence()
 			_check_transit_veil()
 			_check_misjump()
+			_check_save()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -4632,6 +4633,144 @@ func _check_misjump() -> void:
 
 	pilot.free()
 	galaxy.free()
+	ship.queue_free()
+
+
+## Zapis: ziarno plus delty, i nic ponadto.
+##
+## The measure of this one is how **little** it stores. A hundred and
+## eleven systems, their stars, planets, moons, terrain and names all
+## come back from one number, so a save holds only the two things a seed
+## cannot produce: what the player changed about the world, and what the
+## player has. The day it has to write down where a planet is, the
+## generator has stopped being the truth -- so the shape of the file is
+## checked here as well as its contents.
+##
+## Written with `var_to_str` rather than JSON, because a save is full of
+## `Vector2`s and typed arrays and JSON turns every one of them into
+## something else.
+func _check_save() -> void:
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(20260922)
+	var ship: Ship = _spawn_ship()
+	var loot: Node = LOOT_SCRIPT.new()
+
+	# Something worth losing: a legendary drive with rolled numbers, a
+	# hold with things in it, a dented hull and a half-empty tank, in a
+	# system nobody started in.
+	var prize: JumpDriveData = loot.jump_drive(31337, 4)
+	ship.jump_bay.installed = prize
+	ship.rebuild_control_groups(false)
+	ship.cargo.append({"item": loot.weapon(99, 3), "rarity": 3})
+	ship.cargo.append({"item": loot.scanner(98, 2), "rarity": 2})
+	ship.hull_integrity = 0.62
+	ship.fuel = ship.fuel_capacity() * 0.4
+	ship.global_position = Vector2(12345.0, -6789.0)
+	ship.global_rotation = 1.234
+	galaxy.here = 7
+	galaxy.at = galaxy.map.positions[7]
+	galaxy.time = 4242.5
+	galaxy.deltas[555] = {"taken": [1, 2, 3]}
+	loot.free()
+
+	var saved: Dictionary = SaveGame.capture(galaxy, ship)
+	_expect(SaveGame.is_valid(saved), "a capture is something this build can read back")
+
+	# The shape. Nothing in here may be a planet, an orbit or a name:
+	# those come from the seed, and a save that carried them would be a
+	# save that could disagree with the generator.
+	var sky: Dictionary = saved["galaxy"]
+	var extra: Array[String] = []
+	for key: Variant in sky:
+		if not ["seed", "here", "at", "time", "deltas"].has(String(key)):
+			extra.append(String(key))
+	_expect(
+		extra.is_empty(),
+		"the universe is a seed, an address, a clock and a list of changes (%s)" % [extra],
+	)
+
+	# Round trip through the file, which is where the types go wrong if
+	# they are going to.
+	var path: String = "user://_smoke_test.save"
+	_expect(SaveGame.write(saved, path), "it writes")
+	var read_back: Dictionary = SaveGame.read(path)
+	_expect(
+		SaveGame.is_valid(read_back)
+		and int(read_back["galaxy"]["seed"]) == 20260922
+		and (read_back["galaxy"]["at"] as Vector2).is_equal_approx(galaxy.at),
+		"and reads, with a Vector2 still a Vector2 on the way back",
+	)
+
+	# And back into a world that has been reset underneath it.
+	var other: Node = GALAXY_SCRIPT.new()
+	root.add_child(other)
+	other.reset(1)
+	var blank: Ship = _spawn_ship()
+	_expect(
+		SaveGame.restore(read_back, other, blank),
+		"a save goes back into a galaxy that was something else",
+	)
+	_expect(
+		other.galaxy_seed == 20260922 and other.here == 7
+		and other.at.is_equal_approx(galaxy.at)
+		and is_equal_approx(other.time, 4242.5)
+		and other.map.count() == galaxy.map.count(),
+		"the address and the clock come back, and the map with them",
+	)
+	_expect(
+		other.deltas.has(555) and (other.deltas[555]["taken"] as Array).size() == 3,
+		"so do the changes the seed cannot make",
+	)
+
+	# The rolled numbers, which are the thing a hand-written field list
+	# would quietly lose: a legendary drive handed back with common
+	# figures looks fine until somebody reads the card.
+	var restored: JumpDriveData = blank.jump_drive()
+	_expect(
+		restored != null and restored.rarity == prize.rarity
+		and is_equal_approx(restored.reach, prize.reach)
+		and is_equal_approx(restored.fuel_per_ly, prize.fuel_per_ly)
+		and restored.affixes == prize.affixes,
+		"a rolled module comes back rolled, affixes and all (%s)" % [restored.title()],
+	)
+	_expect(
+		blank.cargo.size() == 2
+		and (blank.cargo[0]["item"] as ModuleData) is WeaponData
+		and int(blank.cargo[1]["rarity"]) == 2,
+		"and so does the hold, in order and with its rarities",
+	)
+	_expect(
+		is_equal_approx(blank.hull_integrity, 0.62)
+		and blank.global_position.is_equal_approx(Vector2(12345.0, -6789.0))
+		and is_equal_approx(blank.global_rotation, 1.234),
+		"the ship is where it was, pointing where it was, as dented as it was",
+	)
+	_expect(
+		blank.fuel <= blank.fuel_capacity() + 0.001 and blank.fuel > 0.0,
+		"with a tank that holds what it holds now, not what it held then (%.0f of %.0f)" % [
+			blank.fuel, blank.fuel_capacity(),
+		],
+	)
+
+	# A save from another shape is declined rather than half-read. A
+	# half-read save is a corrupt universe that looks fine until the
+	# pilot lands somewhere that is not there any more.
+	var ancient: Dictionary = read_back.duplicate(true)
+	ancient["version"] = SaveGame.VERSION - 1
+	_expect(
+		not SaveGame.is_valid(ancient) and not SaveGame.restore(ancient, other, blank),
+		"and a save this build does not know is refused, not guessed at",
+	)
+	_expect(
+		SaveGame.read("user://_no_such_file.save").is_empty(),
+		"a missing file is simply no save",
+	)
+
+	SaveGame.forget(path)
+	other.free()
+	galaxy.free()
+	blank.queue_free()
 	ship.queue_free()
 
 

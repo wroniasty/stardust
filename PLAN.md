@@ -420,9 +420,16 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   być w miejscu, którego na mapie nie ma. `StarSystem.deep_space()`: bez
   gwiazdy, bez ciał, bez mass locka. Zawartość sektora (wraki, piraci,
   porzucony tanker) idzie z M5, bo tam mieszka. Szczegóły w IDEAS.md sekcja 10.
-- [ ] Zapis gry: seed plus delty, autosave przy skoku.
+- [x] Zapis gry: seed plus delty, autosave przy skoku.
+  `SaveGame` — ziarno, adres, zegar, delty i to, co ma na sobie statek.
+  Moduły pakowane z listy właściwości, nie z ręcznej listy pól, bo ręczna
+  zapomina to, co ktoś dodał w zeszłym tygodniu. Wznowienie przez
+  `-- resume`; menu, które zrobi z tego rzecz zwykłą, jest w M6.
 
 Gotowe, gdy: wylot z jednego systemu i wlot do drugiego czuje się jak jeden lot.
+
+**Zamknięte.** Dziewięć pozycji, plus ostatnia zaległa z M3 (tankowanie w
+doku), która odblokowała się sama w chwili, gdy bak stał się modułem.
 
 ---
 

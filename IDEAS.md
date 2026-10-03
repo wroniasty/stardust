@@ -3063,6 +3063,34 @@ Jeden seed galaktyki. Systemy rozłożone przez Poisson disk sampling, odległo�
 
 Save = seed galaktyki plus słownik delt.
 
+**Realizacja (M4).** Miarą tego kawałka jest to, jak **mało** zapisuje. Sto
+kilkanaście systemów, ich gwiazdy, planety, księżyce, teren i nazwy wracają z
+jednej liczby, więc plik trzyma tylko dwie rzeczy, których ziarno nie
+wyprodukuje: co gracz zmienił w świecie i co gracz ma. Dzień, w którym zapis
+będzie musiał zapamiętać, **gdzie jest planeta**, jest dniem, w którym
+generator przestał być prawdą — i dlatego kształt pliku jest sprawdzany
+testem na równi z jego treścią.
+
+Moduły pakowane przez `get_property_list()`, a nie przez ręczną listę pól.
+Ręczna lista zapomina to pole, które ktoś dodał w zeszłym tygodniu, a
+zapomina zawsze liczbę z rzutu — więc zapis oddawałby legendarny napęd z
+pospolitymi wartościami i wyglądałoby to dobrze aż do pierwszego odczytania
+karty.
+
+`var_to_str`, nie JSON: zapis jest pełen `Vector2` i tablic typowanych, a
+JSON każdy z nich zamienia w coś innego. Pule są **przycinane przy
+wczytaniu**, nie ufane — zapis sprzed wymiany baku nie może oddać więcej,
+niż mieści ten, który jest teraz. Zapis o nieznanym kształcie jest
+**odrzucany, nie zgadywany**; pół-odczytany zapis to uszkodzony wszechświat,
+który wygląda dobrze do chwili, gdy pilot ląduje tam, gdzie już nic nie ma.
+
+Autosave przy przylocie — i przy misjumpie, który jest przylotem najbardziej
+wartym zapisania, bo pilot za chwilę może się dowiedzieć, że nie odleci.
+Wznowienie dzieje się **przed zbudowaniem świata**: pierwsza wersja
+odtwarzała stan po starcie, co otwierało system startowy, generowało jego
+teren i wyrzucało go — widoczne mknięcie złego miejsca w funkcji, której
+całym zadaniem jest postawić pilota tam, gdzie był.
+
 ### Realizacja (M4): liczby zmierzone, nie zgadnięte
 
 `GalaxyMap` — czysta dana, jak `StarSystem`: galaktyka istnieje, zanim
