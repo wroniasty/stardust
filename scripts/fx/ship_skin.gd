@@ -45,6 +45,34 @@ const PLUME_BOOST_WIDTH: float = 0.5
 ## out until the timer finishes.
 const GEAR_DIMMEST: float = 0.4
 
+## What a hull at full heat is tinted. Over one on purpose: `hull_heat`
+## reaching 1.0 is the ship about to die of it, and a glow that stopped at
+## white would make the last half of that range look like the first.
+const HEAT_GLOW: Color = Color(1.45, 1.15, 0.95)
+
+## And what nothing left of it looks like. Scorched rather than merely
+## dark, so a wrecked hull reads as damaged instead of as unlit -- the
+## night side already owns dark.
+const SCORCHED: Color = Color(0.46, 0.33, 0.29)
+
+## How dark a nozzle gets at zero condition. A dead engine is visibly a
+## dead engine before the pilot looks at the configuration report.
+const RUINED_NOZZLE: float = 0.45
+
+## Seconds for a plume to fall away once the throttle shuts.
+##
+## The reason this exists is the torque jets. They are impulse engines: the
+## delta-sigma modulator in `EngineInstance.advance()` gives them a
+## throttle that is 0 or 1 on any given tick and the right average over
+## many, so a plume following it exactly strobes at sixty hertz. Decaying
+## instead turns a 30% duty cycle into a jet that stutters, which is what
+## it is -- and the average brightness still tracks the duty cycle, so
+## nothing is being hidden.
+##
+## Rising is instant. A burn starts when it starts; only the dying away
+## has any physical reason to lag.
+const PLUME_AFTERGLOW: float = 0.07
+
 var ship: Ship = null
 
 var _hull: StripSprite = null
@@ -52,6 +80,10 @@ var _nozzles: Dictionary = {} ## mount name -> StripSprite
 var _plumes: Dictionary = {} ## mount name -> StripSprite
 var _exits: Dictionary = {} ## mount name -> float, design px from mount to lip
 var _guns: Dictionary = {} ## hardpoint name -> StripSprite
+
+## Per engine, the flame as it is drawn rather than as it is commanded:
+## instant up, PLUME_AFTERGLOW down. Keyed by mount name like the rest.
+var _afterglow: Dictionary = {}
 var _legs: Array[Dictionary] = [] ## {strut, pad, at}
 
 ## What the skin replaces, kept so `F8` can hand the view back to it.
@@ -95,6 +127,7 @@ func rebuild() -> void:
 	_nozzles.clear()
 	_plumes.clear()
 	_exits.clear()
+	_afterglow.clear()
 	_guns.clear()
 	_legs.clear()
 	_hull = null
@@ -228,11 +261,31 @@ func refresh(delta: float) -> void:
 ## `show_strip()` had left on it. A skin whose ticking cannot be tested is
 ## a skin whose ticking is not tested.
 func paint(delta: float, shade: Color) -> void:
+	var worn: Color = hull_shade(shade)
 	if _hull != null:
-		_hull.self_modulate = shade
+		_hull.self_modulate = worn
 	_tick_engines(delta, shade)
-	_tick_guns(shade)
-	_tick_gear(shade)
+	_tick_guns(worn)
+	_tick_gear(worn)
+
+
+## What the hull is painted: the light on it, what is left of it, and how
+## hot it is, in that order.
+##
+## The order is the argument. Scorching first and glow second means a wreck
+## on re-entry is a glowing wreck rather than a clean ship -- heat is
+## something happening to the hull now, damage is what has already happened
+## to it, and the second does not undo the first.
+##
+## Both numbers were already there. `hull_integrity` and `hull_heat` have
+## been computed every tick since M1 and nothing had ever shown either of
+## them anywhere but as a line of text.
+func hull_shade(lit: Color) -> Color:
+	var hurt: float = 1.0 - clampf(ship.hull_integrity, 0.0, 1.0)
+	var worn: Color = lit.lerp(
+		Color(lit.r * SCORCHED.r, lit.g * SCORCHED.g, lit.b * SCORCHED.b), hurt
+	)
+	return worn.lerp(HEAT_GLOW, clampf(ship.hull_heat, 0.0, 1.0))
 
 
 ## Shows or hides what the skin replaces, and shades it either way.
@@ -259,7 +312,13 @@ func _tick_engines(delta: float, shade: Color) -> void:
 			# fixed nozzle recomputes the angle it already had, and a branch
 			# to avoid that is a branch to get wrong.
 			nozzle.rotation = aim
-			nozzle.self_modulate = shade
+			# Darkened by its own condition, not the hull's: a ship can be
+			# sound with one jet beaten in, and that is exactly the case
+			# the damage model exists to make visible.
+			var sound: float = lerpf(RUINED_NOZZLE, 1.0, clampf(engine.health, 0.0, 1.0))
+			nozzle.self_modulate = Color(
+				shade.r * sound, shade.g * sound, shade.b * sound
+			)
 
 		var plume: StripSprite = _plumes.get(engine.mount.name) as StripSprite
 		if plume == null:
@@ -268,7 +327,10 @@ func _tick_engines(delta: float, shade: Color) -> void:
 		# engine's rating -- see EngineInstance.exhaust_flow(). Reading the
 		# throttle here instead is exactly how boost managed to look the same
 		# as not boosting for a whole milestone.
-		var flow: float = engine.exhaust_flow()
+		# As drawn, not as commanded. See PLUME_AFTERGLOW: a torque jet's
+		# throttle is 0 or 1 on any given tick, and a flame following that
+		# exactly is a strobe rather than a jet pulsing.
+		var flow: float = _afterglow_of(engine, delta)
 		plume.visible = flow > PLUME_CUTOFF
 		if not plume.visible:
 			continue
@@ -291,6 +353,18 @@ func _tick_engines(delta: float, shade: Color) -> void:
 		plume.self_modulate = Color(1.0, 1.0, 1.0, throttle)
 		plume.drive(flow)
 		plume.advance(delta)
+
+
+## The flame this engine is drawing with: straight up to whatever it is
+## throwing, and falling away over PLUME_AFTERGLOW when it stops.
+func _afterglow_of(engine: EngineInstance, delta: float) -> float:
+	var now: float = engine.exhaust_flow()
+	var was: float = float(_afterglow.get(engine.mount.name, 0.0))
+	var drawn: float = now if now >= was else lerpf(
+		was, now, clampf(delta / maxf(PLUME_AFTERGLOW, 0.001), 0.0, 1.0)
+	)
+	_afterglow[engine.mount.name] = drawn
+	return drawn
 
 
 func _tick_guns(shade: Color) -> void:

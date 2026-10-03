@@ -329,12 +329,33 @@ Największy skok wrażenia na najmniej kodu, i dotyka wyłącznie shaderów.
 
 Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez patrzenia na nią.
 
-### V2: Statek
+### V2: Statek — **zamknięte**
 
-- [ ] Kadłub przestaje być trójkątem: sylwetka z segmentów, widoczne montaże silników.
-- [ ] Wydech zależny od typu silnika (MAIN ciągły, TORQUE impulsowy — modulacja delta-sigma jest już w kodzie i powinna być widoczna).
-- [ ] Poświata od `hull_heat`, od ledwie widocznej do białej.
-- [ ] Ślady uszkodzeń od `hull_integrity`, uszkodzony silnik widocznie kuleje.
+- [x] **Kadłub przestaje być trójkątem**: sprite kadłuba plus widoczne
+  dysze, działo i podwozie (VS). Sama grafika to jeszcze placeholder, ale
+  sylwetka i montaże są tam, gdzie mają być.
+- [x] **Wydech zależny od typu silnika.** Modulacja delta-sigma była w
+  kodzie od M2 i była **niewidoczna z własnej winy**: przepustnica dyszy
+  obrotowej to 0 albo 1 na danym ticku, więc płomień idący za nią dokładnie
+  stroboskopuje w 60 Hz zamiast czytać się jako impuls. Pióropusz gaśnie
+  teraz przez 70 ms (w górę natychmiast — zapłon zaczyna się, kiedy się
+  zaczyna), więc 30% wypełnienia wygląda jak zacinający się odrzut, a
+  średnia jasność dalej śledzi wypełnienie. Nic nie jest ukryte.
+- [x] **Poświata od `hull_heat`.** Zmierzone na zrzucie: średnia jasność
+  kadłuba 89 → 108 przy cieple 0,75. Barwa docelowa jest **powyżej jedynki**
+  celowo — `hull_heat` dobijające do 1,0 to statek, który zaraz od tego
+  zginie, a poświata kończąca się na bieli robiłaby z drugiej połowy tego
+  zakresu to samo co z pierwszej.
+- [x] **Ślady uszkodzeń od `hull_integrity`, uszkodzony silnik kuleje.**
+  Kadłub 89 → 49 i brązowieje (przypalony, nie po prostu ciemny — ciemność
+  należy już do strony nocnej). Dysza ciemnieje **własną** kondycją, nie
+  kadłuba: statek może być cały z jedną rozwaloną dyszą, i to jest ta
+  asymetria, dla której model uszkodzeń istnieje. Szczyt jasności dyszy
+  188 → 96. Pióropusz skraca się sam, bez linijki kodu na to — bo
+  `effective_output()` od zawsze zawierał `condition_factor()`, tylko nikt
+  tego nie rysował.
+  **Kolejność jest argumentem**: najpierw przypalenie, potem żar. Wrak przy
+  wejściu w atmosferę jest świecącym wrakiem, a nie czystym statkiem.
 - [x] Podwozie jako rysowana geometria, nie tylko punkty kontaktu. Zastrzał wychodzi z obrysu kadłuba (liczony co rysowanie, więc trzyma się kadłuba przerobionego w narzędziu kreatywnym), stopka leży płasko w miejscu, w którym solver naprawdę dotknie. W trakcie wysuwania przygaszona — podwozie w połowie drogi nie może czytać się jako podwozie, na którym da się wylądować.
 
 ### V3: Zderzenia, kopanie, kurz

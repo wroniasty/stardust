@@ -988,6 +988,7 @@ func _evaluate_phase() -> void:
 			_check_art()
 			_check_skin()
 			_check_camera_shake()
+			_check_ship_wear()
 			_check_rarity_travels()
 			_check_affix_pools()
 			_check_item_names()
@@ -4536,17 +4537,26 @@ func _check_boost() -> void:
 
 ## The plume sprite the skin built for one engine, found by where it sits.
 func _plume_of(skin: ShipSkin, engine: EngineInstance) -> StripSprite:
-	var deepest: StripSprite = null
+	return _sprite_near(skin, engine.mount.position, ShipSkin.Z_PLUME)
+
+
+## The nearest sprite of one family to a point on the hull.
+##
+## By position and depth rather than by name, because the skin's sprites
+## are built in code and have none worth matching on. Nearest rather than
+## first: a plume sits a little way past its mount, and two mounts can be
+## closer to each other than a plume is to its own.
+func _sprite_near(skin: ShipSkin, at: Vector2, depth: int) -> StripSprite:
+	var best: StripSprite = null
 	for child: Node in skin.get_children():
 		var sprite: StripSprite = child as StripSprite
-		if sprite == null or sprite.z_index != ShipSkin.Z_PLUME:
+		if sprite == null or sprite.z_index != depth:
 			continue
-		if sprite.position.distance_to(engine.mount.position) < 24.0:
-			if deepest == null or sprite.position.distance_to(engine.mount.position) < (
-				deepest.position.distance_to(engine.mount.position)
-			):
-				deepest = sprite
-	return deepest
+		if sprite.position.distance_to(at) > 24.0:
+			continue
+		if best == null or sprite.position.distance_to(at) < best.position.distance_to(at):
+			best = sprite
+	return best
 
 
 ## Every binding the game answers to is one the help screen knows about.
@@ -7390,6 +7400,103 @@ func _check_art() -> void:
 		"and the same node draws an interface glyph at 1:1, Nearest, opaque",
 	)
 	sprite.queue_free()
+
+
+## Statek nosi na sobie swój stan: cieplo, uszkodzenia, kulejacy silnik.
+##
+## Three numbers the simulation has computed every tick since M1 and that
+## nothing had ever shown anywhere but as a line of debug text:
+## `hull_heat`, `hull_integrity` and each engine's `health`. V2 is mostly
+## this -- not new state, just finally looking at what is already there.
+func _check_ship_wear() -> void:
+	var ship: Ship = (load(SHIP_SCENE) as PackedScene).instantiate() as Ship
+	ship.use_player_input = false
+	root.add_child(ship)
+	var skin: ShipSkin = ship.get_node("Presentation") as ShipSkin
+	var lit: Color = Color.WHITE
+
+	# Heat brightens, damage darkens, and the order matters: scorching is
+	# what has already happened to the hull and heat is what is happening
+	# to it now, so a wreck on re-entry is a glowing wreck rather than a
+	# clean ship.
+	ship.hull_integrity = 1.0
+	ship.hull_heat = 0.0
+	var sound: Color = skin.hull_shade(lit)
+	ship.hull_heat = 1.0
+	var hot: Color = skin.hull_shade(lit)
+	ship.hull_heat = 0.0
+	ship.hull_integrity = 0.0
+	var wrecked: Color = skin.hull_shade(lit)
+	ship.hull_heat = 1.0
+	var burning_wreck: Color = skin.hull_shade(lit)
+
+	_expect(hot.v > sound.v, "heat brightens the hull (%.2f against %.2f)" % [hot.v, sound.v])
+	_expect(
+		wrecked.v < sound.v,
+		"damage darkens it (%.2f against %.2f)" % [wrecked.v, sound.v],
+	)
+	_expect(
+		burning_wreck.v > wrecked.v,
+		"and a wreck on re-entry still glows (%.2f against %.2f)" % [
+			burning_wreck.v, wrecked.v,
+		],
+	)
+	_expect(
+		wrecked.r > wrecked.b,
+		"a damaged hull reads as scorched rather than as merely unlit",
+	)
+	ship.hull_integrity = 1.0
+	ship.hull_heat = 0.0
+
+	# An engine wears its own condition, not the hull's: a ship can be
+	# sound with one jet beaten in, and that asymmetry is the whole point
+	# of the damage model.
+	var drive: EngineInstance = ship.engines[0]
+	drive.health = 1.0
+	skin.paint(0.0, lit)
+	var well: float = _nozzle_of(skin, drive).self_modulate.v
+	drive.health = 0.0
+	skin.paint(0.0, lit)
+	var beaten: float = _nozzle_of(skin, drive).self_modulate.v
+	_expect(
+		beaten < well * 0.7,
+		"a beaten nozzle is visibly beaten (%.2f against %.2f)" % [beaten, well],
+	)
+	drive.health = 1.0
+
+	# And the impulse jets stop strobing. A torque engine's throttle is 0
+	# or 1 on any one tick -- the delta-sigma modulator gives it the right
+	# average, not a steady value -- so a flame following it exactly
+	# flickers at sixty hertz instead of reading as a jet pulsing.
+	var jet: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.data.type == EngineData.Type.TORQUE:
+			jet = engine
+	_expect(jet != null, "the stock hull has an impulse jet to watch")
+	jet.throttle = 1.0
+	skin.paint(1.0 / 60.0, lit)
+	var alight: float = _plume_of(skin, jet).self_modulate.a
+	jet.throttle = 0.0
+	skin.paint(1.0 / 60.0, lit)
+	var fading: float = _plume_of(skin, jet).self_modulate.a
+	_expect(alight > 0.5, "a lit jet is lit (%.2f)" % alight)
+	_expect(
+		fading > 0.0 and fading < alight,
+		"and one tick after it shuts it is dying away, not gone (%.2f)" % fading,
+	)
+	for tick: int in range(30):
+		skin.paint(1.0 / 60.0, lit)
+	_expect(
+		_plume_of(skin, jet).self_modulate.a < 0.05
+		or not _plume_of(skin, jet).visible,
+		"half a second later there is nothing left of it",
+	)
+	ship.free()
+
+
+## The nozzle sprite the skin built for one engine.
+func _nozzle_of(skin: ShipSkin, engine: EngineInstance) -> StripSprite:
+	return _sprite_near(skin, engine.mount.position, ShipSkin.Z_NOZZLE)
 
 
 ## Wstrzas kamery: pierwszy odbiornik zdarzenia, czyli dowod, ze szew dziala.
