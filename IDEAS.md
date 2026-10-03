@@ -2975,6 +2975,36 @@ Maszyna stanów w kontrolerze statku:
 3. **Transit**: shader pełnoekranowy (smugi, radialne rozmycie, przesunięcie koloru), 1.5 do 2 s. Pod efektem: zapis delty starego systemu, zwolnienie sceny, generacja nowej z seedu w wątku, instancjonowanie.
 4. **Arrival**: pozycja = `target.outer_radius * (source_pos - target_pos).normalized()`, kierunek zachowany, prędkość zredukowana. Efekt wygasa, lecisz dalej.
 
+**Realizacja (M4).** `JumpController` to cztery stany i jedna reguła na
+każde przejście, i **nic poza tym**: nie rusza statku, nie zwalnia systemu,
+nic nie rysuje. Kiedy stary system ma zniknąć, mówi o tym sygnałem, a robi
+to świat — jedyne miejsce, które wie, z czego system się składa. Ten podział
+jest powodem, dla którego da się to w ogóle testować: skok to jedyna akcja w
+grze, która niszczy scenę, w której zachodzi.
+
+Sama wymiana okazała się darmowa: `StreamingManager.bind()` od początku
+zaczynał od `clear()`, a komentarz przy nim mówił wprost „test albo skok
+między systemami". Statek nie jest dzieckiem żadnego systemu, więc przeżywa
+obie strony.
+
+**Paliwo palone w trakcie ładowania**, nie na starcie i nie na końcu. Stąd
+częściowe spalenie przy przerwaniu bierze się samo, bez drugiej reguły, a
+bak jest czytelny w trakcie. Rata jest **przycinana do reszty opłaty** —
+granica tiku rzadko dzieli czas ładowania, więc ostatni tik 2,4-sekundowego
+spoolu przy 60 Hz liczył pełną stawkę za ułamek sekundy i skok wychodził 0,8%
+droższy, niż kosztował. Mało, i dokładnie taki błąd, który zostaje na zawsze,
+gdy nikt na niego nie patrzy.
+
+**Cel zatrzaśnięty** w chwili rozpoczęcia ładowania. Dziób służy do wybrania
+celu, nie do trzymania go — skok anulowany przez trzystopniowy dryf byłby
+skokiem, którego nikt nie ukończy w zakręcie. Przerywa puszczenie klawisza
+albo trafienie.
+
+**Celowanie liczy się w układzie świata, nie ekranu.** Pierwsza wersja
+pytała przez `canvas_transform` i dawała dobrą odpowiedź z złego powodu:
+galaktyka i system leżą na tej samej płaszczyźnie, więc „dziób w to celuje"
+to pytanie o dwa kursy i kamera nie ma tu nic do powiedzenia.
+
 ### Paliwo jako ryzyko
 
 Skok z niedoborem paliwa nie jest zablokowany, tylko ryzykowny. Brakujący procent to szansa na misjump: pusty sektor międzygwiezdny (typ "systemu" bez gwiazdy: wraki, piraci, porzucony tanker z paliwem) albo dotarcie z uszkodzonym napędem. Analogicznie skok na styku zasięgu.

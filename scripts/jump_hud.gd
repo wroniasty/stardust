@@ -36,12 +36,6 @@ const RING_MARGIN: float = 14.0
 ## own contacts and must not shout over them.
 const MARKER: float = 2.6
 
-## How close to dead ahead a system has to be to count as the one the
-## nose is pointing at. IDEAS.md section 10 asks for fifteen degrees,
-## which is wide enough to hold while turning and narrow enough that two
-## candidates rarely tie.
-const CONE: float = 0.26179939
-
 ## Most systems marked at once, nearest first.
 ##
 ## The same rule the loot markers learned: a scanner that draws every
@@ -63,6 +57,13 @@ var _here: int = 0
 ## fetching it by path is the habit this file's own docstring warns
 ## about and the one that would make the labels untestable.
 var _galaxy: Node = null
+
+## Who decides what the nose is on. The HUD used to work it out itself,
+## through the canvas transform, which gave the right answer for the
+## wrong reason: aiming is a question about two headings in the world
+## and the camera has nothing to say about it. The machine that acts on
+## the answer should be the one that has it.
+var _jump: JumpController = null
 var _canvas: Control = null
 
 var _ink: Palette = Palette.current()
@@ -78,13 +79,19 @@ func _ready() -> void:
 
 
 func bind(
-	ship: Ship, system: StarSystem, map: GalaxyMap, here: int, galaxy: Node = null
+	ship: Ship,
+	system: StarSystem,
+	map: GalaxyMap,
+	here: int,
+	galaxy: Node = null,
+	jump: JumpController = null,
 ) -> void:
 	_ship = ship
 	_system = system
 	_map = map
 	_here = here
 	_galaxy = galaxy
+	_jump = jump
 
 
 func _process(_delta: float) -> void:
@@ -157,26 +164,10 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 	return found
 
 
-## Which system the nose is pointing at, or -1.
-##
-## The nearest to dead ahead inside the cone, not merely the first one in
-## it: two markers a few degrees apart would otherwise be chosen between
-## by the order the grid happened to return them, and a target that
-## changes when you do not move is a target you cannot aim at.
-func target(to_screen: Transform2D, view: Vector2) -> int:
-	if _ship == null or not is_instance_valid(_ship):
-		return -1
-	var nose: Vector2 = to_screen.basis_xform(
-		Vector2.UP.rotated(_ship.global_rotation)
-	).normalized()
-	var best: int = -1
-	var closest: float = cos(CONE)
-	for contact: Dictionary in contacts(to_screen, view):
-		var alignment: float = nose.dot(contact["heading"])
-		if alignment >= closest:
-			closest = alignment
-			best = int(contact["index"])
-	return best
+## Which system is lit: the one being charged, or the one the nose is
+## on. Asked of the controller, which owns the question.
+func target() -> int:
+	return _jump.showing() if _jump != null else -1
 
 
 ## What is written under a marker, which is the scanner's depth and
@@ -236,7 +227,7 @@ func _draw_markers() -> void:
 		return
 
 	var to_screen: Transform2D = get_viewport().get_canvas_transform()
-	var chosen: int = target(to_screen, view)
+	var chosen: int = target()
 	# Marks first, then the words, so a name is never drawn under a
 	# chevron it does not belong to.
 	var written: Array[Rect2] = []

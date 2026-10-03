@@ -1009,6 +1009,7 @@ func _evaluate_phase() -> void:
 			_check_mass_lock()
 			_check_jump_kit()
 			_check_jump_hud()
+			_check_jump_sequence()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -4033,9 +4034,13 @@ func _check_jump_hud() -> void:
 	galaxy.reset(20260922)
 
 	var ship: Ship = _spawn_ship()
+	var pilot: JumpController = JumpController.new()
+	pilot.use_player_input = false
+	root.add_child(pilot)
+	pilot.bind(ship, system, map, here, galaxy)
 	var hud: JumpHud = JumpHud.new()
 	root.add_child(hud)
-	hud.bind(ship, system, map, here, galaxy)
+	hud.bind(ship, system, map, here, galaxy, pilot)
 
 	var view: Vector2 = Vector2(640.0, 360.0)
 	var flat: Transform2D = Transform2D.IDENTITY
@@ -4177,20 +4182,184 @@ func _check_jump_hud() -> void:
 	# cone, not the first one found: two markers a few degrees apart would
 	# otherwise be chosen between by the order the grid returned them, and
 	# a target that changes while you hold still is not a target.
-	var wanted: Dictionary = hud.contacts(flat, view)[0]
-	var at_it: Vector2 = Vector2(wanted["heading"])
+	var wanted: int = int(hud.contacts(flat, view)[0]["index"])
+	var at_it: Vector2 = (map.positions[wanted] - map.positions[here]).normalized()
 	ship.global_rotation = at_it.angle() - Vector2.UP.angle()
 	_expect(
-		hud.target(flat, view) == int(wanted["index"]),
-		"pointing the nose at a marker selects it",
+		hud.target() == wanted,
+		"pointing the nose at a marker lights it",
 	)
 	ship.global_rotation = (-at_it).angle() - Vector2.UP.angle()
 	_expect(
-		hud.target(flat, view) != int(wanted["index"]),
+		hud.target() != wanted,
 		"and turning away from it lets it go",
 	)
 
+	pilot.free()
 	hud.free()
+	galaxy.free()
+	ship.queue_free()
+
+
+## Sekwencja skoku: cztery stany i jedna regula na każde przejście.
+##
+## The jump is the one action in the game that destroys the scene it is
+## happening in, which is exactly why the controller never does the
+## destroying. It owns the decision and the clock; the world owns what a
+## system is made of and does the swap when told. Everything below runs
+## with no world at all.
+##
+## Driven through `advance()` rather than through a key, for the same
+## reason every other machine here is: a sequence that can only be run
+## from a keyboard is a sequence nobody will run twice.
+func _check_jump_sequence() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(20260922)
+	var here: int = map.start_index()
+	var system: StarSystem = StarSystem.generate(20260922)
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(20260922)
+
+	var ship: Ship = _spawn_ship()
+	var pilot: JumpController = JumpController.new()
+	pilot.use_player_input = false
+	root.add_child(pilot)
+	pilot.bind(ship, system, map, here, galaxy)
+
+	# Held down inside the lock: refused, with a reason. "Nothing
+	# happened" is the one answer an instrument must never give.
+	ship.global_position = system.planets()[0].position_at(0.0)
+	var excuses: Array[String] = []
+	pilot.refused.connect(func(reason: String) -> void: excuses.append(reason))
+	var neighbour: int = map.neighbours(here, GalaxyMap.BASE_REACH)[0]
+	var out: Vector2 = (map.positions[neighbour] - map.positions[here]).normalized()
+	ship.global_rotation = out.angle() - Vector2.UP.angle()
+	pilot.holding = true
+	pilot.advance(1.0 / 60.0)
+	var held_down: Array[String] = ["mass lock"]
+	_expect(
+		pilot.phase == JumpController.Phase.IDLE and excuses == held_down,
+		"the star holds the drive down, and says which thing is stopping you (%s)" % [excuses],
+	)
+
+	# Clear of it, pointed at a neighbour, and holding.
+	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	_expect(
+		pilot.aimed_at() == neighbour,
+		"out here the nose picks a target in the world's own frame",
+	)
+	var bill: float = pilot.bill_for(neighbour)
+	_expect(bill > 0.0, "and the jump has a price (%.1f of %.0f)" % [bill, ship.fuel])
+
+	var tank: float = ship.fuel
+	pilot.holding = true
+	pilot.advance(1.0 / 60.0)
+	_expect(
+		pilot.phase == JumpController.Phase.CHARGING and pilot.target() == neighbour,
+		"holding it starts the charge on the system that was aimed at",
+	)
+
+	# Letting go costs what was burned. IDEAS.md asks for partial burn on
+	# an interruption; spending by the second gives it without a second
+	# rule, and makes the tank readable while it happens.
+	for tick: int in range(30):
+		pilot.advance(1.0 / 60.0)
+	var burned: float = tank - ship.fuel
+	pilot.holding = false
+	pilot.advance(1.0 / 60.0)
+	_expect(
+		pilot.phase == JumpController.Phase.IDLE and burned > 0.0 and burned < bill,
+		"letting go stops it, and the fuel already spent is gone (%.1f of %.1f)" % [
+			burned, bill,
+		],
+	)
+
+	# A hit stops it too, and for the same price.
+	pilot.holding = true
+	pilot.advance(1.0 / 60.0)
+	for tick: int in range(30):
+		pilot.advance(1.0 / 60.0)
+	ship.hull_impact.emit(200.0, 0.3)
+	_expect(
+		pilot.phase == JumpController.Phase.IDLE and not pilot.holding,
+		"and being hit while spooling throws the charge away",
+	)
+
+	# All the way through. The crossing is announced once, halfway, and
+	# the controller is somewhere else afterwards.
+	ship.fuel = ship.fuel_capacity()
+	var crossings: Array[Dictionary] = []
+	pilot.crossed.connect(
+		func(from_index: int, to_index: int, at: Vector2, heading: float) -> void:
+			crossings.append({"from": from_index, "to": to_index, "at": at, "heading": heading})
+	)
+	var landings: Array[int] = []
+	pilot.arrived.connect(func(index: int) -> void: landings.append(index))
+
+	var phases: Array[int] = []
+	pilot.phase_changed.connect(func(phase: int) -> void: phases.append(phase))
+	pilot.holding = true
+	for tick: int in range(900):
+		pilot.advance(1.0 / 60.0)
+		if not landings.is_empty():
+			break
+	var wanted_order: Array[int] = [
+		JumpController.Phase.CHARGING,
+		JumpController.Phase.TRANSIT,
+		JumpController.Phase.ARRIVAL,
+		JumpController.Phase.IDLE,
+	]
+	_expect(
+		phases == wanted_order,
+		"a whole jump is charge, transit, arrival, idle, in that order (%s)" % [phases],
+	)
+	var wanted_landings: Array[int] = [neighbour]
+	_expect(
+		crossings.size() == 1 and landings == wanted_landings
+		and pilot.here() == neighbour,
+		"the worlds change over exactly once, and this is somewhere else now",
+	)
+	_expect(
+		is_equal_approx(ship.fuel, ship.fuel_capacity() - bill),
+		"and the whole fare was paid, no more (%.1f of %.1f)" % [
+			ship.fuel_capacity() - ship.fuel, bill,
+		],
+	)
+
+	# Where you come out. On the near side of the target, facing in,
+	# which is what makes the crossing read as one flight: fly north-east
+	# to leave and you arrive on the target's south-west edge with its
+	# star ahead of you.
+	var landed: Dictionary = crossings[0]
+	var arrival: Vector2 = landed["at"]
+	var back: Vector2 = (map.positions[here] - map.positions[neighbour]).normalized()
+	var target_system: StarSystem = galaxy.system(neighbour)
+	_expect(
+		arrival.normalized().dot(back) > 0.999,
+		"you come out on the side of the target you came from",
+	)
+	_expect(
+		is_equal_approx(arrival.length(), target_system.outer_radius()),
+		"at the far edge of its system (%.0f px of %.0f)" % [
+			arrival.length(), target_system.outer_radius(),
+		],
+	)
+	_expect(
+		target_system.is_mass_locked(arrival),
+		"and inside its hold, so leaving again means flying out again",
+	)
+
+	# Charging is spending, so a dry tank cannot start one.
+	ship.fuel = 0.0
+	pilot.holding = true
+	pilot.advance(1.0 / 60.0)
+	_expect(
+		pilot.phase == JumpController.Phase.IDLE
+		and excuses[excuses.size() - 1] == "brak paliwa",
+		"an empty tank refuses before it starts (%s)" % excuses[excuses.size() - 1],
+	)
+
+	pilot.free()
 	galaxy.free()
 	ship.queue_free()
 

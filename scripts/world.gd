@@ -60,6 +60,7 @@ var _landing_site: int = 0
 var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
 var _jump_hud: JumpHud = null
+var _jump: JumpController = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
 var _help: HelpScreen = null
@@ -159,11 +160,59 @@ func _build_scanner() -> void:
 ## it is in -- the mass lock is the system's own number, and a HUD that
 ## fetched it from an autoload would be a HUD with no tests.
 func _build_jump_hud() -> void:
+	var ship: Ship = (player as Player).ship
+	_jump = JumpController.new()
+	add_child(_jump)
+	_jump.bind(ship, Galaxy.system(Galaxy.here), Galaxy.map, Galaxy.here, Galaxy)
+	_jump.crossed.connect(_on_crossed)
+	_jump.refused.connect(_on_jump_refused)
+	_jump.arrived.connect(_on_jump_arrived)
+
 	_jump_hud = JumpHud.new()
 	add_child(_jump_hud)
 	_jump_hud.bind(
-		(player as Player).ship, Galaxy.system(Galaxy.here), Galaxy.map, Galaxy.here, Galaxy
+		ship, Galaxy.system(Galaxy.here), Galaxy.map, Galaxy.here, Galaxy, _jump
 	)
+
+
+## The crossing. The controller decides when; this is the only place
+## that knows what a system is made of, so this is where one is taken
+## down and the next put up.
+##
+## Under the effect, halfway through the transit, which is why the order
+## here does not have to be careful about what the pilot sees: nothing
+## is visible. It does have to be careful about the ship, which is not a
+## child of either system and survives both.
+func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -> void:
+	var ship: Ship = (player as Player).ship
+	Galaxy.here = to_index
+	var landing: StarSystem = Galaxy.system(to_index)
+	StreamingManager.bind(landing, systems, Galaxy.time)
+	StreamingManager.track(ship)
+	planet = StreamingManager.force_awake(landing.planets()[0]) as Planet
+
+	ship.global_position = at
+	ship.global_rotation = heading
+	# Most of the way scrubbed off rather than all of it: a crossing that
+	# parked the ship would make the heading it just preserved mean
+	# nothing.
+	ship.linear_velocity *= JumpController.SPEED_KEPT
+	ship.angular_velocity = 0.0
+
+	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy)
+	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump)
+	_map.bind(landing, ship, StreamingManager)
+	print("jumped to %s (#%d), out at %.0f px" % [
+		landing.display_name, to_index, at.length(),
+	])
+
+
+func _on_jump_refused(reason: String) -> void:
+	print("jump: %s" % reason)
+
+
+func _on_jump_arrived(index: int) -> void:
+	print("arrived at %s" % Galaxy.system(index).display_name)
 
 
 func _build_loadout() -> void:

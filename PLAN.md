@@ -396,9 +396,22 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   `depth` — co jest podpisane, zasięg napędu i stan baku — w jakim kolorze.
   Trzy rozróżnialne obrazy braku zamiast pustego ekranu. Sześć znaczników
   naraz, nazwy, które się nie nakładają. Szczegóły w IDEAS.md sekcja 10.
-- [ ] Maszyna stanów skoku: Idle, Charging, Transit, Arrival.
+- [x] Maszyna stanów skoku: Idle, Charging, Transit, Arrival.
+  `JumpController` — własna decyzja i własny zegar, zero wiedzy o tym, z
+  czego składa się system. Paliwo palone **w trakcie ładowania**, więc
+  przerwanie kosztuje bez drugiej reguły; przerywa puszczenie klawisza i
+  trafienie. Cel zatrzaśnięty na starcie ładowania, bo dziób służy do
+  wybrania celu, a nie do trzymania go.
 - [ ] Shader tranzytu, wymiana sceny systemu pod graczem w trakcie efektu.
-- [ ] Pozycja przylotu na krawędzi celu od strony źródła.
+  **Wymiana zrobiona**: `StreamingManager.bind()` i tak zaczyna od `clear()`,
+  więc skok to związanie nowego systemu w połowie tranzytu plus przestawienie
+  statku, który nie jest dzieckiem żadnego z nich. Sprawdzone w prawdziwym
+  świecie, nie tylko w teście. Został sam shader.
+- [x] Pozycja przylotu na krawędzi celu od strony źródła.
+  `outer_radius * (źródło - cel)` wprost z IDEAS.md: lecisz na północny
+  wschód, wychodzisz przy południowo-zachodniej krawędzi celu z gwiazdą
+  przed dziobem. Kurs zachowany, prędkość ścięta do ¼ — nie do zera, bo
+  zatrzymanie statku unie ważniłoby kurs, który się właśnie zachowało.
 - [ ] Misjump: sektor międzygwiezdny bez gwiazdy, ryzyko od niedoboru paliwa i zasięgu.
 - [ ] Zapis gry: seed plus delty, autosave przy skoku.
 
