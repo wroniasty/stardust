@@ -90,6 +90,11 @@ var _inspecting: Resource = null
 ## The slot whose name is on the schematic, put there by a click. The boxes
 ## say what kind and whether occupied without being read; the name is the
 ## part a pilot asks for, so it waits to be asked.
+##
+## The only node this screen holds on to between frames, and it is held
+## across something that destroys nodes: a refit frees every mount and
+## builds new ones. Cleared on `Ship.configuration_changed` for that
+## reason, and checked for still existing anyway -- see `_captions()`.
 var _named: Node = null
 
 ## What fitting the selected module into the highlighted slot would do,
@@ -119,6 +124,20 @@ func _ready() -> void:
 
 func bind(ship: Ship) -> void:
 	_ship = ship
+	# A refit throws away every mount and makes new ones, so anything this
+	# screen remembered by node is gone. The ship already announces it.
+	if ship != null and not ship.configuration_changed.is_connected(_forget_slots):
+		ship.configuration_changed.connect(_forget_slots)
+
+
+## Drops a remembered slot that the ship no longer has.
+##
+## Only when it has really gone, so that fitting a module -- which also
+## rebuilds, and keeps every mount -- does not blank the caption the pilot
+## just clicked for.
+func _forget_slots() -> void:
+	if _named != null and not _all_mounts().has(_named):
+		_named = null
 
 
 func is_open() -> bool:
@@ -677,12 +696,30 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	#
 	# The arrow-chosen slot is named too, or stepping through targets with
 	# the keyboard would be stepping blind.
-	for mount: Node in [chosen, _named]:
-		if mount == null or not mounts.has(mount):
-			continue
+	for mount: Node in _captions(chosen, mounts):
 		_draw_slot_caption(font, where[mount], mount, origin, rect)
-		if mount == _named:
-			break
+
+
+## Which slots get their name drawn: the one the arrows are on, and the one
+## that was clicked, in that order and never the same one twice.
+##
+## Built by appending rather than as an array literal, which is not style.
+## `[chosen, _named]` throws while the array is being built if `_named` has
+## been freed -- before the loop body can reach the guard that would have
+## skipped it. That is how this was found: a wall of
+## "previously freed object into a TypedArray" once a frame after a refit,
+## with the check that was supposed to prevent it sitting right there,
+## three lines too late.
+func _captions(chosen: Node, mounts: Array[Node]) -> Array[Node]:
+	var out: Array[Node] = []
+	if chosen != null and mounts.has(chosen):
+		out.append(chosen)
+	# Validity first: a freed node cannot even be compared into a typed
+	# array, so it must not reach one.
+	if _named != null and is_instance_valid(_named) and _named != chosen:
+		if mounts.has(_named):
+			out.append(_named)
+	return out
 
 
 ## The full name of one slot, hung outward so it clears the hull.

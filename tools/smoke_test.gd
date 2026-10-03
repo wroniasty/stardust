@@ -1947,6 +1947,43 @@ func _check_editor() -> void:
 		"a mount the module does not fit is still clickable, and says so",
 	)
 
+	# Last, because it wrecks every mount on the ship.
+	#
+	# A refit frees them all and builds new ones, and this screen was
+	# holding one by reference with nothing to clear it. The next frame
+	# tried to build an array out of a freed node and threw -- once a
+	# frame, for as long as the schematic stayed open. The guard meant to
+	# skip it was already there and ran three lines too late: a typed array
+	# validates while it is being built, not while it is being read.
+	#
+	# Named explicitly rather than by taking whatever the click loop left
+	# behind. The first version of this check did that and passed for the
+	# wrong reason: the last slot it clicked was a bay, and a refit does
+	# not free the bays.
+	var doomed: EngineMount = ship.get_node("MainDrive") as EngineMount
+	editor._named = doomed
+	_expect(editor.named_slot() == doomed, "the editor is holding a mount by name")
+	ShipFitout.apply(ship, _preset_named("frachtowiec"))
+	_expect(
+		editor.named_slot() == null,
+		"and a refit makes it let go, because that mount no longer exists",
+	)
+	_expect(
+		editor._captions(null, editor._all_mounts()).is_empty(),
+		"so nothing stale can reach the captions",
+	)
+
+	# A rebuild that keeps the mounts must keep the caption: fitting a
+	# module rebuilds too, and blanking the name the pilot just clicked
+	# for would be a fix that costs more than the bug.
+	var kept: Node = editor._all_mounts()[0]
+	editor._named = kept
+	ship.rebuild_control_groups(false)
+	_expect(
+		editor.named_slot() == kept,
+		"while a rebuild that keeps every mount keeps it too",
+	)
+
 	editor.queue_free()
 	ship.queue_free()
 
