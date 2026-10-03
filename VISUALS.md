@@ -364,7 +364,10 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 - [ ] Krater ma obrzeże: jaśniejszy pierścień świeżo odsłoniętej skały, ciemniejszy w środku.
 - [ ] Pył wyrzucany przy kopaniu, opadający zgodnie z lokalnym „w dół".
 - [ ] Kurz spod dysz przy podejściu, gęstość od gęstości powietrza i wysokości.
-- [ ] Wstrząs kamery: jedno wspólne źródło, skalowane energią, nie sztywną liczbą na zdarzenie.
+- [x] ~~Wstrząs kamery~~ — **zrobione w V0**, gdzie był jednocześnie
+  dowodem, że szew prezentacji działa. Jedno źródło (`CameraShake`),
+  skalowane energią uderzenia, nie liczbą na zdarzenie. Zostaje wpisane
+  tutaj, bo to tu należy tematycznie i tu ktoś będzie go szukał.
 
 ### V4: Prędkość, atmosfera, kamera
 
