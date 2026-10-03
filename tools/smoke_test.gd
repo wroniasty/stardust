@@ -993,6 +993,7 @@ func _evaluate_phase() -> void:
 			_check_skin()
 			_check_rarity_travels()
 			_check_affix_pools()
+			_check_item_names()
 			_check_seeker_targets()
 			_check_system_model(_planet)
 			_check_star()
@@ -2414,7 +2415,7 @@ func _check_energy() -> void:
 	var highest: float = 0.0
 	for path: String in LOOT_SCRIPT.WEAPON_BASES:
 		var gun: WeaponData = load(path) as WeaponData
-		_expect(gun.energy_cost > 0.0, "%s costs energy to fire" % gun.display_name)
+		_expect(gun.energy_cost > 0.0, "%s costs energy to fire" % gun.title())
 		var ratio: float = gun.damage / maxf(gun.energy_cost, 0.0001)
 		per_energy.append(ratio)
 		lowest = minf(lowest, ratio)
@@ -2524,11 +2525,11 @@ func _check_shot_mods() -> void:
 		var mod: ShotModData = loot.shot_mod(index)
 		_expect(
 			mod.energy_multiplier > 1.0,
-			"%s costs more to fire, as every mod must" % mod.display_name,
+			"%s costs more to fire, as every mod must" % mod.title(),
 		)
 		mount.mods.clear()
 		mount._rebuild_effective()
-		_expect(mount.add_mod(mod), "%s plugs into a free slot" % mod.display_name)
+		_expect(mount.add_mod(mod), "%s plugs into a free slot" % mod.title())
 		_expect(
 			mount.energy_cost() > bare,
 			"and the shot costs more with it in (%.1f against %.1f)" % [
@@ -2636,7 +2637,7 @@ func _check_energy_balance() -> void:
 		_expect(
 			sustained[i] < burst[i],
 			"%s sustains less than it bursts (%.3f against %.3f)" % [
-				guns[i].display_name, sustained[i], burst[i],
+				guns[i].title(), sustained[i], burst[i],
 			],
 		)
 
@@ -5796,6 +5797,97 @@ func _check_seeker_targets() -> void:
 	distant.queue_free()
 
 
+## Nazwa przedmiotu: afiksy plus baza, dla kazdego rodzaju tak samo.
+##
+## There used to be three habits and no rule. A weapon kept its affix list
+## and baked the finished string into its own name; a generator baked the
+## string and threw the list away; an engine threw the list away without
+## baking anything and was called "thruster engine 664". The name is
+## composed from the list now, on every kind, which is what lets it be cut
+## to a length -- a baked string cannot be shortened, because nothing can
+## tell afterwards which of its words were affixes.
+func _check_item_names() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+
+	# Every kind keeps what it rolled, and says so in its name.
+	var kinds: Array[Dictionary] = [
+		{"what": "weapon", "item": loot.weapon(7117, 4)},
+		{"what": "engine", "item": loot.engine(7117, 4)},
+		{"what": "generator", "item": loot.generator(7117, 3)},
+	]
+	var mute: int = 0
+	var unnamed: int = 0
+	for entry: Dictionary in kinds:
+		var item: ModuleData = entry["item"]
+		if item.affixes.is_empty():
+			mute += 1
+			print("    a legendary %s rolled no affixes at all" % entry["what"])
+			continue
+		if not item.title().ends_with(item.display_name):
+			unnamed += 1
+			print("    %s: %s does not end in %s" % [
+				entry["what"], item.title(), item.display_name,
+			])
+		elif not item.title().begins_with(String(item.affixes[0])):
+			unnamed += 1
+			print("    %s: %s does not begin with %s" % [
+				entry["what"], item.title(), item.affixes[0],
+			])
+	_expect(mute == 0, "a rolled item of every kind carries the affixes it rolled")
+	_expect(unnamed == 0, "and every one of them is named for them, affixes first")
+
+	# The engine is the one worth naming out loud: it used to be called
+	# after its own enum and its thrust.
+	var drive: EngineData = loot.engine(7117, 4)
+	_expect(
+		not drive.title().contains("%.0f" % drive.max_thrust),
+		"an engine is not named after a number that is already on its card (%s)" % drive.title(),
+	)
+
+	# Length, against the panel it has to fit in rather than against taste.
+	var face: Font = UiFont.face()
+	var room: float = LoadoutScreen.PANEL_WIDTH
+	var limit: String = "M".repeat(ModuleData.TITLE_LIMIT)
+	_expect(
+		face.get_string_size(limit, 0, -1, UiFont.BODY).x <= room,
+		"a title at the limit fits the swap panel (%.0f px of %.0f)" % [
+			face.get_string_size(limit, 0, -1, UiFont.BODY).x, room,
+		],
+	)
+	_expect(
+		face.get_string_size(limit + "MMMM", 0, -1, UiFont.BODY).x > room,
+		"and the limit is tight rather than timid: four more would not",
+	)
+
+	# Nothing the generator can roll goes over it, and what does not fit is
+	# on the card instead of lost.
+	var overlong: int = 0
+	var spilled: int = 0
+	var listed: int = 0
+	for item_seed: int in range(1200):
+		var item: ModuleData = loot.generate(item_seed * 13, item_seed % 5) as ModuleData
+		if item == null:
+			continue
+		if item.title().length() > ModuleData.TITLE_LIMIT:
+			overlong += 1
+			print("    %d chars: %s" % [item.title().length(), item.title()])
+		if item.dropped_affixes().is_empty():
+			continue
+		spilled += 1
+		for line: String in item.card_lines():
+			if line.begins_with("też:"):
+				listed += 1
+	_expect(overlong == 0, "no rolled item has a title longer than the panel")
+	_expect(
+		spilled == 0 or listed == spilled,
+		"and an affix the title had no room for is on the card, not lost (%d of %d)" % [
+			listed, spilled,
+		],
+	)
+	print("    %d of 1200 rolls spilled an affix onto the card" % spilled)
+	loot.free()
+
+
 ## Afiksy, ktorych baza nie ma gdzie przyjac, nie trafiaja do jej puli.
 ##
 ## The defect this guards was measured rather than suspected: an affix
@@ -5863,7 +5955,7 @@ func _check_affix_pools() -> void:
 			if gun.affixes.has(pair[0]) and absf(float(gun.get(pair[1]))) < 0.0001:
 				contradictions += 1
 				print("    %s rolled %s with no %s" % [
-					gun.display_name, pair[0], pair[1],
+					gun.title(), pair[0], pair[1],
 				])
 	_expect(
 		contradictions == 0,
@@ -6499,14 +6591,14 @@ func _check_loot() -> void:
 	_expect(
 		is_equal_approx(first.damage, again.damage)
 			and is_equal_approx(first.rounds_per_second, again.rounds_per_second)
-			and first.display_name == again.display_name,
-		"the same seed rolls the same weapon (%s)" % first.display_name,
+			and first.title() == again.title(),
+		"the same seed rolls the same weapon (%s)" % first.title(),
 	)
 	var other: WeaponData = _loot.weapon(90211)
 	_expect(
 		not is_equal_approx(first.damage, other.damage)
-			or first.display_name != other.display_name,
-		"a different seed rolls something else (%s)" % other.display_name,
+			or first.title() != other.title(),
+		"a different seed rolls something else (%s)" % other.title(),
 	)
 
 	# Rarity buys affixes, and exactly as many as the table promises.
@@ -6515,7 +6607,7 @@ func _check_loot() -> void:
 		_expect(
 			item.affixes.size() == LOOT_SCRIPT.RARITY_AFFIXES[rarity],
 			"%s weapons carry %d affixes (%s)" % [
-				_loot.rarity_name(rarity), item.affixes.size(), item.display_name,
+				_loot.rarity_name(rarity), item.affixes.size(), item.title(),
 			],
 		)
 
@@ -7001,41 +7093,27 @@ func _check_art() -> void:
 		"and the gun table tells the weapon types apart (%d looks)" % seen_guns.size(),
 	)
 
-	# The affix binding, on the one kind of item that currently carries
-	# affixes at all.
+	# The affix binding, on the real table and a real engine.
 	#
-	# This check was written against an engine first and failed, which is
-	# the useful part: `EngineData` has no `affixes` field, because the
-	# generator throws the rolled list away instead of keeping it (PLAN.md
-	# M3.5, "Nazwy spójne dla wszystkich rodzajów"). So the "steerable"
-	# entry in the nozzle table is written, correct, and inert -- and the
-	# mechanism had to be proved somewhere it can actually fire.
-	var carrier: WeaponData = (
-		load("res://resources/weapons/autocannon.tres") as WeaponData
-	).duplicate() as WeaponData
-	carrier.affixes = [&"breaching"] as Array[StringName]
-	var bench: LookTable = LookTable.new()
-	bench.stat = &"type"
-	bench.thresholds = muzzles.thresholds
-	bench.variants = muzzles.variants
-	bench.by_affix[&"breaching"] = seen_guns[seen_guns.size() - 1]
-	_expect(
-		bench.pick(carrier) == seen_guns[seen_guns.size() - 1],
-		"an affix changes the picture, and beats the threshold that would not have",
-	)
-	_expect(
-		bench.pick(load("res://resources/weapons/autocannon.tres")) == seen_guns[0],
-		"and an item without that affix falls back to the measurement",
-	)
-
-	# Asserted as inert rather than left unsaid, so the day engines start
-	# keeping their affixes this is what notices.
+	# This check spent a while asserting the opposite. `EngineData` had no
+	# `affixes` field, because the generator threw the rolled list away, so
+	# the "steerable" entry in the nozzle table was written, correct and
+	# **inert** -- and the test said so, on the grounds that the day engines
+	# started keeping their affixes something should notice. This is that
+	# day, and this is the something.
 	var gimballed: EngineData = (
 		load("res://resources/engines/gimballed_drive.tres") as EngineData
 	)
+	var plain: SpriteStrip = nozzles.pick(gimballed)
+	var steerable: EngineData = gimballed.duplicate() as EngineData
+	steerable.affixes = [&"steerable"] as Array[StringName]
 	_expect(
-		not ("affixes" in gimballed),
-		"engines carry no affixes yet, so the nozzle table's affix entry is inert (M3.5)",
+		nozzles.pick(steerable) != plain and nozzles.pick(steerable) != null,
+		"an affix changes the picture, and beats the threshold that would not have",
+	)
+	_expect(
+		nozzles.pick(gimballed) == plain,
+		"and an engine without it falls back to the measurement",
 	)
 
 	# And the interface family is the one place still authored 1:1.
@@ -7232,7 +7310,7 @@ func _check_skin() -> void:
 		if body == null or body.strip == null:
 			unpainted += 1
 			print("    %s throws an unpainted round (%s)" % [
-				weapon.display_name, shot.look_key,
+				weapon.title(), shot.look_key,
 			])
 		elif not body.self_modulate.is_equal_approx(shot.tint):
 			untinted += 1

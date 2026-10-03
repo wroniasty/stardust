@@ -301,14 +301,30 @@ wspólna dla całej kategorii i nie wie, czego baza nie ma.
   pięć z trzynastu afiksów broniowych było na beam lance darmowych.
   Rzadkość, która nie ma czym zapełnić slotów, dostaje **mniej afiksów**,
   nie martwe: na ograniczonej bazie naprawdę jest mniej do zróżnicowania.
-- [ ] **Nazwy spójne dla wszystkich rodzajów.** Dziś są trzy traktowania:
-  broń zapisuje `affixes`, generator składa `display_name`, a silnik
-  **wyrzuca zwrotkę z `_apply_affixes`** i nazywa się „thruster engine 664".
-  Docelowo każdy przedmiot ma nazwę złożoną z afiksów i bazy.
-- [ ] **Długość nazwy.** „efficient wide precise rapid dumb rocket" to 38
-  znaków przy karcie 158 px i foncie 8 px — nie mieści się. Rozstrzygnąć
-  **zanim** nazwy urosną: albo tytuł bierze dwa najmocniejsze afiksy i reszta
-  schodzi do wierszy karty, albo karta się poszerza. Zmierzyć, nie zgadnąć.
+- [x] **Nazwy spójne dla wszystkich rodzajów.** `affixes` i `display_name`
+  zeszły na `ModuleData`, a nazwa jest **składana w `title()`**, nie
+  wypalana przy generowaniu. To nie jest porządki dla porządków: wypalonego
+  napisu nie da się skrócić, bo po fakcie nic nie wie, które słowa były
+  afiksami — a bez tego punkt o długości nie ma rozwiązania.
+  Silniki dostały własne nazwy w zasobach („main drive", „torque jet")
+  zamiast nazywać się po swoim enumie i ciągu. Komputer też przestał
+  sklejać własne zdanie: jego funkcje **są** jego afiksami, więc podlega
+  tej samej regule i temu samemu przycinaniu.
+  Odblokowało trzy rzeczy zapisane wcześniej jako zablokowane: wiązanie
+  wyglądu po afiksie dla silników **już nie jest bezczynne**, test afiksów
+  działa teraz na silnikach, a `LootCrate.label()` pyta jedno miejsce
+  zamiast trzech.
+- [x] **Długość nazwy.** Zmierzone, i to pytanie **nie miało odpowiedzi,
+  dopóki nie było fontu**: przy kroju proporcjonalnym „ile znaków wchodzi"
+  zależy od tego, które znaki. Teraz 6 px na znak, karta w ładowni ma
+  210 px — czyli **33 znaki** (poprzednia notatka myliła kartę z panelem
+  HUD, który ma 158). Tytuł bierze tyle afiksów, ile wejdzie, w kolejności
+  rzutu; reszta schodzi do osobnego wiersza karty („też: …"), więc żaden
+  afiks nie znika. **Nie** „dwa najmocniejsze", bo nic nie szereguje
+  afiksów: tabela jest ułożona tematycznie, a wylosowana lista jest w
+  kolejności rzutu, więc ani jedno, ani drugie nie jest rankingiem.
+  Test pilnuje limitu z obu stron — że tytuł tej długości się mieści i że
+  o cztery znaki dłuższy już nie.
 - [ ] **Kadłuby jako zasoby.** Zasób `HullData` i dziesięć kadłubów w
   `resources/hulls/` **już są**, razem z testem, który pilnuje, żeby zgadzały
   się z `CreativeTool.SHAPES` i presetami w `ShipFitout`. Zostało to, co

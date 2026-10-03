@@ -142,11 +142,11 @@ func rarity() -> int:
 func label() -> String:
 	if item == null:
 		return "empty crate"
-	if item is WeaponData:
-		return (item as WeaponData).display_name
-	if item is EngineData:
-		return "%s engine" % EngineData.Type.keys()[(item as EngineData).type].to_lower()
-	return "module"
+	# One question to one place. This used to ask each kind separately and
+	# get a different habit back from each: the weapon's baked name, a name
+	# built here out of the engine's enum, and "module" for everything else.
+	var module: ModuleData = item as ModuleData
+	return module.title() if module != null else "module"
 
 
 func _paint() -> void:

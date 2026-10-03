@@ -24,8 +24,6 @@ enum Effect {
 	INCENDIARY,
 }
 
-@export var display_name: String = "mod"
-
 ## What it does to the cost of a shot. Greater than one, always: the slot
 ## says how many mods fit, energy says how much you get to fire with them.
 ## The table is checked for this the same way affix costs are.

@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_engine_data")
+display_name = "maneuver pod"
 type = 2
 max_thrust = 260.0
 bulk = 0.55

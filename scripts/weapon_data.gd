@@ -38,10 +38,6 @@ func is_beam() -> bool:
 
 @export var type: Type = Type.PROJECTILE
 
-## Shown when the weapon is fitted or found. Rolled names come from the
-## generator; a hand-made weapon just carries its own.
-@export var display_name: String = "gun"
-
 ## What the weapon throws, as a scene. On the weapon rather than the hardpoint:
 ## a mount does not decide whether it fires slugs or missiles.
 @export var projectile_scene: PackedScene
@@ -120,10 +116,6 @@ func is_beam() -> bool:
 ## instant the trigger is pulled, so a laser is a very fast pulse and energy
 ## keeps one rule for everything (IDEAS.md section 14).
 @export var beam_seconds: float = 0.06
-
-
-## Names of the affixes rolled into the numbers above, for display only.
-@export var affixes: Array[StringName] = []
 
 
 ## Seconds a round lives, derived so that range survives a change of speed.

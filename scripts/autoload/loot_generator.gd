@@ -291,14 +291,29 @@ func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
 	box.bulk = rng.randf_range(0.4, 1.2)
 	box.idle_draw = rng.randf_range(0.5, 3.0)
 
-	var parts: PackedStringArray = PackedStringArray()
+	# The functions are what makes one computer different from another, so
+	# they are its affixes. That is not a convenience: it used to write its
+	# own sentence here, and a box with all three ran to 34 characters --
+	# one over what a card can show, with no list left to trim because the
+	# sentence had already been glued together.
+	box.display_name = "computer"
+	var found: Array[StringName] = []
 	if box.allocation == FlightComputerData.Allocation.NNLS:
-		parts.append("solving")
+		found.append(&"solving")
 	if box.has_auto_level:
-		parts.append("levelling")
+		found.append(&"levelling")
 	if box.has_auto_orbit:
-		parts.append("orbital")
-	box.display_name = "%s computer" % " ".join(parts) if not parts.is_empty() else "basic computer"
+		found.append(&"orbital")
+	# A box that does nothing clever still has to be called something, and
+	# "computer" on its own reads as a category rather than as an item.
+	#
+	# A branch rather than a ternary, which is the second time this has
+	# come up: a ternary hands back an untyped Array at runtime whatever
+	# the declared type says, and the assignment then fails where it is
+	# read rather than where it was written. See LandingGear.contact_points().
+	if found.is_empty():
+		found.append(&"basic")
+	box.affixes = found
 	return box
 
 
@@ -352,7 +367,6 @@ func _build_weapon(rng: RandomNumberGenerator, rarity: int) -> WeaponData:
 	# Rarity buys room for decisions, not just bigger numbers.
 	item.mod_slots = mini(rolled, 3)
 	_clamp_all(item)
-	item.display_name = _name_for(item.display_name, item.affixes)
 	return item
 
 
@@ -362,10 +376,8 @@ func _build_engine(rng: RandomNumberGenerator, rarity: int) -> EngineData:
 		return null
 	var item: EngineData = base.duplicate() as EngineData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
-	# EngineData has no name of its own: what an engine is called comes from
-	# its type, because its purpose comes from where it is mounted.
 	item.rarity = rolled
-	_apply_affixes(rng, item, ENGINE_AFFIXES, rolled)
+	item.affixes = _apply_affixes(rng, item, ENGINE_AFFIXES, rolled)
 	_clamp_all(item)
 	return item
 
@@ -379,9 +391,7 @@ func _build_generator(rng: RandomNumberGenerator, rarity: int) -> GeneratorData:
 	var item: GeneratorData = base.duplicate() as GeneratorData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.display_name = _name_for(item.display_name, _apply_affixes(
-		rng, item, GENERATOR_AFFIXES, rolled
-	))
+	item.affixes = _apply_affixes(rng, item, GENERATOR_AFFIXES, rolled)
 	_clamp_all(item)
 	return item
 
@@ -513,16 +523,6 @@ func _scale(
 		var bounds: Vector2 = LIMITS[field]
 		value = clampf(value, bounds.x, bounds.y)
 	item.set(field, value)
-
-
-func _name_for(base_name: String, affixes: Array[StringName]) -> String:
-	if affixes.is_empty():
-		return base_name
-	var parts: PackedStringArray = PackedStringArray()
-	for affix: StringName in affixes:
-		parts.append(String(affix))
-	parts.append(base_name)
-	return " ".join(parts)
 
 
 ## What a rarity is called, for the HUD and the pickup prompt.

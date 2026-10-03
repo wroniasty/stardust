@@ -8,8 +8,6 @@ extends ModuleData
 ## difficulty -- every threshold is a number on the part, and the ship either
 ## meets it or does not (IDEAS.md section 7).
 
-@export var display_name: String = "landing gear"
-
 ## Fastest arrival the legs absorb, straight down and sideways.
 @export var max_vertical_speed: float = 45.0
 @export var max_lateral_speed: float = 22.0

@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_engine_data")
+display_name = "main drive"
 type = 0
 max_thrust = 900.0
 bulk = 3.0

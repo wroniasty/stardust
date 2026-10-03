@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_engine_data")
+display_name = "maneuver thruster"
 type = 2
 max_thrust = 180.0
 bulk = 0.7

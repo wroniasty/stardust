@@ -18,8 +18,6 @@ enum Allocation {
 	NNLS,
 }
 
-@export var display_name: String = "flight computer"
-
 @export var allocation: Allocation = Allocation.NNLS
 
 ## Holds an orbit by itself, given a gravity well and no air. Optional on

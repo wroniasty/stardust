@@ -96,10 +96,12 @@ func stat_rows() -> Array[Dictionary]:
 	return rows
 
 
-## An engine has no name of its own: what it is called comes from its type,
-## because what it is for comes from where it is mounted.
-func title() -> String:
-	return "%s engine %.0f" % [Type.keys()[int(type)].to_lower(), max_thrust]
+## An engine is named like everything else now: in its own resource, and
+## composed with whatever it rolled. It used to be named after its own
+## enum and its thrust -- "thruster engine 664" -- on the argument that a
+## mount decides what an engine is for. True, and it is not an argument
+## about what to call it: the thrust is a row on the card, and a number in
+## a name is a number in two places.
 
 
 func blurb() -> String:

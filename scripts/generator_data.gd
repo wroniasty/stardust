@@ -12,8 +12,6 @@ extends ModuleData
 ## and after `recharge_delay` seconds of silence the pool grows at
 ## `recharge_rate` up to `capacity`.
 
-@export var display_name: String = "generator"
-
 ## Most energy the pool can hold.
 @export var capacity: float = 100.0
 

@@ -22,6 +22,20 @@ const RARITY_COLORS: Array[Color] = [
 	Color(1.00, 0.80, 0.28), ## gold
 ]
 
+## What this kind of thing is called, before any affix: "autocannon",
+## "main drive", "standard cell". Every kind has one now, including
+## engines, which used to be named after their own enum.
+@export var display_name: String = "module"
+
+## Names of the affixes rolled into the numbers, for display only.
+##
+## On the base class, so every kind keeps the roll that made it. There used
+## to be three habits here and no rule: a weapon kept its list, a generator
+## threw it away after baking it into a string, and an engine threw it away
+## without baking anything -- which is why engines were called "thruster
+## engine 664".
+@export var affixes: Array[StringName] = []
+
 ## How good the roll that made this module was, 0..4.
 ##
 ## On the module rather than travelling beside it. It used to ride alongside,
@@ -80,13 +94,57 @@ func blurb() -> String:
 	return ""
 
 
-## What to call this module. Most kinds carry a display_name; an engine is
-## named after what it is, because what it is for comes from where it is
-## mounted.
+## Longest title a card can show, in characters.
+##
+## Derived rather than picked: the swap screen's panel is 210 px wide, the
+## interface font is fixed-width at six pixels a character, and the panel
+## keeps a few for its border. A test checks this against the real panel
+## and the real font from both sides -- that a title this long fits and
+## that a longer one does not -- so the number cannot drift away from the
+## thing it describes.
+##
+## The question had no answer at all until the font had one. In a
+## proportional face "how many characters fit" depends on which characters,
+## which is the other half of why UI_STYLE insists on monospace here.
+const TITLE_LIMIT: int = 33
+
+
+## What this module is called: its affixes, then its base name.
+##
+## Composed on every call rather than baked in at generation. That matters
+## for more than tidiness: a baked string cannot be shortened, because
+## nothing can tell afterwards which words were affixes. Composing means
+## the same item can be named at one length for a card and another for a
+## pickup prompt, and means an affix list and a name can never disagree.
 func title() -> String:
-	if "display_name" in self:
-		return String(get("display_name"))
-	return "moduł"
+	var parts: PackedStringArray = PackedStringArray()
+	for affix: StringName in affixes.slice(0, named_affixes()):
+		parts.append(String(affix))
+	parts.append(display_name)
+	return " ".join(parts)
+
+
+## How many affixes the title has room for.
+##
+## As many as fit, in the order they were rolled; the rest go on their own
+## line of the card. The plan asked for "the two strongest" instead, and
+## that cannot be done yet, because nothing ranks affixes: the table is
+## ordered by theme and a rolled list is in roll order, so neither is a
+## ranking. Inventing one here would be inventing it in the wrong place.
+func named_affixes() -> int:
+	var room: int = TITLE_LIMIT - display_name.length()
+	var taken: int = 0
+	for affix: StringName in affixes:
+		room -= String(affix).length() + 1
+		if room < 0:
+			break
+		taken += 1
+	return taken
+
+
+## The affixes the title had no room for.
+func dropped_affixes() -> Array[StringName]:
+	return affixes.slice(named_affixes())
 
 
 ## The whole information card: what it is, how good the roll was, a line of
@@ -102,6 +160,15 @@ func card_lines(against: ModuleData = null) -> PackedStringArray:
 	var prose: String = blurb()
 	if not prose.is_empty():
 		out.append(prose)
+	# What the title had to leave out. On its own line rather than lost:
+	# an affix that changed the numbers and is named nowhere is a number
+	# the pilot cannot account for.
+	var spilled: Array[StringName] = dropped_affixes()
+	if not spilled.is_empty():
+		var rest: PackedStringArray = PackedStringArray()
+		for affix: StringName in spilled:
+			rest.append(String(affix))
+		out.append("też: %s" % ", ".join(rest))
 
 	var other: Dictionary = {}
 	if against != null:
