@@ -89,7 +89,7 @@ hardpointu, wyrwanie dziury w terenie, przekroczenie granicy atmosfery.
 
 ## 3. Tor wizualny
 
-### V0: Fundament
+### V0: Fundament — **zamknięte**
 
 Cel: nic nie wygląda inaczej, ale wszystko dalej da się robić bez dotykania
 linii głównej.
@@ -109,7 +109,16 @@ linii głównej.
   `Camera2D.offset` jest w jednostkach świata, a wstrząs należy do ekranu.
 - [x] `tools/art_gallery.tscn`: wszystkie sprite'y i specimen fontu do PNG,
   obok `cloud_preview.tscn`.
-- [ ] Paleta jako zasób, nie jako stałe rozsiane po shaderach.
+- [x] **Paleta jako zasób** (`resources/ui/palette.tres`), dwanaście
+  nazwanych ról. Policzone, zanim powstała: te same cztery role były
+  rozpisane w trzech ekranach jako jedenaście różnych kolorów — dwa
+  wypełnienia panelu, dwie krawędzie, cztery szarości na „etykietę" i
+  „wartość" oraz trzy bursztyny o piksel od siebie. Wołanie mówi teraz
+  rolę (`_ink.caution` samo tłumaczy, czemu jest pomarańczowe), a test
+  czyta **źródło** tych ekranów i pilnuje, że żaden nie trzyma własnego
+  koloru: stała, którą nikt nie rysuje, to wciąż druga opinia czekająca na
+  użycie. `void` nazywa się w kodzie `scrim`, bo `void` to słowo kluczowe
+  GDScriptu.
 
 Gotowe, gdy: smoke test przechodzi z warstwą włączoną i wyłączoną, a `gallery`
 wypluwa komplet zrzutów jednym poleceniem.

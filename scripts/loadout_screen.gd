@@ -17,10 +17,6 @@ const PANEL_WIDTH: float = 210.0
 const FONT_SIZE: int = 8
 const SCREEN_MARGIN: int = 6
 
-const BACKGROUND: Color = Color(0.07, 0.07, 0.09, 0.94)
-const BORDER: Color = Color(0.45, 0.50, 0.60, 1.0)
-const DIM: Color = Color(0.70, 0.74, 0.80)
-const PICK: Color = Color(1.00, 0.85, 0.35)
 
 var _ship: Ship = null
 var _panel: PanelContainer = null
@@ -36,6 +32,11 @@ var _cursor: int = 0
 ## screen for, and it must not vanish on the next redraw.
 var _report: PackedStringArray = PackedStringArray()
 
+
+## The twelve colours every screen draws from (UI_STYLE section 3). This
+## file used to spell out its own, which is how three screens ended up
+## with two panel fills, two borders and three ambers a pixel apart.
+var _ink: Palette = Palette.current()
 
 func _ready() -> void:
 	layer = 15
@@ -106,8 +107,8 @@ func _build_ui() -> void:
 	var compact: Theme = Theme.new()
 	compact.default_font_size = FONT_SIZE
 	var background: StyleBoxFlat = StyleBoxFlat.new()
-	background.bg_color = BACKGROUND
-	background.border_color = BORDER
+	background.bg_color = _ink.over(_ink.panel, 0.94)
+	background.border_color = _ink.edge
 	background.set_border_width_all(1)
 	background.set_content_margin_all(4)
 	compact.set_stylebox("panel", "PanelContainer", background)
@@ -194,7 +195,7 @@ func _redraw() -> void:
 		lines.append("pusto - wleć w skrzynkę")
 		lines.append_array(_report_lines())
 		_text.text = "\n".join(lines)
-		_text.add_theme_color_override("font_color", DIM)
+		_text.add_theme_color_override("font_color", _ink.label)
 		return
 
 	var slots: Array = _slots()
@@ -228,7 +229,7 @@ func _redraw() -> void:
 	lines.append_array(_report_lines())
 
 	_text.text = "\n".join(lines)
-	_text.add_theme_color_override("font_color", PICK if not slots.is_empty() else DIM)
+	_text.add_theme_color_override("font_color", _ink.caution if not slots.is_empty() else _ink.label)
 
 
 ## The last swap, as the configuration report saw it. Shown under the slots

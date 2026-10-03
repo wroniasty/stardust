@@ -71,10 +71,19 @@ na swoje piksele.
 
 ## 3. Paleta
 
-Jeden zasób, `resources/ui/palette.tres`, zamiast stałych rozsianych po
-`landing_hud.gd`, `ship_editor.gd`, `loadout_screen.gd` i `scanner_hud.gd`
-(dziś są w czterech miejscach i już się rozjechały). To jednocześnie zamyka
-pozycję „Paleta jako zasób" z V0.
+Jeden zasób, `resources/ui/palette.tres`. **Zrobione**: `flight_hud.gd`,
+`ship_editor.gd` i `loadout_screen.gd` czytają go przez `Palette.current()`
+i nie trzymają już żadnego własnego koloru — pilnuje tego test, który czyta
+ich źródło. Rozjazd, który to kończy, był policzony: te same cztery role
+jako jedenaście kolorów, w tym trzy bursztyny o piksel od siebie.
+
+W kodzie `void` nazywa się `scrim`, bo `void` to słowo kluczowe GDScriptu.
+Alfa nie należy do koloru, tylko do panelu (`Palette.over()`): przyrząd w
+rogu i pełnoekranowa płachta chcą różnej ilości świata prześwitującego
+spod spodu.
+
+Zostają do przeniesienia `system_map.gd`, `help_screen.gd`, `energy_hud.gd`
+i `aim_hud.gd` — idą z V6, razem z resztą oprawy.
 
 | nazwa | hex | rola |
 |---|---|---|

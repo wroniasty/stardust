@@ -1008,6 +1008,7 @@ func _evaluate_phase() -> void:
 			_check_aiming()
 			_check_stat_cards()
 			_check_font()
+			_check_palette()
 			_check_scanner(_planet)
 			_check_crate_physics(_planet)
 			_check_ejection()
@@ -6320,6 +6321,60 @@ func _check_aiming() -> void:
 	big.queue_free()
 	ship.queue_free()
 
+
+
+## Paleta: jeden plik, a nie dwanascie ról rozpisanych w kazdym ekranie.
+##
+## UI_STYLE section 3 counted the damage before the resource existed: the
+## same four roles were spelled out in three screens as eleven different
+## colours -- two panel fills, two borders, four greys for "label" and
+## "value", and three ambers a pixel apart. Nobody did that deliberately;
+## it is what happens when a role is written out where it is used.
+##
+## So the guard is not "the palette loads". It is that those screens no
+## longer declare a colour of their own, read from the source rather than
+## from the running object, because a constant that is never drawn with is
+## still a second opinion waiting to be used.
+func _check_palette() -> void:
+	var ink: Palette = Palette.current()
+	_expect(ink != null, "there is a palette")
+
+	# Twelve roles, twelve colours. Near-duplicates are the failure this
+	# replaces, so exact equality is a weak test -- it is the one that can
+	# be written, and it catches a copied line.
+	var roles: PackedStringArray = PackedStringArray([
+		"scrim", "panel", "edge", "grid", "inert", "label",
+		"value", "accent", "nav", "ok", "caution", "alarm",
+	])
+	var seen: Array[Color] = []
+	var repeated: int = 0
+	for role: String in roles:
+		var shade: Color = ink.get(role)
+		if seen.has(shade):
+			repeated += 1
+			print("    %s repeats a colour already in the palette" % role)
+		seen.append(shade)
+	_expect(repeated == 0, "and its %d roles are %d colours" % [roles.size(), roles.size()])
+
+	# The two accent channels have to be told apart at a glance, or the
+	# rule that one means the ship and the other the world buys nothing.
+	var apart: float = (
+		absf(ink.accent.r - ink.nav.r) + absf(ink.accent.g - ink.nav.g)
+		+ absf(ink.accent.b - ink.nav.b)
+	)
+	_expect(apart > 0.5, "the ship channel and the world channel are not the same blue (%.2f)" % apart)
+
+	# And the screens UI_STYLE named have stopped keeping their own.
+	var kept: int = 0
+	for name: String in ["flight_hud", "ship_editor", "loadout_screen", "scanner_hud"]:
+		var text: String = FileAccess.get_file_as_string("res://scripts/%s.gd" % name)
+		_expect(not text.is_empty(), "%s.gd can be read" % name)
+		for line: String in text.split("
+"):
+			if line.begins_with("const ") and line.contains(": Color"):
+				kept += 1
+				print("    %s still declares %s" % [name, line.strip_edges()])
+	_expect(kept == 0, "and no screen keeps a colour of its own any more")
 
 
 ## Font interfejsu: czy ma wszystkie znaki, ktore gra naprawde pisze.

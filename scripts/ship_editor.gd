@@ -25,23 +25,12 @@ extends CanvasLayer
 ## Opaque, not nearly-opaque. At 0.95 the debug overlay behind still came
 ## through as readable grey text: five percent of bright green on near-black
 ## is twice the panel's own brightness.
-const PANEL_BG: Color = Color(0.05, 0.06, 0.08, 1.0)
 
 ## Dims the world behind the panels, so the screen reads as "the game has
 ## stopped" rather than as a window left open over it.
-const SCRIM: Color = Color(0.0, 0.0, 0.02, 0.72)
-const PANEL_EDGE: Color = Color(0.28, 0.32, 0.39)
-const LABEL: Color = Color(0.56, 0.63, 0.72)
-const TEXT: Color = Color(0.78, 0.80, 0.83)
-const PICK: Color = Color(1.00, 0.85, 0.35)
-const FIT: Color = Color(0.36, 0.88, 0.62)
-const HULL: Color = Color(0.29, 0.34, 0.41)
-const HULL_FILL: Color = Color(0.10, 0.14, 0.19)
 
 ## A mount the selected module will not go into. Readable, but plainly not a
 ## candidate.
-const IDLE_MOUNT: Color = Color(0.42, 0.47, 0.55)
-const WARN: Color = Color(1.00, 0.55, 0.35)
 
 const FONT_SIZE: int = 8
 const ROW: float = 10.0
@@ -107,6 +96,11 @@ var _preview_key: String = ""
 
 
 
+
+## The twelve colours every screen draws from (UI_STYLE section 3). This
+## file used to spell out its own, which is how three screens ended up
+## with two panel fills, two borders and three ambers a pixel apart.
+var _ink: Palette = Palette.current()
 
 func _ready() -> void:
 	layer = 20
@@ -242,7 +236,11 @@ func _where_it_stands() -> String:
 		Ship.FlightMode.LANDED:
 			return "NA ZIEMI — montaż dostępny"
 		_:
-			return "W LOCIE — montaż w doku albo po wylądowaniu"
+			# Short on purpose: it is drawn in the corner of the lower
+			# panel, beside the comparison, and the long version ran over
+			# it. Says what to do rather than where it could be done,
+			# which is also the more useful half.
+			return "W LOCIE — zacumuj albo wyląduj"
 
 
 ## Everything the pilot can act on, hold first. One list rather than two
@@ -604,7 +602,7 @@ func _draw_editor() -> void:
 		return
 	var panels: Dictionary = _panels()
 
-	_canvas.draw_rect(Rect2(Vector2.ZERO, panels["view"] as Vector2), SCRIM)
+	_canvas.draw_rect(Rect2(Vector2.ZERO, panels["view"] as Vector2), _ink.over(_ink.scrim, 0.72))
 	for key: String in ["list", "plan", "info"]:
 		_panel(panels[key])
 	_draw_list(font, panels["list"])
@@ -613,8 +611,8 @@ func _draw_editor() -> void:
 
 
 func _panel(rect: Rect2) -> void:
-	_canvas.draw_rect(rect, PANEL_BG)
-	_canvas.draw_rect(rect, PANEL_EDGE, false, 1.0)
+	_canvas.draw_rect(rect, _ink.panel)
+	_canvas.draw_rect(rect, _ink.edge, false, 1.0)
 
 
 func _width(font: Font, text: String) -> float:
@@ -630,12 +628,12 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 	var x: float = rect.position.x + PAD
 	_text(font, Vector2(x, y), "ŁADOWNIA / CARGO   %.1f / %.1f" % [
 		_ship.cargo_used(), _ship.cargo_capacity(),
-	], LABEL)
+	], _ink.label)
 	y += ROW * 1.5
 
 	var items: Array[Dictionary] = _items()
 	if items.is_empty():
-		_text(font, Vector2(x, y), "pusto", LABEL)
+		_text(font, Vector2(x, y), "pusto", _ink.label)
 		return
 
 	for i: int in range(items.size()):
@@ -646,17 +644,17 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 			ModuleData.RARITY_COLORS[0] if module == null else module.rarity_color()
 		)
 		if i == _pick:
-			_canvas.draw_rect(_row_rect(i, rect), Color(PICK, 0.18))
+			_canvas.draw_rect(_row_rect(i, rect), Color(_ink.caution, 0.18))
 		_text(font, Vector2(x, y), "%s %-22s %4.1f" % [
 			">" if bool(entry["held"]) else " ", _label(item).left(22), Ship.module_bulk(item),
-		], colour if i != _pick else PICK)
+		], colour if i != _pick else _ink.caution)
 		y += ROW
 
 
 ## The schematic, built from the hull polygon and the mount positions so it
 ## cannot disagree with the ship it describes.
 func _draw_plan(font: Font, rect: Rect2) -> void:
-	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "SCHEMAT", LABEL)
+	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "SCHEMAT", _ink.label)
 
 	var hull: PackedVector2Array = _ship.hull_outline
 	var mounts: Array[Node] = _all_mounts()
@@ -670,9 +668,9 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	var outline: PackedVector2Array = PackedVector2Array()
 	for point: Vector2 in hull:
 		outline.append(place.call(point))
-	_canvas.draw_colored_polygon(outline, HULL_FILL)
+	_canvas.draw_colored_polygon(outline, _ink.edge)
 	outline.append(outline[0])
-	_canvas.draw_polyline(outline, HULL, 1.0)
+	_canvas.draw_polyline(outline, _ink.grid, 1.0)
 
 	var targets: Array[Node] = _targets()
 	var chosen: Node = null
@@ -683,7 +681,7 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	for mount: Node in mounts:
 		var at: Vector2 = where[mount]
 		var fits: bool = targets.has(mount)
-		var colour: Color = PICK if mount == chosen else (FIT if fits else IDLE_MOUNT)
+		var colour: Color = _ink.caution if mount == chosen else (_ink.ok if fits else _ink.inert)
 		var gun: Hardpoint = mount as Hardpoint
 		if gun != null:
 			_draw_arc_for(gun, at)
@@ -739,7 +737,7 @@ func _draw_slot_caption(font: Font, at: Vector2, mount: Node, origin: Vector2, r
 	if at.x < origin.x - 0.5:
 		label.x = at.x - SLOT_RING * 0.5 - 2.0 - width
 	label.x = clampf(label.x, rect.position.x + PAD, rect.end.x - PAD - width)
-	_text(font, label, caption, PICK)
+	_text(font, label, caption, _ink.caution)
 
 
 ## One slot: a box that says what kind of socket it is and what is in it.
@@ -902,7 +900,7 @@ func _collides(at: Vector2, taken: Array[Vector2]) -> bool:
 func _draw_arc_for(gun: Hardpoint, at: Vector2) -> void:
 	var arc: float = gun.traverse()
 	var rest: float = gun.rotation - PI * 0.5
-	var colour: Color = Color(FIT, 0.35) if gun.trigger == 0 else Color(PICK, 0.35)
+	var colour: Color = Color(_ink.ok, 0.35) if gun.trigger == 0 else Color(_ink.caution, 0.35)
 	# Standing off the box rather than starting at its centre. Drawn from the
 	# centre, the two edge lines cross the slot and meet on the glyph, which
 	# left the mount showing an arc and no longer showing what was in it.
@@ -936,11 +934,11 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	if picked.is_empty():
 		if _inspecting != null:
 			for line: String in _card(_inspecting, null):
-				_text(font, Vector2(x, y), line, TEXT)
+				_text(font, Vector2(x, y), line, _ink.value)
 				y += ROW
 		else:
-			_text(font, Vector2(x, y), "nic nie wybrano — kliknij gniazdo albo przedmiot", LABEL)
-		_text(font, Vector2(x, rect.end.y - PAD), _keys(), LABEL)
+			_text(font, Vector2(x, y), "nic nie wybrano — kliknij gniazdo albo przedmiot", _ink.label)
+		_text(font, Vector2(x, rect.end.y - PAD), _keys(), _ink.label)
 		return
 	_inspecting = null
 
@@ -955,7 +953,7 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 		if y > floor_y:
 			dropped += 1
 			continue
-		_text(font, Vector2(x, y), line, TEXT)
+		_text(font, Vector2(x, y), line, _ink.value)
 		y += ROW
 
 	# What it would replace, beside it rather than under it: a swap is a
@@ -964,12 +962,12 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	if replacing != null:
 		var beside: float = rect.position.x + rect.size.x * 0.48
 		var at: float = rect.position.y + PAD + float(FONT_SIZE)
-		_text(font, Vector2(beside, at), "-- zamontowane teraz --", LABEL)
+		_text(font, Vector2(beside, at), "-- zamontowane teraz --", _ink.label)
 		for line: String in _card(replacing, null):
 			at += ROW
 			if at > floor_y:
 				break
-			_text(font, Vector2(beside, at), line, IDLE_MOUNT)
+			_text(font, Vector2(beside, at), line, _ink.inert)
 
 	# What the swap would do to the ship as a whole, which the card cannot
 	# say: where an engine goes decides what it does.
@@ -978,18 +976,18 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 		if y > floor_y:
 			dropped += 1
 			continue
-		_text(font, Vector2(x, y), line.left(96), FIT)
+		_text(font, Vector2(x, y), line.left(96), _ink.ok)
 		y += ROW
 
 	if not _notice.is_empty() and y <= floor_y:
-		_text(font, Vector2(x, y), _notice.left(96), WARN)
+		_text(font, Vector2(x, y), _notice.left(96), _ink.caution)
 
 	var state: String = _where_it_stands()
 	_text(
 		font,
 		Vector2(rect.end.x - PAD - _width(font, state), rect.position.y + PAD + float(FONT_SIZE)),
 		state,
-		FIT if can_refit() else WARN,
+		_ink.ok if can_refit() else _ink.caution,
 	)
 	# A row that will not fit is dropped, but never quietly: a card missing
 	# its last line looks exactly like a card that ends there, and the pilot
@@ -997,7 +995,7 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	var hints: String = _keys()
 	if dropped > 0:
 		hints += "   (+%d wierszy poza panelem)" % dropped
-	_text(font, Vector2(x, rect.end.y - PAD), hints, LABEL)
+	_text(font, Vector2(x, rect.end.y - PAD), hints, _ink.label)
 
 
 func _keys() -> String:

@@ -21,12 +21,6 @@ const FONT_SIZE: int = 8
 const ROW: float = 10.0
 const MARGIN: float = 6.0
 
-const GOOD: Color = Color(0.45, 1.00, 0.50)
-const CAUTION: Color = Color(1.00, 0.85, 0.30)
-const BAD: Color = Color(1.00, 0.40, 0.35)
-const IDLE: Color = Color(0.70, 0.75, 0.80)
-const FRAME: Color = Color(0.32, 0.37, 0.45)
-const GROUND: Color = Color(0.55, 0.60, 0.68)
 
 ## Slope and descent turn amber at this fraction of what the gear will take.
 const CAUTION_FRACTION: float = 0.6
@@ -82,6 +76,11 @@ const ARROW_HEAD: float = 6.0
 var _ship: Ship = null
 var _canvas: Control = null
 
+
+## The twelve colours every screen draws from (UI_STYLE section 3). This
+## file used to spell out its own, which is how three screens ended up
+## with two panel fills, two borders and three ambers a pixel apart.
+var _ink: Palette = Palette.current()
 
 func _ready() -> void:
 	layer = 10
@@ -158,13 +157,13 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 	var left: float = (view.x - BAR_WIDTH) * 0.5
 	var frame: Rect2 = Rect2(left, MARGIN, BAR_WIDTH, BAR_HEIGHT)
 	var health: float = clampf(_ship.hull_integrity, 0.0, 1.0)
-	var colour: Color = GOOD
+	var colour: Color = _ink.ok
 	if health < 0.25:
-		colour = BAD
+		colour = _ink.alarm
 	elif health < 0.6:
-		colour = CAUTION
+		colour = _ink.caution
 	_canvas.draw_rect(Rect2(frame.position, Vector2(BAR_WIDTH * health, BAR_HEIGHT)), colour, true)
-	_canvas.draw_rect(frame, FRAME, false, 1.0)
+	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
 	var reading: String = "%3.0f%%" % (health * 100.0)
 	_text(font, Vector2(left - 4.0 - _width(font, reading), frame.end.y), reading, colour)
 	_draw_heat(font, left, frame.end.y + HEAT_GAP)
@@ -179,7 +178,7 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 			font,
 			Vector2(frame.end.x + 4.0, frame.end.y),
 			"BOOST" if _ship.boost_active else "BOOST --",
-			CAUTION if _ship.boost_active else BAD,
+			_ink.caution if _ship.boost_active else _ink.alarm,
 		)
 	_draw_dock(font, left, frame.end.y + ROW)
 
@@ -193,13 +192,13 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 ## fly on.
 func _draw_dock(font: Font, left: float, top: float) -> void:
 	var says: String = ""
-	var colour: Color = GOOD
+	var colour: Color = _ink.ok
 	if _ship.flight_mode == Ship.FlightMode.DOCKED:
 		says = "DOK" if _ship.fully_serviced() else "DOK -- naprawa"
-		colour = GOOD if _ship.fully_serviced() else CAUTION
+		colour = _ink.ok if _ship.fully_serviced() else _ink.caution
 	elif not _ship.last_dock_rejection.is_empty():
 		says = "DOK: %s" % _ship.last_dock_rejection
-		colour = CAUTION
+		colour = _ink.caution
 	if says.is_empty():
 		return
 	_text(font, Vector2(left - 6.0 - _width(font, says), top), says, colour)
@@ -220,13 +219,13 @@ func _draw_heat(font: Font, left: float, top: float) -> void:
 		return
 	var frame: Rect2 = Rect2(left, top, BAR_WIDTH, HEAT_HEIGHT)
 	var burning: bool = heat >= Ship.BURN_HEAT
-	var colour: Color = BAD if burning else CAUTION
+	var colour: Color = _ink.alarm if burning else _ink.caution
 	_canvas.draw_rect(Rect2(frame.position, Vector2(BAR_WIDTH * heat, HEAT_HEIGHT)), colour, true)
-	_canvas.draw_rect(frame, FRAME, false, 1.0)
+	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
 	var mark: float = left + BAR_WIDTH * Ship.BURN_HEAT
-	_canvas.draw_line(Vector2(mark, top - 1.0), Vector2(mark, frame.end.y + 1.0), BAD, 1.0)
+	_canvas.draw_line(Vector2(mark, top - 1.0), Vector2(mark, frame.end.y + 1.0), _ink.alarm, 1.0)
 	if burning:
-		_text(font, Vector2(frame.end.x + 4.0, frame.end.y + 1.0), "HEAT", BAD)
+		_text(font, Vector2(frame.end.x + 4.0, frame.end.y + 1.0), "HEAT", _ink.alarm)
 
 
 func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
@@ -239,8 +238,8 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 		_draw_conic(dial, planet, shape, orbit)
 	else:
 		# Landed: there is no coasting conic to draw, only where you are.
-		_canvas.draw_circle(dial.get_center(), PLANET_DOT, GROUND)
-		_canvas.draw_arc(dial.get_center(), DIAL * 0.5 - 3.0, 0.0, TAU, 48, GROUND, 1.0)
+		_canvas.draw_circle(dial.get_center(), PLANET_DOT, _ink.nav)
+		_canvas.draw_arc(dial.get_center(), DIAL * 0.5 - 3.0, 0.0, TAU, 48, _ink.nav, 1.0)
 
 	var up: Vector2 = (_ship.global_position - planet.global_position).normalized()
 	var altitude: float = planet.height_above_terrain(_ship.global_position)
@@ -258,7 +257,7 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 	y += ROW
 	_row(font, x, y, "APO", _apsis_text(planet, shape["apoapsis"], landed), _apoapsis_colour(shape))
 	y += ROW
-	_row(font, x, y, "ALT", "%6.0f" % altitude, IDLE)
+	_row(font, x, y, "ALT", "%6.0f" % altitude, _ink.value)
 	y += ROW
 	_row(font, x, y, "V/S", "%+6.1f" % -descent, _descent_colour(descent))
 	y += ROW
@@ -272,7 +271,7 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 		y += ROW
 		_row(font, x, y, "GEAR", _gear_text(), _gear_colour())
 	else:
-		_row(font, x, y, "NAME", planet.catalogue_name(), IDLE)
+		_row(font, x, y, "NAME", planet.catalogue_name(), _ink.value)
 
 	_draw_warning(font, box)
 	# Above the panel and to the right, where the refusal mark is above it
@@ -335,10 +334,10 @@ func _draw_conic(
 	# dial and swallowed the very track the pilot was reading. A ring says
 	# the same thing about scale and leaves the inside visible, which is
 	# where a suborbital conic lives.
-	_canvas.draw_circle(focus, PLANET_DOT, GROUND)
+	_canvas.draw_circle(focus, PLANET_DOT, _ink.nav)
 	var ground_ring: float = planet.surface_radius * scale
 	if ground_ring > PLANET_DOT + 1.0:
-		_canvas.draw_arc(focus, ground_ring, 0.0, TAU, 48, GROUND, 1.0)
+		_canvas.draw_arc(focus, ground_ring, 0.0, TAU, 48, _ink.nav, 1.0)
 
 	var colour: Color = _orbit_colour(orbit)
 	var width: float = ORBIT_WIDTH if orbit == GravityWell.OrbitState.ORBIT else TRACK_WIDTH
@@ -367,10 +366,10 @@ func _draw_conic(
 		_canvas.draw_circle(
 			focus + Vector2.from_angle(periapsis_angle + turn + PI) * apoapsis * scale,
 			APSIS_DOT,
-			GOOD,
+			_ink.ok,
 		)
 	# Where the ship is on it, which is what turns a shape into a position.
-	_canvas.draw_circle(focus + arm.rotated(turn) * scale, 1.6, GOOD)
+	_canvas.draw_circle(focus + arm.rotated(turn) * scale, 1.6, _ink.ok)
 
 
 ## Out of every well: which way, and how fast. An orbit diagram around a
@@ -378,20 +377,20 @@ func _draw_conic(
 func _draw_transfer(font: Font, box: Rect2) -> void:
 	var centre: Vector2 = Vector2(box.position.x + DIAL * 0.5 + 2.0, box.get_center().y)
 	var speed: float = _ship.linear_velocity.length()
-	_canvas.draw_arc(centre, DIAL * 0.5 - 3.0, 0.0, TAU, 32, FRAME, 1.0)
+	_canvas.draw_arc(centre, DIAL * 0.5 - 3.0, 0.0, TAU, 32, _ink.edge, 1.0)
 	if speed > 0.01:
 		var along: Vector2 = _ship.linear_velocity.normalized().rotated(-_view_rotation())
 		var tip: Vector2 = centre + along * ARROW_LENGTH
-		_canvas.draw_line(centre, tip, GOOD, 1.0)
+		_canvas.draw_line(centre, tip, _ink.ok, 1.0)
 		for side: float in [-1.0, 1.0]:
 			_canvas.draw_line(
-				tip, tip - along.rotated(side * 0.4) * ARROW_HEAD, GOOD, 1.0
+				tip, tip - along.rotated(side * 0.4) * ARROW_HEAD, _ink.ok, 1.0
 			)
 	var x: float = centre.x + DIAL * 0.5 + 4.0
 	var y: float = box.position.y + ROW * 2.0
-	_row(font, x, y, "V", "%6.0f" % speed, GOOD)
+	_row(font, x, y, "V", "%6.0f" % speed, _ink.ok)
 	_row(font, x, y + ROW, "GEAR", _gear_text(), _gear_colour())
-	_text(font, Vector2(x, y + ROW * 2.5), "w przelocie", IDLE)
+	_text(font, Vector2(x, y + ROW * 2.5), "w przelocie", _ink.value)
 
 
 ## Why the landing was refused, as a mark rather than a sentence. The
@@ -416,13 +415,13 @@ func _draw_warning(font: Font, box: Rect2) -> void:
 	if warning().is_empty():
 		return
 	var at: Vector2 = Vector2(box.position.x + 4.0, box.position.y - 4.0)
-	_canvas.draw_line(at + Vector2(0.0, -6.0), at + Vector2(0.0, -2.0), BAD, 2.0)
-	_canvas.draw_line(at + Vector2(0.0, -0.5), at, BAD, 2.0)
-	_text(font, at + Vector2(5.0, 0.0), warning().to_upper(), BAD)
+	_canvas.draw_line(at + Vector2(0.0, -6.0), at + Vector2(0.0, -2.0), _ink.alarm, 2.0)
+	_canvas.draw_line(at + Vector2(0.0, -0.5), at, _ink.alarm, 2.0)
+	_text(font, at + Vector2(5.0, 0.0), warning().to_upper(), _ink.alarm)
 
 
 func _row(font: Font, x: float, y: float, label: String, value: String, colour: Color) -> void:
-	_text(font, Vector2(x, y), label, IDLE)
+	_text(font, Vector2(x, y), label, _ink.value)
 	_text(font, Vector2(x + 34.0, y), value, colour)
 
 
@@ -442,17 +441,17 @@ func _view_rotation() -> float:
 func _orbit_colour(orbit: GravityWell.OrbitState) -> Color:
 	match orbit:
 		GravityWell.OrbitState.SUBORBITAL:
-			return BAD
+			return _ink.alarm
 		GravityWell.OrbitState.DECAYING:
-			return CAUTION
+			return _ink.caution
 		GravityWell.OrbitState.ESCAPE:
-			return IDLE
+			return _ink.value
 		_:
-			return GOOD
+			return _ink.ok
 
 
 func _apoapsis_colour(shape: Dictionary) -> Color:
-	return IDLE if is_inf(float(shape["apoapsis"])) else GOOD
+	return _ink.value if is_inf(float(shape["apoapsis"])) else _ink.ok
 
 
 func _gear_text() -> String:
@@ -467,23 +466,23 @@ func _gear_text() -> String:
 
 func _gear_colour() -> Color:
 	if _ship.gear == null:
-		return BAD
+		return _ink.alarm
 	if _ship.gear.is_deployed():
-		return GOOD
-	return IDLE if _ship.gear.is_stowed() else CAUTION
+		return _ink.ok
+	return _ink.value if _ship.gear.is_stowed() else _ink.caution
 
 
 func _slope_colour(slope: float) -> Color:
 	if _ship.gear == null:
-		return IDLE
+		return _ink.value
 	if slope > _ship.gear.slope_limit():
-		return BAD
-	return CAUTION if slope > _ship.gear.slope_limit() * CAUTION_FRACTION else GOOD
+		return _ink.alarm
+	return _ink.caution if slope > _ship.gear.slope_limit() * CAUTION_FRACTION else _ink.ok
 
 
 func _descent_colour(descent: float) -> Color:
 	if _ship.gear == null or descent <= 0.0:
-		return IDLE
+		return _ink.value
 	if descent > _ship.gear.vertical_limit():
-		return BAD
-	return CAUTION if descent > _ship.gear.vertical_limit() * CAUTION_FRACTION else GOOD
+		return _ink.alarm
+	return _ink.caution if descent > _ship.gear.vertical_limit() * CAUTION_FRACTION else _ink.ok
