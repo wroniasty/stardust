@@ -122,7 +122,8 @@ Cel: statek jako zestaw modułów, które są lootem.
 - [x] Komputer lotu jako moduł (`FlightComputerData` w `ComputerBay`): alokacja przez ograniczone najmniejsze kwadraty z rzeczywistym ciągiem i kondycją każdego silnika. Na uszkodzonym statku obrót zostawia 36 N zamiast 88 N siły bocznej.
 - [x] **Gotowe konfiguracje statków** w sandboksie (`ShipFitout`): stock, stock z silnikami o 75% mocniejszymi, **gimbal podwójny (para sił)**, gimbal pojedynczy, przechwytujący, frachtowiec i goły kadłub. Preset niesie montaże, silniki, działa, obrys, ładownię i nogi; przebudowa jest **w miejscu**, bo podmiana sceny unieważniłaby kamerę, HUD-y, edytor i streaming manager.
 - [x] **Para sił z dwóch wychylanych dysz**: dziób i rufa, obie wychylane w tę samą stronę — momenty się dodają, ciągi znoszą. Zmierzone: **4366 autorytetu CW** (więcej niż 3760 na stockowych dyszach) przy **1,4 px/s² resztkowego pchnięcia** zamiast 48,9 dla pojedynczego gimbala. Kadłub musi być symetryczny, bo para przestaje być parą, gdy środek masy przesunie się między ramionami.
-- [ ] Strafe z pary gimbali: wychylone **przeciwnie** dają czysty ciąg boczny, więc dwie dysze wystarczyłyby na wszystko. Dziś raport słusznie melduje brak STRAFE — `_aim_gimbals` celuje tylko pod obrót, a grupy nie liczą wkładu bocznego z wychylenia.
+- [x] **Strafe z pary gimbali.** Wychylone **tak samo** — momenty się dodają, siły boczne znoszą: to jest obrót, który już był. Wychylone **przeciwnie** — momenty się znoszą, siły boczne dodają: to jest strafe, i dwie dysze są wtedy całym statkiem. Zmierzone na presecie „para sił": **341 N STRAFE_LEFT**, dysze na -0,21 i +0,21 przy strafie, na -0,21 i -0,21 przy obrocie.
+  Liczy się to **tylko dla pary** (`ShipControl.gimbal_partner`: przeciwne ciągi, przeciwne ramiona, podobne wielkości) i to jest sedno, nie ostrożność: pojedyncza dysza wychylona w bok pcha statek wzdłuż własnego ciągu dokładnie tak samo mocno jak przedtem. Preset zrobiony po to, żeby to pokazać, nazywa się „gimbal pojedynczy (dryfuje)" i dalej nie dostaje gimbala do grupy strafe — co test sprawdza wprost, bo ten preset ma zwykłe silniki boczne i raport słusznie o nic nie ma pretensji.
 - [x] Grupy kontroli liczą **moment z gimbala**. Przedtem napęd główny na osi miał zerowy moment z dyszą prosto, więc CW/CCW nie miały żadnego członka i statek sterowany wyłącznie gimbalem **nie skręcał w ogóle**. Dodatkowo kara za bok nie dotyczy gimbala przy obrocie: pchnięcie do przodu to znana cena tego narzędzia, nie dowód, że jest złe. Zmierzone: 1638 autorytetu CW przeciw 3760 na dyszach, 2,93 rad/s po trzech sekundach i 58 px/s dryfu.
 - [x] Gimbal: `gimbal_range` i `gimbal_rate` na `EngineData`, dysza wychylana proporcjonalnie do żądania obrotu. Kierunek wychylenia wyprowadzony z ramienia, nie deklarowany per mount.
 - [x] Punkty kontaktu wyprowadzane z `hull_outline`: wierzchołki plus podział krawędzi krokiem 6 px (cztery teksele), liczone raz w `_ready()`. `HULL_POINTS` zniknęło.
@@ -178,7 +179,7 @@ Cel: strzela się tam, gdzie się patrzy, a kursor mówi, czy to coś da.
 - [x] `traverse_range` i `traverse_rate` w tabelach lootu, z afiksami `turreted` (szerszy łuk za kadencję) i `quick-slewing` (szybszy obrót za obrażenia).
 - [x] Wybór celu dla pocisków naprowadzanych **z pozycji kursora**, nie „najbliższy statek". Promień chwytu liczony w pikselach ekranu i przeliczany przez kamerę, więc celowanie jest tak samo wyrozumiałe przy każdym zoomie; rozmiar celu dochodzi na wierzch. Kursor na pustce to **brak zaczepienia** — rakieta leci prosto tam, gdzie pokazałeś, zamiast łapać cokolwiek było bliżej.
 - [x] Własny kadłub nie jest przeszkodą: amunicja przelatuje przez własny statek. Pocisk jest **martwy, dopóki nie wyjdzie poza obrys** tego, kto go wystrzelił — nie przez stały czas, bo to zakład o rozmiar kadłuba; przy 150 px/s przez 72-pikselowy kadłub stara łaska 0,2 s kończyła się w połowie drogi. Raz opuszczony obrys uzbraja na stałe, więc pocisk, który wróci dookoła planety, trafia.
-- [ ] Ewentualnie: teren między działkiem a celem. Kursor melduje wtedy zielony, choć pocisk trafi w zbocze — ale trafienie w zbocze jest prawdziwym skutkiem (robi krater), więc to raczej wygoda niż kłamstwo. Koszt: raycast na działko na klatkę.
+- [x] ~~Teren między działkiem a celem~~ — **nie robimy, i to jest decyzja.** Kursor odpowiada na pytanie „czy ta lufa może się wycelować", nie „czy pocisk doleci". To jest ta sama granica, którą pilot postawił przy grawitacji: kursor nic nie kompensuje, poprawka należy do pilota. Trafienie w zbocze jest zresztą prawdziwym skutkiem — robi krater — więc byłaby to wygoda, nie naprawa kłamstwa. Koszt byłby raycastem na działko na klatkę, płaconym po to, żeby odebrać pilotowi decyzję.
 
 
 ---
@@ -231,7 +232,7 @@ z ciężkiego świata), drugie z tego, że klawiszy zrobiło się trzydzieści p
 - [x] **Akord trzyma swoje klawisze aż do puszczenia.** Zgłoszone z kokpitu: przy puszczaniu A+D jeden klawisz przeżywa drugi i statek zaczyna się kręcić w chwili, gdy pilot przestał kazać mu przestać. `SETTLE` pilnował tylko wchodzenia w akord. Lustrem byłoby okno przy wychodzeniu, a okno to zgadywanie — więc klawisz zużyty przez akord zostaje zużyty do puszczenia. Test pada bez poprawki.
 - [x] **Ekran pomocy na `?` / `F1`**, czytany z InputMap, nie z przepisanej listy. Test pilnuje, że każda akcja ma opis — przy pierwszym uruchomieniu wypadły cztery akcje, o których nie wiedziałem.
 - [x] **Dopalanie widać.** Problem nie był w przycinaniu, tylko w tym, **którą liczbę czytała grafika**: wszystko, co rysowało wydech, brało `effective_output()`, czyli ułamek przepustnicy, który z definicji kończy się na jedynce. Fizyka od początku mnożyła go przez `boost_factor()` w `current_force()` — prezentacja nie. Jest teraz `EngineInstance.exhaust_flow()`, jawnie mogące przekroczyć jeden, i to ono napędza płomień, światło i cząstki. Przy trzykrotnym ciągu: płomień **trzy razy dłuższy**, szerszy o pierwiastek z trzech (dopalanie to włócznia, nie chmura), klatki trzy razy szybsze, światło dyszy 1,50 zamiast 0,50. `amount_ratio` cząstek dalej nasyca się na jedynce, bo to ułamek i naprawdę nie może być większy.
-- [ ] Przemapowanie klawiszy przez gracza (M6 ma to w „Menu, ustawienia, mapowanie klawiszy"); ekran pomocy jest już gotowy na to, bo nazwy czyta z mapy.
+- [x] ~~Przemapowanie klawiszy~~ — **należy do M6** („Menu, ustawienia, mapowanie klawiszy") i tam zostaje; trzymanie tego w dwóch milestone'ach to jedna pozycja, o którą dwa plany się spierają. Ekran pomocy jest na to gotowy, bo nazwy czyta z mapy wejścia, a nie ze stałych.
 
 ---
 
@@ -352,13 +353,17 @@ wspólna dla całej kategorii i nie wie, czego baza nie ma.
   jest jedynym miejscem, w którym tempo powstaje: pióropusz przy ćwierci
   przepustnicy miga cztery razy wolniej, bo silnik pracuje na ćwierć. Ikony
   HUD i edytora zostają statyczne.
-- [ ] Test: żaden afiks nie ląduje na polu, którego baza nie ma; każdy
-  przedmiot ma nazwę mieszczącą się na karcie; każdy kadłub z katalogu ma
-  komplet sprite'ów albo jawnie ich nie ma.
+- [x] Test: żaden afiks nie ląduje na polu, którego baza nie ma
+  (`_check_affix_pools`, 1500 losowań plus sama reguła); każdy przedmiot ma
+  nazwę mieszczącą się na karcie (`_check_item_names`, 1200 losowań, limit
+  sprawdzany z obu stron przeciwko prawdziwemu panelowi i prawdziwemu
+  fontowi); każdy kadłub z katalogu ma sprite (`_check_art`).
 
 Gotowe, gdy: z siedmiu baz silnika i jednej puli afiksów wychodzi setka
 rozróżnialnych silników, każdy o nazwie, która mówi, co robi, i wyglądzie,
-który to potwierdza.
+który to potwierdza. **Spełnione.** Nazwa składa się z afiksów i bazy dla
+każdego rodzaju tak samo, afiksy trafiają tylko tam, gdzie mają co ruszyć,
+a dysza i pióropusz wynikają z typu i mocy.
 
 ---
 

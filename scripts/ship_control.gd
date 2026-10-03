@@ -64,6 +64,31 @@ var solve_allocation: bool = false
 ## Braking divides by this, so it has to be a real force, not a score.
 var max_authority: Dictionary = {}
 
+## Gimballed engines that form a couple, as engine -> engine.
+##
+## Two nozzles whose thrusts oppose and whose arms oppose. Deflect such a
+## pair **the same way** and the side forces cancel while the torques add,
+## which is the turn the ship already knew how to do. Deflect them
+## **opposite ways** and the torques cancel while the side forces add,
+## which is a strafe -- and two nozzles are then the whole ship.
+##
+## Why a pair and not any gimbal: one nozzle swung sideways shoves the
+## ship along its own thrust just as hard as before, so a lone gimballed
+## main drive asked to strafe mostly flies forward. The preset built to
+## show that is called "gimbal pojedynczy (dryfuje)" and it is right to.
+## Only a partner cancels the shove, so only a partner earns the group.
+var gimbal_partner: Dictionary = {}
+
+## How closely two nozzles have to oppose to count as a couple. Dot
+## products, so 0.95 is about eighteen degrees of slop in each of thrust
+## and arm -- loose enough for a hull nobody measured with a protractor,
+## tight enough that two jets at right angles are not a pair.
+const COUPLE_ALIGNMENT: float = -0.95
+
+## And how closely matched in size. A big nozzle opposite a small one does
+## not cancel; it mostly wins.
+const COUPLE_BALANCE: float = 0.25
+
 
 ## Recomputes every group from the current geometry.
 ##
@@ -91,16 +116,23 @@ func rebuild(
 	# single contribution vector can only point one way. Which way it goes
 	# is decided per command, below.
 	var swing: PackedFloat32Array = PackedFloat32Array()
+	# And what it adds sideways, which is the same deflection seen as a
+	# force rather than as a torque. Only useful to a nozzle with a partner
+	# -- see `gimbal_partner`.
+	var slip: Array[Vector2] = []
+	var arms: Array[Vector2] = []
 	for engine: EngineInstance in engines:
 		var force: Vector2 = engine.nominal_force()
 		var arm: Vector2 = engine.mount.position - centre_of_mass
 		var torque: float = arm.cross(force)
 		forces.append(force)
+		arms.append(arm)
 		torques.append(torque)
 		var reach: float = engine.data.gimbal_range if engine.data != null else 0.0
 		swing.append(
 			0.0 if reach <= 0.0 else absf(arm.cross(force.rotated(reach)) - torque)
 		)
+		slip.append(Vector2.ZERO if reach <= 0.0 else force.rotated(reach) - force)
 		contributions.append(
 			Vector3(force.x / mass, force.y / mass, (torque / inertia) * gyration)
 		)
@@ -112,6 +144,7 @@ func rebuild(
 	_engine_order.clear()
 	for i: int in range(engines.size()):
 		_engine_order[engines[i]] = i
+	_find_couples(engines, forces, arms, swing)
 
 	for command: Command in COMMAND_AXES:
 		var axis: Vector3 = COMMAND_AXES[command]
@@ -119,8 +152,19 @@ func rebuild(
 		var best: float = 0.0
 
 		var turning: bool = command == Command.CW or command == Command.CCW
+		var strafing: bool = (
+			command == Command.STRAFE_LEFT or command == Command.STRAFE_RIGHT
+		)
+		var axis_flat: Vector2 = Vector2(axis.x, axis.y)
 		for i: int in range(engines.size()):
 			var contribution: Vector3 = contributions[i]
+			if strafing and gimbal_partner.has(engines[i]):
+				# A couple, so the partner cancels this nozzle's own thrust
+				# and the torque its deflection makes. What is left is the
+				# side force alone, which is already exactly on the axis --
+				# hence a contribution of nothing else, and no penalty to
+				# charge it for being off one.
+				contribution = axis * (absf(slip[i].dot(axis_flat)) / mass)
 			if turning and swing[i] > 0.0:
 				# The nozzle will be swung the way that helps, so the torque
 				# it can bring to this command is always the full swing in
@@ -138,7 +182,9 @@ func rebuild(
 			# threshold below still drops it when real torque jets are
 			# bolted on, because theirs is an order of magnitude better.
 			var weight: float = along
-			if not (turning and swing[i] > 0.0):
+			if not (turning and swing[i] > 0.0) and not (
+				strafing and gimbal_partner.has(engines[i])
+			):
 				weight -= side_penalty * sideways
 			if weight <= 0.0:
 				continue
@@ -157,12 +203,51 @@ func rebuild(
 			# actually be run at when the command is held at 1.
 			if turning:
 				authority += (absf(torques[index]) + swing[index]) * normalised
+			elif strafing and gimbal_partner.has(member["engine"]):
+				# The deflection, not the thrust: the thrust is what the
+				# partner is busy cancelling.
+				authority += absf(slip[index].dot(axis_flat)) * normalised
 			else:
-				var axis_2d: Vector2 = Vector2(axis.x, axis.y)
-				authority += forces[index].dot(axis_2d) * normalised
+				authority += forces[index].dot(axis_flat) * normalised
 
 		groups[command] = kept
 		max_authority[command] = authority
+
+
+## Finds the gimballed nozzles that oppose each other, and records them.
+##
+## O(n squared) over the gimballed engines only, which on any hull anyone
+## would fly is two. Done at rebuild, because a couple is a fact about the
+## geometry and the geometry only changes on a refit.
+func _find_couples(
+	engines: Array[EngineInstance],
+	forces: Array[Vector2],
+	arms: Array[Vector2],
+	swing: PackedFloat32Array,
+) -> void:
+	gimbal_partner.clear()
+	for i: int in range(engines.size()):
+		if swing[i] <= 0.0:
+			continue
+		for j: int in range(engines.size()):
+			if i == j or swing[j] <= 0.0:
+				continue
+			if not _opposes(forces[i], forces[j]):
+				continue
+			if not _opposes(arms[i], arms[j]):
+				continue
+			gimbal_partner[engines[i]] = engines[j]
+			break
+
+
+## Whether two vectors point opposite ways and are about the same length.
+func _opposes(a: Vector2, b: Vector2) -> bool:
+	if a.is_zero_approx() or b.is_zero_approx():
+		return false
+	if a.normalized().dot(b.normalized()) > COUPLE_ALIGNMENT:
+		return false
+	var longest: float = maxf(a.length(), b.length())
+	return absf(a.length() - b.length()) / longest <= COUPLE_BALANCE
 
 
 ## Sets every engine's target throttle from a set of command values.

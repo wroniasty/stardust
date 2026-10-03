@@ -5538,10 +5538,84 @@ func _check_fitout_presets() -> void:
 			pair_shove, lone_shove,
 		],
 	)
+	# And what two nozzles can do that one cannot: strafe.
+	#
+	# This check used to assert the opposite, and the report was right to
+	# complain. Deflect a couple **the same way** and the side forces
+	# cancel while the torques add, which is the turn above; deflect them
+	# **opposite ways** and the torques cancel while the side forces add.
+	# Two nozzles are then the whole ship.
+	var pair_strafe: float = ship.control.authority_of(ShipControl.Command.STRAFE_LEFT)
 	_expect(
-		_findings_of(ship.configuration()).contains("STRAFE"),
-		"what two nozzles cannot do is strafe, and the report says so",
+		pair_strafe > 0.0,
+		"two nozzles deflected opposite ways strafe (%.0f of STRAFE_LEFT)" % pair_strafe,
 	)
+	_expect(
+		_gimbal_in_group(ship, ShipControl.Command.STRAFE_LEFT),
+		"and it is the nozzles doing it, not something else on the hull",
+	)
+	_expect(
+		not _findings_of(ship.configuration()).contains("STRAFE"),
+		"so the configuration report stops reporting the group as empty",
+	)
+	_expect(
+		ship.control.gimbal_partner.size() == 2,
+		"and the two of them know about each other (%d paired)" % [
+			ship.control.gimbal_partner.size(),
+		],
+	)
+
+	# The discriminator, which is the whole reason this is a pair and not
+	# any gimbal: one nozzle swung sideways shoves the ship along its own
+	# thrust just as hard as before. The preset built to show that is
+	# called "drifts", and it must not claim a strafe group.
+	ShipFitout.apply(ship, _preset_named("pojedynczy"))
+	_expect(
+		ship.control.gimbal_partner.is_empty(),
+		"a lone gimbal has no partner to cancel its shove",
+	)
+	# Not "cannot strafe": that preset carries ordinary strafe thrusters
+	# and the report is right to say nothing. What must hold is narrower
+	# and is the actual claim -- the **gimbal** earns no place in the
+	# group, so the ship strafes with the jets it has and not by swinging
+	# a main drive it would ride forward on.
+	_expect(
+		not _gimbal_in_group(ship, ShipControl.Command.STRAFE_LEFT),
+		"so its gimbal earns no place in the strafe group",
+	)
+
+	# Asked to strafe, the couple leans its nozzles opposite ways. Asked to
+	# turn, the same way. Measured off the nozzles rather than off the
+	# authority, because the authority is what the groups believe and this
+	# is what the hinges do.
+	ShipFitout.apply(ship, _preset_named("para sił"))
+	var couple: Array[EngineInstance] = []
+	for engine: EngineInstance in ship.engines:
+		if engine.data.gimbal_range > 0.0:
+			couple.append(engine)
+	ship.commands.clear()
+	ship.commands[ShipControl.Command.STRAFE_LEFT] = 1.0
+	ship.active_commands = ship.commands.duplicate()
+	ship._aim_gimbals()
+	_expect(
+		couple.size() == 2 and couple[0].target_gimbal * couple[1].target_gimbal < 0.0,
+		"a strafe leans the two nozzles opposite ways (%.2f and %.2f)" % [
+			couple[0].target_gimbal, couple[1].target_gimbal,
+		],
+	)
+	ship.commands.clear()
+	ship.commands[ShipControl.Command.CW] = 1.0
+	ship.active_commands = ship.commands.duplicate()
+	ship._aim_gimbals()
+	_expect(
+		couple[0].target_gimbal * couple[1].target_gimbal > 0.0,
+		"and a turn leans them the same way (%.2f and %.2f)" % [
+			couple[0].target_gimbal, couple[1].target_gimbal,
+		],
+	)
+	ship.commands.clear()
+	ship.active_commands = {}
+	ship._aim_gimbals()
 
 	# And the trade is real on the stock ship too: letting a gimbal into the
 	# turn groups must not change a hull that has proper jets.
@@ -5584,6 +5658,15 @@ func _check_fitout_presets() -> void:
 
 ## How hard a turn command pushes the hull about, in px/s^2. What a
 ## couple is supposed to make nearly nothing of.
+## Whether any gimballed engine is a member of a command's group.
+func _gimbal_in_group(ship: Ship, command: ShipControl.Command) -> bool:
+	for member: Dictionary in ship.control.groups.get(command, []):
+		var engine: EngineInstance = member["engine"]
+		if engine.data != null and engine.data.gimbal_range > 0.0:
+			return true
+	return false
+
+
 func _turn_residual(ship: Ship) -> float:
 	for line: String in ship.configuration().lines():
 		if line.contains("CW pushes the ship sideways"):

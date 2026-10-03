@@ -2327,25 +2327,52 @@ func _aim_gimbals() -> void:
 		float(active_commands.get(ShipControl.Command.CW, 0.0))
 		- float(active_commands.get(ShipControl.Command.CCW, 0.0))
 	)
+	# Positive is to the ship's right, matching the +X of its own frame.
+	var side: float = (
+		float(active_commands.get(ShipControl.Command.STRAFE_RIGHT, 0.0))
+		- float(active_commands.get(ShipControl.Command.STRAFE_LEFT, 0.0))
+	)
 	for engine: EngineInstance in engines:
 		if engine.data.gimbal_range <= 0.0:
 			continue
-		if is_zero_approx(turn):
-			engine.target_gimbal = 0.0
-			continue
-		var arm: Vector2 = engine.mount.position - center_of_mass
-		# Which way to steer, derived rather than declared per mount so that
-		# moving an engine cannot leave a stale sign behind.
-		#
-		# Godot's rotated(a) is v - a * v.orthogonal() for small a, so a
-		# deflection of g adds a torque of -T * g * arm.cross(d.orthogonal()).
-		# Written as the cross the other way round, because the version with
-		# a leading minus is the one I got backwards first time and the test
-		# caught it.
-		var sense: float = signf(engine.mount.force_direction().orthogonal().cross(arm))
-		if is_zero_approx(sense):
-			sense = 1.0
-		engine.target_gimbal = clampf(turn, -1.0, 1.0) * engine.data.gimbal_range * sense
+		var reach: float = engine.data.gimbal_range
+		var wanted: float = 0.0
+
+		if not is_zero_approx(turn):
+			var arm: Vector2 = engine.mount.position - center_of_mass
+			# Which way to steer, derived rather than declared per mount so
+			# that moving an engine cannot leave a stale sign behind.
+			#
+			# Godot's rotated(a) is v - a * v.orthogonal() for small a, so a
+			# deflection of g adds a torque of -T * g * arm.cross(
+			# d.orthogonal()). Written as the cross the other way round,
+			# because the version with a leading minus is the one I got
+			# backwards first time and the test caught it.
+			var sense: float = signf(
+				engine.mount.force_direction().orthogonal().cross(arm)
+			)
+			if is_zero_approx(sense):
+				sense = 1.0
+			wanted += clampf(turn, -1.0, 1.0) * reach * sense
+
+		# And the other use of the same hinge. A couple deflected the same
+		# way turns the ship; deflected opposite ways it shoves it sideways,
+		# because then the torques cancel and the side forces add. Only a
+		# nozzle with a partner is asked, for the reason recorded on
+		# ShipControl.gimbal_partner: on its own it would mostly fly
+		# forward.
+		if not is_zero_approx(side) and control.gimbal_partner.has(engine):
+			var slip: Vector2 = (
+				engine.mount.force_direction().rotated(reach)
+				- engine.mount.force_direction()
+			)
+			if not is_zero_approx(slip.x):
+				wanted += clampf(side, -1.0, 1.0) * reach * signf(slip.x)
+
+		# Asking for both at once gets both, up to what the hinge has. A
+		# full turn and a full strafe cannot both be had from two nozzles,
+		# and the clamp is where that shows rather than somewhere surprising.
+		engine.target_gimbal = clampf(wanted, -reach, reach)
 
 
 ## Kills linear velocity by pushing against it, one axis at a time.
