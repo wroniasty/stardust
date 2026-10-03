@@ -15,46 +15,18 @@ const TOGGLE_ACTION: StringName = &"debug_creative"
 
 ## The generator, by script rather than through the autoload. Autoloads do
 ## not exist under `--script`, so a tool that named the singleton could not
-## be compiled by the smoke test -- which needs the shape table below.
+## be compiled by the smoke test.
 const LOOT: GDScript = preload("res://scripts/autoload/loot_generator.gd")
 
-## Outlines worth trying against the contact solver. Deliberately a spread
-## rather than a set of nice ships: a long thin one and a wide flat one fail
-## in different ways, and the point is to find out which.
+## The hull list used to live here, as a const table of outlines. It is
+## `resources/hulls/` now, read through `HullData.catalogue()` -- the same
+## resources `ShipFitout` builds its presets from and the same ones the
+## sprites are cut from. Three copies of a catalogue were two too many, and
+## the test that held them in step was a prop rather than a fix.
 ##
-## Every one is convex and drawn clockwise, which the guidelines ask for and
-## the convex-hull shape depends on.
-const SHAPES: Array[Dictionary] = [
-	{
-		"name": "dart (stock)",
-		"outline": [Vector2(0, -12), Vector2(-8, 10), Vector2(8, 10)],
-	},
-	{
-		"name": "wide delta",
-		"outline": [Vector2(0, -10), Vector2(-18, 9), Vector2(18, 9)],
-	},
-	{
-		"name": "long lance",
-		"outline": [Vector2(0, -30), Vector2(-6, 18), Vector2(6, 18)],
-	},
-	{
-		"name": "hexagon",
-		"outline": [
-			Vector2(0, -14), Vector2(-12, -7), Vector2(-12, 7),
-			Vector2(0, 14), Vector2(12, 7), Vector2(12, -7),
-		],
-	},
-	{
-		"name": "brick",
-		"outline": [
-			Vector2(-14, -18), Vector2(14, -18), Vector2(14, 18), Vector2(-14, 18),
-		],
-	},
-	{
-		"name": "sliver (bad)",
-		"outline": [Vector2(0, -22), Vector2(-3, 16), Vector2(3, 16)],
-	},
-]
+## The spread is still the point of the list: a long thin hull and a wide
+## flat one fail against the contact solver in different ways, and one of
+## them is in there as a deliberately bad example.
 
 ## What the tool can conjure. Each one asks the real generator, so anything
 ## the sandbox produces is something the game could have dropped.
@@ -202,8 +174,8 @@ func _build_ui() -> void:
 
 	rows.add_child(_heading("KADŁUB"))
 	_shape = OptionButton.new()
-	for shape: Dictionary in SHAPES:
-		_shape.add_item(shape["name"])
+	for hull: HullData in HullData.catalogue():
+		_shape.add_item(hull.display_name)
 	rows.add_child(_labelled("kształt", _shape))
 
 	_scale = SpinBox.new()
@@ -367,8 +339,9 @@ func _on_refit() -> void:
 	_scale.value = 1.0
 	# The shape picker follows, so the two controls do not disagree about
 	# what the ship currently is.
-	for i: int in range(SHAPES.size()):
-		if SHAPES[i]["name"] == preset["name"]:
+	var catalogue: Array[HullData] = HullData.catalogue()
+	for i: int in range(catalogue.size()):
+		if catalogue[i].id == preset["hull"]:
 			_shape.selected = i
 	_say("%s — %s. %d silników, %d dział, ładownia %.0f" % [
 		preset["name"], preset["blurb"], _ship.engines.size(),
@@ -380,10 +353,10 @@ func _on_refit() -> void:
 func _on_reshape() -> void:
 	if _ship == null:
 		return
-	var chosen: Dictionary = SHAPES[_shape.selected]
+	var chosen: HullData = HullData.catalogue()[_shape.selected]
 	var factor: float = float(_scale.value)
 	var outline: PackedVector2Array = PackedVector2Array()
-	for point: Vector2 in chosen["outline"]:
+	for point: Vector2 in chosen.outline:
 		outline.append(point * factor)
 
 	_ship.hull_outline = outline
@@ -401,7 +374,7 @@ func _on_reshape() -> void:
 	if drawn != null:
 		drawn.polygon = outline
 	_say("%s x%.1f — %d punktów kontaktu, %d przebiegów solvera" % [
-		chosen["name"], factor, _ship.contact_points().size(), _ship.contact_iterations(),
+		chosen.display_name, factor, _ship.contact_points().size(), _ship.contact_iterations(),
 	])
 	_refresh()
 

@@ -8,3 +8,4 @@ id = &"rhombus"
 display_name = "gimbal podwójny (para sił)"
 outline = PackedVector2Array(0, -15, -9, 0, 0, 15, 9, 0)
 legs = Array[Vector2]([Vector2(-8, 14), Vector2(8, 14)])
+cargo_capacity = 9.0

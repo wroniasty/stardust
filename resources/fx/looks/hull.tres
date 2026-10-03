@@ -1,22 +1,22 @@
 [gd_resource type="Resource" script_class="LookTable" format=3]
 
 [ext_resource type="Script" path="res://scripts/fx/sprite_strip.gd" id="1_db6is"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/dart.png" id="2_o7q8v"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/hexagon.png" id="2_o7q8v"]
 [ext_resource type="Texture2D" path="res://assets/art/world/hulls/wide_delta.png" id="3_yx0ou"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/long_lance.png" id="4_x73i3"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/hexagon.png" id="5_8omtu"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/brick.png" id="6_11yl5"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/sliver.png" id="7_6vdha"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/rhombus.png" id="8_wug7t"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/broad_dart.png" id="9_er6c5"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/interceptor.png" id="10_6vfuv"]
-[ext_resource type="Texture2D" path="res://assets/art/world/hulls/freighter.png" id="11_1pii4"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/rhombus.png" id="4_x73i3"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/sliver.png" id="5_8omtu"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/broad_dart.png" id="6_11yl5"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/interceptor.png" id="7_6vdha"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/long_lance.png" id="8_wug7t"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/dart.png" id="9_er6c5"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/freighter.png" id="10_6vfuv"]
+[ext_resource type="Texture2D" path="res://assets/art/world/hulls/brick.png" id="11_1pii4"]
 [ext_resource type="Script" path="res://scripts/fx/look_table.gd" id="12_ho8ip"]
 
 [sub_resource type="Resource" id="Resource_ai0mk"]
 script = ExtResource("1_db6is")
 texture = ExtResource("2_o7q8v")
-pivot = Vector2(27, 39)
+pivot = Vector2(39, 45)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_x38yl"]
@@ -28,63 +28,63 @@ full_rate = 0.0
 [sub_resource type="Resource" id="Resource_18ykw"]
 script = ExtResource("1_db6is")
 texture = ExtResource("4_x73i3")
-pivot = Vector2(21, 93)
+pivot = Vector2(30, 48)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_7iujd"]
 script = ExtResource("1_db6is")
 texture = ExtResource("5_8omtu")
-pivot = Vector2(39, 45)
+pivot = Vector2(12, 69)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_xjgak"]
 script = ExtResource("1_db6is")
 texture = ExtResource("6_11yl5")
-pivot = Vector2(45, 57)
+pivot = Vector2(30, 45)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_xu4gw"]
 script = ExtResource("1_db6is")
 texture = ExtResource("7_6vdha")
-pivot = Vector2(12, 69)
+pivot = Vector2(24, 48)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_c7a8s"]
 script = ExtResource("1_db6is")
 texture = ExtResource("8_wug7t")
-pivot = Vector2(30, 48)
+pivot = Vector2(21, 93)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_7pg1t"]
 script = ExtResource("1_db6is")
 texture = ExtResource("9_er6c5")
-pivot = Vector2(30, 45)
+pivot = Vector2(27, 39)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_kbtrm"]
 script = ExtResource("1_db6is")
 texture = ExtResource("10_6vfuv")
-pivot = Vector2(24, 48)
+pivot = Vector2(51, 51)
 full_rate = 0.0
 
 [sub_resource type="Resource" id="Resource_4unuk"]
 script = ExtResource("1_db6is")
 texture = ExtResource("11_1pii4")
-pivot = Vector2(51, 51)
+pivot = Vector2(45, 57)
 full_rate = 0.0
 
 [resource]
 script = ExtResource("12_ho8ip")
 thresholds = PackedFloat32Array()
 by_key = {
-&"brick": SubResource("Resource_xjgak"),
-&"broad_dart": SubResource("Resource_7pg1t"),
-&"dart": SubResource("Resource_ai0mk"),
-&"freighter": SubResource("Resource_4unuk"),
-&"hexagon": SubResource("Resource_7iujd"),
-&"interceptor": SubResource("Resource_kbtrm"),
-&"long_lance": SubResource("Resource_18ykw"),
-&"rhombus": SubResource("Resource_c7a8s"),
-&"sliver": SubResource("Resource_xu4gw"),
+&"brick": SubResource("Resource_4unuk"),
+&"broad_dart": SubResource("Resource_xjgak"),
+&"dart": SubResource("Resource_7pg1t"),
+&"freighter": SubResource("Resource_kbtrm"),
+&"hexagon": SubResource("Resource_ai0mk"),
+&"interceptor": SubResource("Resource_xu4gw"),
+&"long_lance": SubResource("Resource_c7a8s"),
+&"rhombus": SubResource("Resource_18ykw"),
+&"sliver": SubResource("Resource_7iujd"),
 &"wide_delta": SubResource("Resource_x38yl")
 }

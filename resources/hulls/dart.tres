@@ -7,3 +7,5 @@ script = ExtResource("1_5nc40")
 id = &"dart"
 display_name = "dart (stock)"
 outline = PackedVector2Array(0, -12, -8, 10, 8, 10)
+legs = Array[Vector2]([Vector2(-9, 13), Vector2(9, 13)])
+cargo_capacity = 11.0

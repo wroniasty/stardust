@@ -47,10 +47,6 @@ const FORWARD_BURN_TICKS: int = 120
 ## would miss the assist overshooting afterwards.
 const AUTO_ORBIT_TICKS: int = 2400
 
-## Index of the preset the sandbox offers as a deliberately poor outline,
-## so the test that it is reported as poor names it rather than counting.
-const SLIVER_SHAPE: int = 5
-
 const HEADING_TICKS: int = 900
 const HEADING_TRAVEL: Vector2 = Vector2(140.0, -60.0)
 
@@ -3329,33 +3325,34 @@ func _check_creative_tool() -> void:
 		"the stock outline still weighs what it always did (%.2f)" % stock_mass,
 	)
 
-	for shape: Dictionary in CreativeTool.SHAPES:
-		var outline: PackedVector2Array = PackedVector2Array(shape["outline"])
-		_expect(
-			Geometry2D.convex_hull(outline).size() >= outline.size(),
-			"%s is convex, as the guidelines ask" % shape["name"],
-		)
+	var bent: int = 0
+	var undersampled: int = 0
+	var mismatched: int = 0
+	for hull: HullData in HullData.catalogue():
+		var outline: PackedVector2Array = hull.outline
+		if Geometry2D.convex_hull(outline).size() < outline.size():
+			bent += 1
+			print("    %s is not convex" % hull.id)
 
 		ship.hull_outline = outline
 		ship._build_contact_points()
 		ship._build_collision_shape()
 		ship.rebuild_control_groups(false)
-		_expect(
-			ship.contact_points().size() >= outline.size(),
-			"%s gets at least a contact point per corner (%d)" % [
-				shape["name"], ship.contact_points().size(),
-			],
-		)
+		if ship.contact_points().size() < outline.size():
+			undersampled += 1
+			print("    %s has fewer contact points than corners" % hull.id)
 		var convex: ConvexPolygonShape2D = (
 			ship.get_node("HullShape") as CollisionShape2D
 		).shape as ConvexPolygonShape2D
-		_expect(
-			convex.points == Geometry2D.convex_hull(outline),
-			"%s hands the same shape to projectiles" % shape["name"],
-		)
+		if convex.points != Geometry2D.convex_hull(outline):
+			mismatched += 1
+			print("    %s draws one shape and collides with another" % hull.id)
+	_expect(bent == 0, "every hull in the catalogue is convex, as the guidelines ask")
+	_expect(undersampled == 0, "and gets at least a contact point per corner")
+	_expect(mismatched == 0, "and hands the same shape to projectiles")
 
 	# Twice the size is four times the area, so four times the mass.
-	var small: PackedVector2Array = PackedVector2Array(CreativeTool.SHAPES[0]["outline"])
+	var small: PackedVector2Array = HullData.of(&"dart").outline
 	ship.hull_outline = small
 	var one: float = ship.hull_mass()
 	var doubled: PackedVector2Array = PackedVector2Array()
@@ -3368,7 +3365,7 @@ func _check_creative_tool() -> void:
 	)
 
 	# And the one shape put in as a bad example has to be caught.
-	ship.hull_outline = PackedVector2Array(CreativeTool.SHAPES[SLIVER_SHAPE]["outline"])
+	ship.hull_outline = HullData.of(&"sliver").outline
 	ship._build_contact_points()
 	ship.rebuild_control_groups(false)
 	_expect(
@@ -5481,7 +5478,7 @@ func _check_fitout_presets() -> void:
 			"and can go forward",
 		)
 		_expect(
-			absf(ship.hull_extent() - _extent_of(preset["hull"])) < 0.01,
+			absf(ship.hull_extent() - HullData.of(preset["hull"]).extent()) < 0.01,
 			"with the hull it names, not the one left over from the last refit",
 		)
 
@@ -5577,13 +5574,6 @@ func _preset_named(fragment: String) -> Dictionary:
 		if String(preset["name"]).contains(fragment):
 			return preset
 	return {}
-
-
-func _extent_of(outline: Array) -> float:
-	var out: float = 0.0
-	for point: Vector2 in outline:
-		out = maxf(out, point.length())
-	return out
 
 
 ## A planet built as the body a system says it is.
@@ -6979,21 +6969,39 @@ func _check_art() -> void:
 	var hulls: Dictionary = HullData.all()
 	_expect(not hulls.is_empty(), "there are hull resources at all (%d)" % hulls.size())
 
-	var outlines: Array[PackedVector2Array] = []
-	for id: Variant in hulls:
-		var known: HullData = hulls[id]
-		outlines.append(known.outline)
-
-	var missing: int = 0
-	for shape: Dictionary in CreativeTool.SHAPES:
-		if not _art_knows_outline(outlines, PackedVector2Array(shape["outline"])):
-			missing += 1
-			print("    no hull resource for shape %s" % shape["name"])
+	# One catalogue, which is the point of the migration. This check used
+	# to reconcile three: the resources, `CreativeTool.SHAPES` and the
+	# outlines written into every preset. Holding them in step was a prop,
+	# not a fix -- what it guards now is that a preset cannot name a hull
+	# that is not there.
+	var orphaned: int = 0
 	for preset: Dictionary in ShipFitout.all():
-		if not _art_knows_outline(outlines, PackedVector2Array(preset["hull"])):
-			missing += 1
-			print("    no hull resource for preset %s" % preset["name"])
-	_expect(missing == 0, "every shape and preset hull has a resource with the same outline")
+		if HullData.of(preset["hull"]) == null:
+			orphaned += 1
+			print("    preset %s names hull %s, which does not exist" % [
+				preset["name"], preset["hull"],
+			])
+	_expect(orphaned == 0, "every preset names a hull that is in the catalogue")
+	# And what the hull states is what the ship gets. The hold and the feet
+	# moved onto the resource, so three presets flying the same dart can no
+	# longer disagree about either by hand.
+	var dressed: Ship = _spawn_ship()
+	var heavy: Dictionary = {}
+	for preset: Dictionary in ShipFitout.all():
+		if preset["hull"] == &"freighter":
+			heavy = preset
+	ShipFitout.apply(dressed, heavy)
+	var hold: HullData = HullData.of(&"freighter")
+	_expect(
+		is_equal_approx(dressed.hull_cargo_capacity, hold.cargo_capacity)
+		and dressed.gear.legs == hold.legs,
+		"a refit takes the hold and the feet from the hull, not from the preset",
+	)
+	dressed.free()
+	_expect(
+		not ("SHAPES" in CreativeTool),
+		"and the sandbox no longer keeps a second copy of the list",
+	)
 
 	var hull_looks: LookTable = load("res://resources/fx/looks/hull.tres") as LookTable
 	_expect(hull_looks != null, "the hull look table loads")
@@ -7338,15 +7346,6 @@ func _sprite_at(sprites: Array[StripSprite], where: Vector2) -> StripSprite:
 		if sprite.position.distance_to(where) < 0.01:
 			return sprite
 	return null
-
-
-func _art_knows_outline(
-	known: Array[PackedVector2Array], outline: PackedVector2Array
-) -> bool:
-	for shape: PackedVector2Array in known:
-		if shape == outline:
-			return true
-	return false
 
 
 func _finish() -> bool:

@@ -325,13 +325,20 @@ wspólna dla całej kategorii i nie wie, czego baza nie ma.
   kolejności rzutu, więc ani jedno, ani drugie nie jest rankingiem.
   Test pilnuje limitu z obu stron — że tytuł tej długości się mieści i że
   o cztery znaki dłuższy już nie.
-- [ ] **Kadłuby jako zasoby.** Zasób `HullData` i dziesięć kadłubów w
-  `resources/hulls/` **już są**, razem z testem, który pilnuje, żeby zgadzały
-  się z `CreativeTool.SHAPES` i presetami w `ShipFitout`. Zostało to, co
-  trudne: `Ship.hull: HullData` obok `hull_outline`, przestawienie obu
-  katalogów na zasoby i skasowanie ich — czyli zejście z trzech kopii do
-  jednej. Dopiero wtedy statek wie, jakim jest kadłubem, a bez tego nie da
-  się wybrać dla niego sprite'a (VISUALS.md, VS krok 3).
+- [x] **Kadłuby jako zasoby.** Z trzech kopii katalogu do jednej.
+  `CreativeTool.SHAPES` już nie istnieje, a presety `ShipFitout` nazywają
+  kadłub (`"hull": &"freighter"`) zamiast wypisywać obrys. Przy okazji
+  **ładownia i rozstaw nóg zeszły na kadłub**, bo to są fakty o kształcie:
+  frachtowiec wozi czterdzieści dwa, bo jest skrzynią, a przechwytujący
+  cztery, bo nie jest. Trzy presety latające tym samym dartem nie mogą się
+  już co do tego różnić ręcznie.
+  Test, który trzymał trzy kopie w zgodzie, zamienił się w test, że preset
+  nie może nazwać kadłuba, którego nie ma — podpora zamieniona na regułę.
+  **Czego świadomie nie zrobiłem:** pola `Ship.hull`. Statek znajduje swój
+  obrazek przez `HullData.matching(hull_outline)`, bo obrys i tak jest
+  jedynym źródłem prawdy o fizyce, a pole byłoby drugim, które trzeba
+  pamiętać ustawić. Narzędzie kreatywne skaluje obrys i wtedy żaden kadłub
+  nie pasuje — i to jest poprawna odpowiedź, nie dziura.
 - [x] **Wygląd wiązany z cechą** (ASSETLIST.md, „Wygląd wynika z cech").
   `LookTable` wybiera obrazek po kluczu, po afiksie albo po progu na
   nazwanej statystyce, i mieszka w warstwie prezentacji — żaden zasób

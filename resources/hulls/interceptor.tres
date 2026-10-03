@@ -8,3 +8,4 @@ id = &"interceptor"
 display_name = "przechwytujący"
 outline = PackedVector2Array(0, -15, -7, 9, 7, 9)
 legs = Array[Vector2]([Vector2(-7, 11), Vector2(7, 11)])
+cargo_capacity = 4.0

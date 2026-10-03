@@ -48,25 +48,6 @@ const SHELL_DARK: Color = Color(0.45, 0.47, 0.52)
 ## live on Art, because the skin has to know it too.
 const MARGIN: int = Art.MARGIN
 
-## Short, file-safe names for the hulls the game already has, keyed by the
-## display name the catalogues use.
-##
-## A map rather than a field on the catalogues, because the catalogues are
-## what is being migrated: adding an `id` to CreativeTool.SHAPES now would be
-## editing the copy that is on its way out.
-const HULL_IDS: Dictionary = {
-	"dart (stock)": &"dart",
-	"wide delta": &"wide_delta",
-	"long lance": &"long_lance",
-	"hexagon": &"hexagon",
-	"brick": &"brick",
-	"sliver (bad)": &"sliver",
-	"gimbal podwójny (para sił)": &"rhombus",
-	"gimbal pojedynczy (dryfuje)": &"broad_dart",
-	"przechwytujący": &"interceptor",
-	"frachtowiec": &"freighter",
-}
-
 ## Icons are laid out as text because at eleven pixels across that is the only
 ## honest way to say what they look like. '#' is opaque white, anything else
 ## is nothing, and colour arrives through `modulate` as ASSETLIST.md requires.
@@ -186,8 +167,7 @@ var _missing: PackedStringArray = PackedStringArray()
 func _initialize() -> void:
 	_make_dirs()
 
-	var hulls: Array[Dictionary] = _hull_catalogue()
-	for hull: Dictionary in hulls:
+	for hull: HullData in _hulls():
 		_draw_hull(hull)
 	_draw_nozzles()
 	_draw_plumes()
@@ -204,7 +184,6 @@ func _initialize() -> void:
 		print("placeholders: run `--import`, then run this again to write the resources")
 		quit(0)
 		return
-	_write_hull_resources(hulls)
 	_write_look_tables()
 	if _missing.is_empty():
 		print("placeholders: resources written")
@@ -217,50 +196,18 @@ func _initialize() -> void:
 	quit(0)
 
 
-## Every distinct hull the game knows, from the two catalogues that hold them.
+## Every hull the game knows.
 ##
-## Read rather than restated. The sprite for a hull is its own outline filled
-## in, so a placeholder cannot be the wrong shape for the ship it is on, and
-## when the hull list changes the pictures change with it.
-func _hull_catalogue() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var seen: Array[PackedVector2Array] = []
-
-	for shape: Dictionary in CreativeTool.SHAPES:
-		var outline: PackedVector2Array = PackedVector2Array(shape["outline"])
-		seen.append(outline)
-		out.append({
-			"id": HULL_IDS.get(shape["name"], StringName(shape["name"])),
-			"name": String(shape["name"]),
-			"outline": outline,
-			"legs": [] as Array[Vector2],
-		})
-
-	# Presets carry hulls the reshape menu does not offer, and legs the
-	# reshape menu has no opinion about. Matched by outline, not by name:
-	# three presets fly the stock dart under three different names.
-	for preset: Dictionary in ShipFitout.all():
-		var outline: PackedVector2Array = PackedVector2Array(preset["hull"])
-		if _has_outline(seen, outline):
-			continue
-		seen.append(outline)
-		var legs: Array[Vector2] = []
-		for leg: Variant in preset.get("legs", []):
-			legs.append(leg as Vector2)
-		out.append({
-			"id": HULL_IDS.get(preset["name"], StringName(preset["name"])),
-			"name": String(preset["name"]),
-			"outline": outline,
-			"legs": legs,
-		})
-	return out
-
-
-func _has_outline(seen: Array[PackedVector2Array], outline: PackedVector2Array) -> bool:
-	for known: PackedVector2Array in seen:
-		if known == outline:
-			return true
-	return false
+## Read off the resources, which are now the catalogue -- `CreativeTool` and
+## `ShipFitout` read the same ones. This used to walk both of those and
+## reconcile them by outline, because there were three copies of the list
+## and this was the third.
+##
+## The sprite for a hull is still its own outline filled in, so a
+## placeholder cannot be the wrong shape for the ship it is on, and when
+## the hull list changes the pictures change with it.
+func _hulls() -> Array[HullData]:
+	return HullData.catalogue()
 
 
 # --- drawing ----------------------------------------------------------------
@@ -269,8 +216,8 @@ func _has_outline(seen: Array[PackedVector2Array], outline: PackedVector2Array) 
 ## A hull: its own collision outline, filled, with a lit keel, a dark stern
 ## deck and a cockpit. Nothing a real sprite would keep, and every dimension
 ## one a real sprite has to match.
-func _draw_hull(hull: Dictionary) -> void:
-	var outline: PackedVector2Array = hull["outline"]
+func _draw_hull(hull: HullData) -> void:
+	var outline: PackedVector2Array = hull.outline
 	var box: Rect2 = _bounds(outline)
 	var width: int = int(ceilf(box.size.x * Art.FACTOR)) + MARGIN * 2
 	var height: int = int(ceilf(box.size.y * Art.FACTOR)) + MARGIN * 2
@@ -308,7 +255,7 @@ func _draw_hull(hull: Dictionary) -> void:
 		true,
 	)
 	_border(image, EDGE)
-	_save(image, "%s/hulls/%s.png" % [Art.WORLD_DIR, hull["id"]])
+	_save(image, "%s/hulls/%s.png" % [Art.WORLD_DIR, hull.id])
 
 
 ## Three nozzles by engine type, plus the one an affix brings.
@@ -597,23 +544,12 @@ func _draw_icons() -> void:
 # --- resources --------------------------------------------------------------
 
 
-func _write_hull_resources(hulls: Array[Dictionary]) -> void:
-	for entry: Dictionary in hulls:
-		var hull: HullData = HullData.new()
-		hull.id = entry["id"]
-		hull.display_name = entry["name"]
-		hull.outline = entry["outline"]
-		hull.legs = entry["legs"]
-		_store(hull, "%s/%s.tres" % [HullData.DIRECTORY, hull.id])
-
-
 func _write_look_tables() -> void:
 	var hulls: LookTable = LookTable.new()
-	for entry: Dictionary in _hull_catalogue():
-		var id: StringName = entry["id"]
-		var box: Rect2 = _bounds(entry["outline"])
-		hulls.by_key[id] = _strip(
-			"%s/hulls/%s.png" % [Art.WORLD_DIR, id],
+	for hull: HullData in _hulls():
+		var box: Rect2 = _bounds(hull.outline)
+		hulls.by_key[hull.id] = _strip(
+			"%s/hulls/%s.png" % [Art.WORLD_DIR, hull.id],
 			1,
 			Vector2(-box.position.x * Art.FACTOR + MARGIN, -box.position.y * Art.FACTOR + MARGIN)
 		)

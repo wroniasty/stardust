@@ -29,9 +29,17 @@ extends Resource
 ## The shape, in the ship's own frame, nose towards -Y.
 @export var outline: PackedVector2Array = PackedVector2Array()
 
-## Where the feet go, when this hull is flown as a preset. Empty for a shape
-## the creative tool only ever reshapes an existing ship into.
+## Where the feet go. Empty on a shape nobody has worked out a stance for,
+## in which case a ship reshaped into it keeps the feet it had.
 @export var legs: Array[Vector2] = []
+
+## How much the hold takes. Zero means the hull does not say, and whatever
+## is flying it keeps its own.
+##
+## A property of the hull rather than of a fitout, because it is a fact
+## about the shape: the freighter carries forty-two because it is a box,
+## and the interceptor four because it is not.
+@export var cargo_capacity: float = 0.0
 
 ## Every hull, newest catalogue first. A directory listing rather than a
 ## const list, because a const list of paths is the fourth copy.
@@ -86,6 +94,25 @@ static func matching(outline: PackedVector2Array) -> HullData:
 		if hull.outline == outline:
 			return hull
 	return null
+
+
+## Every hull in id order, as a list.
+##
+## Ordered, because a menu built from this has to offer the same thing in
+## the same place every run -- and `all()` is a dictionary, whose order is
+## the directory's, which `ResourceLoader` does not promise.
+static func catalogue() -> Array[HullData]:
+	var ids: Array = all().keys()
+	ids.sort()
+	var out: Array[HullData] = []
+	for id: Variant in ids:
+		out.append(all()[id])
+	return out
+
+
+## The hull with this id, or null.
+static func of(id: StringName) -> HullData:
+	return all().get(id)
 
 
 ## Half the longest span of the outline, matching Ship.hull_extent().

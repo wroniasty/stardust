@@ -1,6 +1,7 @@
 class_name ShipFitout
 extends RefCounted
-## Whole ships, as data: where the mounts are and what is bolted into them.
+## Whole ships, as data: which hull, where the mounts are, and what is
+## bolted into them.
 ##
 ## The creative tool could already change a hull's shape, which is half of
 ## what a ship is. The other half is the fitout, and until now there was
@@ -48,31 +49,25 @@ static func all() -> Array[Dictionary]:
 		{
 			"name": "dart (stock)",
 			"blurb": "cztery dysze obrotowe, główny napęd, retro i dwa boczne",
-			"hull": [Vector2(0, -12), Vector2(-8, 10), Vector2(8, 10)],
-			"cargo": 11.0,
-			"legs": [Vector2(-9, 13), Vector2(9, 13)],
+			"hull": &"dart",
 			"mounts": _stock_mounts(),
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
 		},
 		{
 			"name": "dart, mocniejsze dysze",
 			"blurb": "ten sam układ, każdy silnik o 75% mocniejszy i o połowę cięższy",
-			"hull": [Vector2(0, -12), Vector2(-8, 10), Vector2(8, 10)],
-			"cargo": 11.0,
-			"legs": [Vector2(-9, 13), Vector2(9, 13)],
+			"hull": &"dart",
 			"mounts": _scaled(_stock_mounts(), 1.75),
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
 		},
 		{
 			"name": "gimbal podwójny (para sił)",
 			"blurb": "dwie wychylane dysze, dziób i rufa: momenty się dodają, ciągi znoszą",
-			# Symmetric on purpose. The two nozzles only cancel while their
-			# arms about the centre of mass are equal, and the centre of
-			# mass follows the hull: on a triangle it sits aft of the
-			# middle and the pair stops being a pair.
-			"hull": [Vector2(0, -15), Vector2(-9, 0), Vector2(0, 15), Vector2(9, 0)],
-			"cargo": 9.0,
-			"legs": [Vector2(-8, 14), Vector2(8, 14)],
+			# A symmetric hull on purpose. The two nozzles only cancel
+			# while their arms about the centre of mass are equal, and the
+			# centre of mass follows the hull: on a triangle it sits aft
+			# of the middle and the pair stops being a pair.
+			"hull": &"rhombus",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 13), "engine": "gimbal"},
 				# Nose nozzle, pointing the other way: it is the retro and
@@ -85,9 +80,7 @@ static func all() -> Array[Dictionary]:
 		{
 			"name": "gimbal pojedynczy (dryfuje)",
 			"blurb": "obrót z wychylanej dyszy głównej, nic poza nią nie kręci",
-			"hull": [Vector2(0, -14), Vector2(-9, 12), Vector2(9, 12)],
-			"cargo": 11.0,
-			"legs": [Vector2(-10, 15), Vector2(10, 15)],
+			"hull": &"broad_dart",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 12), "engine": "gimbal"},
 				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(9, 1.75),
@@ -102,9 +95,7 @@ static func all() -> Array[Dictionary]:
 		{
 			"name": "przechwytujący",
 			"blurb": "lekki i zwrotny, dwa działka, ładownia na nic",
-			"hull": [Vector2(0, -15), Vector2(-7, 9), Vector2(7, 9)],
-			"cargo": 4.0,
-			"legs": [Vector2(-7, 11), Vector2(7, 11)],
+			"hull": &"interceptor",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.0, "at": Vector2(0, 9), "engine": "main",
 					"scale": 0.8},
@@ -131,11 +122,7 @@ static func all() -> Array[Dictionary]:
 		{
 			"name": "frachtowiec",
 			"blurb": "duża ładownia, ciężki kadłub, szerokie nogi i mało mocy na kilogram",
-			"hull": [
-				Vector2(-13, -16), Vector2(13, -16), Vector2(16, 6), Vector2(-16, 6),
-			],
-			"cargo": 42.0,
-			"legs": [Vector2(-15, 9), Vector2(15, 9)],
+			"hull": &"freighter",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 6), "engine": "main",
 					"scale": 1.4},
@@ -159,9 +146,7 @@ static func all() -> Array[Dictionary]:
 		{
 			"name": "kadłub bez niczego",
 			"blurb": "sam napęd główny — raport konfiguracji ma co powiedzieć",
-			"hull": [Vector2(0, -12), Vector2(-8, 10), Vector2(8, 10)],
-			"cargo": 11.0,
-			"legs": [Vector2(-9, 13), Vector2(9, 13)],
+			"hull": &"dart",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 10), "engine": "main"},
 			],
@@ -229,13 +214,17 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 		gun.weapon = load(WEAPONS[entry["weapon"]]) as WeaponData
 		ship.add_child(gun)
 
-	ship.hull_outline = PackedVector2Array(preset["hull"])
-	ship.hull_cargo_capacity = float(preset["cargo"])
-	if ship.gear != null:
-		var legs: Array[Vector2] = []
-		for leg: Vector2 in preset["legs"]:
-			legs.append(leg)
-		ship.gear.legs = legs
+	# The hull is named, not described. It used to be an outline, a hold
+	# and a pair of feet written out in every preset -- three of which flew
+	# the same dart and had to agree about it by hand.
+	var hull: HullData = HullData.of(preset["hull"])
+	if hull == null:
+		push_error("preset %s names no hull" % preset["name"])
+		return
+	ship.hull_outline = hull.outline
+	ship.hull_cargo_capacity = hull.cargo_capacity
+	if ship.gear != null and not hull.legs.is_empty():
+		ship.gear.legs = hull.legs.duplicate()
 	var drawn: Polygon2D = ship.get_node_or_null("Hull") as Polygon2D
 	if drawn != null:
 		drawn.polygon = ship.hull_outline

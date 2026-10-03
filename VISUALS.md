@@ -181,12 +181,10 @@ Ten krok ma zależność i warto ją nazwać: **statek nie wie, jakim jest
 kadłubem.** `Ship.hull_outline` to goła tablica punktów, a sprite wybiera
 się nazwą.
 
-- [x] `HullData.matching(outline)` zamiast pola na statku. Tańsza połowa
-  checkboxa „Kadłuby jako zasoby" z M3.5: statek znajduje swój obrazek po
-  własnym obrysie, więc nie trzeba niczego ustawiać w trzech miejscach.
-  **Droga połowa dalej czeka** — zejście `CreativeTool.SHAPES` i presetów
-  `ShipFitout` na zasoby, czyli z trzech kopii do jednej. Dopóki tego nie
-  ma, pole na statku byłoby czwartą kopią.
+- [x] `HullData.matching(outline)` zamiast pola na statku: statek znajduje
+  swój obrazek po własnym obrysie. **Droga połowa też zrobiona** —
+  `CreativeTool.SHAPES` zniknęło, presety `ShipFitout` nazywają kadłub
+  zamiast wypisywać obrys, i katalog jest jeden (M3.5).
 - [x] `StripSprite` z `hull.tres` zamiast `Hull` jako `Polygon2D`.
 - [x] **Kadłub przebudowany w narzędziu kreatywnym nie pasuje do niczego,
   więc nie ma sprite'a** — i wtedy `Polygon2D` zostaje widoczny. To nie
