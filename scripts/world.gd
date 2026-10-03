@@ -111,7 +111,7 @@ func _build_map() -> void:
 	_map = SystemMap.new()
 	add_child(_map)
 	_map.bind(
-		Galaxy.system(SYSTEM_INDEX), (player as Player).ship, StreamingManager
+		Galaxy.system(Galaxy.here), (player as Player).ship, StreamingManager
 	)
 	_map.teleport_requested.connect(_on_map_teleport)
 
@@ -322,11 +322,6 @@ const ARRIVAL_CLEARANCE: float = 0.8
 const ARRIVAL_RATIO: float = 3.0
 
 
-## Which system this world is a visit to. One, for now: laying systems out
-## across a galaxy is M4, and until then index zero is the only address.
-const SYSTEM_INDEX: int = 0
-
-
 ## Opens a system: the manager takes it from here.
 ##
 ## The one body built by hand is the one the ship starts at, and it is
@@ -334,8 +329,11 @@ const SYSTEM_INDEX: int = 0
 ## somewhere, and it cannot be put next to a planet that is three frames
 ## away from existing. Everything else comes and goes as the pilot flies.
 func _open_system() -> void:
-	Galaxy.galaxy_seed = world_seed
-	var here: StarSystem = Galaxy.system(SYSTEM_INDEX)
+	# Reset rather than assignment: the seed is what the galaxy is made of,
+	# so setting it without rebuilding would leave the layout belonging to
+	# the previous one.
+	Galaxy.reset(world_seed)
+	var here: StarSystem = Galaxy.system(Galaxy.here)
 	StreamingManager.loot = LootGenerator
 	# The one delta store, where the design puts it and where a save file
 	# will look for it.
@@ -344,8 +342,9 @@ func _open_system() -> void:
 	StreamingManager.track((player as Player).ship)
 	StreamingManager.crate_placed.connect(_on_crate_placed)
 	planet = StreamingManager.force_awake(here.planets()[0]) as Planet
-	print("system %s: arriving at %s, %.0f px out" % [
-		here.display_name, planet.body.display_name, planet.body.orbit_radius,
+	print("system %s (#%d of %d): arriving at %s, %.0f px out" % [
+		here.display_name, Galaxy.here, Galaxy.map.count(),
+		planet.body.display_name, planet.body.orbit_radius,
 	])
 
 

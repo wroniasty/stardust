@@ -2885,6 +2885,56 @@ Jeden seed galaktyki. Systemy rozłożone przez Poisson disk sampling, odległo�
 
 Save = seed galaktyki plus słownik delt.
 
+### Realizacja (M4): liczby zmierzone, nie zgadnięte
+
+`GalaxyMap` — czysta dana, jak `StarSystem`: galaktyka istnieje, zanim
+powstanie jakikolwiek węzeł. Dwie przestrzenie współrzędnych zostały
+rozdzielone tak, jak mówi ta sekcja: `GalaxyMap` to lata świetlne i sto
+kilkadziesiąt punktów, `StarSystem` to piksele i jedna gwiazda. Skaner i
+napęd pytają pierwszego, wszystko, co lata — drugiego.
+
+**Poisson disk ze zmiennym promieniem.** Bridson, ale odstęp rośnie z
+odległością od środka: `SPACING * lerp(1, RIM_SPREAD, (r/R)^3)`. Gradient
+jest całym sensem, nie ozdobą — równomierna sypanka daje galaktykę, która
+wszędzie jest taka sama, i wówczas „wyspy poza grafem jako late game" nie
+mają się gdzie wydarzyć. Test odrzucający kandydata patrzy na **większe** z
+dwóch żądań: system przy obrzeżu chce więcej miejsca niż ten w rdzeniu, a
+sprawdzanie tylko żądania nowego pozwoliłoby go ścisnąć systemowi
+położonemu wcześniej.
+
+**Pierwsza wersja była liniowa** (`lerp(1, 1.9, r/R)`) i dała 80 systemów
+zamiast spodziewanych dwustu, a rdzeń ściśnięty do promienia kilkunastu lat
+świetlnych. Sześcian przesuwa rozrzedzanie na sam brzeg: 109–117 systemów
+na cztery seedy, szeroki rdzeń po ~6–7 ly i obrzeże po ~11 ly.
+
+**Zasięg skoku ma sens tylko jako wielokrotność odstępu, i to też zostało
+zmierzone.** Taki graf nie zaczyna się spinać, dopóki zasięg nie wynosi
+około 1,75 lokalnego odstępu — przy 1,5 startowa galaktyka to było od
+jednej siódmej do jednej czwartej samej siebie:
+
+| zasięg (× odstęp rdzenia) | największy spójny kawałek | wyspy |
+|---|---|---|
+| 1,25 | 12–34% | 74–98 |
+| 1,50 | 53–58% | 47–52 |
+| **1,75 (`BASE_REACH`)** | **73–79%** | **25–29** |
+| 2,00 | 90–94% | 7–11 |
+| 2,33 | 98–100% | 0–2 |
+
+Stąd `BASE_REACH = SPACING * 1.75`: startowy napęd dostaje trzy czwarte
+galaktyki, a pozostała ćwiartka to obrzeże w wyspach. Lepszy napęd kupuje
+**gdzie polecieć**, a nie krótszą drogę tam, gdzie się już było — i to jest
+różnica, którą trzeba było zmierzyć, żeby ją utrzymać.
+
+Zasięg mieszka w `GalaxyMap`, a nie na zasobie napędu, bo to przeciwko
+niemu sprawdzany jest układ: `largest_component(BASE_REACH)` to galaktyka,
+w której gracz naprawdę lata. Dwie liczby, które mogłyby się rozjechać,
+byłyby testem galaktyki, której nikt nie odwiedza.
+
+**Start w środku**, nie losowo: nowa gra, która ląduje na wyspie przy
+obrzeżu, to nowa gra bez skoku, a „sprawdź spójność grafu" nie jest
+sprawdzeniem, jeśli jedyny system, który musi w nim być, wybiera się
+potem.
+
 ## 11. Grafika
 
 - Atmosfera: shader na kole nieco większym od planety. Szum FBM przewijany w czasie na chmury, rim light na krawędzi, kolor i gęstość z parametrów planety. Różne typy atmosfer (kolor, gęstość, prędkość chmur, wzór).

@@ -1,15 +1,26 @@
 extends Node
 ## Galaxy: pure data model of the universe. No nodes, no scene tree children.
 ##
-## Holds the galaxy seed, generated system descriptors and the delta dictionary
-## with every player-made change. Everything here must be reproducible from
-## `galaxy_seed` alone, plus the deltas.
+## Holds the galaxy seed, where the systems are, the systems themselves and
+## the delta dictionary with every player-made change. Everything here must
+## be reproducible from `galaxy_seed` alone, plus the deltas.
 ##
-## Systems are here (M3); laying them out across a galaxy is M4, so for now
-## index 0 is the one system there is.
+## Two layers, kept apart on purpose. `GalaxyMap` is where systems stand and
+## which can reach which -- a plane in light years, a hundred-odd points, a
+## graph. `StarSystem` is what one of them contains -- a star, planets,
+## moons, stations, in pixels. The scanner and the jump drive ask the first;
+## everything that flies asks the second; neither needs the other's units.
 
 ## Seed every other seed in the game is derived from.
 var galaxy_seed: int = 0
+
+## Where the systems are, and which can reach which. Built from the seed.
+var map: GalaxyMap = null
+
+## Which system the player is in. An index into `map`, and the address a
+## save file stores -- not a scene path, because the scene is only the
+## part of the system the pilot happens to be near.
+var here: int = 0
 
 ## Persisted changes that cannot be regenerated from a seed
 ## (terrain edits, looted crates, killed enemies). Keyed by object id.
@@ -39,8 +50,27 @@ func system(index: int) -> StarSystem:
 	return _systems[index]
 
 
-## Reseeds the galaxy and drops everything derived from the old seed. M4.
+## Where a system stands, in light years.
+func position_of(index: int) -> Vector2:
+	if map == null or index < 0 or index >= map.count():
+		return Vector2.ZERO
+	return map.positions[index]
+
+
+## How far apart two systems are, in light years. The number a jump costs
+## fuel by and a drive is measured against.
+func distance_between(from: int, to: int) -> float:
+	return position_of(from).distance_to(position_of(to))
+
+
+## Reseeds the galaxy and drops everything derived from the old seed.
+##
+## Everything, which includes the layout: a new seed is a new galaxy, and
+## keeping the old positions while regenerating the systems in them would
+## be the one bug this whole model exists to make impossible.
 func reset(new_seed: int) -> void:
 	galaxy_seed = new_seed
 	deltas.clear()
 	_systems.clear()
+	map = GalaxyMap.generate(new_seed)
+	here = map.start_index()

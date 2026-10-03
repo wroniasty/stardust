@@ -995,6 +995,7 @@ func _evaluate_phase() -> void:
 			_check_affix_pools()
 			_check_item_names()
 			_check_seeker_targets()
+			_check_galaxy()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -3602,6 +3603,167 @@ func _check_ejection() -> void:
 	)
 	crate.queue_free()
 	ship.queue_free()
+
+
+## Rozkład galaktyki: odstępy, gradient, spójność grafu.
+##
+## The whole of M4 stands on this being right, and almost none of it can
+## be seen. A galaxy that looks fine on a map can still be one where the
+## starting drive reaches four systems, or where the islands IDEAS.md
+## section 10 wants as late game do not exist because everything is
+## connected to everything.
+##
+## So the numbers here were **measured and then written down**, not
+## chosen. The first pass had the reach at one and a half spacings and
+## the starting galaxy came out at between a seventh and a quarter of
+## itself -- a graph like this does not begin to connect until about one
+## and three quarters, and the floors below are set under what four seeds
+## actually produce rather than at the figure that was hoped for.
+func _check_galaxy() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(20260922)
+	_expect(map.count() > 40, "a galaxy has systems in it (%d)" % map.count())
+
+	# Same seed, same galaxy. The save file is the seed plus deltas, so a
+	# layout that drifted between loads would move every system the player
+	# had been to.
+	var again: GalaxyMap = GalaxyMap.generate(20260922)
+	var other: GalaxyMap = GalaxyMap.generate(20260923)
+	_expect(
+		again.positions == map.positions,
+		"and the same seed lays it out identically, every time",
+	)
+	_expect(
+		other.positions != map.positions,
+		"while the next seed along is a different galaxy (%d systems)" % other.count(),
+	)
+
+	# Nobody crowds anybody, and the test is against the **larger** of the
+	# two claims: a rim system wants more room than a core one, and
+	# checking only the newcomer's figure would let it be crowded by a core
+	# system that happened to be placed first.
+	var crowded: int = 0
+	var tightest: float = INF
+	for i: int in range(map.count()):
+		for j: int in range(i + 1, map.count()):
+			var gap: float = map.positions[i].distance_to(map.positions[j])
+			tightest = minf(tightest, gap)
+			var wants: float = maxf(
+				map.spacing_at(map.positions[i]), map.spacing_at(map.positions[j])
+			)
+			if gap < wants - 0.001:
+				crowded += 1
+	_expect(
+		crowded == 0,
+		"no two systems stand closer than they both want (tightest %.2f ly)" % tightest,
+	)
+	_expect(
+		tightest >= GalaxyMap.SPACING - 0.001,
+		"and nothing anywhere is inside the core spacing of %.0f ly" % GalaxyMap.SPACING,
+	)
+
+	# The gradient, which is the reason the galaxy has a shape at all. The
+	# rim has to be measurably thinner than the core or there is no late
+	# game behind a better drive, only a longer one.
+	var core_gap: float = _mean_gap(map, 0.0, 0.45)
+	var rim_gap: float = _mean_gap(map, 0.8, 1.0)
+	_expect(
+		rim_gap > core_gap * 1.3,
+		"the rim is thinner than the core (%.1f ly apart against %.1f)" % [
+			rim_gap, core_gap,
+		],
+	)
+
+	# And the graph. Three claims, and the middle one is the one worth
+	# having: a galaxy with no islands is a galaxy where drive range buys
+	# a shorter trip to where you already were.
+	var home: int = map.start_index()
+	var reachable: PackedInt32Array = map.reachable_from(home, GalaxyMap.BASE_REACH)
+	var biggest: PackedInt32Array = map.largest_component(GalaxyMap.BASE_REACH)
+	var share: float = float(reachable.size()) / float(maxi(map.count(), 1))
+	_expect(
+		reachable.size() == biggest.size(),
+		"a new game starts in the largest group, not on an island (%d of %d)" % [
+			reachable.size(), biggest.size(),
+		],
+	)
+	_expect(
+		share > 0.6,
+		"and the starting drive reaches most of the galaxy (%.0f%%)" % [share * 100.0],
+	)
+	var stranded: int = map.count() - biggest.size()
+	_expect(
+		stranded >= 5,
+		"while %d systems are islands until the drive is better" % stranded,
+	)
+	var far: PackedInt32Array = map.largest_component(GalaxyMap.BASE_REACH * 1.35)
+	_expect(
+		far.size() > biggest.size()
+		and float(far.size()) / float(map.count()) > 0.95,
+		"a third again of range opens nearly all of it (%d of %d)" % [
+			far.size(), map.count(),
+		],
+	)
+
+	# The grid query has to agree with the honest answer, because every
+	# scanner reading goes through it and nothing else will ever notice.
+	var probe: Vector2 = Vector2(13.0, -21.0)
+	var quick: PackedInt32Array = map.within(probe, 17.0)
+	var slow: Array[int] = []
+	for index: int in range(map.count()):
+		if probe.distance_to(map.positions[index]) <= 17.0:
+			slow.append(index)
+	_expect(
+		quick.size() == slow.size(),
+		"the grid finds exactly what a full scan finds (%d against %d)" % [
+			quick.size(), slow.size(),
+		],
+	)
+	var ordered: bool = true
+	for step: int in range(1, quick.size()):
+		if (
+			probe.distance_to(map.positions[quick[step - 1]])
+			> probe.distance_to(map.positions[quick[step]]) + 0.001
+		):
+			ordered = false
+	_expect(ordered, "and hands them back nearest first")
+
+	# Four seeds, not one. A layout rule that holds on the seed it was
+	# tuned against is a layout rule that holds on one seed.
+	var thin: int = 0
+	var whole: int = 0
+	for galaxy_seed: int in [1, 777, 4242, 31337]:
+		var rolled: GalaxyMap = GalaxyMap.generate(galaxy_seed)
+		var group: PackedInt32Array = rolled.largest_component(GalaxyMap.BASE_REACH)
+		if float(group.size()) / float(maxi(rolled.count(), 1)) < 0.6:
+			thin += 1
+		if group.size() == rolled.count():
+			whole += 1
+	_expect(
+		thin == 0,
+		"four more seeds all give a galaxy worth starting in",
+	)
+	_expect(
+		whole == 0,
+		"and none of them is so connected that range would buy nothing",
+	)
+
+
+## Mean distance to the nearest neighbour, for systems in a ring of the
+## galaxy given as fractions of its radius.
+func _mean_gap(map: GalaxyMap, from: float, to: float) -> float:
+	var total: float = 0.0
+	var counted: int = 0
+	for i: int in range(map.count()):
+		var out: float = map.positions[i].length() / GalaxyMap.RADIUS
+		if out < from or out > to:
+			continue
+		var nearest: float = INF
+		for j: int in range(map.count()):
+			if i != j:
+				nearest = minf(nearest, map.positions[i].distance_to(map.positions[j]))
+		total += nearest
+		counted += 1
+	return 0.0 if counted == 0 else total / float(counted)
 
 
 ## The system model: a star, its planets, their moons, and where all of it

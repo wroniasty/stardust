@@ -371,7 +371,11 @@ a dysza i pióropusz wynikają z typu i mocy.
 
 Cel: wiele systemów, podróż skokiem bez bramek.
 
-- [ ] Generacja galaktyki: Poisson disk sampling, seedy systemów, sprawdzenie spójności grafu.
+- [x] Generacja galaktyki: Poisson disk sampling, seedy systemów, sprawdzenie spójności grafu.
+  `GalaxyMap` — czysta dana, 109–117 systemów, odstęp rosnący ku obrzeżu.
+  Zasięg bazowy zmierzony, nie zgadnięty: graf spina się dopiero przy ~1,75
+  lokalnego odstępu, co daje 73–79% w jednym kawałku i 25–29 wysp na później.
+  Szczegóły i tabela pomiarów w IDEAS.md sekcja 10.
 - [ ] Mass lock gwiazdy i strefa skoku.
 - [ ] Moduły: skaner (zasięg, jakość), napęd skokowy (zasięg), bak (paliwo). Wszystkie jako loot.
 - [ ] HUD: wskaźniki systemów na krawędzi ekranu, kolor wg osiągalności, informacje wg jakości skanera.
