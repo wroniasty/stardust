@@ -588,10 +588,13 @@ tutaj, żeby tor wizualny nigdy nie musiał sam wchodzić w `ship.gd`.
 
 - [ ] `Ship`: sygnał zapłonu i zgaszenia silnika (`engine_ignited` / `engine_cut` z referencją do silnika).
 - [ ] `Hardpoint`: sygnał wystrzału z pozycją i kierunkiem.
-- [ ] `Planet`: sygnał wyrwania dziury (`carved(point, radius)`), dziś `carve()` tylko zwraca `bool`.
+- [x] `Planet`: sygnał wyrwania dziury (`carved(point, radius)`), dziś `carve()` tylko zwraca `bool`.
+  Zrobione w M1.3, słuchacza doczekał się dopiero w V3.
 - [ ] `Ship`: sygnał przekroczenia granicy atmosfery w obie strony.
 - [ ] `Ship`: sygnał zmiany stanu orbity (dziś stan jest odpytywany, co wystarcza HUD-owi, ale nie wystarcza do zagrania dźwięku raz).
-- [ ] `project.godot`: magistrale audio.
+- [x] `project.godot`: magistrale audio. Cztery (`Master`, `Sfx`, `Ambient`,
+  `Ui`), z filtrem dolnoprzepustowym na tej, która niesie świat — zrobione
+  w S0, bo bez nich reguła próżni nie ma gdzie mieszkać.
 
 ---
 
