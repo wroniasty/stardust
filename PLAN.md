@@ -265,7 +265,10 @@ Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wył�
 - [x] **Pociski pod wpływem grawitacji.** Jedyna rzecz w grze zwolniona z reguły, o którą cała gra chodzi. Zmierzone na 1600 px z 848 px wysokości: pulse repeater spada 18,7 px (0,7° poprawki), autocannon 42,4 px (1,5°), dumb rocket 522,8 px (18,1°) — charakter broni z jednej liczby. **Kursor celowania nic nie kompensuje i to jest decyzja**: melduje tylko, czy lufa może się wycelować, poprawka należy do pilota.
 - [x] **Pociski nie są drogie — poprzedni pomiar był zły.** Podałem 0,9 ms na pocisk na klatkę; prawdziwa liczba to **7–8 µs**, czyli ponad dwa rzędy wielkości mniej. Błąd był w metodzie: `Performance.TIME_PROCESS` w oknie z vsync nie mierzy wykonanej pracy, tylko gdzie silnikowi wypadło zaksięgować czekanie (ten sam pomiar dawał 42 ms przy zerze pocisków). Zmierzone zegarem ściennym bez vsync: koszt **liniowy**, 15 pocisków to 0,7% klatki, 160 to 8%. Strzelanie w grunt nie kosztuje nic ponad bezczynność, a najgorsza klatka (5,6 ms) jest taka sama także w bezruchu. Metoda zapisana w `tools/frame_bench.gd`.
 - [x] **Stacja orbitująca i stacja w deep space: dokowanie i naprawa.** Rysowana (pierścień, szprychy, piasta, lampa nawigacyjna), losowana z seeda, streamowana jak każde inne ciało — `builds_as_node` mówi teraz „wszystko poza gwiazdą" zamiast wyliczać, kto może. Dokowanie **bez klawisza**: w zasięgu 2,6 promienia i pod 30 px/s statek sam się przywiązuje, bo przelot w tempie spacerowym już jest decyzją. Odmowa podaje powód (`za daleko` / `za szybko`), nie „nie". Naprawa za czas: pół kadłuba w 1,6 s, komplet w dziesięć — pierwszy raz, gdy uszkodzenie da się cofnąć bez respawnu. Odlot to ten sam gest co start z gruntu, z zatrzaskiem: dok nie przyjmie statku ponownie, dopóki ten nie opuści zasięgu (bez tego łapał go z powrotem w następnej klatce).
-- [ ] Tankowanie: paliwa jeszcze nie ma (M5), więc dok uzupełnia na razie pulę energii. Gdy paliwo powstanie, to jest miejsce, w którym się je kupuje. **Jedyna otwarta pozycja M3 i otwarta z własnej definicji** — nie da się zatankować zasobu, którego nie ma.
+- [x] Tankowanie: dok uzupełnia paliwo. Było otwarte z własnej definicji — nie
+  da się zatankować zasobu, którego nie ma — i zamknęło się samo w M4, kiedy
+  bak stał się modułem. Dok tankuje wolniej, niż ładuje energię, i
+  `fully_serviced()` czeka na pełny bak. Blokadą było M4, nie M5.
 - [x] **Wymiana modułów w doku.** `ShipEditor.can_refit()` przyjmuje teraz LANDED **albo** DOCKED — obietnica zapisana w komentarzu tej funkcji, zanim było do czego dokować. Szybka wymiana na Tab **zostaje dostępna w locie** i to jest decyzja, nie przeoczenie: `LoadoutScreen` nie pauzuje właśnie dlatego, że jeden niesiony moduł w jedno zgodne gniazdo przy działającym świecie to decyzja podejmowana, kiedy coś idzie źle. Edytor to druga rzecz — wszystkie gniazda naraz na zapauzowanym schemacie — i to jest robota w warsztacie.
 - [x] **Mapa układu na `M`**. Rysowana z **modelu**, nie ze sceny — manager trzyma w świecie jedną planetę naraz, a mapa z żywych węzłów pokazałaby jedną kropkę i nazwała to układem. Orbity w skali, ciała jako znaczniki (planeta w skali to jedna dziesiąta piksela). Jasność znacznika mówi, czy ciało jest w świecie, czy dopiero w modelu — jedyne okno na to, co robi streaming. Nazwa i odczyt na kliknięcie, jak na schemacie w edytorze.
 - [x] Zoom mapy (`+` / `-`), jako **zasięg w pikselach świata**, nie mnożnik: systemy mają od 41k do 302k px, więc ten sam mnożnik to inny widok w każdym z nich — x64 mieściło księżyc na ekranie w szerokim systemie i wyrzucało go poza ekran w wąskim. Poziomy to cały układ, 30000, 7500 i 2000 px; 7500 to „ta planeta i jej księżyce” w dowolnym systemie. Powiększanie wokół **wybranego ciała**, bo wokół gwiazdy pierwszy krok wypycha z ekranu to, co się przed chwilą kliknęło. Ciało dostaje swój prawdziwy okrąg powierzchni, gdy zrobi się większy od znacznika.
@@ -381,7 +384,12 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   potrafi stać dalej niż najdalsza planeta. Jedna reguła na cały układ,
   `is_mass_locked()` i `jump_clearance()` jako jedna odpowiedź, pierścień na
   mapie układu. Szczegóły w IDEAS.md sekcja 10.
-- [ ] Moduły: skaner (zasięg, jakość), napęd skokowy (zasięg), bak (paliwo). Wszystkie jako loot.
+- [x] Moduły: skaner (zasięg, jakość), napęd skokowy (zasięg), bak (paliwo). Wszystkie jako loot.
+  `ScannerData` / `JumpDriveData` / `TankData` na wspólnym `ModuleBay`, z
+  własnymi tabelami afiksów i bazami. `depth` skanera kupuje rzadkość, nie
+  afiks. Paliwo jako pula na statku, liniowe w dystansie i masie, niedobór
+  nie jest odmową. Stockowy kadłub dostaje wszystkie trzy — +20% masy,
+  zmierzone. Szczegóły w IDEAS.md sekcja 10.
 - [ ] HUD: wskaźniki systemów na krawędzi ekranu, kolor wg osiągalności, informacje wg jakości skanera.
 - [ ] Maszyna stanów skoku: Idle, Charging, Transit, Arrival.
 - [ ] Shader tranzytu, wymiana sceny systemu pod graczem w trakcie efektu.

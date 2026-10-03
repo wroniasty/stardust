@@ -784,6 +784,27 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 			var y: float = at.y + float(row[0]) * GLYPH * 0.7
 			_canvas.draw_line(Vector2(at.x - half, y), Vector2(at.x + half, y), colour, 1.0)
 		return
+	if mount is ScannerBay:
+		# A dish: an arc looking forward off a stem.
+		_canvas.draw_arc(at, GLYPH, PI * 1.15, PI * 1.85, 10, colour, 1.0)
+		_canvas.draw_line(at, at + Vector2(0.0, GLYPH), colour, 1.0)
+		return
+	if mount is JumpDriveBay:
+		# A ring with a line through it: the thing you go through, drawn
+		# as the thing it does rather than as the box it lives in.
+		_canvas.draw_arc(at, GLYPH * 0.8, 0.0, TAU, 12, colour, 1.0)
+		_canvas.draw_line(
+			at - Vector2(GLYPH * 1.3, 0.0), at + Vector2(GLYPH * 1.3, 0.0), colour, 1.0
+		)
+		return
+	if mount is TankBay:
+		# A drum: a box with a band across it.
+		var body: Vector2 = Vector2(GLYPH * 0.8, GLYPH)
+		_canvas.draw_rect(Rect2(at - body, body * 2.0), colour, false, 1.0)
+		_canvas.draw_line(
+			Vector2(at.x - body.x, at.y), Vector2(at.x + body.x, at.y), colour, 1.0
+		)
+		return
 	if mount is ComputerBay:
 		# A chip: a die with legs down both sides.
 		_canvas.draw_rect(Rect2(at - Vector2(GLYPH, GLYPH) * 0.7, Vector2(GLYPH, GLYPH) * 1.4),
@@ -873,14 +894,40 @@ func slot_positions(plan: Rect2) -> Dictionary:
 	var out: Dictionary = {}
 	var taken: Array[Vector2] = []
 	for mount: Node in _all_mounts():
-		var at: Vector2 = place.call((mount as Node2D).position)
-		var guard: int = 0
-		while guard < 24 and _collides(at, taken):
-			at.y += SLOT * 0.6
-			guard += 1
-		taken.append(at)
-		out[mount] = at
+		var home: Vector2 = place.call((mount as Node2D).position)
+		out[mount] = _free_near(place.call((mount as Node2D).position), taken, plan)
+		taken.append(out[mount])
 	return out
+
+
+## A place for one slot: its own, or the nearest free one that is still
+## on the panel.
+##
+## Spread **about** the spot and sideways when a column fills, which took
+## three goes to get right. Marching always downwards worked while the
+## hull had three internal bays; with five it walked the landing gear a
+## pixel past the bottom edge, and a slot drawn outside the schematic is
+## a slot nobody can click. Alternating up and down fixed that and ran
+## into the real limit: fifteen boxes eleven pixels tall do not fit in
+## one column of a panel a hundred and fifty-eight pixels high, so the
+## gear ended up at the top of the ship it hangs under. The panel is four
+## hundred pixels wide and was using none of it.
+##
+## On the schematic only. The nodes themselves carry mass, and moving one
+## to tidy a drawing would move the centre of mass.
+func _free_near(home: Vector2, taken: Array[Vector2], plan: Rect2) -> Vector2:
+	var at: Vector2 = home
+	for attempt: int in range(1, 48):
+		if not _collides(at, taken) and plan.encloses(slot_rect(at)):
+			return at
+		var step: int = attempt % 12
+		var column: int = attempt / 12
+		var rung: float = float((step + 1) / 2) * SLOT * 0.6
+		at = home + Vector2(
+			float((column + 1) / 2) * SLOT * 1.25 * (1.0 if column % 2 == 1 else -1.0),
+			rung if step % 2 == 1 else -rung,
+		)
+	return at
 
 
 func _collides(at: Vector2, taken: Array[Vector2]) -> bool:

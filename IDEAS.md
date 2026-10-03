@@ -2897,6 +2897,50 @@ linii, już mówi, czy jest czysto; kolor niesie sam odczyt.
 
 Systemy widoczne, ale nieosiągalne, pokazywane szaro. Jakość skanera decyduje, ile wiesz przed skokiem: kierunek i dystans, potem typ gwiazdy, liczba planet, poziom zagrożenia, stacje. Opcjonalnie czas skanowania i szum sygnału.
 
+**Realizacja (M4): trzy moduły, trzy liczby, i jedna wspólna cena.**
+
+`ScannerData` (zasięg w ly + `depth`), `JumpDriveData` (zasięg, ładowanie,
+spalanie na ly) i `TankData` (pojemność). Rozdzielone, bo o to chodzi:
+pilot ma móc **widzieć dalej, niż doskoczy**, albo **doskoczyć dalej, niż
+go stać**. Jeden moduł trzymający wszystkie trzy liczby zamieniłby zasięg w
+jedną statystykę idącą w górę.
+
+`depth` kupuje się **rzadkością, nie afiksem** — tak jak funkcje komputera
+pokładowego. „Mówi, ile tam jest światów" nie jest dokładniejszą wersją
+„mówi namiar"; to inny przyrząd, a nie większy, więc nie ma liczby, do
+której afiks mógłby dążyć.
+
+**Skaner przeglądowy nie jest tym, co znajduje planety w bieżącym
+układzie**, i to jest decyzja, nie przeoczenie. `ScannerHud.scan_range`
+jest w pikselach, a `StreamingManager` gwarantuje, że nic nie śpi w jego
+zasięgu — moduł mogący tę liczbę podnieść byłby modułem obiecującym
+kontakty, których świat jeszcze nie zbudował. Dwa czujniki zostają dwoma
+czujnikami: jeden patrzy w układ, drugi na zewnątrz.
+
+**Paliwo** to nowy zasób i odpowiada regule z sekcji 14: energia mierzy
+walkę w sekundach i sama się odnawia wszędzie, paliwo mierzy zasięg w
+skokach i bierze się tylko z doku. Koszt skoku jest liniowy w dystansie i
+w masie kadłuba — arkadowo, nie poprawnie, bo to cała reguła, którą pilot
+ma trzymać w głowie. Niedobór **nie jest odmową**: `draw_fuel()` oddaje
+tyle, ile miał, a brakujący ułamek to szansa na misjump. Brak baku to co
+innego niż mały bak — pojemność zero, bez szyny kadłuba, bo statek bez
+baku nie jest statkiem o krótkim zasięgu, tylko statkiem, który zostaje.
+
+To zamyka też ostatni otwarty punkt M3: dok uzupełnia teraz paliwo, a nie
+tylko energię, i `fully_serviced()` czeka na pełny bak.
+
+**Co to kosztowało stockowego darta, zmierzone.** Trzy moduły na kadłubie
+to +3,4 gabarytu, czyli masa 16,6 → 20,0 (+20%). Wszystkie trzy siedzą na
+środku masy kadłuba, tam gdzie już siedziały ładownia i generator — gniazdo
+gdziekolwiek indziej to błąd wyważenia przykręcony w stoczni. Skutek
+uboczny tej reguły: masa dokładnie na środku masy **nie dokłada nic do
+momentu bezwładności**, więc alokator musi mniej opierać się na dławikach
+obrotowych, żeby nie zakręcić statkiem — autorytet strafe spadł z 280,4 do
+264,4 N. Razem: zgaszenie bocznego dryfu 100 px/s to 5,9 s na gołym
+kadłubie i 7,4 s z pełnym wyposażeniem skokowym (plus rozkręcenie dysz).
+Pierwotny budżet testu, 8 s, był na to za ciasny i został podniesiony do
+11 s — z zapisanym pomiarem, nie „dopóki nie przeszło".
+
 ### Sekwencja skoku
 
 Maszyna stanów w kontrolerze statku:

@@ -256,6 +256,15 @@ const DOCK_HULL_RATE: float = 0.12
 const DOCK_ENGINE_RATE: float = 0.18
 const DOCK_ENERGY_RATE: float = 3.0
 
+## And of the tank, per second docked.
+##
+## Slower than the energy pool on purpose. Energy is combat's clock and
+## refills itself anywhere; fuel is range's clock and only comes from a
+## dock, so sitting still for it is the price of having gone a long way
+## (IDEAS.md section 14). Still generous -- the wait is meant to be felt,
+## not endured.
+const DOCK_FUEL_RATE: float = 0.12
+
 ## Emitted when the ship touches down or leaves the ground.
 signal flight_mode_changed(mode: FlightMode)
 
@@ -513,6 +522,7 @@ const STATS: Array[StringName] = [
 	&"energy_recharge",
 	&"energy_delay",
 	&"cargo_capacity",
+	&"fuel_capacity",
 ]
 
 ## key -> { "add": float, "mul": float }, and key -> the modules behind it.
@@ -541,6 +551,21 @@ var generator_bay: GeneratorBay = null
 
 ## The flight computer bay, if the hull has one.
 var computer_bay: ComputerBay = null
+
+## The three that decide whether this hull can leave the system at all.
+var scanner_bay: ScannerBay = null
+var jump_bay: JumpDriveBay = null
+var tank_bay: TankBay = null
+
+## Fuel in the tank. Range's clock, against energy's combat one.
+##
+## The two never mix and that is a design rule, not an accident of
+## plumbing (IDEAS.md section 14): energy refills itself, is never bought
+## and cannot be saved up, so a long burst can never leave a ship unable
+## to slow down. Fuel is the opposite in every one of those, which is why
+## it is the thing that decides how far from a dock a pilot is willing to
+## be.
+var fuel: float = 0.0
 
 ## Contact points along the outline, without the gear's. Built once.
 var _outline_contacts: Array[Vector2] = []
@@ -580,6 +605,9 @@ func collect_parts() -> void:
 	bays.clear()
 	generator_bay = null
 	computer_bay = null
+	scanner_bay = null
+	jump_bay = null
+	tank_bay = null
 	gear = null
 	for child: Node in get_children():
 		if child is Hardpoint:
@@ -593,6 +621,12 @@ func collect_parts() -> void:
 			generator_bay = bay as GeneratorBay
 		elif bay is ComputerBay:
 			computer_bay = bay as ComputerBay
+		elif bay is ScannerBay:
+			scanner_bay = bay as ScannerBay
+		elif bay is JumpDriveBay:
+			jump_bay = bay as JumpDriveBay
+		elif bay is TankBay:
+			tank_bay = bay as TankBay
 
 
 func _ready() -> void:
@@ -606,9 +640,11 @@ func _ready() -> void:
 	_build_contact_points()
 	_build_collision_shape()
 	rebuild_control_groups()
-	# A ship starts charged. The rebuild above only clamps downwards, so
-	# without this a fresh hull would come out of the yard unable to fire.
+	# A ship starts charged and fuelled. The rebuild above only clamps
+	# downwards, so without this a fresh hull would come out of the yard
+	# unable to fire and unable to leave.
 	energy = energy_capacity()
+	fuel = fuel_capacity()
 	_since_spend = energy_recharge_delay()
 
 
@@ -804,6 +840,10 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 	# the new one can. Topping it up on a swap is the other way round and
 	# would make refitting a free reload.
 	energy = minf(energy, energy_capacity())
+	# And the same for the tank, for the same reason in both directions: a
+	# smaller tank must not hold what the old one did, and swapping to a
+	# bigger one must not fill it.
+	fuel = minf(fuel, fuel_capacity())
 	# After the rebuild, not before: whatever listens is entitled to read a
 	# ship that is finished rather than one halfway through a refit.
 	configuration_changed.emit()
@@ -1057,6 +1097,52 @@ func _record_stat(key: StringName, source: String, kind: String, value: float) -
 ## weight heuristic.
 func computer() -> FlightComputerData:
 	return computer_bay.installed as FlightComputerData if computer_bay != null else null
+
+
+## The survey scanner fitted, or null for a ship that cannot see past
+## the system it is in.
+func scanner() -> ScannerData:
+	return scanner_bay.installed as ScannerData if scanner_bay != null else null
+
+
+## The jump drive fitted, or null for a ship that is not going anywhere.
+func jump_drive() -> JumpDriveData:
+	return jump_bay.installed as JumpDriveData if jump_bay != null else null
+
+
+## The tank fitted, or null. A drive with no tank is a drive with nothing
+## to burn, which is a configuration the report should talk about rather
+## than one the code should prevent.
+func tank() -> TankData:
+	return tank_bay.installed as TankData if tank_bay != null else null
+
+
+## How much fuel this hull can hold.
+##
+## Zero without a tank, and no hull rail to fall back on -- unlike energy,
+## which every hull has a trickle of. A ship with no tank is not a ship
+## with a small tank; it is a ship that is staying in this system, and
+## saying so plainly is better than a litre of mystery fuel.
+func fuel_capacity() -> float:
+	var fitted: TankData = tank()
+	return stat(&"fuel_capacity", fitted.fuel_capacity if fitted != null else 0.0)
+
+
+## Takes fuel out of the tank. Returns how much it actually got, which is
+## less than asked for when the tank runs dry -- the shortfall is what
+## IDEAS.md section 10 turns into misjump risk rather than a refusal.
+func draw_fuel(amount: float) -> float:
+	var taken: float = clampf(amount, 0.0, fuel)
+	fuel -= taken
+	return taken
+
+
+## Puts fuel in, up to the tank's capacity. Returns how much went in.
+func add_fuel(amount: float) -> float:
+	var room: float = maxf(fuel_capacity() - fuel, 0.0)
+	var poured: float = clampf(amount, 0.0, room)
+	fuel += poured
+	return poured
 
 
 ## The generator fitted, or null when running on the hull's own rail.
@@ -1332,11 +1418,18 @@ func _mend(delta: float) -> void:
 	for engine: EngineInstance in engines:
 		engine.health = minf(engine.health + DOCK_ENGINE_RATE * delta, 1.0)
 	energy = minf(energy + energy_capacity() * DOCK_ENERGY_RATE * delta, energy_capacity())
+	# And the tank, which is what a dock is actually for. M3 left this
+	# line out on purpose -- "the dock tops up energy for now, and when
+	# fuel exists this is where it gets bought" -- because there was no
+	# fuel to put in. There is now.
+	add_fuel(fuel_capacity() * DOCK_FUEL_RATE * delta)
 
 
 ## True while everything a dock can mend is mended.
 func fully_serviced() -> bool:
 	if hull_integrity < 1.0 or energy < energy_capacity() - 0.01:
+		return false
+	if fuel < fuel_capacity() - 0.01:
 		return false
 	for engine: EngineInstance in engines:
 		if engine.health < 1.0:

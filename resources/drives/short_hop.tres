@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="JumpDriveData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/jump_drive_data.gd" id="1_drive"]
+
+[resource]
+script = ExtResource("1_drive")
+display_name = "short hop"
+reach = 10.5
+charge_time = 2.4
+fuel_per_ly = 1.7
+bulk = 1.2

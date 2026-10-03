@@ -51,6 +51,21 @@ const GENERATOR_BASES: Array[String] = [
 	"res://resources/generators/standard_cell.tres",
 ]
 
+const SCANNER_BASES: Array[String] = [
+	"res://resources/scanners/survey_array.tres",
+	"res://resources/scanners/deep_field.tres",
+]
+
+const DRIVE_BASES: Array[String] = [
+	"res://resources/drives/short_hop.tres",
+	"res://resources/drives/long_reach.tres",
+]
+
+const TANK_BASES: Array[String] = [
+	"res://resources/tanks/standard_tank.tres",
+	"res://resources/tanks/long_haul.tres",
+]
+
 const ENGINE_BASES: Array[String] = [
 	"res://resources/engines/main_drive.tres",
 	"res://resources/engines/torque_jet.tres",
@@ -167,6 +182,74 @@ const GENERATOR_AFFIXES: Array[Dictionary] = [
 	},
 ]
 
+## A scanner trades sight against size, and nothing else: how much it
+## *says* is bought with rarity, not with affixes, the same way a flight
+## computer buys functions. A finer reading is a different instrument,
+## not a bigger one, and there is no number to scale towards it.
+const SCANNER_AFFIXES: Array[Dictionary] = [
+	{
+		"name": &"far-seeing", "field": "reach", "factor": Vector2(1.20, 1.55),
+		"cost_field": "bulk", "cost": Vector2(1.20, 1.50),
+	},
+	{
+		"name": &"compact", "field": "bulk", "factor": Vector2(0.55, 0.80),
+		"cost_field": "reach", "cost": Vector2(0.78, 0.92),
+	},
+	{"name": &"tuned", "field": "reach", "factor": Vector2(1.08, 1.20)},
+	# The cross-stat pair every table has. An instrument with its own cell
+	# is an instrument the generator is not paying for, and the price is
+	# the only thing a scanner has to sell: how far it sees.
+	{
+		"name": &"piggybacked", "stat_add": &"energy_capacity",
+		"amount": Vector2(8.0, 22.0),
+		"cost_field": "reach", "cost": Vector2(0.82, 0.93),
+	},
+]
+
+const DRIVE_AFFIXES: Array[Dictionary] = [
+	{
+		"name": &"long-legged", "field": "reach", "factor": Vector2(1.20, 1.50),
+		"cost_field": "fuel_per_ly", "cost": Vector2(1.25, 1.60),
+	},
+	{
+		"name": &"quick-spun", "field": "charge_time", "factor": Vector2(0.50, 0.78),
+		"cost_field": "fuel_per_ly", "cost": Vector2(1.15, 1.40),
+	},
+	{
+		"name": &"thrifty", "field": "fuel_per_ly", "factor": Vector2(0.60, 0.85),
+		"cost_field": "reach", "cost": Vector2(0.82, 0.94),
+	},
+	{
+		"name": &"compact", "field": "bulk", "factor": Vector2(0.60, 0.85),
+		"cost_field": "reach", "cost": Vector2(0.80, 0.92),
+	},
+	# The cross-stat pair, as every table has one. A drive that holds a
+	# little fuel of its own is a drive you fit when the hold is full.
+	{
+		"name": &"wet-slung", "stat_add": &"fuel_capacity", "amount": Vector2(10.0, 30.0),
+		"cost_field": "reach", "cost": Vector2(0.80, 0.92),
+	},
+]
+
+const TANK_AFFIXES: Array[Dictionary] = [
+	{
+		"name": &"capacious", "field": "fuel_capacity", "factor": Vector2(1.25, 1.60),
+		"cost_field": "bulk", "cost": Vector2(1.25, 1.55),
+	},
+	{
+		"name": &"lightweight", "field": "bulk", "factor": Vector2(0.55, 0.80),
+		"cost_field": "fuel_capacity", "cost": Vector2(0.72, 0.88),
+	},
+	{"name": &"baffled", "field": "fuel_capacity", "factor": Vector2(1.08, 1.22)},
+	# A tank built narrow leaves room beside it. Range traded for what you
+	# can carry, which is the same decision the whole hold is about.
+	{
+		"name": &"slimline", "stat_add": &"cargo_capacity",
+		"amount": Vector2(0.6, 1.8),
+		"cost_field": "fuel_capacity", "cost": Vector2(0.78, 0.90),
+	},
+]
+
 ## Shot mods, as a fixed catalogue rather than a rolled template: a mod is a
 ## decision the pilot makes, so the interesting variety is in which ones they
 ## own, not in each one being slightly different.
@@ -204,6 +287,10 @@ const HIGHER_IS_BETTER: Dictionary = {
 	"recharge_delay": false,
 	"spool_time": false,
 	"fuel_cost": false,
+	"reach": true,
+	"charge_time": false,
+	"fuel_per_ly": false,
+	"fuel_capacity": true,
 }
 
 ## Floors and ceilings applied after the affixes, so no roll can produce an
@@ -235,6 +322,13 @@ const LIMITS: Dictionary = {
 	"spool_time": Vector2(0.05, 5.0),
 	"reliability": Vector2(0.1, 1.0),
 	"fuel_cost": Vector2(0.0, 100.0),
+	# In light years, and generous at the top for the same reason bulk is:
+	# a drive that outreaches the galaxy's own spacing by a wide margin is
+	# a legitimate find, and the islands at the rim are what it is for.
+	"reach": Vector2(3.0, 45.0),
+	"charge_time": Vector2(0.4, 12.0),
+	"fuel_per_ly": Vector2(0.2, 12.0),
+	"fuel_capacity": Vector2(20.0, 1200.0),
 }
 
 
@@ -247,14 +341,24 @@ func generate(item_seed: int, rarity: int = ROLLED) -> Resource:
 	# turn up least often. Drawn before anything else, as before, so the kind
 	# a container holds is fixed by its seed whatever the tables gain later.
 	var kind: float = rng.randf()
-	if kind < 0.38:
+	if kind < 0.33:
 		return _build_weapon(rng, rarity)
-	if kind < 0.70:
+	if kind < 0.61:
 		return _build_engine(rng, rarity)
-	if kind < 0.82:
+	if kind < 0.71:
 		return _build_generator(rng, rarity)
-	if kind < 0.90:
+	if kind < 0.78:
 		return computer(rng.randi(), rarity)
+	# The three that make a ship able to leave the system. Rarer than
+	# guns and engines, of which a hull carries many, and about as common
+	# as the generator, of which it carries one -- a second scanner is
+	# not a second gun, it is a replacement or it is cargo.
+	if kind < 0.84:
+		return _build_scanner(rng, rarity)
+	if kind < 0.90:
+		return _build_drive(rng, rarity)
+	if kind < 0.95:
+		return _build_tank(rng, rarity)
 	return shot_mod(rng.randi() % SHOT_MODS.size())
 
 
@@ -271,6 +375,21 @@ func engine(item_seed: int, rarity: int = ROLLED) -> EngineData:
 ## Rolls a generator. `rarity` of ROLLED lets the seed decide.
 func generator(item_seed: int, rarity: int = ROLLED) -> GeneratorData:
 	return _build_generator(_rng_for(item_seed), rarity)
+
+
+## Rolls a survey scanner. `rarity` of ROLLED lets the seed decide.
+func scanner(item_seed: int, rarity: int = ROLLED) -> ScannerData:
+	return _build_scanner(_rng_for(item_seed), rarity)
+
+
+## Rolls a jump drive. `rarity` of ROLLED lets the seed decide.
+func jump_drive(item_seed: int, rarity: int = ROLLED) -> JumpDriveData:
+	return _build_drive(_rng_for(item_seed), rarity)
+
+
+## Rolls a fuel tank. `rarity` of ROLLED lets the seed decide.
+func tank(item_seed: int, rarity: int = ROLLED) -> TankData:
+	return _build_tank(_rng_for(item_seed), rarity)
 
 
 ## Rolls a flight computer. Not from a base resource: what makes one
@@ -392,6 +511,55 @@ func _build_generator(rng: RandomNumberGenerator, rarity: int) -> GeneratorData:
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
 	item.affixes = _apply_affixes(rng, item, GENERATOR_AFFIXES, rolled)
+	_clamp_all(item)
+	return item
+
+
+## Builds a scanner.
+##
+## Depth comes from the rarity and nothing else, which is the one place
+## this generator does not roll: "tells you how many worlds there are" is
+## not a larger version of "tells you a bearing", so there is no number
+## for an affix to push. Same argument as the flight computer's
+## functions, and the depth is written into the name for the same reason
+## -- a card has to say what the thing does.
+func _build_scanner(rng: RandomNumberGenerator, rarity: int) -> ScannerData:
+	var base: ScannerData = load(
+		SCANNER_BASES[rng.randi() % SCANNER_BASES.size()]
+	) as ScannerData
+	if base == null:
+		return null
+	var item: ScannerData = base.duplicate() as ScannerData
+	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	item.rarity = rolled
+	item.depth = clampi(rolled, 0, int(ScannerData.Depth.DEEP)) as ScannerData.Depth
+	item.affixes = _apply_affixes(rng, item, SCANNER_AFFIXES, rolled)
+	_clamp_all(item)
+	return item
+
+
+func _build_drive(rng: RandomNumberGenerator, rarity: int) -> JumpDriveData:
+	var base: JumpDriveData = load(
+		DRIVE_BASES[rng.randi() % DRIVE_BASES.size()]
+	) as JumpDriveData
+	if base == null:
+		return null
+	var item: JumpDriveData = base.duplicate() as JumpDriveData
+	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	item.rarity = rolled
+	item.affixes = _apply_affixes(rng, item, DRIVE_AFFIXES, rolled)
+	_clamp_all(item)
+	return item
+
+
+func _build_tank(rng: RandomNumberGenerator, rarity: int) -> TankData:
+	var base: TankData = load(TANK_BASES[rng.randi() % TANK_BASES.size()]) as TankData
+	if base == null:
+		return null
+	var item: TankData = base.duplicate() as TankData
+	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
+	item.rarity = rolled
+	item.affixes = _apply_affixes(rng, item, TANK_AFFIXES, rolled)
 	_clamp_all(item)
 	return item
 

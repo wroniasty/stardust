@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="TankData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/tank_data.gd" id="1_tank"]
+
+[resource]
+script = ExtResource("1_tank")
+display_name = "standard tank"
+fuel_capacity = 120.0
+bulk = 1.0

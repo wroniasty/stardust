@@ -55,12 +55,21 @@ const KILL_TICKS: int = 90
 
 ## Speed the brake has to shed, and the time it gets.
 ##
-## Eight seconds rather than five because sideways braking is genuinely slower:
-## the strafe groups muster 300 N against the retro thruster's 500 N, so a
-## sideways stop takes about six seconds to the forward stop's four and a half.
+## Eleven seconds rather than five because sideways braking is genuinely
+## slower: the strafe groups muster 264 N against the retro thruster's 500 N.
 ## That is the ship's design showing through, not a fault.
+##
+## It was eight until M4 put a jump drive and a tank on the stock hull.
+## Measured either way rather than nudged until it passed: the bare dart
+## needs 5.9 s of ideal burn to kill 100 px/s sideways and the one carrying
+## jump gear needs 7.4 s, because the mass is up a fifth and the strafe
+## authority is down a sixteenth -- mass sitting exactly on the centre of
+## mass adds nothing to the inertia, so the allocator has to lean less on
+## the torque jets to avoid spinning the ship. Spool-up goes on top of
+## both, which is why eight seconds was already thin for a figure of 5.9
+## and is not enough for 7.4.
 const BRAKE_SPEED: float = 100.0
-const BRAKE_TICKS: int = 480
+const BRAKE_TICKS: int = 660
 const FALL_TICKS: int = 60
 const ORBIT_TICKS: int = 1800
 const LANDING_TICKS: int = 600
@@ -998,6 +1007,7 @@ func _evaluate_phase() -> void:
 			_check_seeker_targets()
 			_check_galaxy()
 			_check_mass_lock()
+			_check_jump_kit()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -2722,11 +2732,14 @@ func _check_engine_failures() -> void:
 	_expect(nose != null and tail != null, "the test ship has the engines this check needs")
 
 	# A hit near one end breaks what was there, and leaves the other end alone.
-	# 0.7 of hull damage, which at the current share leaves the engine at
-	# 0.65 -- clearly past the threshold the report complains about. The
-	# number moved when the penalty was softened; it is written against
-	# WORN rather than against a remembered outcome.
-	ship.damage_engines_near(nose.mount.position, (1.0 - ConfigurationReport.WORN + 0.2)
+	# Written against WORN rather than against a remembered outcome, and
+	# the margin on top of it has had to grow twice. The second time was
+	# M4: the stock hull picked up a jump drive and a tank, and the drift
+	# warning is in px/s2 -- rightly, since a given force imbalance really
+	# is less of a handling fault on a heavier ship -- so the same broken
+	# jet stopped crossing it. Hitting harder tests the same rule on the
+	# ship that exists.
+	ship.damage_engines_near(nose.mount.position, (1.0 - ConfigurationReport.WORN + 0.45)
 		/ Ship.ENGINE_DAMAGE_SHARE)
 	_expect(nose.health < 1.0, "an impact costs the engine it landed on (%.2f)" % nose.health)
 	_expect(
@@ -3839,6 +3852,163 @@ func _check_mass_lock() -> void:
 		and not one.is_mass_locked(Vector2.RIGHT * edge * 1.01),
 		"you are held at a planet and free a hair past the ring (%.0f px)" % edge,
 	)
+
+
+## Skaner, napęd skokowy i bak: trzy moduły, które decydują o wyjeździe.
+##
+## All three are loot, which is the point: IDEAS.md section 10 keeps the
+## three numbers that govern leaving a system on three separate machines,
+## so a pilot can be able to see further than they can jump, or able to
+## jump further than they can pay for. One module holding all three would
+## make range a single stat going up.
+##
+## Fuel is the new resource here and the rule it answers to is section
+## 14's: energy paces combat in seconds and refills itself anywhere; fuel
+## paces range in jumps and only comes from a dock. The two never mix, so
+## a long burst can never leave a ship unable to slow down.
+func _check_jump_kit() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+
+	# Rarity buys the scanner's reading, not a bigger number, the same way
+	# it buys a flight computer's functions. "Tells you how many worlds
+	# there are" is not a finer version of "tells you a bearing", so there
+	# is nothing for an affix to scale towards it.
+	var dim: ScannerData = loot.scanner(31, 0)
+	var sharp: ScannerData = loot.scanner(31, 4)
+	_expect(
+		dim != null and sharp != null
+		and int(dim.depth) == int(ScannerData.Depth.BEARING)
+		and int(sharp.depth) == int(ScannerData.Depth.DEEP),
+		"a common scanner gives a bearing and a legendary one gives the lot (%s, %s)" % [
+			dim.depth_name(), sharp.depth_name(),
+		],
+	)
+	_expect(
+		sharp.knows(ScannerData.Depth.BEARING) and not dim.knows(ScannerData.Depth.SURVEY),
+		"and each one answers for everything up to its own reading",
+	)
+	_expect(
+		dim.reach > 0.0 and sharp.reach > 0.0,
+		"both see something (%.1f and %.1f ly)" % [dim.reach, sharp.reach],
+	)
+
+	# The drive. Cost linear in both distance and mass, which is the whole
+	# of the rule a pilot has to hold in their head.
+	var drive: JumpDriveData = loot.jump_drive(31, 1)
+	var near: float = drive.fuel_for(5.0, JumpDriveData.REFERENCE_MASS)
+	var far: float = drive.fuel_for(10.0, JumpDriveData.REFERENCE_MASS)
+	var laden: float = drive.fuel_for(5.0, JumpDriveData.REFERENCE_MASS * 2.0)
+	_expect(
+		is_equal_approx(far, near * 2.0) and is_equal_approx(laden, near * 2.0),
+		"twice as far costs twice as much, and so does twice as heavy (%.1f, %.1f, %.1f)" % [
+			near, far, laden,
+		],
+	)
+	_expect(
+		is_equal_approx(drive.fuel_for(0.0, JumpDriveData.REFERENCE_MASS), 0.0)
+		and drive.can_cross(drive.reach) and not drive.can_cross(drive.reach + 0.1),
+		"going nowhere is free and the reach is a hard edge (%.1f ly)" % drive.reach,
+	)
+
+	# A starting drive has to be able to leave the starting system, or the
+	# galaxy's connectivity check was checking a galaxy nobody can fly.
+	var stock: JumpDriveData = load("res://resources/drives/short_hop.tres") as JumpDriveData
+	_expect(
+		is_equal_approx(stock.reach, GalaxyMap.BASE_REACH),
+		"the stock drive reaches exactly what the galaxy was laid out for (%.1f ly)" % [
+			stock.reach,
+		],
+	)
+
+	# The tank, the pool, and the hull that has neither.
+	var ship: Ship = _spawn_ship()
+	# All three on the stock hull, which is a design decision rather than
+	# a convenience: a starting ship missing any one of them cannot leave
+	# the system, and two of the three would be a ship that can see where
+	# it cannot go or go where it cannot see.
+	_expect(
+		ship.scanner() != null and ship.jump_drive() != null and ship.tank() != null,
+		"the stock hull starts with all three: eyes, a drive and something to burn",
+	)
+	# And all of them amidships. A bay anywhere else is a balance fault
+	# bolted in at the yard -- mass on the centre of mass adds nothing to
+	# the inertia either, which is why the stock couples still cancel.
+	var astray: int = 0
+	for bay: ModuleBay in ship.bays:
+		if bay.installed != null and not bay.position.is_equal_approx(Ship.CARGO_BAY):
+			astray += 1
+	_expect(
+		astray == 0,
+		"and every loaded one sits on the hull's centre of mass",
+	)
+	_expect(
+		ship.tank() != null and ship.fuel_capacity() > 0.0
+		and is_equal_approx(ship.fuel, ship.fuel_capacity()),
+		"a fresh hull comes out of the yard fuelled (%.0f of %.0f)" % [
+			ship.fuel, ship.fuel_capacity(),
+		],
+	)
+	var full: float = ship.fuel_capacity()
+	_expect(
+		is_equal_approx(ship.draw_fuel(full * 0.25), full * 0.25)
+		and is_equal_approx(ship.fuel, full * 0.75),
+		"drawing takes what it asked for while there is any",
+	)
+	# A shortfall is not a refusal: what the tank could not give is what
+	# IDEAS.md section 10 turns into misjump risk.
+	var asked: float = full * 2.0
+	var got: float = ship.draw_fuel(asked)
+	_expect(
+		got < asked and is_equal_approx(ship.fuel, 0.0),
+		"and an empty tank hands back what it had rather than nothing (%.0f of %.0f)" % [
+			got, asked,
+		],
+	)
+	_expect(
+		is_equal_approx(ship.add_fuel(full * 10.0), full) and is_equal_approx(ship.fuel, full),
+		"filling stops at the top of the tank",
+	)
+
+	# No tank is not a small tank. Unlike energy, which every hull has a
+	# trickle of, a ship without one is a ship staying in this system --
+	# and saying so plainly beats a litre of mystery fuel.
+	var held: TankData = ship.tank()
+	ship.tank_bay.installed = null
+	ship.rebuild_control_groups(false)
+	_expect(
+		is_equal_approx(ship.fuel_capacity(), 0.0) and is_equal_approx(ship.fuel, 0.0),
+		"pull the tank and there is no fuel and nowhere to put any",
+	)
+	# And refitting is not a reload. The pool is clamped down on a swap and
+	# never topped up, for the same reason the energy pool is.
+	ship.tank_bay.installed = held
+	ship.rebuild_control_groups(false)
+	_expect(
+		ship.fuel_capacity() > 0.0 and is_equal_approx(ship.fuel, 0.0),
+		"and bolting it back on gives you the tank, not the fuel",
+	)
+
+	# The dock is where fuel comes from. M3 left this line out on purpose
+	# -- there was no fuel to put in -- and said that this is where it
+	# would go.
+	var before: float = ship.fuel
+	for tick: int in range(600):
+		ship._mend(1.0 / 60.0)
+	_expect(
+		ship.fuel > before,
+		"a dock puts fuel in (%.0f of %.0f after ten seconds)" % [
+			ship.fuel, ship.fuel_capacity(),
+		],
+	)
+	while ship.fuel < ship.fuel_capacity() - 0.001:
+		ship._mend(1.0 / 60.0)
+	_expect(
+		ship.fully_serviced(),
+		"and a ship is not serviced until the tank is full as well",
+	)
+
+	loot.free()
+	ship.queue_free()
 
 
 ## The system model: a star, its planets, their moons, and where all of it
@@ -6300,6 +6470,9 @@ func _check_affix_pools() -> void:
 		{"kind": "weapon", "bases": loot.WEAPON_BASES, "table": loot.WEAPON_AFFIXES},
 		{"kind": "engine", "bases": loot.ENGINE_BASES, "table": loot.ENGINE_AFFIXES},
 		{"kind": "generator", "bases": loot.GENERATOR_BASES, "table": loot.GENERATOR_AFFIXES},
+		{"kind": "scanner", "bases": loot.SCANNER_BASES, "table": loot.SCANNER_AFFIXES},
+		{"kind": "drive", "bases": loot.DRIVE_BASES, "table": loot.DRIVE_AFFIXES},
+		{"kind": "tank", "bases": loot.TANK_BASES, "table": loot.TANK_AFFIXES},
 	]
 
 	var toothless: int = 0

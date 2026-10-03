@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="ScannerData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/scanner_data.gd" id="1_scanner"]
+
+[resource]
+script = ExtResource("1_scanner")
+display_name = "survey array"
+reach = 14.0
+depth = 0
+bulk = 1.2
