@@ -72,6 +72,21 @@ const MOON_CHANCE: float = 0.45
 ## Only a world with room around it gets one.
 const MOON_PARENT_RADIUS: float = 1300.0
 
+## How far past everything in the system the star holds a ship down, as a
+## multiple of the outermost thing orbiting it.
+##
+## IDEAS.md section 10 puts this at one and a half times the last orbit,
+## and measures it against **everything** the star holds rather than
+## against the last planet. A deep station can sit outside the outermost
+## world, and a lock that stopped short of it would let a pilot jump from
+## a dock -- which is the one place in a system where leaving should mean
+## flying out first.
+##
+## The whole system is inside it by construction, so this is also the only
+## mass lock there is: no separate rule for planets, because anywhere a
+## planet can hold you the star already does.
+const MASS_LOCK_RATIO: float = 1.5
+
 ## Docks. One always, and sometimes a second out in the dark between orbits.
 const STATION_RADIUS: Vector2 = Vector2(55.0, 110.0)
 const STATION_ORBIT_RATIO: float = 2.4
@@ -240,6 +255,31 @@ func outer_radius() -> float:
 	for body: SystemBody in star.children:
 		out = maxf(out, body.extent())
 	return out
+
+
+## How far from the star a ship has to get before it can jump, in pixels.
+##
+## The outer edge of the system and then half as much again. Derived
+## rather than rolled: a system with wider orbits is a longer climb out,
+## which is what makes a compact system a convenient one to be based in
+## and a sprawling one a nuisance to leave.
+func mass_lock_radius() -> float:
+	return outer_radius() * MASS_LOCK_RATIO
+
+
+## Whether a point in this system is still held down by the star.
+##
+## The star sits at the origin of the system frame, which is also the
+## origin of the scene, so a ship can be asked about with its own global
+## position and no arithmetic in between.
+func is_mass_locked(point: Vector2) -> bool:
+	return point.length() < mass_lock_radius()
+
+
+## How much further out a point still has to get, in pixels. Zero or
+## negative once the ship is clear, which is what a readout counts down.
+func jump_clearance(point: Vector2) -> float:
+	return mass_lock_radius() - point.length()
 
 
 func planets() -> Array[SystemBody]:

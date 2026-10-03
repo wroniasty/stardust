@@ -38,6 +38,20 @@ const SHIP: Color = Color(0.36, 0.92, 0.50)
 const TRACK: Color = Color(0.45, 0.70, 0.95)
 const TRACK_IMPACT: Color = Color(1.00, 0.40, 0.35)
 
+## The edge of the star's hold. Warm rather than cold, because it is the
+## one line on this map that is about leaving rather than about where
+## things are.
+##
+## One colour, never two. The first pass lit the ring green once the ship
+## was outside it, which put a green ring next to a green ship marker and
+## made a fact about the system look like a status light. Where the ship
+## is relative to the line already says whether it is clear; the line
+## itself is not a reading.
+const LOCK: Color = Color(0.85, 0.62, 0.30)
+
+## And the one thing here that *is* a reading.
+const LOCK_CLEAR: Color = Color(0.45, 0.85, 0.55)
+
 ## The dash pattern, in screen pixels along the curve rather than in world
 ## units: a dash that stretches with the zoom stops being a dash.
 const DASH: float = 4.0
@@ -91,6 +105,10 @@ const PICK_RADIUS: float = 9.0
 ## in a narrow one. A reach in pixels means the same thing everywhere --
 ## 7500 is "this planet and its moons" in any system there is.
 const ZOOM_REACH: Array[float] = [0.0, 30000.0, 7500.0, 2000.0]
+
+## How much past the mass lock the unzoomed map shows. Enough that the
+## ring is a ring and not the frame.
+const LOCK_HEADROOM: float = 1.12
 
 signal teleport_requested(body: SystemBody)
 
@@ -264,7 +282,13 @@ func zoom_level() -> int:
 ## this out rather than reading back what the last `_draw` left behind.
 func layout(view: Vector2) -> Dictionary:
 	var room: float = minf(view.x, view.y) * 0.5 - PAD * 3.0
-	var reach: float = _system.outer_radius() if _system != null else 1.0
+	# Out to the mass lock rather than to the last orbit, with a little
+	# room past it. A map that stopped at the outermost planet would cut
+	# off the one circle a pilot planning to leave is looking for, and
+	# "how much further" is not a question a map should make you guess.
+	var reach: float = (
+		_system.mass_lock_radius() * LOCK_HEADROOM if _system != null else 1.0
+	)
 	if ZOOM_REACH[_zoom] > 0.0:
 		reach = ZOOM_REACH[_zoom]
 	return {
@@ -330,6 +354,13 @@ func _draw_map() -> void:
 		LABEL,
 	)
 
+	# The star's hold, before the orbits: it is the biggest circle here and
+	# a solid one would read as the edge of the map rather than as a thing
+	# in the system.
+	var lock: float = _system.mass_lock_radius() * float(plan["scale"])
+	if lock >= 2.0:
+		_dashed(_ring(to_map(Vector2.ZERO, plan), lock), LOCK)
+
 	# Orbits first, so no marker is drawn under a line.
 	for body: SystemBody in _system.bodies:
 		if body.orbit_period <= 0.0 or body.parent_body() == null:
@@ -347,6 +378,18 @@ func _draw_map() -> void:
 
 	for body: SystemBody in _system.bodies:
 		_draw_body(body, to_map(_position_of(body), plan), float(plan["scale"]))
+
+	if _ship != null and is_instance_valid(_ship):
+		var togo: float = _system.jump_clearance(_ship.global_position)
+		_text(
+			font,
+			Vector2(PAD, PAD + float(FONT_SIZE) * 4.0),
+			(
+				"mass lock  jeszcze %.0f px" % togo if togo > 0.0
+				else "mass lock  czysto, skok możliwy"
+			),
+			LOCK if togo > 0.0 else LOCK_CLEAR,
+		)
 
 	_draw_track(plan)
 	if _ship != null and is_instance_valid(_ship):
@@ -454,6 +497,17 @@ func _draw_track(plan: Dictionary) -> void:
 
 ## Walks a polyline by arc length and draws every other stretch, so the
 ## dashes are an even length on screen whatever the curve is doing.
+## A circle as a polyline, so it can go through the same dasher as a
+## forecast. Segments scaled to the radius: a fixed count makes a big ring
+## a polygon and a small one a waste.
+func _ring(around: Vector2, radius: float) -> PackedVector2Array:
+	var steps: int = clampi(int(radius * 0.5), 24, 160)
+	var points: PackedVector2Array = PackedVector2Array()
+	for step: int in range(steps + 1):
+		points.append(around + Vector2.from_angle(TAU * float(step) / float(steps)) * radius)
+	return points
+
+
 func _dashed(points: PackedVector2Array, colour: Color) -> void:
 	var travelled: float = 0.0
 	for i: int in range(1, points.size()):

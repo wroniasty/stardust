@@ -376,7 +376,11 @@ Cel: wiele systemów, podróż skokiem bez bramek.
   Zasięg bazowy zmierzony, nie zgadnięty: graf spina się dopiero przy ~1,75
   lokalnego odstępu, co daje 73–79% w jednym kawałku i 25–29 wysp na później.
   Szczegóły i tabela pomiarów w IDEAS.md sekcja 10.
-- [ ] Mass lock gwiazdy i strefa skoku.
+- [x] Mass lock gwiazdy i strefa skoku. 1,5 × `outer_radius()`, więc liczone
+  względem wszystkiego, co gwiazda trzyma — w tym głębokiej stacji, która
+  potrafi stać dalej niż najdalsza planeta. Jedna reguła na cały układ,
+  `is_mass_locked()` i `jump_clearance()` jako jedna odpowiedź, pierścień na
+  mapie układu. Szczegóły w IDEAS.md sekcja 10.
 - [ ] Moduły: skaner (zasięg, jakość), napęd skokowy (zasięg), bak (paliwo). Wszystkie jako loot.
 - [ ] HUD: wskaźniki systemów na krawędzi ekranu, kolor wg osiągalności, informacje wg jakości skanera.
 - [ ] Maszyna stanów skoku: Idle, Charging, Transit, Arrival.

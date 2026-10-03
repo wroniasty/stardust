@@ -2856,6 +2856,37 @@ Galaktyka ma własne współrzędne (system to punkt na płaszczyźnie, umowna j
 
 Gwiazda ma promień mass lock (np. 1.5 promienia orbity ostatniej planety). Poza nim skaner zaczyna działać i skok jest możliwy.
 
+**Realizacja (M4).** 1,5, ale liczone względem **wszystkiego**, co gwiazda
+trzyma (`outer_radius()`), a nie względem ostatniej planety. Głęboka stacja
+potrafi stać dalej niż najdalszy świat, a blokada kończąca się przed nią
+pozwalałaby skoczyć z doku — czyli z jedynego miejsca w układzie, z którego
+wyjście powinno znaczyć „najpierw wylecieć".
+
+Skoro cały układ leży wtedy wewnątrz z definicji, **nie ma drugiej reguły dla
+planet**: wszędzie tam, gdzie planeta mogłaby cię przytrzymać, gwiazda już
+trzyma. Jedna liczba, jedno pytanie, jedno miejsce w kodzie.
+
+Zmierzone na 300 seedach: promień blokady wychodzi od 72 tys. do 504 tys.
+pikseli, czyli siedmiokrotny rozrzut. To jest cecha, nie wada — ciasny
+układ jest wygodną bazą, rozległy jest uciążliwy do opuszczenia — i jest do
+przyjęcia tylko dlatego, że w próżni nie ma oporu: 900 N na 16,6 kg to
+54 px/s², więc pierwsza minuta ciągłego palenia to już około 97 tys. pikseli.
+Wspinaczka z największego układu to kilka minut palenia, a nie dwadzieścia
+minut lotu ze stałą prędkością.
+
+`is_mass_locked(point)` i `jump_clearance(point)` to **jedna odpowiedź**, nie
+dwie: pierwsze jest tym, na czym rozgałęzi się maszyna stanów, drugie tym, co
+odlicza odczyt, i granica, co do której by się nie zgadzały, to HUD mówiący
+„czysto" obok napędu odmawiającego ładowania.
+
+**Na mapie układu** zasięg rysowania sięga teraz blokady z niewielkim
+zapasem, a nie ostatniej orbity: mapa ucinająca jedyne kółko, którego szuka
+ktoś planujący wylot, zamienia „ile jeszcze" z powrotem w zgadywankę.
+Pierścień jest **jednokolorowy**. Pierwsza wersja zapalała go na zielono po
+wyjściu, co postawiło zielony pierścień obok zielonego znacznika statku i
+zrobiło z faktu o układzie kontrolkę stanu. To, gdzie stoi statek względem
+linii, już mówi, czy jest czysto; kolor niesie sam odczyt.
+
 ### Skaner
 
 `Galaxy.systems_within(current_pos, scanner_range)` zwraca kandydatów. HUD rysuje wskaźniki na krawędzi ekranu w kierunku każdego. Trzy niezależne parametry, każdy z osobnego modułu statku (czyli z lootu):

@@ -996,6 +996,7 @@ func _evaluate_phase() -> void:
 			_check_item_names()
 			_check_seeker_targets()
 			_check_galaxy()
+			_check_mass_lock()
 			_check_system_model(_planet)
 			_check_star()
 			_check_orbit_host()
@@ -3766,6 +3767,79 @@ func _mean_gap(map: GalaxyMap, from: float, to: float) -> float:
 	return 0.0 if counted == 0 else total / float(counted)
 
 
+## Mass lock: gdzie kończy się trzymanie gwiazdy.
+##
+## One rule for the whole system, which is the part worth checking.
+## IDEAS.md section 10 measures the lock against the last orbit; it is
+## measured here against **everything** the star holds, because a deep
+## station can sit outside the outermost world and a lock that stopped
+## short of it would let a pilot jump from a dock. Since every body is
+## then inside it by construction, there is no second rule for planets:
+## anywhere a planet could hold you, the star already does.
+##
+## Three hundred seeds, like `_check_system_model`, and invariants rather
+## than numbers: a system with wider orbits should be a longer climb out,
+## and nothing should be able to generate one where the climb is zero.
+func _check_mass_lock() -> void:
+	var leaky: int = 0
+	var backwards: int = 0
+	var tightest: float = INF
+	var widest: float = 0.0
+	for roll: int in range(300):
+		var system: StarSystem = StarSystem.generate(20260000 + roll)
+		var lock: float = system.mass_lock_radius()
+		if lock <= system.outer_radius():
+			backwards += 1
+		for body: SystemBody in system.bodies:
+			# At its furthest, which for anything on an orbit is not where it
+			# started: a lock that only held at phase zero would be a lock
+			# that opened once a year.
+			var furthest: float = body.position_at(0.0).length() + body.radius
+			if body.orbit_period > 0.0:
+				furthest = body.orbit_radius + body.radius
+				var above: SystemBody = body.parent_body()
+				if above != null:
+					furthest += above.orbit_radius
+			if furthest >= lock:
+				leaky += 1
+		tightest = minf(tightest, lock)
+		widest = maxf(widest, lock)
+	_expect(
+		backwards == 0,
+		"the star holds a ship past the far edge of its own system",
+	)
+	_expect(
+		leaky == 0,
+		"and past every single thing in it, wherever that thing is on its orbit",
+	)
+	_expect(
+		tightest > 0.0 and widest / tightest > 1.3,
+		"a sprawling system is a longer climb out than a compact one (%.0f to %.0f px)" % [
+			tightest, widest,
+		],
+	)
+
+	# The two readings have to be the same reading. `is_mass_locked` is
+	# what a state machine branches on and `jump_clearance` is what a
+	# readout counts down, and a boundary they disagreed about would be a
+	# HUD saying "clear" next to a drive refusing to charge.
+	var one: StarSystem = StarSystem.generate(20260922)
+	var edge: float = one.mass_lock_radius()
+	var split: int = 0
+	for step: int in range(40):
+		var out: Vector2 = Vector2.from_angle(float(step)) * (
+			edge * lerpf(0.2, 1.8, float(step) / 39.0)
+		)
+		if one.is_mass_locked(out) != (one.jump_clearance(out) > 0.0):
+			split += 1
+	_expect(split == 0, "held and how-much-further are one answer, not two")
+	_expect(
+		one.is_mass_locked(one.planets()[0].position_at(0.0))
+		and not one.is_mass_locked(Vector2.RIGHT * edge * 1.01),
+		"you are held at a planet and free a hair past the ring (%.0f px)" % edge,
+	)
+
+
 ## The system model: a star, its planets, their moons, and where all of it
 ## is at a given moment.
 ##
@@ -5462,6 +5536,15 @@ func _check_system_map() -> void:
 	_expect(
 		outermost < minf(view.x, view.y) * 0.5,
 		"and the whole system fits on it (%.0f px of %.0f)" % [outermost, minf(view.x, view.y) * 0.5],
+	)
+
+	# And so does the mass lock, which is the circle somebody planning to
+	# leave is actually looking for. A map that stopped at the last orbit
+	# would cut it off and turn "how much further" back into a guess.
+	var lock: float = system.mass_lock_radius() * float(plan["scale"])
+	_expect(
+		lock > outermost and lock < minf(view.x, view.y) * 0.5,
+		"the jump ring is outside the last orbit and still on the map (%.0f px)" % lock,
 	)
 
 	# Clicking works before a single frame has been drawn. The ship editor
