@@ -42,9 +42,9 @@ func _build() -> void:
 	for preset: Dictionary in ShipFitout.all():
 		_presets.add_item(String(preset["name"]))
 	add_child(_presets)
-	add_child(BenchForm.button("załóż preset", _on_preset))
+	add_child(BenchForm.button("fit a preset", _on_preset))
 
-	add_child(BenchForm.heading("kadłub"))
+	add_child(BenchForm.heading("hull"))
 	_hulls = OptionButton.new()
 	for hull: HullData in HullData.catalogue():
 		_hulls.add_item("%s (%s)" % [hull.display_name, hull.id])
@@ -55,19 +55,19 @@ func _build() -> void:
 	_scale.step = 0.1
 	_scale.value = 1.0
 	add_child(BenchForm.labelled("skala", _scale))
-	add_child(BenchForm.button("zmień kadłub", _on_hull))
+	add_child(BenchForm.button("change the hull", _on_hull))
 
-	add_child(BenchForm.heading("silniki"))
+	add_child(BenchForm.heading("engines"))
 	_engine_box = VBoxContainer.new()
 	add_child(_engine_box)
 
-	add_child(BenchForm.heading("broń"))
+	add_child(BenchForm.heading("weapons"))
 	_gun_box = VBoxContainer.new()
 	add_child(_gun_box)
 
-	add_child(BenchForm.heading("statek"))
-	add_child(BenchForm.check("zamrożony", func(on: bool) -> void: _ship.freeze = on))
-	add_child(BenchForm.button("wróć na środek", _bench.reset_ship))
+	add_child(BenchForm.heading("ship"))
+	add_child(BenchForm.check("frozen", func(on: bool) -> void: _ship.freeze = on))
+	add_child(BenchForm.button("back to the middle", _bench.reset_ship))
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -94,9 +94,9 @@ func _refresh() -> void:
 	for hardpoint: Hardpoint in _ship.hardpoints:
 		_gun_box.add_child(BenchForm.labelled(String(hardpoint.name), _gun_picker(hardpoint)))
 	if _ship.hardpoints.is_empty():
-		_gun_box.add_child(BenchForm.note("brak hardpointów"))
+		_gun_box.add_child(BenchForm.note("no hardpoints"))
 
-	_status.text = "%d silników, %d dział, masa %.1f" % [
+	_status.text = "%d engines, %d guns, mass %.1f" % [
 		_ship.engines.size(), _ship.hardpoints.size(), _ship.mass,
 	]
 
@@ -105,7 +105,7 @@ func _refresh() -> void:
 ## whatever is in there now (a scaled copy has no file to match it to).
 func _engine_picker(mount: EngineMount) -> OptionButton:
 	var picker: OptionButton = OptionButton.new()
-	picker.add_item("(pusty)")
+	picker.add_item("(empty)")
 	picker.set_item_metadata(0, null)
 	var chosen: int = 0
 	var found: bool = mount.installed == null

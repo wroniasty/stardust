@@ -1,7 +1,7 @@
 class_name Art
 extends RefCounted
-## Gdzie mieszka decyzja o rozdzielczości: ile texeli przypada na jeden piksel
-## układu, i czym to jest filtrowane po drodze na ekran.
+## Where the resolution decision lives: how many texels go to one layout
+## pixel, and what filters them on the way to the screen.
 ##
 ## Decision record, because this one is easy to get wrong twice.
 ##

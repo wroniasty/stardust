@@ -105,6 +105,11 @@ func current() -> StarSystem:
 func reset(new_seed: int) -> void:
 	galaxy_seed = new_seed
 	deltas.clear()
+	# The pin is in system pixels, so a new galaxy is certainly not the
+	# place it was pointing at. It lives on `NavMarker` rather than here
+	# because the instruments that read it have to be loadable without
+	# an autoload -- see that file.
+	NavMarker.unmark()
 	_systems.clear()
 	_sectors.clear()
 	map = GalaxyMap.generate(new_seed)

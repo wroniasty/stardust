@@ -1069,6 +1069,7 @@ func _physics_process(delta: float) -> void:
 			take_off()
 		else:
 			_hold_landed_pose()
+			_wind_engines_down(delta)
 
 	_resolve_dock(delta)
 	_recharge(delta)
@@ -1922,6 +1923,38 @@ func _hold_landed_pose() -> void:
 	# ground at twice the surface speed.
 	global_position = _landed_planet.polar_to_world(_landed_angle, _landed_radius)
 	global_rotation = _landed_heading + _landed_planet.global_rotation
+
+
+## Lets the engines run down while the ship sits on its legs.
+##
+## Here rather than in `_integrate_forces`, which is where throttles are
+## resolved and where `advance` is called in flight, because a landed
+## ship never reaches it: it bails out at the top, and the body is frozen
+## besides, so the physics server has no reason to call it at all.
+##
+## Without this an engine keeps whatever throttle it had at the moment
+## the legs took the weight -- the flame stays lit, the loop keeps
+## playing, and nothing the pilot does clears it, because input is not
+## what put it there. It took a touchdown inside the half second a main
+## drive spends spooling down after the stick is released, which is what
+## a careful powered descent looks like, so it turned up now and then
+## rather than every time.
+##
+## The throttles are cleared rather than read off `commands`, which is
+## the decision rather than the mechanism: a ship on its legs has its
+## engines off. A pilot leaning on a rotation key while parked gets
+## nothing, the same as before, and asking for thrust is the one thing
+## that does something -- it takes off, a few lines up.
+func _wind_engines_down(delta: float) -> void:
+	active_commands.clear()
+	control.apply_commands(engines, active_commands)
+	for engine: EngineInstance in engines:
+		engine.advance(delta)
+		engine.mount.set_exhaust(engine.exhaust_flow())
+		# Only ever out, down here: nothing is asking for thrust, so the
+		# latch can only fall the one way.
+		if engine.settle_flame() and not engine.lit:
+			engine_cut.emit(engine)
 
 
 ## Releases the ship from the ground, carrying the surface velocity with it so

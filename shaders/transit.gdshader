@@ -1,5 +1,5 @@
 shader_type canvas_item;
-/// Przejście między systemami: smugi, rozmycie radialne, przesunięcie koloru.
+/// Crossing between systems: streaks, radial blur, a shift in colour.
 ///
 /// The one effect in the game that exists to hide something. The old
 /// system is freed and the new one built halfway through the crossing,

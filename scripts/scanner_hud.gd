@@ -70,6 +70,13 @@ const LOOT_BRACKET: float = 15.0
 const INSIDE_ALPHA: float = 1.0
 const OUTSIDE_ALPHA: float = 0.5
 
+## Half-size of the navigation pin's cross on the ring, and of the one laid
+## over the place itself once it is on screen. The second is bigger for the
+## reason the loot bracket is: on the ring the mark is the thing, on screen
+## it has to go round something and still be seen.
+const MARK_SIZE: float = 3.0
+const MARK_BRACKET: float = 9.0
+
 var _ship: Ship = null
 var _canvas: Control = null
 
@@ -214,6 +221,38 @@ func loot_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 	return found.slice(0, max_loot)
 
 
+## The pilot's navigation marker, or nothing when there is none.
+##
+## The one contact that is never filtered, never capped and never dropped.
+## A body stops being marked once it is on screen and loot is cut to the
+## nearest six; this is neither, because it is not something found out in
+## the world -- it is something the pilot put there, and a pin you could
+## lose would be worse than no pin at all.
+##
+## On the ring when it is off screen, laid over the place when it is on,
+## which is the loot mark's trick and for the loot mark's reason: an
+## indicator that vanishes the moment you turn towards the thing it was
+## pointing at fails exactly when it is being used.
+func marker_contact(to_screen: Transform2D, view: Vector2) -> Dictionary:
+	if _ship == null or not is_instance_valid(_ship) or not NavMarker.is_marked():
+		return {}
+
+	var centre: Vector2 = view * 0.5
+	var extent: Vector2 = centre - Vector2(ring_margin, ring_margin)
+	if extent.x <= 0.0 or extent.y <= 0.0:
+		return {}
+
+	var point: Vector2 = NavMarker.marked
+	var offset: Vector2 = to_screen * point - centre
+	var off_screen: bool = absf(offset.x) >= extent.x or absf(offset.y) >= extent.y
+	return {
+		"at": centre + _on_ring(offset, extent) if off_screen else centre + offset,
+		"direction": offset.normalized() if off_screen else Vector2.DOWN,
+		"distance": _ship.global_position.distance_to(point),
+		"on_ring": off_screen,
+	}
+
+
 func _draw_markers() -> void:
 	# The interface face, not whatever theme the canvas happens to inherit:
 	# the scanner draws distances, and a distance in a proportional font
@@ -221,11 +260,43 @@ func _draw_markers() -> void:
 	var font: Font = UiFont.face()
 	var to_screen: Transform2D = get_viewport().get_canvas_transform()
 	_labels.clear()
+	# The pin first, and that is about the labels rather than the marks.
+	# First label placed wins the space, so going first is how a reading
+	# gets priority -- and of the three, the one the pilot asked for by
+	# hand is the one that has earned it.
+	var pin: Dictionary = marker_contact(to_screen, _canvas.size)
+	if not pin.is_empty():
+		_draw_pin(font, pin)
 	for contact: Dictionary in contacts(to_screen, _canvas.size):
 		_draw_marker(font, contact)
 	# Over the bodies: loot is the smaller, more urgent mark of the two.
 	for contact: Dictionary in loot_contacts(to_screen, _canvas.size):
 		_draw_loot(font, contact)
+
+
+## The pin is a cross, so it is neither a body nor a crate at a glance.
+## Three kinds of thing, three shapes: triangle, diamond, cross.
+func _draw_pin(font: Font, contact: Dictionary) -> void:
+	# Out of the palette, not out of a constant here. Everything else this
+	# instrument draws is an object's own colour -- a body's, a rarity's --
+	# and those belong to the object. A pin belongs to the interface, and
+	# the interface has one channel for "what the cursor chose".
+	var ink: Color = Palette.current().caution
+	var at: Vector2 = contact["at"]
+	var on_ring: bool = bool(contact["on_ring"])
+	var size: float = MARK_SIZE if on_ring else MARK_BRACKET
+	var arm: Vector2 = Vector2(size, size)
+	_canvas.draw_line(at - arm, at + arm, ink, 1.0)
+	_canvas.draw_line(
+		at - Vector2(arm.x, -arm.y), at + Vector2(arm.x, -arm.y), ink, 1.0
+	)
+	if not on_ring:
+		_canvas.draw_arc(at, size * 1.4, 0.0, TAU, 20, Color(ink, 0.7), 1.0)
+	if font != null:
+		_draw_label(
+			font, at, contact["direction"], size,
+			distance_text(contact["distance"]), ink,
+		)
 
 
 ## Loot is a diamond, so it never reads as a small planet. Solid and pointing

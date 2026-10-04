@@ -1,6 +1,6 @@
 class_name TankData
 extends ModuleData
-## Bak: ile paliwa mieści.
+## A tank: how much fuel it holds.
 ##
 ## One number, and it is the one that decides how far from home a pilot
 ## is willing to be. IDEAS.md section 14 draws the line that makes this
@@ -20,10 +20,10 @@ extends ModuleData
 
 func stat_rows() -> Array[Dictionary]:
 	return [
-		row("pojemność", fuel_capacity, 0, 1),
-		row("gabaryt", bulk, 2, -1),
+		row("capacity", fuel_capacity, 0, 1),
+		row("bulk", bulk, 2, -1),
 	]
 
 
 func blurb() -> String:
-	return "paliwo mierzy zasięg, energia mierzy walkę"
+	return "fuel measures range, energy measures a fight"

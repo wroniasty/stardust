@@ -1,6 +1,6 @@
 class_name OrdnanceVoice
 extends Node2D
-## Broń i teren: wystrzał, lot, trafienie w skałę kontra w próżnię.
+## Weapons and terrain: the shot, the flight, rock struck against vacuum.
 ##
 ## The clearest demonstration of the vacuum rule in the game, and the
 ## reason this is one node rather than two. A shot and its impact are

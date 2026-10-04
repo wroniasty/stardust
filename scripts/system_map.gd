@@ -34,6 +34,16 @@ const ORBIT: Color = Color(0.24, 0.30, 0.40)
 const LABEL: Color = Color(0.56, 0.63, 0.72)
 const TEXT: Color = Color(0.78, 0.80, 0.83)
 const PICK: Color = Color(1.00, 0.85, 0.35)
+
+## Half-width of the cross drawn at the navigation pin. The pin is drawn
+## in `PICK`, the same amber as the body the cursor chose, because it is
+## the same role -- UI_STYLE gives that channel to attention and to the
+## cursor's choice, and a pin is nothing if not the cursor's choice. A magenta of its own
+## was the first answer and it was the mistake the palette exists to
+## stop: a thirteenth colour for a role that already had one. The shapes
+## are what tell them apart, which is also how a triangle and a diamond
+## are told apart on the scanner.
+const MARK_SIZE: float = 3.5
 const SHIP: Color = Color(0.36, 0.92, 0.50)
 const TRACK: Color = Color(0.45, 0.70, 0.95)
 const TRACK_IMPACT: Color = Color(1.00, 0.40, 0.35)
@@ -128,6 +138,23 @@ var _picked: SystemBody = null
 ## state of the flight.
 var _zoom: int = 0
 
+## The world point drawn in the middle of the map.
+##
+## It used to be read straight off the picked body, which was right as
+## long as the only way to magnify was a key: what a pilot zooms in on is
+## the thing they just clicked. The wheel broke that, because the wheel
+## says where to zoom by where the pointer is, and the pointer is not a
+## body -- it is usually the gap between two of them, which is exactly
+## the gap you want to look into.
+##
+## So the focus is a point, and `_focus_follows` says whether that point
+## is still tied to the picked body. Clicking ties it, which keeps the
+## old behaviour including following the body round its orbit; the wheel
+## unties it, because the pilot has just said in so many words where
+## they want the middle to be.
+var _focus: Vector2 = Vector2.ZERO
+var _focus_follows: bool = true
+
 ## The forecast, worked out when the map opens. The map pauses the game, so
 ## the ship is not going anywhere while it is up; recomputing four hundred
 ## integration steps every frame would be four hundred steps to arrive at
@@ -204,7 +231,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_open():
 		return
 	var click: InputEventMouseButton = event as InputEventMouseButton
-	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+	if click == null or not click.pressed:
+		return
+	if click.button_index == MOUSE_BUTTON_RIGHT:
+		mark_at(_canvas.get_global_mouse_position())
+		_canvas.queue_redraw()
+		get_viewport().set_input_as_handled()
+		return
+	if (
+		click.button_index == MOUSE_BUTTON_WHEEL_UP
+		or click.button_index == MOUSE_BUTTON_WHEEL_DOWN
+	):
+		zoom_at(
+			_canvas.get_global_mouse_position(),
+			1 if click.button_index == MOUSE_BUTTON_WHEEL_UP else -1,
+		)
+		get_viewport().set_input_as_handled()
+		return
+	if click.button_index != MOUSE_BUTTON_LEFT:
 		return
 	click_at(_canvas.get_global_mouse_position())
 	_canvas.queue_redraw()
@@ -231,11 +275,69 @@ func click_at(at: Vector2) -> SystemBody:
 			nearest = gap
 			best = body
 	_picked = best
+	# A click re-ties the middle, even when it hits nothing: clicking the
+	# empty black is how a pilot says "never mind" and gets the star back.
+	_focus_follows = true
+	_focus = Vector2.ZERO if best == null else _position_of(best)
 	return best
 
 
 func picked() -> SystemBody:
 	return _picked
+
+
+## Drops the navigation marker, moves it, or picks it up. Returns whether
+## there is one afterwards.
+##
+## One button doing all three, because to a pilot they are one gesture:
+## right click on the pin and it is gone, right click anywhere else and
+## it is there instead. Nothing to arm, nothing to confirm, nothing to
+## cancel -- it is a pin in a map.
+##
+## What gets stored is the **world** point, not the map one. The pin has
+## to survive the zoom changing, the view turning, the map being closed
+## and the ship flying a quarter of the way round the system before it
+## comes back into the picture, and only a world point does all four.
+##
+## Picked up with the same forgiveness a body is picked with: the pin is
+## seven pixels across on a map where a planet is a dot, and a gesture
+## that demanded the exact pixel would be a gesture nobody could make.
+func mark_at(at: Vector2) -> bool:
+	if _system == null:
+		return NavMarker.is_marked()
+	var plan: Dictionary = layout(_canvas.size)
+	if NavMarker.is_marked() and at.distance_to(to_map(NavMarker.marked, plan)) < PICK_RADIUS:
+		NavMarker.unmark()
+		return false
+	NavMarker.mark(from_map(at, plan))
+	return true
+
+
+## Steps the zoom, keeping whatever is under the cursor under the cursor.
+##
+## That invariant is the whole feature: a wheel that magnifies about the
+## middle makes the pilot chase the thing they were looking at across the
+## screen, one scroll at a time. The arithmetic is just the inverse
+## transform read twice -- find the world point under the pointer at the
+## old scale, then put the focus where it has to be for that point to
+## land back under the pointer at the new one.
+##
+## Nothing moves when the ladder is already at its end, which matters
+## more than it sounds: without the early return, a pilot leaning on the
+## wheel at full magnification would slowly drag the view sideways while
+## the scale stood still.
+func zoom_at(at: Vector2, by: int) -> void:
+	var was: int = _zoom
+	var world: Vector2 = from_map(at, layout(_canvas.size))
+	set_zoom_level(_zoom + by)
+	if _zoom == was:
+		return
+	var plan: Dictionary = layout(_canvas.size)
+	_focus_follows = false
+	_focus = world - (at - Vector2(plan["centre"])).rotated(
+		-float(plan["turn"])
+	) / maxf(float(plan["scale"]), 0.000001)
+	_canvas.queue_redraw()
 
 
 ## Clamped rather than wrapped: running off the end of the ladder should
@@ -297,9 +399,10 @@ func layout(view: Vector2) -> Dictionary:
 		"reach": reach,
 		"turn": -_view_rotation(),
 		# Magnifying about the star would push everything worth looking at
-		# off the edge at the first step. What a pilot zooms in on is the
-		# thing they just clicked, so that is what the middle is.
-		"focus": Vector2.ZERO if _picked == null else _position_of(_picked),
+		# off the edge at the first step, so the middle is whatever the
+		# pilot last pointed at -- a body they clicked, or the place they
+		# put the pointer when they turned the wheel.
+		"focus": _focus_point(),
 	}
 
 
@@ -322,9 +425,33 @@ func view_size() -> Vector2:
 	return _canvas.size
 
 
+## The world point the map is centred on this frame.
+##
+## Read off the body rather than stored while the focus is tied to one,
+## so a magnified view of a moon stays on the moon while it goes round
+## instead of sliding off the edge over a minute.
+func _focus_point() -> Vector2:
+	if _focus_follows and _picked != null:
+		return _position_of(_picked)
+	return _focus
+
+
 func to_map(point: Vector2, plan: Dictionary) -> Vector2:
 	var from_focus: Vector2 = point - Vector2(plan["focus"])
 	return Vector2(plan["centre"]) + from_focus.rotated(float(plan["turn"])) * float(plan["scale"])
+
+
+## `to_map` read backwards: which point in the world is under this pixel.
+##
+## Needed the moment the map stopped being a readout and became something
+## a pilot can put things into. Written as the exact inverse rather than
+## as a second derivation, so a change to one that is not mirrored in the
+## other shows up as a round trip that does not close -- which is how the
+## test checks it.
+func from_map(at: Vector2, plan: Dictionary) -> Vector2:
+	var from_centre: Vector2 = at - Vector2(plan["centre"])
+	var scale: float = maxf(float(plan["scale"]), 0.000001)
+	return Vector2(plan["focus"]) + from_centre.rotated(-float(plan["turn"])) / scale
 
 
 func _process(_delta: float) -> void:
@@ -340,17 +467,19 @@ func _draw_map() -> void:
 	var font: Font = ModuleData.card_font()
 	var plan: Dictionary = layout(view)
 
-	_text(font, Vector2(PAD, PAD + float(FONT_SIZE)), "UKŁAD %s" % _system.display_name, LABEL)
-	var hints: String = "M zamyka,  klik wybiera,  + / - przybliża"
+	_text(font, Vector2(PAD, PAD + float(FONT_SIZE)), "SYSTEM %s" % _system.display_name, LABEL)
+	var hints: String = (
+		"M closes,  click picks,  right click marks,  wheel or + / - zooms"
+	)
 	if _picked != null:
-		hints += ",  Enter teleportuje (dev)"
+		hints += ",  Enter teleports (dev)"
 	_text(font, Vector2(PAD, view.y - PAD), hints, LABEL)
 	# Always, not only when zoomed: a map whose scale you have to infer is
 	# a map you cannot judge a distance on.
 	_text(
 		font,
 		Vector2(PAD, PAD + float(FONT_SIZE) * 2.5),
-		"zasięg %.0f px" % float(plan["reach"]),
+		"reach %.0f px" % float(plan["reach"]),
 		LABEL,
 	)
 
@@ -385,11 +514,23 @@ func _draw_map() -> void:
 			font,
 			Vector2(PAD, PAD + float(FONT_SIZE) * 4.0),
 			(
-				"mass lock  jeszcze %.0f px" % togo if togo > 0.0
-				else "mass lock  czysto, skok możliwy"
+				"mass lock  %.0f px to go" % togo if togo > 0.0
+				else "mass lock  clear, jump available"
 			),
 			LOCK if togo > 0.0 else LOCK_CLEAR,
 		)
+
+	# After the bodies, so the pin is never under a planet's dot, and
+	# before the ship, which is the one thing that should sit on top of it.
+	if NavMarker.is_marked():
+		_draw_mark(to_map(NavMarker.marked, plan))
+		if _ship != null and is_instance_valid(_ship):
+			_text(
+				font,
+				Vector2(PAD, PAD + float(FONT_SIZE) * 5.5),
+				"marker  %.0f px" % _ship.global_position.distance_to(NavMarker.marked),
+				PICK,
+			)
 
 	_draw_track(plan)
 	if _ship != null and is_instance_valid(_ship):
@@ -534,6 +675,19 @@ func _dashed(points: PackedVector2Array, colour: Color) -> void:
 ## The ship, as a cross rather than a dot: a dot at this scale is
 ## indistinguishable from a moon, and the one thing a pilot has to find on
 ## a map instantly is themselves.
+## The pin: a cross in a circle, which is the ship's own mark turned
+## forty-five degrees. A near-rhyme rather than a new shape, deliberately
+## -- both mean "a place that matters to the pilot", and the colour is
+## what says which of the two it is.
+func _draw_mark(at: Vector2) -> void:
+	var arm: Vector2 = Vector2(MARK_SIZE, MARK_SIZE)
+	_canvas.draw_line(at - arm, at + arm, PICK, 1.0)
+	_canvas.draw_line(
+		at - Vector2(arm.x, -arm.y), at + Vector2(arm.x, -arm.y), PICK, 1.0
+	)
+	_canvas.draw_arc(at, MARK_SIZE * 1.7, 0.0, TAU, 16, PICK, 1.0)
+
+
 func _draw_ship(at: Vector2) -> void:
 	_canvas.draw_line(at - Vector2(4.0, 0.0), at + Vector2(4.0, 0.0), SHIP, 1.0)
 	_canvas.draw_line(at - Vector2(0.0, 4.0), at + Vector2(0.0, 4.0), SHIP, 1.0)
@@ -547,14 +701,14 @@ func _draw_readout(font: Font, view: Vector2) -> void:
 		return
 	var lines: PackedStringArray = PackedStringArray()
 	lines.append("%s   %s" % [_picked.display_name, _picked.kind_name()])
-	lines.append("promień      %8.0f px" % _picked.radius)
+	lines.append("radius       %8.0f px" % _picked.radius)
 	if _picked.surface_gravity > 0.0:
-		lines.append("grawitacja   %8.1f px/s2" % _picked.surface_gravity)
+		lines.append("gravity      %8.1f px/s2" % _picked.surface_gravity)
 	if _picked.orbit_radius > 0.0:
-		lines.append("orbita       %8.0f px" % _picked.orbit_radius)
-		lines.append("rok          %8.0f s" % _picked.orbit_period)
+		lines.append("orbit        %8.0f px" % _picked.orbit_radius)
+		lines.append("year         %8.0f s" % _picked.orbit_period)
 	if _ship != null and is_instance_valid(_ship):
-		lines.append("stąd         %8.0f px" % _ship.global_position.distance_to(
+		lines.append("from here    %8.0f px" % _ship.global_position.distance_to(
 			_position_of(_picked)
 		))
 	# A moon orbits its planet at a few thousand pixels and the system is a

@@ -1,5 +1,5 @@
 shader_type canvas_item;
-/// Pęd w powietrzu: rozmycie kierunkowe i smugi przy krawędziach.
+/// Rush through air: directional blur, and streaks at the edges.
 ///
 /// The counterpart to `transit.gdshader` and deliberately unlike it. A
 /// jump is an event that takes the screen away; this is a condition the

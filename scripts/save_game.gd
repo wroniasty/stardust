@@ -2,7 +2,8 @@ class_name SaveGame
 extends RefCounted
 ## Zapis gry: ziarno plus delty, i to, co ma na sobie statek.
 ##
-## IDEAS.md section 10: *save = seed galaktyki plus słownik delt*. The
+## IDEAS.md section 10: *a save is the galaxy seed plus a dictionary of
+## deltas*. The
 ## universe is a pure function of one number, so none of it is written
 ## down -- a hundred and eleven systems, their stars, planets, moons,
 ## terrain and names all come back from the seed. What a file has to
@@ -35,6 +36,11 @@ static func capture(galaxy: Node, ship: Ship) -> Dictionary:
 			"here": galaxy.here,
 			"at": galaxy.at,
 			"time": galaxy.time,
+			# Read back with a default rather than behind a version bump:
+			# a field nobody had is a field that defaults, and bumping the
+			# version to add one would throw away every existing save for
+			# the sake of a pin.
+			"marked": NavMarker.marked,
 			"deltas": galaxy.deltas.duplicate(true),
 		},
 		"ship": _capture_ship(ship),
@@ -136,6 +142,9 @@ static func restore(data: Dictionary, galaxy: Node, ship: Ship) -> bool:
 	galaxy.here = int(sky["here"])
 	galaxy.at = sky["at"] as Vector2
 	galaxy.time = float(sky["time"])
+	# After `reset`, which clears it: the saved pin goes back on top the
+	# same way the saved address does.
+	NavMarker.marked = sky.get("marked", Vector2.INF)
 	galaxy.deltas.clear()
 	for key: Variant in sky["deltas"]:
 		galaxy.deltas[key] = (sky["deltas"][key] as Dictionary).duplicate(true)

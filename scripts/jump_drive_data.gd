@@ -1,6 +1,6 @@
 class_name JumpDriveData
 extends ModuleData
-## Napęd skokowy: jak daleko sięga, jak długo się ładuje, ile pali.
+## A jump drive: how far it reaches, how long it charges, what it burns.
 ##
 ## Range is the headline and the other two are what it costs. IDEAS.md
 ## section 10 puts the charge at two to four seconds -- long enough that
@@ -51,13 +51,13 @@ func can_cross(distance: float) -> bool:
 
 func stat_rows() -> Array[Dictionary]:
 	return [
-		row("zasięg", reach, 1, 1, " ly"),
-		row("ładowanie", charge_time, 1, -1, " s"),
-		row("spalanie", fuel_per_ly, 2, -1, "/ly"),
-		row("pełny skok", fuel_for(reach, REFERENCE_MASS), 0, -1),
-		row("gabaryt", bulk, 2, -1),
+		row("range", reach, 1, 1, " ly"),
+		row("charge", charge_time, 1, -1, " s"),
+		row("burn", fuel_per_ly, 2, -1, "/ly"),
+		row("full jump", fuel_for(reach, REFERENCE_MASS), 0, -1),
+		row("bulk", bulk, 2, -1),
 	]
 
 
 func blurb() -> String:
-	return "koszt rośnie z masą kadłuba"
+	return "the cost rises with hull mass"

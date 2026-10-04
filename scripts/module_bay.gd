@@ -1,6 +1,6 @@
 class_name ModuleBay
 extends Node2D
-## Gniazdo w kadłubie: gdzie siedzi moduł i ile go się tam mieści.
+## A socket in the hull: where a module sits, and how much of one fits there.
 ##
 ## The slot is a hole in the hull. It weighs nothing; what is fitted into
 ## it is the mass, and it has to be no bulkier than the hole. Keeping the

@@ -44,13 +44,13 @@ func sustained_throughput(drain: float) -> float:
 
 func stat_rows() -> Array[Dictionary]:
 	return [
-		row("pojemność", capacity, 0, 1),
-		row("ładowanie", recharge_rate, 0, 1, "/s"),
-		row("cisza", recharge_delay, 2, -1, " s"),
-		row("pułap", sustained_throughput(INF), 1, 1, "/s"),
-		row("gabaryt", bulk, 2, -1),
+		row("capacity", capacity, 0, 1),
+		row("charge", recharge_rate, 0, 1, "/s"),
+		row("quiet", recharge_delay, 2, -1, " s"),
+		row("ceiling", sustained_throughput(INF), 1, 1, "/s"),
+		row("bulk", bulk, 2, -1),
 	]
 
 
 func blurb() -> String:
-	return "cisza liczona od ostatniego wydatku, nie od serii"
+	return "the quiet is counted from the last spend, not from the burst"

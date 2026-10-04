@@ -1,6 +1,6 @@
 class_name Soundscape
 extends Node
-## Jedyne miejsce, przez które cokolwiek w tej grze wydaje dźwięk.
+## The only place anything in this game makes a sound through.
 ##
 ## VISUALS.md section 2 states the decision this whole class exists to
 ## implement: **vacuum is quiet.** In space you hear only what travels

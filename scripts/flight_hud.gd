@@ -390,7 +390,7 @@ func _draw_transfer(font: Font, box: Rect2) -> void:
 	var y: float = box.position.y + ROW * 2.0
 	_row(font, x, y, "V", "%6.0f" % speed, _ink.ok)
 	_row(font, x, y + ROW, "GEAR", _gear_text(), _gear_colour())
-	_text(font, Vector2(x, y + ROW * 2.5), "w przelocie", _ink.value)
+	_text(font, Vector2(x, y + ROW * 2.5), "in transit", _ink.value)
 
 
 ## Why the landing was refused, as a mark rather than a sentence. The

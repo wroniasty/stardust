@@ -1,5 +1,5 @@
 extends SceneTree
-## Buduje magistrale dźwiękowe i komplet placeholderowych próbek.
+## Builds the audio buses and a full set of placeholder samples.
 ##   godot --headless --path . --script res://tools/make_audio.gd
 ##
 ## Same reason the sprites are generated: the point is to have the right

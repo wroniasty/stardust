@@ -1,6 +1,6 @@
 class_name UiFont
 extends RefCounted
-## Jeden font na cały interfejs, i trzy rozmiary, w których wolno go używać.
+## One face for the whole interface, and the three sizes it may be used at.
 ##
 ## UI_STYLE.md section 4 asks for two things that have to be decided in one
 ## place or not at all: a pixel font rather than a scaled ordinary one, and

@@ -1,6 +1,6 @@
 class_name CameraShake
 extends Node
-## Trzęsie kamerą, kiedy kadłub w coś uderzy.
+## Shakes the camera when the hull hits something.
 ##
 ## VISUALS.md section 1 says presentation listens and the simulation emits,
 ## and section 6 calls the first such receiver **the proof that the seam

@@ -1,6 +1,7 @@
 class_name JumpHud
 extends CanvasLayer
-## Inne systemy na krawędzi ekranu: gdzie są, czy się da, i co o nich wiadomo.
+## Other systems at the edge of the screen: where they are, whether you can
+## get there, and what is known about them.
 ##
 ## The outward-looking half of the instrumentation. `ScannerHud` answers
 ## "what is around me in this system" in pixels; this answers "where else
@@ -117,9 +118,9 @@ func _process(_delta: float) -> void:
 ## different each time.
 func silence() -> String:
 	if _ship == null or not is_instance_valid(_ship):
-		return "brak statku"
+		return "no ship"
 	if _ship.scanner() == null:
-		return "brak skanera"
+		return "no scanner"
 	if _system != null and _system.is_mass_locked(_ship.global_position):
 		return "mass lock  %.0f px" % _system.jump_clearance(_ship.global_position)
 	return ""

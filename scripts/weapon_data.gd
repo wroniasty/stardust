@@ -138,28 +138,28 @@ func damage_per_second() -> float:
 func stat_rows() -> Array[Dictionary]:
 	var rows: Array[Dictionary] = [
 		row("dps", damage_per_second(), 3, 1),
-		row("obrażenia", damage, 3, 1),
-		row("kadencja", rounds_per_second, 2, 1, "/s"),
-		row("energia", energy_cost, 1, -1),
-		row("na jednostkę", damage / maxf(energy_cost, 0.0001), 4, 1),
-		row("rozrzut", rad_to_deg(deg_to_rad(spread_degrees)), 1, -1, " st"),
-		row("zasięg", range_px, 0, 1, " px"),
-		row("krater", crater_radius, 0, 1, " px"),
-		row("łuk", rad_to_deg(traverse_range), 0, 1, " st"),
-		row("obrót", rad_to_deg(traverse_rate), 0, 1, " st/s"),
-		row("gniazda", float(mod_slots), 0, 1),
+		row("damage", damage, 3, 1),
+		row("rate", rounds_per_second, 2, 1, "/s"),
+		row("energy", energy_cost, 1, -1),
+		row("per unit", damage / maxf(energy_cost, 0.0001), 4, 1),
+		row("spread", rad_to_deg(deg_to_rad(spread_degrees)), 1, -1, " deg"),
+		row("range", range_px, 0, 1, " px"),
+		row("crater", crater_radius, 0, 1, " px"),
+		row("arc", rad_to_deg(traverse_range), 0, 1, " deg"),
+		row("traverse", rad_to_deg(traverse_rate), 0, 1, " deg/s"),
+		row("sockets", float(mod_slots), 0, 1),
 	]
 	if blast_radius > 0.0:
-		rows.append(row("wybuch", blast_radius, 0, 1, " px"))
+		rows.append(row("blast", blast_radius, 0, 1, " px"))
 	if is_missile():
-		rows.append(row("ciąg", missile_thrust, 0, 1))
-		rows.append(row("naprowadzanie", rad_to_deg(missile_turn_rate), 0, 1, " st/s"))
-	rows.append(row("gabaryt", bulk, 2, -1))
+		rows.append(row("thrust", missile_thrust, 0, 1))
+		rows.append(row("guidance", rad_to_deg(missile_turn_rate), 0, 1, " deg/s"))
+	rows.append(row("bulk", bulk, 2, -1))
 	return rows
 
 
 func blurb() -> String:
-	return "%s, %d strzałów z pełnej puli" % [
+	return "%s, %d shots from a full pool" % [
 		Type.keys()[int(type)].to_lower().replace("_", " "),
 		int(100.0 / maxf(energy_cost, 0.0001)),
 	]

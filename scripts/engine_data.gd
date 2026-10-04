@@ -81,18 +81,18 @@ func spool_rate() -> float:
 
 func stat_rows() -> Array[Dictionary]:
 	var rows: Array[Dictionary] = [
-		row("ciąg", max_thrust, 0, 1),
-		row("rozruch", spool_time, 2, -1, " s"),
-		row("niezawodność", reliability, 2, 1),
-		row("paliwo", fuel_cost, 2, -1, "/s"),
-		row("gabaryt", bulk, 2, -1),
+		row("thrust", max_thrust, 0, 1),
+		row("spool", spool_time, 2, -1, " s"),
+		row("reliability", reliability, 2, 1),
+		row("fuel", fuel_cost, 2, -1, "/s"),
+		row("bulk", bulk, 2, -1),
 	]
 	if can_boost():
-		rows.append(row("dopalanie", boost_thrust, 1, 1, "x"))
-		rows.append(row("spalanie", fuel_cost * boost_burn, 1, -1, "/s"))
+		rows.append(row("boost", boost_thrust, 1, 1, "x"))
+		rows.append(row("burn", fuel_cost * boost_burn, 1, -1, "/s"))
 	if gimbal_range > 0.0:
-		rows.append(row("gimbal", rad_to_deg(gimbal_range), 0, 1, " st"))
-		rows.append(row("wychylanie", rad_to_deg(gimbal_rate), 0, 1, " st/s"))
+		rows.append(row("gimbal", rad_to_deg(gimbal_range), 0, 1, " deg"))
+		rows.append(row("gimbal rate", rad_to_deg(gimbal_rate), 0, 1, " deg/s"))
 	return rows
 
 
@@ -107,6 +107,6 @@ func stat_rows() -> Array[Dictionary]:
 func blurb() -> String:
 	return "%s — %s" % [
 		Type.keys()[int(type)].to_lower(),
-		"przepustnica z rozruchem" if type == Type.MAIN
-		else ("impulsowy, 0 albo 1" if type == Type.TORQUE else "natychmiastowy"),
+		"throttled, with a spool-up" if type == Type.MAIN
+		else ("impulse, 0 or 1" if type == Type.TORQUE else "instant"),
 	]

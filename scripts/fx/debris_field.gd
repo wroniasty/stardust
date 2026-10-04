@@ -1,6 +1,6 @@
 class_name DebrisField
 extends Node2D
-## Rzeczy odpryskujące: od uderzenia w kadłub i od kopania w gruncie.
+## Things that fly off: struck from the hull, and kicked up off the ground.
 ##
 ## Two events, one shape. Something gives way at a point, and bits of it
 ## leave in a hurry -- the difference between a hull strike and a shell

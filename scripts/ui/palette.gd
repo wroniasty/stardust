@@ -1,6 +1,6 @@
 class_name Palette
 extends Resource
-## Dwanaście nazwanych kolorów interfejsu, w jednym pliku.
+## Twelve named interface colours, in one file.
 ##
 ## UI_STYLE.md section 3 counted the damage before this existed: the same
 ## four roles were written out in `flight_hud.gd`, `ship_editor.gd` and

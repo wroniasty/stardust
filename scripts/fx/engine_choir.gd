@@ -1,6 +1,6 @@
 class_name EngineChoir
 extends Node2D
-## Silniki słychać: pętla na typ, głośność i wysokość z tego, co robią.
+## Engines are heard: one loop per type, loudness and pitch off what they are doing.
 ##
 ## One looping voice per fitted engine, placed at its nozzle, with the
 ## loudness and the pitch read off the simulation every tick. Nothing

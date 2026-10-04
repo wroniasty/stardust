@@ -74,7 +74,7 @@ const SPECIMEN: Array[String] = [
 	"ĄĆĘŁŃÓŚŹŻ  ągćzęłńóśźż  — zażółć gęślą jaźń",
 	"PERI  -1107   APO  1400   ALT  1414   V/S  +0.0",
 	"efficient wide precise rapid dumb rocket",
-	"W DOKU — montaż dostępny.  Odmowa: za szybko",
+	"DOCKED - fitting available.  Refused: too fast",
 ]
 
 var _shown: Array[Dictionary] = []

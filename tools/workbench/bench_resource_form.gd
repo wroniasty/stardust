@@ -96,7 +96,7 @@ func _row(property: Dictionary) -> Control:
 			return _object_row(key, value as Resource)
 		TYPE_ARRAY, TYPE_DICTIONARY, TYPE_PACKED_VECTOR2_ARRAY, TYPE_PACKED_FLOAT32_ARRAY:
 			var label: Label = Label.new()
-			label.text = "%d elementów" % _count_of(value)
+			label.text = "%d items" % _count_of(value)
 			label.modulate = Color(1, 1, 1, 0.55)
 			return BenchForm.labelled(key, label)
 	return null
@@ -166,7 +166,7 @@ func _vector(key: String, value: Vector2) -> HBoxContainer:
 func _object_row(key: String, value: Resource) -> Control:
 	if value == null:
 		var empty: Label = Label.new()
-		empty.text = "(brak)"
+		empty.text = "(none)"
 		empty.modulate = Color(1, 1, 1, 0.55)
 		return BenchForm.labelled(key, empty)
 	if value.get_script() == null or _depth >= MAX_DEPTH or not value.resource_path.is_empty():

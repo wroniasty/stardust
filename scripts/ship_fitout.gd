@@ -48,21 +48,21 @@ static func all() -> Array[Dictionary]:
 	return [
 		{
 			"name": "dart (stock)",
-			"blurb": "cztery dysze obrotowe, główny napęd, retro i dwa boczne",
+			"blurb": "four torque jets, a main drive, a retro and two strafe",
 			"hull": &"dart",
 			"mounts": _stock_mounts(),
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
 		},
 		{
-			"name": "dart, mocniejsze dysze",
-			"blurb": "ten sam układ, każdy silnik o 75% mocniejszy i o połowę cięższy",
+			"name": "dart, stronger jets",
+			"blurb": "the same layout, every engine 75% stronger and 50% heavier",
 			"hull": &"dart",
 			"mounts": _scaled(_stock_mounts(), 1.75),
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
 		},
 		{
-			"name": "gimbal podwójny (para sił)",
-			"blurb": "dwie wychylane dysze, dziób i rufa: momenty się dodają, ciągi znoszą",
+			"name": "twin gimbal (force couple)",
+			"blurb": "two steerable nozzles, nose and tail: the moments add, the thrusts cancel",
 			# A symmetric hull on purpose. The two nozzles only cancel
 			# while their arms about the centre of mass are equal, and the
 			# centre of mass follows the hull: on a triangle it sits aft
@@ -78,8 +78,8 @@ static func all() -> Array[Dictionary]:
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -17), "weapon": "pulse"}],
 		},
 		{
-			"name": "gimbal pojedynczy (dryfuje)",
-			"blurb": "obrót z wychylanej dyszy głównej, nic poza nią nie kręci",
+			"name": "single gimbal (drifts)",
+			"blurb": "rotation out of the gimballed main drive, and nothing else turns it",
 			"hull": &"broad_dart",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 12), "engine": "gimbal"},
@@ -93,8 +93,8 @@ static func all() -> Array[Dictionary]:
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -16), "weapon": "beam"}],
 		},
 		{
-			"name": "przechwytujący",
-			"blurb": "lekki i zwrotny, dwa działka, ładownia na nic",
+			"name": "interceptor",
+			"blurb": "light and nimble, two cannon, a hold worth nothing",
 			"hull": &"interceptor",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.0, "at": Vector2(0, 9), "engine": "main",
@@ -120,8 +120,8 @@ static func all() -> Array[Dictionary]:
 			],
 		},
 		{
-			"name": "frachtowiec",
-			"blurb": "duża ładownia, ciężki kadłub, szerokie nogi i mało mocy na kilogram",
+			"name": "freighter",
+			"blurb": "a big hold, a heavy hull, wide legs and little power per kilo",
 			"hull": &"freighter",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 6), "engine": "main",
@@ -144,8 +144,8 @@ static func all() -> Array[Dictionary]:
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -18), "weapon": "rocket"}],
 		},
 		{
-			"name": "kadłub bez niczego",
-			"blurb": "sam napęd główny — raport konfiguracji ma co powiedzieć",
+			"name": "bare hull",
+			"blurb": "the main drive and nothing else -- the configuration report has plenty to say",
 			"hull": &"dart",
 			"mounts": [
 				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 10), "engine": "main"},

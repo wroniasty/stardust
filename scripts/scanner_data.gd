@@ -1,6 +1,6 @@
 class_name ScannerData
 extends ModuleData
-## Skaner przeglądowy: jak daleko widzi inne systemy i ile o nich mówi.
+## A survey scanner: how far it sees other systems, and how much it says.
 ##
 ## Two numbers that do different jobs, which IDEAS.md section 10 keeps
 ## apart on purpose: **reach** decides which systems appear at all, and
@@ -36,7 +36,7 @@ enum Depth {
 	DEEP,
 }
 
-const DEPTH_NAMES: Array[String] = ["namiar", "klasa", "przegląd", "pełny"]
+const DEPTH_NAMES: Array[String] = ["bearing", "class", "survey", "deep"]
 
 ## How far it sees, in light years.
 @export var reach: float = 14.0
@@ -58,11 +58,11 @@ func knows(wanted: Depth) -> bool:
 
 func stat_rows() -> Array[Dictionary]:
 	return [
-		row("zasięg", reach, 1, 1, " ly"),
-		row("rozdzielczość", float(int(depth)), 0, 1),
-		row("gabaryt", bulk, 2, -1),
+		row("range", reach, 1, 1, " ly"),
+		row("resolution", float(int(depth)), 0, 1),
+		row("bulk", bulk, 2, -1),
 	]
 
 
 func blurb() -> String:
-	return "czyta: %s" % depth_name()
+	return "reads: %s" % depth_name()

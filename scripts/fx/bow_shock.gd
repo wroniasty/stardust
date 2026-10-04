@@ -1,6 +1,6 @@
 class_name BowShock
 extends Node2D
-## Jonizacja przed dziobem: widać, że wchodzisz w atmosferę.
+## Ionisation ahead of the nose: you can see yourself entering the air.
 ##
 ## The hull has been heating up since M1 -- `hull_heat` rises with the
 ## air and the square of the speed -- and until now the only thing that

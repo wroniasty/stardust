@@ -188,11 +188,11 @@ func _redraw() -> void:
 		return
 
 	var lines: PackedStringArray = PackedStringArray()
-	lines.append("ŁADOWNIA   (Tab zamyka)")
+	lines.append("HOLD   (Tab closes)")
 
 	if _ship.carried == null:
 		lines.append("")
-		lines.append("pusto - wleć w skrzynkę")
+		lines.append("empty - fly into a crate")
 		lines.append_array(_report_lines())
 		_text.text = "\n".join(lines)
 		_text.add_theme_color_override("font_color", _ink.label)
@@ -218,7 +218,7 @@ func _redraw() -> void:
 			lines.append(line)
 	else:
 		_cursor = posmod(_cursor, slots.size())
-		lines.append("gniazdo (strzałka w dół zmienia):")
+		lines.append("socket (down arrow changes it):")
 		for i: int in range(slots.size()):
 			var slot: Node = slots[i]
 			var marker: String = ">" if i == _cursor else " "
@@ -240,7 +240,7 @@ func _report_lines() -> PackedStringArray:
 	if _report.is_empty():
 		return out
 	out.append("")
-	out.append("-- po wymianie --")
+	out.append("-- after the swap --")
 	out.append_array(_report)
 	return out
 
@@ -250,7 +250,7 @@ func _report_lines() -> PackedStringArray:
 ## bigger ship, the wrong kind is a reason to stop carrying it.
 func _why_nothing_fits() -> PackedStringArray:
 	var lines: PackedStringArray = PackedStringArray()
-	lines.append("brak pasującego gniazda")
+	lines.append("no socket it fits")
 	var engine: EngineData = _ship.carried as EngineData
 	if engine == null:
 		return lines
@@ -260,9 +260,9 @@ func _why_nothing_fits() -> PackedStringArray:
 		if mount.accepts(engine.type):
 			largest = maxf(largest, mount.size)
 	if largest <= 0.0:
-		lines.append("ten kadłub nie bierze tego typu")
+		lines.append("this hull does not take that kind")
 	else:
-		lines.append("gabaryt %.2f, największe gniazdo %.2f" % [engine.bulk, largest])
+		lines.append("bulk %.2f, largest socket %.2f" % [engine.bulk, largest])
 	return lines
 
 
@@ -282,4 +282,4 @@ func _fitted_in(slot: Node) -> ModuleData:
 ## A one-line summary of what is in a slot, for the slot list.
 func _fitted_label(slot: Node) -> String:
 	var fitted: ModuleData = _fitted_in(slot)
-	return "pusty" if fitted == null else fitted.title()
+	return "empty" if fitted == null else fitted.title()

@@ -26,11 +26,11 @@ extends ModuleData
 
 func stat_rows() -> Array[Dictionary]:
 	return [
-		row("opadanie", max_vertical_speed, 0, 1, " px/s"),
-		row("w bok", max_lateral_speed, 0, 1, " px/s"),
-		row("przechył", rad_to_deg(max_tilt), 0, 1, " st"),
-		row("nachylenie", rad_to_deg(max_slope), 0, 1, " st"),
-		row("opór", deployed_drag, 2, -1),
-		row("wysuwanie", deploy_time, 2, -1, " s"),
-		row("gabaryt", bulk, 2, -1),
+		row("descent", max_vertical_speed, 0, 1, " px/s"),
+		row("sideways", max_lateral_speed, 0, 1, " px/s"),
+		row("tilt", rad_to_deg(max_tilt), 0, 1, " deg"),
+		row("slope", rad_to_deg(max_slope), 0, 1, " deg"),
+		row("drag", deployed_drag, 2, -1),
+		row("deploy", deploy_time, 2, -1, " s"),
+		row("bulk", bulk, 2, -1),
 	]

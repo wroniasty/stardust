@@ -1,6 +1,6 @@
 class_name Presentation
 extends RefCounted
-## Jeden wyłącznik na całą warstwę prezentacji.
+## One switch for the whole presentation layer.
 ##
 ## VISUALS.md section 1, point 4: a broken effect must not be able to block
 ## the main line or the tests. So every presentation node asks here before it

@@ -49,11 +49,11 @@ enum Effect {
 
 
 func stat_rows() -> Array[Dictionary]:
-	var rows: Array[Dictionary] = [row("koszt strzału", energy_multiplier, 2, -1, "x")]
+	var rows: Array[Dictionary] = [row("shot cost", energy_multiplier, 2, -1, "x")]
 	for pair: Array in [
-		["obrażenia", damage_multiplier], ["kadencja", rate_multiplier],
+		["damage", damage_multiplier], ["rate", rate_multiplier],
 		["rozrzut", spread_multiplier], ["krater", crater_multiplier],
-		["zasięg", range_multiplier], ["prędkość", speed_multiplier],
+		["range", range_multiplier], ["speed", speed_multiplier],
 	]:
 		if not is_equal_approx(float(pair[1]), 1.0):
 			rows.append(row(String(pair[0]), float(pair[1]), 2, 1, "x"))
@@ -63,4 +63,4 @@ func stat_rows() -> Array[Dictionary]:
 
 
 func blurb() -> String:
-	return "afiks to cecha przedmiotu, moduł to decyzja pilota"
+	return "an affix is a property of the item, a module is the pilot's choice"

@@ -12,15 +12,15 @@ const WORKBENCH_SCENE: String = "res://tools/workbench/workbench.tscn"
 
 ## Kind -> directory, the same ones the bench's resource tab lists.
 const CATEGORIES: Dictionary = {
-	"kadłuby": "res://resources/hulls",
-	"silniki": "res://resources/engines",
-	"bronie": "res://resources/weapons",
-	"generatory": "res://resources/generators",
-	"napędy skokowe": "res://resources/drives",
-	"zbiorniki": "res://resources/tanks",
-	"skanery": "res://resources/scanners",
-	"tabele dźwięku": "res://resources/fx/sounds",
-	"tabele wyglądu": "res://resources/fx/looks",
+	"hulls": "res://resources/hulls",
+	"engines": "res://resources/engines",
+	"weapons": "res://resources/weapons",
+	"generators": "res://resources/generators",
+	"jump drives": "res://resources/drives",
+	"tanks": "res://resources/tanks",
+	"scanners": "res://resources/scanners",
+	"sound tables": "res://resources/fx/sounds",
+	"look tables": "res://resources/fx/looks",
 }
 
 ## Only resources under here are forwarded: an edit to a scene or the
@@ -110,8 +110,8 @@ func _open(index: int) -> void:
 
 
 func _on_link_changed(connected: bool) -> void:
-	_link.text = "Workbench połączony: zmiany z inspektora lecą na żywo." if connected \
-			else "Workbench nie działa: zmiany tylko w edytorze."
+	_link.text = "Workbench connected: inspector edits go through live." if connected \
+			else "Workbench is not running: edits stay in the editor."
 
 
 ## An inspector edit, forwarded when it is a plain value on a game resource.

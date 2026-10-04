@@ -1,6 +1,6 @@
 class_name SoundStrip
 extends Resource
-## Jak coś brzmi: próbka, droga, głośność, zakres wysokości, czas reakcji.
+## How a thing sounds: sample, path, loudness, pitch range, response time.
 ##
 ## The counterpart to `SpriteStrip`, and built for the same reason. A
 ## sample on its own is not a sound: the same recording played through

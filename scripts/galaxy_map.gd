@@ -1,6 +1,6 @@
 class_name GalaxyMap
 extends RefCounted
-## Gdzie w galaktyce stoją systemy, i który z którego da się dosięgnąć.
+## Where the systems stand in the galaxy, and which can be reached from which.
 ##
 ## Pure data, like `StarSystem`: the layout exists whether or not anything
 ## has been instantiated, and the same seed gives the same galaxy down to

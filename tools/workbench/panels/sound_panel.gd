@@ -18,7 +18,7 @@ extends VBoxContainer
 const DIRECTORY: String = "res://resources/fx/sounds"
 
 ## The three ways a sound reaches the ear, and "as the table says".
-const PATH_CHOICES: Array[String] = ["jak w tabeli", "przez kadłub", "przez powietrze", "interfejs"]
+const PATH_CHOICES: Array[String] = ["as the table says", "through the hull", "through the air", "interface"]
 
 var _bench: Workbench = null
 var _ship: Ship = null
@@ -72,11 +72,11 @@ func _build() -> void:
 	_table_pick.item_selected.connect(func(_i: int) -> void: _fill())
 	add_child(_table_pick)
 
-	add_child(BenchForm.heading("jak"))
+	add_child(BenchForm.heading("how"))
 	_share = BenchForm.slider(0.0, 1.0, 0.01, 1.0)
-	add_child(BenchForm.labelled("siła 0..1", _share))
+	add_child(BenchForm.labelled("share 0..1", _share))
 	_volume = BenchForm.slider(0.0, 2.0, 0.01, 1.0)
-	add_child(BenchForm.labelled("głośność", _volume))
+	add_child(BenchForm.labelled("volume", _volume))
 	_air = BenchForm.slider(0.0, 1.0, 0.01, 0.0)
 	_air.value_changed.connect(func(v: float) -> void: _bench.pins.pin(&"air_density", v))
 	add_child(BenchForm.labelled("powietrze", _air))
@@ -84,13 +84,13 @@ func _build() -> void:
 	for choice: String in PATH_CHOICES:
 		_path_pick.add_item(choice)
 	add_child(BenchForm.labelled("droga", _path_pick))
-	add_child(BenchForm.button("zatrzymaj pętle", _stop_all))
+	add_child(BenchForm.button("stop the loops", _stop_all))
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_status)
 
-	add_child(BenchForm.heading("dźwięki"))
+	add_child(BenchForm.heading("sounds"))
 	_list = VBoxContainer.new()
 	add_child(_list)
 
@@ -103,7 +103,7 @@ func _fill() -> void:
 		_list.remove_child(child)
 		child.queue_free()
 	if _tables.is_empty():
-		_list.add_child(BenchForm.note("brak tabel w %s" % DIRECTORY))
+		_list.add_child(BenchForm.note("no tables in %s" % DIRECTORY))
 		return
 	var table: SoundTable = _tables[_table_pick.selected]
 	for entry: Dictionary in _entries(table):
@@ -123,7 +123,7 @@ func _entries(table: SoundTable) -> Array[Dictionary]:
 	for affix: Variant in table.by_affix:
 		out.append({"label": "affix %s" % str(affix), "strip": table.by_affix[affix]})
 	if table.fallback != null:
-		out.append({"label": "domyślny", "strip": table.fallback})
+		out.append({"label": "default", "strip": table.fallback})
 	return out
 
 
@@ -134,7 +134,7 @@ func _row(label: String, strip: SoundStrip) -> Control:
 		button.text = "%s (cisza)" % label
 		button.disabled = true
 		return button
-	button.text = "%s %s" % ["pętla" if strip.loops else "▶", label]
+	button.text = "%s %s" % ["loop" if strip.loops else "▶", label]
 	if strip.loops:
 		button.toggle_mode = true
 		button.toggled.connect(_on_loop.bind(strip))
@@ -171,7 +171,7 @@ func _on_play(strip: SoundStrip) -> void:
 	)
 	_status.text = "%s, droga %s: %s" % [
 		_name_of(strip), Soundscape.Path.keys()[path],
-		"zagrało" if played else "cisza (powietrza brak albo zbyt cicho)",
+		"played" if played else "silence (no air, or too quiet)",
 	]
 
 

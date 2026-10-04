@@ -225,22 +225,22 @@ func can_refit() -> bool:
 
 
 ## What the corner of the panel says about why fitting is or is not
-## available. Three states rather than two: "montaż po wylądowaniu" was a
+## available. Three states rather than two: "fitting after landing" was a
 ## half-truth the moment a dock would also do.
 func _where_it_stands() -> String:
 	if _ship == null:
-		return "BRAK STATKU"
+		return "NO SHIP"
 	match _ship.flight_mode:
 		Ship.FlightMode.DOCKED:
-			return "W DOKU — montaż dostępny"
+			return "DOCKED - fitting available"
 		Ship.FlightMode.LANDED:
-			return "NA ZIEMI — montaż dostępny"
+			return "ON THE GROUND - fitting available"
 		_:
 			# Short on purpose: it is drawn in the corner of the lower
 			# panel, beside the comparison, and the long version ran over
 			# it. Says what to do rather than where it could be done,
 			# which is also the more useful half.
-			return "W LOCIE — zacumuj albo wyląduj"
+			return "IN FLIGHT - dock or land"
 
 
 ## Everything the pilot can act on, hold first. One list rather than two
@@ -321,11 +321,11 @@ func _fit() -> void:
 	var targets: Array[Node] = _targets()
 	var picked: Dictionary = _selected()
 	if targets.is_empty() or picked.is_empty():
-		_notice = "nie ma gdzie tego zamontować"
+		_notice = "nowhere to fit that"
 		return
 
 	if not can_refit():
-		_notice = "montaż tylko na ziemi — wyląduj albo użyj Tab w locie"
+		_notice = "fitting only on the ground - land, or use Tab in flight"
 		return
 
 	var slot: Node = targets[posmod(_slot, targets.size())]
@@ -344,7 +344,7 @@ func _fit() -> void:
 		# takes the item and leaves `removed` null.
 		if not (slot as Hardpoint).add_mod(item as ShotModData):
 			_ship.take(item, 0)
-			_notice = "nie ma wolnego gniazda w tej broni"
+			_notice = "no free socket in that weapon"
 			return
 	elif slot is Hardpoint:
 		removed = (slot as Hardpoint).fit(item as WeaponData)
@@ -366,13 +366,13 @@ func _fit() -> void:
 			_ship.cargo.append({"item": removed, "rarity": 0})
 		elif not _ship.take(removed, 0):
 			_ship.jettison()
-			_notice = "ładownia i cargo pełne — stary moduł za burtę"
+			_notice = "hold and cargo both full - the old module goes overboard"
 	_ship.rebuild_control_groups(false)
 	_ship.cargo_changed.emit()
 
 	var delta: PackedStringArray = _ship.configuration().compare(before)
-	_notice = "zamontowano w %s — %s" % [
-		slot.name, "bez zmian w sterowaniu" if delta.is_empty() else ", ".join(delta),
+	_notice = "fitted in %s - %s" % [
+		slot.name, "no change to the controls" if delta.is_empty() else ", ".join(delta),
 	]
 
 
@@ -425,7 +425,7 @@ func _verdict() -> PackedStringArray:
 		return out
 
 	out.append("%s: %s" % [
-		slot.name, "bez zmian w sterowaniu" if _preview.is_empty() else ", ".join(_preview),
+		slot.name, "no change to the controls" if _preview.is_empty() else ", ".join(_preview),
 	])
 	return out
 
@@ -437,20 +437,20 @@ func _verdict() -> PackedStringArray:
 func _turn_mount(by: float) -> void:
 	var slot: Hardpoint = _highlighted() as Hardpoint
 	if slot == null:
-		_notice = "obrót ustawia się na gnieździe broni"
+		_notice = "rotation is set on a weapon socket"
 		return
 	slot.rotation = wrapf(slot.rotation + by, -PI, PI)
-	_notice = "%s celuje %.0f st od dziobu" % [slot.name, rad_to_deg(slot.rotation)]
+	_notice = "%s aims %.0f deg off the nose" % [slot.name, rad_to_deg(slot.rotation)]
 
 
 ## Moves the highlighted hardpoint to the other trigger.
 func _swap_trigger() -> void:
 	var slot: Hardpoint = _highlighted() as Hardpoint
 	if slot == null:
-		_notice = "spust przypisuje się do gniazda broni"
+		_notice = "a trigger is assigned to a weapon socket"
 		return
 	slot.trigger = 1 - slot.trigger
-	_notice = "%s na %s spust" % [slot.name, "lewy" if slot.trigger == 0 else "prawy"]
+	_notice = "%s on the %s trigger" % [slot.name, "left" if slot.trigger == 0 else "right"]
 
 
 ## The mount the slot cursor is on, whatever kind it is. Falls back to the
@@ -466,9 +466,9 @@ func _highlighted() -> Node:
 func _stow() -> void:
 	var picked: Dictionary = _selected()
 	if picked.is_empty() or not bool(picked["held"]):
-		_notice = "schować można tylko to, co jest w ładowni"
+		_notice = "only what is in the hold can be stowed"
 		return
-	_notice = "schowano do cargo" if _ship.stow() else "cargo nie ma tyle miejsca"
+	_notice = "stowed in cargo" if _ship.stow() else "cargo has no room for that"
 
 
 func _jettison() -> void:
@@ -480,11 +480,11 @@ func _jettison() -> void:
 		# and one place the world hears about it.
 		var index: int = _pick - (1 if _ship.carried != null else 0)
 		if _ship.carried != null:
-			_notice = "najpierw opróżnij ładownię"
+			_notice = "empty the hold first"
 			return
 		_ship.retrieve(index)
 	_ship.jettison()
-	_notice = "wyrzucono za burtę"
+	_notice = "thrown overboard"
 
 
 ## A click picks whatever is under it: a row in the list, or a mount on the
@@ -528,7 +528,7 @@ func click_at(at: Vector2) -> bool:
 			_inspecting = _fitted_in(mount)
 			_notice = ""
 		else:
-			_notice = "%s jest puste" % mount.name
+			_notice = "%s is empty" % mount.name
 		return true
 	return false
 
@@ -622,14 +622,14 @@ func _text(font: Font, at: Vector2, text: String, colour: Color) -> void:
 func _draw_list(font: Font, rect: Rect2) -> void:
 	var y: float = rect.position.y + PAD + float(FONT_SIZE)
 	var x: float = rect.position.x + PAD
-	_text(font, Vector2(x, y), "ŁADOWNIA / CARGO   %.1f / %.1f" % [
+	_text(font, Vector2(x, y), "HOLD / CARGO   %.1f / %.1f" % [
 		_ship.cargo_used(), _ship.cargo_capacity(),
 	], _ink.label)
 	y += ROW * 1.5
 
 	var items: Array[Dictionary] = _items()
 	if items.is_empty():
-		_text(font, Vector2(x, y), "pusto", _ink.label)
+		_text(font, Vector2(x, y), "empty", _ink.label)
 		return
 
 	for i: int in range(items.size()):
@@ -650,7 +650,7 @@ func _draw_list(font: Font, rect: Rect2) -> void:
 ## The schematic, built from the hull polygon and the mount positions so it
 ## cannot disagree with the ship it describes.
 func _draw_plan(font: Font, rect: Rect2) -> void:
-	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "SCHEMAT", _ink.label)
+	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "SCHEMATIC", _ink.label)
 
 	var hull: PackedVector2Array = _ship.hull_outline
 	var mounts: Array[Node] = _all_mounts()
@@ -980,7 +980,7 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 				_text(font, Vector2(x, y), line, _ink.value)
 				y += ROW
 		else:
-			_text(font, Vector2(x, y), "nic nie wybrano — kliknij gniazdo albo przedmiot", _ink.label)
+			_text(font, Vector2(x, y), "nothing selected - click a socket or an item", _ink.label)
 		_text(font, Vector2(x, rect.end.y - PAD), _keys(), _ink.label)
 		return
 	_inspecting = null
@@ -1005,7 +1005,7 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	if replacing != null:
 		var beside: float = rect.position.x + rect.size.x * 0.48
 		var at: float = rect.position.y + PAD + float(FONT_SIZE)
-		_text(font, Vector2(beside, at), "-- zamontowane teraz --", _ink.label)
+		_text(font, Vector2(beside, at), "-- fitted now --", _ink.label)
 		for line: String in _card(replacing, null):
 			at += ROW
 			if at > floor_y:
@@ -1037,17 +1037,17 @@ func _draw_info(font: Font, rect: Rect2) -> void:
 	# would be deciding a swap on numbers they were not told about.
 	var hints: String = _keys()
 	if dropped > 0:
-		hints += "   (+%d wierszy poza panelem)" % dropped
+		hints += "   (+%d rows off the panel)" % dropped
 	_text(font, Vector2(x, rect.end.y - PAD), hints, _ink.label)
 
 
 func _keys() -> String:
-	return "strzałki: wybór   F: montuj   S: schowaj   , .: obrót   G: spust   Bksp: za burtę"
+	return "arrows: pick   F: fit   S: stow   , .: turn   G: trigger   Bksp: overboard"
 
 
 func _label(item: Resource) -> String:
 	var module: ModuleData = item as ModuleData
-	return "moduł" if module == null else module.title()
+	return "module" if module == null else module.title()
 
 
 ## What is fitted in a mount, whichever kind of mount it is.
@@ -1068,6 +1068,6 @@ func _fitted_in(slot: Node) -> Resource:
 func _card(item: Resource, against: Resource) -> PackedStringArray:
 	var module: ModuleData = item as ModuleData
 	if module == null:
-		return PackedStringArray(["nieznany moduł"])
+		return PackedStringArray(["unknown module"])
 	return module.card_lines(against as ModuleData)
 

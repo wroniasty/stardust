@@ -4,19 +4,19 @@ extends VBoxContainer
 ##
 ## Edits go straight into the object the game loaded, so they take effect on
 ## the running ship without a restart, and nothing touches the file until
-## "zapisz" is pressed. "Cofnij" puts the file's values back into the live
+## "save" is pressed. "Revert" puts the file's values back into the live
 ## object (rather than reloading it, which would leave the ship holding the
 ## old copy).
 
 ## Category caption -> directory. The same directories the game lists.
 const CATEGORIES: Dictionary = {
-	"kadłuby": "res://resources/hulls",
-	"silniki": "res://resources/engines",
-	"bronie": "res://resources/weapons",
-	"generatory": "res://resources/generators",
-	"napędy skokowe": "res://resources/drives",
-	"zbiorniki": "res://resources/tanks",
-	"skanery": "res://resources/scanners",
+	"hulls": "res://resources/hulls",
+	"engines": "res://resources/engines",
+	"weapons": "res://resources/weapons",
+	"generators": "res://resources/generators",
+	"jump drives": "res://resources/drives",
+	"tanks": "res://resources/tanks",
+	"scanners": "res://resources/scanners",
 }
 
 var _bench: Workbench = null
@@ -43,7 +43,7 @@ func bind(bench: Workbench, ship: Ship) -> void:
 
 
 func _build() -> void:
-	add_child(BenchForm.heading("zasób"))
+	add_child(BenchForm.heading("resource"))
 	_category = OptionButton.new()
 	for caption: String in CATEGORIES:
 		_category.add_item(caption)
@@ -54,16 +54,16 @@ func _build() -> void:
 	add_child(_file)
 
 	var buttons: HBoxContainer = HBoxContainer.new()
-	buttons.add_child(BenchForm.button("zapisz", save_current))
-	buttons.add_child(BenchForm.button("cofnij", revert_current))
+	buttons.add_child(BenchForm.button("save", save_current))
+	buttons.add_child(BenchForm.button("revert", revert_current))
 	add_child(buttons)
-	_apply_hull = BenchForm.button("załóż ten kadłub", _on_apply_hull)
+	_apply_hull = BenchForm.button("fit this hull", _on_apply_hull)
 	add_child(_apply_hull)
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_status)
 
-	add_child(BenchForm.heading("pola"))
+	add_child(BenchForm.heading("fields"))
 	_form = BenchResourceForm.new()
 	_form.edited.connect(_on_edited)
 	add_child(_form)
@@ -103,7 +103,7 @@ func _open_selected() -> void:
 func _on_edited(resource: Resource) -> void:
 	_dirty[_paths[_file.selected]] = true
 	_file.set_item_text(_file.selected, _caption(_paths[_file.selected]))
-	_status.text = "zmieniony, nie zapisany: %s" % _paths[_file.selected]
+	_status.text = "changed, not saved: %s" % _paths[_file.selected]
 	_bench.refresh_for(resource)
 
 
@@ -120,7 +120,7 @@ func save_current() -> void:
 		return
 	var result: Error = ResourceSaver.save(_current, _current.resource_path)
 	if result != OK:
-		_status.text = "nie zapisano (%s)" % error_string(result)
+		_status.text = "not saved (%s)" % error_string(result)
 		return
 	_dirty.erase(_current.resource_path)
 	_file.set_item_text(_file.selected, _caption(_current.resource_path))
@@ -149,4 +149,4 @@ func revert_current() -> void:
 	_file.set_item_text(_file.selected, _caption(_current.resource_path))
 	_form.show_resource(_current)
 	_ship.rebuild_control_groups(false)
-	_status.text = "cofnięto do pliku: %s" % _current.resource_path
+	_status.text = "reverted to the file: %s" % _current.resource_path

@@ -193,19 +193,19 @@ func aimed_at() -> int:
 ## disagree about what is stopping the pilot.
 func blocked_by(index: int) -> String:
 	if _ship == null or not is_instance_valid(_ship):
-		return "brak statku"
+		return "no ship"
 	if index < 0 or _map == null or index >= _map.count() or index == _here:
-		return "brak celu"
+		return "no target"
 	if _system != null and _system.is_mass_locked(_ship.global_position):
 		return "mass lock"
 	var drive: JumpDriveData = _ship.jump_drive()
 	if drive == null:
-		return "brak napędu"
+		return "no drive"
 	var away: float = _at.distance_to(_map.positions[index])
 	if not drive.can_cross(away):
-		return "poza zasięgiem"
+		return "out of range"
 	if _ship.fuel <= 0.0:
-		return "brak paliwa"
+		return "no fuel"
 	return ""
 
 
@@ -344,7 +344,7 @@ func _charging(delta: float) -> void:
 	var drive: JumpDriveData = _ship.jump_drive()
 	if drive == null:
 		_enter(Phase.IDLE)
-		refused.emit("brak napędu")
+		refused.emit("no drive")
 		return
 	# Burned as it goes, which is how a cancelled charge comes to cost
 	# something without a second rule for it. IDEAS.md asks for partial
@@ -477,4 +477,4 @@ func _on_hit(_impact_speed: float, _damage: float) -> void:
 	holding = false
 	_target = -1
 	_enter(Phase.IDLE)
-	refused.emit("trafienie przerwało ładowanie")
+	refused.emit("a hit broke the charge")

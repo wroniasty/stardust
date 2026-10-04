@@ -236,10 +236,9 @@ z ciężkiego świata), drugie z tego, że klawiszy zrobiło się trzydzieści p
 
 ---
 
-## MAUX3: Hamowanie w próżni
+## MAUX3: Z kokpitu
 
-Poza kolejnością milestone'ów, z kokpitu: hamulec używał najsłabszych silników
-statku tam, gdzie nic nie stoi na przeszkodzie, żeby użył najmocniejszego.
+Poza kolejnością milestone'ów, wszystko zgłoszone z lotu.
 
 - [x] **Hamulec ma dwa tryby, granicą jest sfera wpływu planety.** Poza nią
   statek obraca się retrograde i pali główny napęd; trzymane jednocześnie
@@ -252,6 +251,34 @@ statku tam, gdzie nic nie stoi na przeszkodzie, żeby użył najmocniejszego.
   sekundy, a przewaga ciągu to iloraz. Bramka zgodności 0,98, dryf poniżej
   8 px/s idzie starym hamulcem. Szczegóły i dwa przypadki brzegowe w IDEAS.md,
   „Hamowanie poza grawitacją planety".
+- [x] **Marker nawigacyjny.** Prawy klik na mapie układu wbija szpilkę, prawy
+  klik na szpilce ją wyjmuje, prawy klik gdzie indziej ją przenosi — jeden
+  przycisk, bo to jeden gest. Skaner trzyma ją zawsze: na pierścieniu z
+  odległością, kiedy jest poza ekranem, i na samym miejscu, kiedy nie jest.
+  Planeta przestaje być znaczona, gdy już ją widać; szpilka nie może, bo to
+  miejsce, a nie obiekt. Trzyma się w `NavMarker` ze stanem statycznym, nie w
+  `Galaxy` — autoload nie istnieje w biegu `--script`, więc mapa i skaner, które
+  by go czytały, nie dadzą się nawet skompilować w teście. Przeskok między
+  systemami ją wyrzuca (piksele układu nie podróżują), zapis ją niesie, a stary
+  plik bez tego pola wczytuje się bez niej.
+- [x] **Silniki gasną po wylądowaniu.** Zgłoszone z kokpitu: czasem płomień
+  zostawał zapalony bez żadnego inputu. Statek na nogach nigdy nie dociera do
+  `_integrate_forces`, więc nikt nie schodził mu z przepustnicy, którą miał w
+  chwili przyziemienia. „Czasem", bo trzeba trafić w pół sekundy spool-downu
+  po puszczeniu klawisza — czyli w ostrożne lądowanie na silniku. Szczegóły w
+  IDEAS.md, „Stan «wylądowany»”.
+- [x] **Zoom kółkiem na mapie, zakotwiczony na kursorze.** Punkt pod kursorem
+  zostaje pod kursorem — to jest cały warunek i test pilnuje go dwa razy pod
+  rząd, bo ciekawa awaria to ta, która wychodzi dopiero, kiedy środek już raz
+  się przesunął. Środek mapy jest teraz punktem, nie ciałem; klik przywiązuje
+  go z powrotem do klikniętego ciała i dalej je śledzi. Szczegóły w IDEAS.md,
+  „Mapa układu".
+- [x] **Kod i teksty w grze po angielsku.** Reguła z CLAUDE.md była od dawna, a
+  51 plików jej nie dotrzymywało; przy okazji na angielski poszło wszystko, co
+  czyta pilot. Dokumenty projektowe (ten plik, IDEAS, VISUALS, UI_STYLE)
+  zostają po polsku. Test złapał dziewięć miejsc, w których sam dopasowywał się
+  do polskiego tekstu — nazwy presetów i prefiks „też:” na karcie modułu.
+  Glify polskie zostają w `make_font.gd`: to czcionka, a nie proza.
 
 ---
 

@@ -398,6 +398,48 @@ Dwa przypadki brzegowe, oba znalezione przez test, nie przez myślenie:
 - **Kadłub bez autorytetu obrotowego zostaje przy starym hamulcie.** Nie umie
   się obrócić, więc alternatywą byłoby niehamowanie w ogóle.
 
+### Marker nawigacyjny: jedna szpilka, trzymana statycznie
+
+Prawy klik na mapie wbija szpilkę, prawy klik na szpilce ją wyjmuje, prawy klik
+gdzie indziej ją przenosi. **Jeden przycisk na trzy rzeczy, bo to jeden gest** —
+lista wymagałaby sposobu na powiedzenie, którą się ma na myśli, czyli drugiego
+gestu do wymyślenia i drugiej rzeczy do rysowania. Kiedy będzie powód na dwie,
+będzie też powód, żeby je nazywać, i to jest inna funkcja.
+
+Zapamiętany jest **punkt w świecie**, nie na mapie: szpilka musi przeżyć zmianę
+zoomu, obrót widoku, zamknięcie mapy i ćwierć okrążenia układu, zanim wróci
+w kadr. `SystemMap.from_map()` jest napisane jako **dokładna odwrotność**
+`to_map()`, żeby zmiana w jednym bez drugiego pokazała się jako niedomknięty
+obieg w teście, a nie jako szpilka w złym miejscu u pilota.
+
+Na skanerze szpilka jest **zawsze**, i to jest różnica wobec planety: planeta
+przestaje być znaczona, kiedy widać ją na ekranie, bo wówczas znacznik pokazuje
+to, co pilot i tak widzi. Szpilka to miejsce, nie obiekt — wskaźnik, który
+znika w chwili dolotu, zawodzi dokładnie tam, gdzie był używany. Poza ekranem
+siedzi na pierścieniu z odległością, na ekranie leży na samym miejscu.
+
+**Stan jest statyczny (`NavMarker`), nie na autoloadzie `Galaxy`** — i to
+zmierzone, nie wybrane: autoload nie istnieje w biegu `godot --script`, więc
+mapa albo skaner czytające `Galaxy` to mapa albo skaner, których test nawet nie
+skompiluje. Probe to potwierdził (`Identifier not found: Galaxy`) zanim kod
+poszedł dalej. To jest ta sama reguła, co bramki prezentacji: stan, który czytają
+przyrządy, musi być osiągalny z testu headless, albo przyrządy nie mają testów.
+`Palette` trzyma swoją wczytaną kopię tak samo.
+
+**Kolor nie jest nowy.** Pierwsza wersja miała własną magentę i test paleta
+ją wyrzucił: UI_STYLE mówi, że ekrany nie trzymają własnych kolorów, a w palecie
+rola już była — `caution` to „uwaga, wybór kursora”, a szpilka jest niczym
+innym. Trzynasty kolor na rolę, która ma swój, to dokładnie ten błąd, przed
+którym paleta ma chronić. Rozróżnia kształt: trójkąt to ciało, romb to łup,
+krzyżyk to szpilka.
+
+Przeskok między systemami ją **wyrzuca**, bo zapamiętane są piksele układu, a te
+same liczby nad inną gwiazdą to szpilka w złym miejscu — gorzej niż jej brak.
+Misjumpy idą tą samą drogą (`crossed` z −1), więc jest jedno miejsce, gdzie to
+się dzieje. Zapis ją niesie, czytany z wartością domyślną zamiast podbicia
+wersji: pole, którego ktoś nie miał, to pole, które się domyślnie wypełnia, a
+podbicie wersji wyrzuciłoby każdy istniejący zapis dla jednej szpilki.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne
@@ -1047,8 +1089,17 @@ zrzucie x64 wyrzuciło księżyc pół ekranu poza krawędź, bo trafiło na sys
 szerszy, niż zakładałem. Zasięg w pikselach znaczy wszędzie to samo: 7500 px to
 „ta planeta i jej księżyce" w dowolnym systemie, jaki generator zbuduje.
 
-Powiększanie idzie wokół **wybranego ciała**, nie wokół gwiazdy — inaczej pierwszy
-krok wypycha z ekranu dokładnie to, co się przed chwilą kliknęło. A ciało dostaje
+Powiększanie idzie wokół **tego, na co pilot wskazał**, nie wokół gwiazdy —
+inaczej pierwszy krok wypycha z ekranu dokładnie to, co się przed chwilą
+kliknęło. Z klawiszem `+` / `-` to jest kliknięte ciało; z **kółkiem to punkt
+pod kursorem**, i to jest właściwie cała ta funkcja: kółko, które powiększa
+względem środka, każe gonić oglądaną rzecz przez ekran, jeden obrót na raz.
+Środek mapy przestał więc być ciałem i stał się punktem (`_focus` plus
+`_focus_follows`), bo wskaźnik zwykle stoi w szczelinie między dwoma ciałami —
+czyli dokładnie tam, gdzie chce się zajrzeć. Klik znowu przywiązuje środek do
+klikniętego ciała i nadal śledzi je po orbicie; na końcu drabinki kółko nie robi
+**nic**, bo bez tego oparcie się na nim przy pełnym powiększeniu przesuwałoby
+widok przy nieruchomej skali. A ciało dostaje
 swój prawdziwy okrąg powierzchni, gdy tylko zrobi się większy od znacznika: przy
 skali układu planeta to jedna dziesiąta piksela i znacznik jest wszystkim, co
 jest; przy 7500 px to jest to, na co się patrzy.
@@ -2456,6 +2507,24 @@ uderzenie, a statek koziołkujący po górze powinien się rozpadać.
 Po udanym lądowaniu statek zamrożony (`freeze = true`, tryb kinematyczny) i przypięty do node'a planety. Planety mogą się obracać (dzień i noc); wylądowany statek obraca się razem z nią. Start = odmrożenie z prędkością styczną powierzchni.
 
 W stanie wylądowanym: naprawa, tankowanie, zbieranie zasobów, handel na lądowisku, autosave.
+
+**I silniki zgaszone**, co brzmi jak oczywistość, a było błędem zgłoszonym z
+kokpitu. `_integrate_forces` jest miejscem, gdzie liczą się przepustnice i gdzie
+woła się `advance()`, a statek na nogach nigdy tam nie dociera: wychodzi na samej
+górze, a ciało jest poza tym zamrożone, więc serwer fizyki nie ma powodu go
+wołać. Silnik trzymał więc przepustnicę, którą miał w chwili, gdy nogi przejęły
+ciężar — płomień palił się dalej, pętla grała dalej i **nic z drążka tego nie
+czyściło, bo nie drążek to postawił**.
+
+Zdarzało się „czasem", i to jest wskazówka, a nie przypadek: `_try_land` odmawia,
+kiedy pilot żąda ciągu, więc potrzeba przyziemienia w ciągu tego pół sekundy,
+które główny napęd schodzi z ciągu po puszczeniu klawisza. Czyli dokładnie tak
+wygląda ostrożne lądowanie na silniku.
+
+Przepustnice są **zerowane**, a nie czytane z `commands`, i to jest decyzja, nie
+mechanika: statek na nogach ma silniki wyłączone. Pilot opierający się na
+klawiszu obrotu przy zaparkowanym statku dostaje tyle samo co wcześniej — nic —
+a żądanie ciągu jest jedyną rzeczą, która coś robi: startuje.
 
 ### Skąd trudność
 

@@ -1,5 +1,5 @@
 extends SceneTree
-## Rysuje komplet placeholderów i zapisuje do nich zasoby. Uruchamianie:
+## Draws a full set of placeholders and writes the resources for them. Run with:
 ##   godot --headless --path . --script res://tools/make_placeholders.gd
 ##   godot --headless --path . --import
 ##   godot --headless --path . --script res://tools/make_placeholders.gd

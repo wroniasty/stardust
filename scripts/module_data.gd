@@ -85,7 +85,7 @@ static func row(
 ## comparison and a future tooltip all read the same numbers and none of
 ## them can quietly disagree about what a weapon is.
 func stat_rows() -> Array[Dictionary]:
-	return [row("gabaryt", bulk, 2, -1)]
+	return [row("bulk", bulk, 2, -1)]
 
 
 ## A short line of prose under the numbers. Blank unless a kind has
@@ -168,7 +168,7 @@ func card_lines(against: ModuleData = null) -> PackedStringArray:
 		var rest: PackedStringArray = PackedStringArray()
 		for affix: StringName in spilled:
 			rest.append(String(affix))
-		out.append("też: %s" % ", ".join(rest))
+		out.append("also: %s" % ", ".join(rest))
 
 	var other: Dictionary = {}
 	if against != null:

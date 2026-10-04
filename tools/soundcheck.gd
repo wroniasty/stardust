@@ -1,5 +1,5 @@
 extends Node
-## Odpala po kolei każdy dźwięk i wypisuje, co zagrało.
+## Plays every sound in turn and prints what came out.
 ##   godot --headless --path . tools/soundcheck.tscn --quit-after 2
 ##
 ## The point is the table, not the noise. "Vacuum is quiet" is a rule with

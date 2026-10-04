@@ -13,16 +13,16 @@ extends VBoxContainer
 
 ## Rows for what the ship recomputes: field, caption, top of the range.
 const PINNED_ROWS: Array[Dictionary] = [
-	{"key": &"hull_heat", "caption": "ciepło kadłuba", "top": 1.0},
-	{"key": &"air_density", "caption": "gęstość powietrza", "top": 1.0},
-	{"key": &"star_flux", "caption": "światło gwiazdy", "top": 1.5},
+	{"key": &"hull_heat", "caption": "hull heat", "top": 1.0},
+	{"key": &"air_density", "caption": "air density", "top": 1.0},
+	{"key": &"star_flux", "caption": "star light", "top": 1.5},
 ]
 
 ## What a held control sends, so the bench can press it for you.
 const HOLDS: Array[Dictionary] = [
-	{"action": &"thrust_forward", "caption": "ciąg do przodu"},
+	{"action": &"thrust_forward", "caption": "thrust forward"},
 	{"action": &"brake", "caption": "hamulec"},
-	{"action": &"boost", "caption": "doładowanie"},
+	{"action": &"boost", "caption": "boost"},
 ]
 
 var _bench: Workbench = null
@@ -51,13 +51,13 @@ func _build() -> void:
 	_readout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_readout)
 
-	add_child(BenchForm.heading("kadłub"))
+	add_child(BenchForm.heading("hull"))
 	_integrity = BenchForm.slider(0.0, 1.0, 0.01, 1.0)
 	_integrity.value_changed.connect(_on_integrity)
-	add_child(BenchForm.labelled("integralność", _integrity))
-	add_child(BenchForm.button("napraw kadłub", _on_repair_hull))
+	add_child(BenchForm.labelled("integrity", _integrity))
+	add_child(BenchForm.button("repair the hull", _on_repair_hull))
 
-	add_child(BenchForm.heading("przypięte (statek liczy je sam)"))
+	add_child(BenchForm.heading("pinned (the ship works these out itself)"))
 	for row: Dictionary in PINNED_ROWS:
 		_build_pinned_row(row)
 
@@ -65,19 +65,19 @@ func _build() -> void:
 	_fuel = BenchForm.slider(0.0, 1.0, 0.01, 1.0)
 	_fuel.value_changed.connect(func(v: float) -> void: _ship.fuel = v * _ship.fuel_capacity())
 	add_child(BenchForm.labelled("paliwo", _fuel))
-	add_child(BenchForm.check("paliwo bez końca", func(on: bool) -> void:
+	add_child(BenchForm.check("endless fuel", func(on: bool) -> void:
 		_bench.pins.endless_fuel = on))
 	_energy = BenchForm.slider(0.0, 1.0, 0.01, 1.0)
 	_energy.value_changed.connect(func(v: float) -> void: _ship.energy = v * _ship.energy_capacity())
 	add_child(BenchForm.labelled("energia", _energy))
-	add_child(BenchForm.check("energia bez końca", func(on: bool) -> void:
+	add_child(BenchForm.check("endless energy", func(on: bool) -> void:
 		_bench.pins.endless_energy = on))
 
-	add_child(BenchForm.heading("silniki (zdrowie)"))
+	add_child(BenchForm.heading("engines (health)"))
 	_engine_box = VBoxContainer.new()
 	add_child(_engine_box)
 	var engine_buttons: HBoxContainer = HBoxContainer.new()
-	engine_buttons.add_child(BenchForm.button("uszkodź jeden", _on_break_engine))
+	engine_buttons.add_child(BenchForm.button("damage one", _on_break_engine))
 	engine_buttons.add_child(BenchForm.button("napraw", _on_repair_engines))
 	add_child(engine_buttons)
 
@@ -87,10 +87,10 @@ func _build() -> void:
 	_impact_speed.max_value = 400.0
 	_impact_speed.step = 10.0
 	_impact_speed.value = 100.0
-	add_child(BenchForm.labelled("prędkość [px/s]", _impact_speed))
-	add_child(BenchForm.button("uderz w skałę", _on_impact))
-	add_child(BenchForm.button("zniszcz statek", _on_destroy))
-	add_child(BenchForm.check("podwozie wysunięte", _on_gear))
+	add_child(BenchForm.labelled("speed [px/s]", _impact_speed))
+	add_child(BenchForm.button("hit rock", _on_impact))
+	add_child(BenchForm.button("destroy the ship", _on_destroy))
+	add_child(BenchForm.check("gear down", _on_gear))
 
 	add_child(BenchForm.heading("trzymaj klawisz"))
 	for hold: Dictionary in HOLDS:
@@ -98,7 +98,7 @@ func _build() -> void:
 		add_child(BenchForm.check(String(hold["caption"]), func(on: bool) -> void:
 			_bench.hold(action, on)))
 
-	add_child(BenchForm.heading("całość"))
+	add_child(BenchForm.heading("everything"))
 	add_child(BenchForm.button("odpnij wszystko i napraw", _on_clear))
 
 
@@ -126,7 +126,7 @@ func _build_pinned_row(row: Dictionary) -> void:
 func _process(_delta: float) -> void:
 	if _ship == null or not is_visible_in_tree():
 		return
-	_readout.text = "kadłub %.0f%%  ciepło %.2f\npowietrze %.2f  gwiazda %.2f\npaliwo %.0f/%.0f  energia %.0f/%.0f\nprędkość %.0f px/s" % [
+	_readout.text = "hull %.0f%%  heat %.2f\nair %.2f  star %.2f\nfuel %.0f/%.0f  energy %.0f/%.0f\nspeed %.0f px/s" % [
 		_ship.hull_integrity * 100.0, _ship.hull_heat,
 		_ship.air_density, _ship.star_flux,
 		_ship.fuel, _ship.fuel_capacity(), _ship.energy, _ship.energy_capacity(),

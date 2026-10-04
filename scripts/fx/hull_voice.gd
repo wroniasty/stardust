@@ -1,6 +1,6 @@
 class_name HullVoice
 extends Node
-## Co słychać od kadłuba: uderzenia, podwozie, odmowa, koniec.
+## What the hull has to say: knocks, gear, a refusal, the end.
 ##
 ## Everything the ship itself does, as opposed to what its engines do.
 ## Listens and never writes: every signal it hangs off was already being

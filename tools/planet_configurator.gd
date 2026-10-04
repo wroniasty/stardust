@@ -32,13 +32,13 @@ signal teleport_requested
 ## Numeric parameters, in the order they appear. Ranges are generous rather
 ## than realistic: the tool is for finding out what the extremes feel like.
 const FIELDS: Array[Dictionary] = [
-	{"name": "surface_radius", "label": "promień", "min": 300.0, "max": 3000.0, "step": 10.0},
+	{"name": "surface_radius", "label": "radius", "min": 300.0, "max": 3000.0, "step": 10.0},
 	{"name": "surface_gravity", "label": "grawitacja", "min": 1.0, "max": 200.0, "step": 1.0},
-	{"name": "influence_radius", "label": "zasięg pola", "min": 1000.0, "max": 20000.0, "step": 100.0},
+	{"name": "influence_radius", "label": "field reach", "min": 1000.0, "max": 20000.0, "step": 100.0},
 	{"name": "atmosphere_height", "label": "atmosfera h", "min": 0.0, "max": 2000.0, "step": 10.0},
-	{"name": "atmosphere_density", "label": "atmosfera gęst", "min": 0.0, "max": 1.0, "step": 0.05},
-	{"name": "spin_rate", "label": "obrót rad/s", "min": -0.2, "max": 0.2, "step": 0.005},
-	{"name": "plateau_count", "label": "lądowiska", "min": 0.0, "max": 40.0, "step": 1.0, "int": true},
+	{"name": "atmosphere_density", "label": "air density", "min": 0.0, "max": 1.0, "step": 0.05},
+	{"name": "spin_rate", "label": "spin rad/s", "min": -0.2, "max": 0.2, "step": 0.005},
+	{"name": "plateau_count", "label": "landing sites", "min": 0.0, "max": 40.0, "step": 1.0, "int": true},
 	{"name": "cloud_coverage", "label": "chmury pokrycie", "min": 0.0, "max": 2.0, "step": 0.05},
 	{"name": "cloud_opacity", "label": "chmury krycie", "min": 0.0, "max": 1.0, "step": 0.05},
 ]
@@ -186,7 +186,7 @@ func _build_ui() -> void:
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(rows)
 
-	rows.add_child(_heading("PLANETA - PAUZA - F6 / P / Esc zamyka"))
+	rows.add_child(_heading("PLANET - PAUSED - F6 / P / Esc closes"))
 
 	_seed_spin = SpinBox.new()
 	_seed_spin.min_value = 0
@@ -209,23 +209,23 @@ func _build_ui() -> void:
 	_cloud_type = OptionButton.new()
 	for type_name: String in Planet.CloudType.keys():
 		_cloud_type.add_item(type_name)
-	rows.add_child(_labelled("typ nieba", _cloud_type))
+	rows.add_child(_labelled("sky kind", _cloud_type))
 
 	_surface_picker = ColorPickerButton.new()
 	_surface_picker.custom_minimum_size = Vector2(40, 12)
-	rows.add_child(_labelled("kolor gruntu", _surface_picker))
+	rows.add_child(_labelled("ground colour", _surface_picker))
 
 	_atmosphere_picker = ColorPickerButton.new()
 	_atmosphere_picker.custom_minimum_size = Vector2(40, 12)
-	rows.add_child(_labelled("kolor nieba", _atmosphere_picker))
+	rows.add_child(_labelled("sky colour", _atmosphere_picker))
 
 	# One row of three: four stacked buttons pushed the last of them off the
 	# bottom of a 360 px screen, and closing has three keys already.
 	var actions: HBoxContainer = HBoxContainer.new()
 	for entry: Array in [
-		["Nowy seed", _on_reroll],
+		["New seed", _on_reroll],
 		["Przebuduj", _on_rebuild],
-		["Lądowisko", _on_next_site],
+		["Landing site", _on_next_site],
 	]:
 		var button: Button = _button(String(entry[0]), entry[1] as Callable)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -323,7 +323,7 @@ func _on_next_site() -> void:
 func _report() -> void:
 	if _planet == null or _status == null:
 		return
-	_status.text = "lądowisk: %d   szczyt %.0f   strop powietrza %.0f" % [
+	_status.text = "sites: %d   peak %.0f   air ceiling %.0f" % [
 		_planet.landing_sites().size(),
 		_planet.terrain_ceiling(),
 		_planet.atmosphere_radius(),

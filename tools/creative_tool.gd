@@ -140,19 +140,19 @@ func _build_ui() -> void:
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(rows)
 
-	rows.add_child(_heading("SANDBOX - PAUZA - T / Esc zamyka"))
+	rows.add_child(_heading("SANDBOX - PAUSED - T / Esc closes"))
 
 	rows.add_child(_heading("LOOT"))
 	_kind = OptionButton.new()
 	for kind: String in KINDS:
 		_kind.add_item(kind)
-	rows.add_child(_labelled("rodzaj", _kind))
+	rows.add_child(_labelled("kind", _kind))
 
 	_rarity = OptionButton.new()
 	_rarity.add_item("z losowania")
 	for name: String in LOOT.RARITY_NAMES:
 		_rarity.add_item(name)
-	rows.add_child(_labelled("rzadkość", _rarity))
+	rows.add_child(_labelled("rarity", _rarity))
 
 	_seed_spin = SpinBox.new()
 	_seed_spin.min_value = 0
@@ -161,42 +161,42 @@ func _build_ui() -> void:
 	_seed_spin.value = 1
 	rows.add_child(_labelled("seed", _seed_spin))
 
-	rows.add_child(_button("do ładowni", _on_spawn))
-	rows.add_child(_button("wypełnij cargo", _on_fill))
-	rows.add_child(_button("opróżnij cargo", _on_empty))
+	rows.add_child(_button("to the hold", _on_spawn))
+	rows.add_child(_button("fill cargo", _on_fill))
+	rows.add_child(_button("empty cargo", _on_empty))
 
-	rows.add_child(_heading("KONFIGURACJA"))
+	rows.add_child(_heading("CONFIGURATION"))
 	_fitout = OptionButton.new()
 	for preset: Dictionary in ShipFitout.all():
 		_fitout.add_item(preset["name"])
-	rows.add_child(_labelled("statek", _fitout))
-	rows.add_child(_button("przebuduj statek", _on_refit))
+	rows.add_child(_labelled("ship", _fitout))
+	rows.add_child(_button("rebuild the ship", _on_refit))
 
-	rows.add_child(_heading("KADŁUB"))
+	rows.add_child(_heading("HULL"))
 	_shape = OptionButton.new()
 	for hull: HullData in HullData.catalogue():
 		_shape.add_item(hull.display_name)
-	rows.add_child(_labelled("kształt", _shape))
+	rows.add_child(_labelled("shape", _shape))
 
 	_scale = SpinBox.new()
 	_scale.min_value = 0.5
 	_scale.max_value = 4.0
 	_scale.step = 0.1
 	_scale.value = 1.0
-	rows.add_child(_labelled("skala", _scale))
-	rows.add_child(_button("przebuduj kadłub", _on_reshape))
+	rows.add_child(_labelled("scale", _scale))
+	rows.add_child(_button("rebuild the hull", _on_reshape))
 
-	rows.add_child(_heading("STATEK"))
-	rows.add_child(_button("napraw statek", _on_repair_ship))
-	rows.add_child(_button("napraw silniki", _on_repair))
-	rows.add_child(_button("naładuj energię", _on_recharge))
-	rows.add_child(_button("uszkodź losowy silnik", _on_break))
+	rows.add_child(_heading("SHIP"))
+	rows.add_child(_button("repair the ship", _on_repair_ship))
+	rows.add_child(_button("repair the engines", _on_repair))
+	rows.add_child(_button("recharge", _on_recharge))
+	rows.add_child(_button("damage a random engine", _on_break))
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rows.add_child(_status)
 
-	rows.add_child(_heading("RAPORT"))
+	rows.add_child(_heading("REPORT"))
 	_report = Label.new()
 	_report.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rows.add_child(_report)
@@ -271,19 +271,19 @@ func _on_spawn() -> void:
 		return
 	var item: Resource = _roll()
 	if item == null:
-		_say("nic nie wyszło z losowania")
+		_say("the roll produced nothing")
 		return
 	# Into the hold if it is free, into cargo otherwise: the tool should not
 	# make the pilot juggle to accept what it just made.
 	if _ship.carried == null and _ship.take(item):
-		_say("do ładowni: %s" % _name_of(item))
+		_say("to the hold: %s" % _name_of(item))
 	elif Ship.module_bulk(item) <= _ship.cargo_free():
 		_ship.cargo.append({"item": item, "rarity": _grade(item)})
 		_ship.rebuild_control_groups(false)
 		_ship.cargo_changed.emit()
 		_say("do cargo: %s" % _name_of(item))
 	else:
-		_say("nie ma miejsca na %s" % _name_of(item))
+		_say("no room for %s" % _name_of(item))
 	_seed_spin.value = int(_seed_spin.value) + 1
 	_refresh()
 
@@ -304,7 +304,7 @@ func _on_fill() -> void:
 		added += 1
 	_ship.rebuild_control_groups(false)
 	_ship.cargo_changed.emit()
-	_say("dorzucono %d, zajęte %.1f / %.1f" % [
+	_say("added %d, holding %.1f / %.1f" % [
 		added, _ship.cargo_used(), _ship.cargo_capacity(),
 	])
 	_refresh()
@@ -316,7 +316,7 @@ func _on_empty() -> void:
 	_ship.cargo.clear()
 	_ship.rebuild_control_groups(false)
 	_ship.cargo_changed.emit()
-	_say("cargo puste")
+	_say("cargo empty")
 	_refresh()
 
 
@@ -343,7 +343,7 @@ func _on_refit() -> void:
 	for i: int in range(catalogue.size()):
 		if catalogue[i].id == preset["hull"]:
 			_shape.selected = i
-	_say("%s — %s. %d silników, %d dział, ładownia %.0f" % [
+	_say("%s - %s. %d engines, %d guns, hold %.0f" % [
 		preset["name"], preset["blurb"], _ship.engines.size(),
 		_ship.hardpoints.size(), _ship.cargo_capacity(),
 	])
@@ -373,7 +373,7 @@ func _on_reshape() -> void:
 	var drawn: Polygon2D = _ship.get_node_or_null("Hull") as Polygon2D
 	if drawn != null:
 		drawn.polygon = outline
-	_say("%s x%.1f — %d punktów kontaktu, %d przebiegów solvera" % [
+	_say("%s x%.1f - %d contact points, %d solver passes" % [
 		chosen.display_name, factor, _ship.contact_points().size(), _ship.contact_iterations(),
 	])
 	_refresh()
@@ -391,7 +391,7 @@ func _on_repair_ship() -> void:
 	_ship.repair_hull()
 	_ship.repair_engines()
 	_ship.energy = _ship.energy_capacity()
-	_say("statek jak nowy: kadłub 100%, silniki, pula %.0f" % _ship.energy)
+	_say("ship as new: hull 100%, engines, pool %.0f" % _ship.energy)
 	_refresh()
 
 
@@ -399,7 +399,7 @@ func _on_repair() -> void:
 	if _ship == null:
 		return
 	_ship.repair_engines()
-	_say("silniki jak nowe")
+	_say("engines as new")
 	_refresh()
 
 
@@ -407,7 +407,7 @@ func _on_recharge() -> void:
 	if _ship == null:
 		return
 	_ship.energy = _ship.energy_capacity()
-	_say("pula pełna: %.0f" % _ship.energy)
+	_say("pool full: %.0f" % _ship.energy)
 
 
 func _on_break() -> void:
@@ -432,7 +432,7 @@ func _refresh() -> void:
 		return
 	var report: ConfigurationReport = _ship.configuration()
 	var lines: PackedStringArray = PackedStringArray()
-	lines.append("masa %.1f  bezwładność %.0f" % [_ship.mass, _ship.inertia])
+	lines.append("mass %.1f  inertia %.0f" % [_ship.mass, _ship.inertia])
 	lines.append("cargo %.1f / %.1f" % [_ship.cargo_used(), _ship.cargo_capacity()])
 	for finding: Dictionary in report.findings:
 		lines.append("%s: %s" % [
@@ -443,7 +443,7 @@ func _refresh() -> void:
 	_report.text = "\n".join(lines)
 
 
-## Name plus grade, because "do ładowni: main engine" says nothing about
+## Name plus grade, because "to the hold: main engine" says nothing about
 ## whether the thing that just appeared is the legendary one that was asked
 ## for.
 func _name_of(item: Resource) -> String:
@@ -452,7 +452,7 @@ func _name_of(item: Resource) -> String:
 	for property: String in ["display_name"]:
 		if property in item:
 			return String(item.get(property)) + grade
-	return "moduł" + grade
+	return "module" + grade
 
 
 func _grade(item: Resource) -> int:

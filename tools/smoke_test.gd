@@ -187,6 +187,13 @@ var _ground_slip: float = 0.0
 var _ground_contacts: int = 0
 
 var _ride_start_world: Vector2 = Vector2.ZERO
+
+## How many engines the landed-ride phase caught burning when the legs
+## took the weight, and how many were still burning a second and a half
+## later. The fault this guards left every one of them lit for ever,
+## with nothing on the stick.
+var _ride_lit: int = 0
+var _ride_still_lit: int = -1
 var _ride_start_polar: float = 0.0
 var _took_off: bool = false
 var _first_touchdown: String = ""
@@ -260,6 +267,16 @@ func _physics_process(delta: float) -> bool:
 		_peak_drift = maxf(_peak_drift, _ship.linear_velocity.length())
 	elif _phase == Phase.LANDED_RIDE:
 		if _ship.flight_mode == Ship.FlightMode.LANDED and _ride_start_world == Vector2.ZERO:
+			# Lit on the tick the ship goes down, which is the landing that
+			# found the fault: let go of the stick a moment before the legs
+			# touch and the drive is still part way through its spool-down
+			# when the weight goes on. `throttle` and not only the target,
+			# because the target is what a spool-down chases and the
+			# throttle is what is actually leaving the nozzle.
+			for engine: EngineInstance in _ship.engines:
+				engine.throttle = 1.0
+				engine.target_throttle = 1.0
+			_ride_lit = _ship.engines.size()
 			# Forced rather than taken from the seed, and only once the ship is
 			# down, so the check means the same thing on every planet.
 			_planet.spin_rate = TEST_SPIN
@@ -274,6 +291,14 @@ func _physics_process(delta: float) -> bool:
 					- _planet.global_rotation,
 				_ride_start_polar,
 			))
+			# Counted on the last tick before thrust is asked for, so what
+			# gets measured is a parked ship rather than one taking off. A
+			# second and a half have gone by, against the 0.6 s a main
+			# drive takes to spool down.
+			_ride_still_lit = 0
+			for engine: EngineInstance in _ship.engines:
+				if engine.exhaust_flow() > 0.01:
+					_ride_still_lit += 1
 			_ship.commands[ShipControl.Command.FORWARD] = 1.0
 		if _ticks > RIDE_TICKS - 20 and _ship.flight_mode == Ship.FlightMode.PHYSICAL:
 			_took_off = true
@@ -1144,6 +1169,7 @@ func _evaluate_phase() -> void:
 			_check_streaming()
 			_check_system_tour()
 			_check_system_map()
+			_check_nav_marker()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -1225,6 +1251,12 @@ func _evaluate_phase() -> void:
 			_expect(
 				_ride_slip < 0.001,
 				"the ship stays on the same patch of ground (%.5f rad of slip)" % _ride_slip,
+			)
+			_expect(
+				_ride_lit > 0 and _ride_still_lit == 0,
+				"a ship that lands mid-burn winds its engines down (%d of %d still lit)" % [
+					_ride_still_lit, _ride_lit,
+				],
 			)
 			_expect(_took_off, "thrust lifts the ship off again")
 			_expect(
@@ -2105,7 +2137,7 @@ func _check_editor() -> void:
 	var doomed: EngineMount = ship.get_node("MainDrive") as EngineMount
 	editor._named = doomed
 	_expect(editor.named_slot() == doomed, "the editor is holding a mount by name")
-	ShipFitout.apply(ship, _preset_named("frachtowiec"))
+	ShipFitout.apply(ship, _preset_named("freighter"))
 	_expect(
 		editor.named_slot() == null,
 		"and a refit makes it let go, because that mount no longer exists",
@@ -3627,10 +3659,13 @@ func _check_workbench() -> void:
 	_expect(scape != null, "the bench has the same soundscape the game has")
 	scape.density = 1.0
 	sounds._on_play(strip)
-	_expect(sounds._status.text.contains("zagrało"), "a sound through the air plays in air")
+	_expect(sounds._status.text.contains("played"), "a sound through the air plays in air")
 	scape.density = 0.0
 	sounds._on_play(strip)
-	_expect(sounds._status.text.contains("cisza"), "and is silent in vacuum, by the same rule")
+	_expect(
+		sounds._status.text.contains("silence"),
+		"and is silent in vacuum, by the same rule",
+	)
 
 	var rows: int = 0
 	for index: int in range(sounds._tables.size()):
@@ -3663,7 +3698,7 @@ func _check_workbench() -> void:
 			empty_forms += 1
 	_expect(empty_forms == 0, "every resource category opens a form with rows in it")
 
-	resources._category.selected = categories.find("silniki")
+	resources._category.selected = categories.find("engines")
 	resources._fill_files()
 	var drive: EngineData = resources._current as EngineData
 	var before: float = drive.max_thrust
@@ -3677,7 +3712,7 @@ func _check_workbench() -> void:
 	_expect(is_equal_approx(drive.max_thrust, before), "reverting restores the file's value (%.1f)" % drive.max_thrust)
 	_expect(not resources._dirty.has(drive.resource_path), "and clears the mark")
 
-	var weapon_index: int = categories.find("bronie")
+	var weapon_index: int = categories.find("weapons")
 	resources._category.selected = weapon_index
 	resources._fill_files()
 	var enum_rows: int = 0
@@ -3958,7 +3993,7 @@ func _check_ejection() -> void:
 	ship.queue_free()
 
 
-## Rozkład galaktyki: odstępy, gradient, spójność grafu.
+## The galaxy's layout: spacing, the gradient, and whether the graph holds.
 ##
 ## The whole of M4 stands on this being right, and almost none of it can
 ## be seen. A galaxy that looks fine on a map can still be one where the
@@ -4119,7 +4154,7 @@ func _mean_gap(map: GalaxyMap, from: float, to: float) -> float:
 	return 0.0 if counted == 0 else total / float(counted)
 
 
-## Mass lock: gdzie kończy się trzymanie gwiazdy.
+## Mass lock: where the star stops holding on.
 ##
 ## One rule for the whole system, which is the part worth checking.
 ## IDEAS.md section 10 measures the lock against the last orbit; it is
@@ -4192,7 +4227,7 @@ func _check_mass_lock() -> void:
 	)
 
 
-## Skaner, napęd skokowy i bak: trzy moduły, które decydują o wyjeździe.
+## Scanner, jump drive and tank: the three modules that decide whether you leave.
 ##
 ## All three are loot, which is the point: IDEAS.md section 10 keeps the
 ## three numbers that govern leaving a system on three separate machines,
@@ -4349,7 +4384,7 @@ func _check_jump_kit() -> void:
 	ship.queue_free()
 
 
-## Wskazniki systemów na krawędzi: co widać, w jakim kolorze i z czym pod spodem.
+## System markers on the edge: what shows, in what colour, and on what underneath.
 ##
 ## Three separate things decide what a pilot sees, and the whole reason
 ## the modules came apart is that they are separate: the scanner's reach
@@ -4393,7 +4428,7 @@ func _check_jump_hud() -> void:
 	ship.scanner_bay.installed = null
 	ship.rebuild_control_groups(false)
 	_expect(
-		hud.silence() == "brak skanera",
+		hud.silence() == "no scanner",
 		"no scanner is a different silence from mass lock (%s)" % hud.silence(),
 	)
 	ship.scanner_bay.installed = kept
@@ -4537,7 +4572,7 @@ func _check_jump_hud() -> void:
 	ship.queue_free()
 
 
-## Sekwencja skoku: cztery stany i jedna regula na każde przejście.
+## The jump sequence: four states, and one rule per transition.
 ##
 ## The jump is the one action in the game that destroys the scene it is
 ## happening in, which is exactly why the controller never does the
@@ -4691,7 +4726,7 @@ func _check_jump_sequence() -> void:
 	pilot.advance(1.0 / 60.0)
 	_expect(
 		pilot.phase == JumpController.Phase.IDLE
-		and excuses[excuses.size() - 1] == "brak paliwa",
+		and excuses[excuses.size() - 1] == "no fuel",
 		"an empty tank refuses before it starts (%s)" % excuses[excuses.size() - 1],
 	)
 
@@ -4700,7 +4735,7 @@ func _check_jump_sequence() -> void:
 	ship.queue_free()
 
 
-## Zasłona tranzytu: kształt krzywej jest projektem, nie gustem.
+## The transit veil: the shape of the curve is a design, not a taste.
 ##
 ## This is the one effect in the game with a job rather than a look. The
 ## old system is freed and the next one built halfway through the
@@ -4798,7 +4833,7 @@ func _check_transit_veil() -> void:
 	ship.queue_free()
 
 
-## Misjump: niedobór paliwa to ryzyko, nie ściana.
+## Misjump: too little fuel is a risk, not a wall.
 ##
 ## The rule IDEAS.md section 10 is most explicit about, and the one
 ## easiest to get wrong by being kind: a jump the tank cannot quite pay
@@ -5012,15 +5047,17 @@ func _check_save() -> void:
 
 	# The shape. Nothing in here may be a planet, an orbit or a name:
 	# those come from the seed, and a save that carried them would be a
-	# save that could disagree with the generator.
+	# save that could disagree with the generator. The pin is the one
+	# thing on the list that is not the world at all -- it is a place the
+	# pilot chose, which is exactly why no seed can produce it.
 	var sky: Dictionary = saved["galaxy"]
 	var extra: Array[String] = []
 	for key: Variant in sky:
-		if not ["seed", "here", "at", "time", "deltas"].has(String(key)):
+		if not ["seed", "here", "at", "time", "marked", "deltas"].has(String(key)):
 			extra.append(String(key))
 	_expect(
 		extra.is_empty(),
-		"the universe is a seed, an address, a clock and a list of changes (%s)" % [extra],
+		"a save is a seed, an address, a clock, a pin and a list of changes (%s)" % [extra],
 	)
 
 	# Round trip through the file, which is where the types go wrong if
@@ -6892,6 +6929,52 @@ func _check_system_map() -> void:
 	)
 	map.set_zoom_level(0)
 
+	# The wheel says where to magnify by where the pointer is, and the one
+	# thing it must hold is that whatever was under the pointer is still
+	# under it afterwards. Without that, every scroll pushes the thing the
+	# pilot is looking at further off the middle and they chase it across
+	# the screen a step at a time.
+	var pointer: Vector2 = view * 0.5 + Vector2(110.0, -70.0)
+	var under: Vector2 = map.from_map(pointer, map.layout(view))
+	map.zoom_at(pointer, 1)
+	var slipped: float = map.to_map(under, map.layout(view)).distance_to(pointer)
+	_expect(
+		slipped < 0.01,
+		"the wheel magnifies about the pointer, not the middle (%.4f px of slip)" % slipped,
+	)
+
+	# And again from there, because the interesting failure is the one
+	# that only shows up when the focus has already moved once.
+	var deeper: Vector2 = map.from_map(pointer, map.layout(view))
+	map.zoom_at(pointer, 1)
+	_expect(
+		map.to_map(deeper, map.layout(view)).distance_to(pointer) < 0.01,
+		"and keeps holding it on the next notch",
+	)
+
+	# At the end of the ladder the wheel does nothing at all. Without the
+	# early return the scale would stand still while the focus kept
+	# shifting, so leaning on the wheel would quietly pan the map.
+	map.set_zoom_level(SystemMap.ZOOM_REACH.size() - 1)
+	var pinned: Vector2 = map.from_map(pointer, map.layout(view))
+	map.zoom_at(pointer, 1)
+	_expect(
+		map.zoom_level() == SystemMap.ZOOM_REACH.size() - 1
+		and map.from_map(pointer, map.layout(view)).distance_to(pinned) < 0.01,
+		"a wheel against the end of the ladder moves nothing",
+	)
+
+	# A click takes the middle back, which is how a pilot undoes a scroll
+	# they did not mean. It re-ties too: the body is followed again rather
+	# than frozen where it was when it was clicked.
+	map.set_zoom_level(2)
+	map.click_at(map.to_map(target.position_at(0.0), map.layout(view)))
+	_expect(
+		map.to_map(target.position_at(0.0), map.layout(view)).distance_to(view * 0.5) < 0.01,
+		"and clicking a body puts the middle back on it",
+	)
+	map.set_zoom_level(0)
+
 	# The teleport is a dev convenience and carries what was picked.
 	var asked: Array[SystemBody] = []
 	map.teleport_requested.connect(func(body: SystemBody) -> void: asked.append(body))
@@ -7077,7 +7160,7 @@ func _check_fitout_presets() -> void:
 	# the whole point. One gimballed nozzle turns the ship and shoves it;
 	# two, nose and tail, swing the same way, so their torques add and
 	# their thrusts cancel. A couple instead of a push.
-	ShipFitout.apply(ship, _preset_named("pojedynczy"))
+	ShipFitout.apply(ship, _preset_named("single gimbal"))
 	var lone_turn: float = ship.control.authority_of(ShipControl.Command.CW)
 	var lone_shove: float = _turn_residual(ship)
 	var torque_jets: bool = false
@@ -7088,7 +7171,7 @@ func _check_fitout_presets() -> void:
 		"one gimballed nozzle can steer with no torque jets at all (%.0f of CW)" % lone_turn,
 	)
 
-	ShipFitout.apply(ship, _preset_named("para sił"))
+	ShipFitout.apply(ship, _preset_named("force couple"))
 	var pair_turn: float = ship.control.authority_of(ShipControl.Command.CW)
 	var pair_shove: float = _turn_residual(ship)
 	_expect(
@@ -7132,7 +7215,7 @@ func _check_fitout_presets() -> void:
 	# any gimbal: one nozzle swung sideways shoves the ship along its own
 	# thrust just as hard as before. The preset built to show that is
 	# called "drifts", and it must not claim a strafe group.
-	ShipFitout.apply(ship, _preset_named("pojedynczy"))
+	ShipFitout.apply(ship, _preset_named("single gimbal"))
 	_expect(
 		ship.control.gimbal_partner.is_empty(),
 		"a lone gimbal has no partner to cancel its shove",
@@ -7151,7 +7234,7 @@ func _check_fitout_presets() -> void:
 	# turn, the same way. Measured off the nozzles rather than off the
 	# authority, because the authority is what the groups believe and this
 	# is what the hinges do.
-	ShipFitout.apply(ship, _preset_named("para sił"))
+	ShipFitout.apply(ship, _preset_named("force couple"))
 	var couple: Array[EngineInstance] = []
 	for engine: EngineInstance in ship.engines:
 		if engine.data.gimbal_range > 0.0:
@@ -7198,7 +7281,7 @@ func _check_fitout_presets() -> void:
 	var plain: EngineData = load(ShipFitout.ENGINES["main"]) as EngineData
 	var was_thrust: float = plain.max_thrust
 	var was_bulk: float = plain.bulk
-	ShipFitout.apply(ship, _preset_named("mocniejsze"))
+	ShipFitout.apply(ship, _preset_named("stronger"))
 	var beefy: EngineData = null
 	for engine: EngineInstance in ship.engines:
 		if engine.mount.name == "MainDrive":
@@ -7533,7 +7616,7 @@ func _check_item_names() -> void:
 			continue
 		spilled += 1
 		for line: String in item.card_lines():
-			if line.begins_with("też:"):
+			if line.begins_with("also:"):
 				listed += 1
 	_expect(overlong == 0, "no rolled item has a title longer than the panel")
 	_expect(
@@ -7850,7 +7933,7 @@ func _check_aiming() -> void:
 
 
 
-## Paleta: jeden plik, a nie dwanascie ról rozpisanych w kazdym ekranie.
+## The palette: one file, rather than twelve roles spelled out in every screen.
 ##
 ## UI_STYLE section 3 counted the damage before the resource existed: the
 ## same four roles were spelled out in three screens as eleven different
@@ -8032,9 +8115,9 @@ func _check_stat_cards() -> void:
 	for row: Dictionary in gun.stat_rows():
 		direction[row["label"]] = int(row["better"])
 	_expect(direction.get("dps", 0) > 0, "more damage per second is better")
-	_expect(direction.get("rozrzut", 0) < 0, "more spread is not")
-	_expect(direction.get("energia", 0) < 0, "nor is a dearer shot")
-	_expect(direction.get("gabaryt", 0) < 0, "nor a bulkier gun")
+	_expect(direction.get("spread", 0) < 0, "more spread is not")
+	_expect(direction.get("energy", 0) < 0, "nor is a dearer shot")
+	_expect(direction.get("bulk", 0) < 0, "nor a bulkier gun")
 
 	# Every kind of mount can say what is in it, which is what the card
 	# compares against.
@@ -8957,7 +9040,7 @@ func _check_art() -> void:
 	sprite.queue_free()
 
 
-## Próznia jest cicha, i to jest regula, nie ustawienie miksera.
+## Vacuum is quiet, and that is a rule rather than a mixer setting.
 ##
 ## VISUALS.md section 2 makes this a design decision rather than a mixing
 ## preference: in space you hear only what travels through the ship's own
@@ -9079,7 +9162,7 @@ func _cutoff() -> float:
 	return muffle.cutoff_hz if muffle != null else 0.0
 
 
-## Gniazda: jedna klasa, i teraz pilnują rodzaju same.
+## Sockets: one class, and they police the kind themselves now.
 ##
 ## Five slots that were five classes, sixteen of whose seventeen lines
 ## were the same. What actually differed was which modules each takes,
@@ -9145,7 +9228,7 @@ func _check_bays() -> void:
 	ship.queue_free()
 
 
-## Szwy dla toru dźwiękowego: zapłon, zgaśnięcie, wystrzał.
+## Seams for the soundtrack: ignition, cut-out, the shot.
 ##
 ## Three signals, and the reason they exist rather than being polled.
 ## A loop can be driven by reading `exhaust_flow()` every tick, because
@@ -9272,7 +9355,7 @@ func _check_sound_seams() -> void:
 	ship.queue_free()
 
 
-## Silniki slychać: pętla na typ, i modulacja, która jest w kodzie.
+## Engines are heard: one loop per type, and the modulation that lives in code.
 ##
 ## Nothing here is scripted, which is the property worth checking. A
 ## drive spooling up gets louder because `exhaust_flow()` went up; a
@@ -9445,7 +9528,7 @@ func _check_engine_choir() -> void:
 	ship.queue_free()
 
 
-## Kadłub: od stuknięcia do zgrzytu, podwozie, odmowa, koniec.
+## The hull: from a knock to a grind, the gear, a refusal, the end.
 ##
 ## Counted rather than listened to, the same way the vacuum rule is:
 ## headless there is nothing to hear, so `Soundscape.play()` reports
@@ -9582,7 +9665,7 @@ func _check_hull_voice() -> void:
 	ship.queue_free()
 
 
-## Broń i teren: strzał przez kadłub, trafienie przez powietrze.
+## Weapons and terrain: the shot through the hull, the hit through the air.
 ##
 ## The clearest case of the vacuum rule in the game, and the one worth
 ## checking hardest, because getting it backwards would be invisible in
@@ -9712,7 +9795,7 @@ func _check_ordnance_voice() -> void:
 	sound.free()
 
 
-## Wejście w atmosferę: fala dziobowa, pęd, smuga kondensacyjna.
+## Entering the air: the bow shock, the rush, the contrail.
 ##
 ## Three readings of one thing. The hull has been heating since M1 --
 ## `hull_heat` rises with the air and the square of the speed -- and
@@ -9861,7 +9944,7 @@ func _check_entry() -> void:
 	ship.queue_free()
 
 
-## Niebo: warstwy paralaksy, mgławice z seeda, gwiazdy gasnące w dzień.
+## The sky: parallax layers, nebulae out of the seed, stars going out by day.
 ##
 ## The sky is the one part of the game that is drawn entirely in a
 ## shader, which makes it the one part a test can say least about. So
@@ -9971,7 +10054,7 @@ func _check_sky() -> void:
 	ship.queue_free()
 
 
-## Tablice dźwięku: to samo, co tablice wyglądu, tylko dla ucha.
+## Sound tables: what the look tables are, for the ear.
 ##
 ## The sound layer was built first with the samples picked by a flat
 ## array indexed by the type enum, which is the under-built half of
@@ -10088,7 +10171,7 @@ func _check_sound_tables() -> void:
 	)
 
 
-## Gdzie statek jest **rysowany**, a nie gdzie doleciał.
+## Where the ship is **drawn**, rather than where it got to.
 ##
 ## Physics interpolation is on project-wide, so a body is rendered
 ## between its last two physics transforms while a script reading
@@ -10166,7 +10249,7 @@ func _check_drawn_transform() -> void:
 	ship.queue_free()
 
 
-## Pętle silników: nagrania, które muszą się zapinać.
+## Engine loops: recordings that have to join up.
 ##
 ## The three engine loops are cut out of two recordings rather than
 ## synthesised, and that moved the risk. A generated loop is seamless
@@ -10301,6 +10384,173 @@ func _typical_step(samples: PackedFloat32Array) -> float:
 		return 0.0
 	steps.sort()
 	return steps[steps.size() / 2]
+
+
+## The navigation marker: a pin the pilot puts in the map.
+##
+## Four things, and only the first is about the map. The pin is stored as
+## a **world** point rather than a map one, so it has to survive the zoom
+## and the view turning. The scanner has to keep hold of it whether or
+## not it is on screen, unlike a planet. A jump has to drop it, because
+## the same numbers over a different star point at the wrong place. And
+## a save has to carry it, including a save written before it existed.
+func _check_nav_marker() -> void:
+	NavMarker.unmark()
+	var system: StarSystem = StarSystem.generate(TEST_SEED)
+	var ship: Ship = _spawn_ship()
+	var map: SystemMap = SystemMap.new()
+	root.add_child(map)
+	map.bind(system, ship, null)
+
+	var view: Vector2 = map.view_size()
+	var plan: Dictionary = map.layout(view)
+
+	# The inverse transform first, because everything else rests on it.
+	# `from_map` is written as the exact inverse of `to_map`, so what is
+	# worth checking is that the round trip closes -- a change to one of
+	# them that is not mirrored in the other shows up here and nowhere
+	# else until a pilot notices their marker is in the wrong place.
+	var somewhere: Vector2 = Vector2(31400.0, -9200.0)
+	_expect(
+		map.from_map(map.to_map(somewhere, plan), plan).distance_to(somewhere) < 0.5,
+		"a point put on the map and read back off it is the same point",
+	)
+
+	var pixel: Vector2 = view * 0.5 + Vector2(90.0, -40.0)
+	_expect(map.mark_at(pixel), "a right click puts a marker down")
+	_expect(
+		NavMarker.is_marked()
+		and map.to_map(NavMarker.marked, plan).distance_to(pixel) < 0.5,
+		"and it lands under the cursor rather than somewhere near it",
+	)
+
+	# Stored in the world, so magnifying the picture must not move it.
+	var was: Vector2 = NavMarker.marked
+	map.set_zoom_level(2)
+	_expect(
+		NavMarker.marked.is_equal_approx(was),
+		"zooming moves the picture and leaves the pin where it was",
+	)
+	map.set_zoom_level(0)
+
+	# The same button takes it away again, which is the whole gesture:
+	# nothing to arm and nothing to cancel.
+	_expect(
+		not map.mark_at(map.to_map(NavMarker.marked, map.layout(view))),
+		"a right click on the marker takes it away",
+	)
+	_expect(not NavMarker.is_marked(), "and then there is none")
+
+	map.mark_at(view * 0.5 + Vector2(20.0, 20.0))
+	var first: Vector2 = NavMarker.marked
+	map.mark_at(view * 0.5 - Vector2(70.0, 30.0))
+	_expect(
+		NavMarker.is_marked() and not NavMarker.marked.is_equal_approx(first),
+		"a right click elsewhere moves the one marker rather than adding a second",
+	)
+	map.free()
+
+	_check_marker_on_scanner(ship)
+	_check_marker_persists(ship)
+
+	NavMarker.unmark()
+	ship.queue_free()
+
+
+## The pin on the edge-of-screen instrument, which is where it is read
+## from in flight: the map is a thing you open, and the scanner is on.
+func _check_marker_on_scanner(ship: Ship) -> void:
+	var scanner: ScannerHud = ScannerHud.new()
+	root.add_child(scanner)
+	scanner.bind(ship)
+
+	var screen: Vector2 = Vector2(640.0, 360.0)
+	var centre: Vector2 = screen * 0.5
+	ship.global_position = Vector2.ZERO
+	var to_screen: Transform2D = Transform2D(0.0, centre)
+
+	NavMarker.mark(Vector2(5000.0, 0.0))
+	var pin: Dictionary = scanner.marker_contact(to_screen, screen)
+	_expect(not pin.is_empty(), "the scanner reports the marker")
+	if not pin.is_empty():
+		_expect(bool(pin["on_ring"]), "off screen it sits on the ring")
+		_expect(
+			(pin["direction"] as Vector2).dot(Vector2.RIGHT) > 0.99,
+			"pointing at it rather than anywhere else",
+		)
+		_expect(
+			absf(float(pin["distance"]) - 5000.0) < 1.0,
+			"and carrying the range to it (%.0f px)" % float(pin["distance"]),
+		)
+		_expect(
+			absf((pin["at"] as Vector2).x - (screen.x - scanner.ring_margin)) < 0.5,
+			"hard against the edge it is off",
+		)
+
+	# A body stops being marked once it is on screen, because by then the
+	# pilot can see it. A pin must not: it is a place, not an object, and
+	# an indicator that vanished as you arrived would fail exactly where
+	# it was being used.
+	NavMarker.mark(Vector2(40.0, 20.0))
+	var near: Dictionary = scanner.marker_contact(to_screen, screen)
+	_expect(
+		not near.is_empty() and not bool(near["on_ring"]),
+		"on screen it is still reported, and lies on the place itself",
+	)
+	if not near.is_empty():
+		_expect(
+			(near["at"] as Vector2).distance_to(centre + Vector2(40.0, 20.0)) < 0.5,
+			"exactly over the place, not near it",
+		)
+
+	NavMarker.unmark()
+	_expect(
+		scanner.marker_contact(to_screen, screen).is_empty(),
+		"and with no marker there is nothing to report",
+	)
+	scanner.queue_free()
+
+
+## What a jump does to it, and what a save file does with it.
+##
+## The galaxy script is loaded and instantiated rather than reached
+## through the autoload, because an autoload does not exist in a
+## `--script` run. It is the same code: this is the real `reset`, and
+## the real `SaveGame` either side of it.
+func _check_marker_persists(ship: Ship) -> void:
+	var sky: Node = (load("res://scripts/autoload/galaxy.gd") as GDScript).new()
+	root.add_child(sky)
+
+	NavMarker.mark(Vector2(100.0, 100.0))
+	sky.reset(TEST_SEED)
+	_expect(
+		not NavMarker.is_marked(),
+		"a new galaxy drops the marker, because system pixels do not travel",
+	)
+
+	var put: Vector2 = Vector2(777.0, -333.0)
+	NavMarker.mark(put)
+	var saved: Dictionary = SaveGame.capture(sky, ship)
+	NavMarker.unmark()
+	SaveGame.restore(saved, sky, ship)
+	_expect(
+		NavMarker.is_marked() and NavMarker.marked.is_equal_approx(put),
+		"a saved marker comes back with the save (%s)" % NavMarker.marked,
+	)
+
+	# Which also pins the order: `restore` calls `reset`, and `reset`
+	# clears the pin, so a marker written before the reset would be gone
+	# by the time the file was finished loading.
+	var old: Dictionary = saved.duplicate(true)
+	(old["galaxy"] as Dictionary).erase("marked")
+	NavMarker.mark(Vector2(5.0, 5.0))
+	SaveGame.restore(old, sky, ship)
+	_expect(
+		not NavMarker.is_marked(),
+		"and a save written before markers existed loads, without one",
+	)
+
+	sky.free()
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.
@@ -10622,7 +10872,7 @@ func _spray_of(field: DebrisField) -> Vector2:
 	return Vector2.ZERO
 
 
-## Statek nosi na sobie swój stan: cieplo, uszkodzenia, kulejacy silnik.
+## The ship wears its state: heat, damage, a limping engine.
 ##
 ## Three numbers the simulation has computed every tick since M1 and that
 ## nothing had ever shown anywhere but as a line of debug text:
@@ -10895,7 +11145,7 @@ func _check_skin() -> void:
 	# passed while proving nothing.
 	var interceptor: Dictionary = {}
 	for preset: Dictionary in ShipFitout.all():
-		if String(preset["name"]) == "przechwytujący":
+		if String(preset["name"]) == "interceptor":
 			interceptor = preset
 	ShipFitout.apply(ship, interceptor)
 	_expect(

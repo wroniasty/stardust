@@ -1,6 +1,6 @@
 class_name TransitVeil
 extends CanvasLayer
-## Zasłona na czas skoku: to, co zakrywa wymianę systemu.
+## The veil over a jump: what hides one system being swapped for another.
 ##
 ## The only effect in the game with a job rather than a look. The old
 ## system is freed and the next one built halfway through the crossing,

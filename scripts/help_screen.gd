@@ -24,7 +24,8 @@ const COLUMN_GAP: float = 14.0
 
 ## Room for the key names before the description starts. Wide enough for
 ## the longest of them -- an action with two keys on it prints both, and
-## "Equal / Kp Add" ran straight through "przybliż" at the first guess.
+## "Equal / Kp Add" ran straight through its own description at the first
+## guess.
 const KEY_WIDTH: float = 92.0
 
 const SCRIM: Color = Color(0.03, 0.04, 0.06, 0.97)
@@ -38,62 +39,62 @@ const BAD: Color = Color(1.00, 0.40, 0.35)
 ## is the order on screen: blocks in the order they first appear, actions
 ## in the order they are listed.
 ##
-## Polish, like the rest of what the pilot reads.
+## English, like the rest of what the pilot reads.
 const LABELS: Array[Dictionary] = [
-	{"block": "LOT", "action": &"thrust_forward", "says": "ciąg do przodu"},
-	{"block": "LOT", "action": &"thrust_reverse", "says": "ciąg wstecz"},
-	{"block": "LOT", "action": &"rotate_left", "says": "obrót w lewo"},
-	{"block": "LOT", "action": &"rotate_right", "says": "obrót w prawo"},
-	{"block": "LOT", "action": &"strafe_left", "says": "w bok, w lewo"},
-	{"block": "LOT", "action": &"strafe_right", "says": "w bok, w prawo"},
-	{"block": "LOT", "action": &"brake", "says": "hamowanie (w próżni: zwrot i wypał)"},
-	{"block": "LOT", "action": &"boost", "says": "dopalanie (pali pulę)"},
-	{"block": "LOT", "action": &"jump", "says": "skok: wyceluj dziobem i trzymaj"},
-	{"block": "LOT", "action": &"toggle_gear", "says": "podwozie"},
-	{"block": "LOT", "action": &"ship_fire", "says": "ognia"},
-	{"block": "LOT", "action": &"ship_fire_secondary", "says": "ognia, druga grupa"},
+	{"block": "FLIGHT", "action": &"thrust_forward", "says": "thrust forward"},
+	{"block": "FLIGHT", "action": &"thrust_reverse", "says": "thrust reverse"},
+	{"block": "FLIGHT", "action": &"rotate_left", "says": "rotate left"},
+	{"block": "FLIGHT", "action": &"rotate_right", "says": "rotate right"},
+	{"block": "FLIGHT", "action": &"strafe_left", "says": "strafe left"},
+	{"block": "FLIGHT", "action": &"strafe_right", "says": "strafe right"},
+	{"block": "FLIGHT", "action": &"brake", "says": "brake (in vacuum: turn, then burn)"},
+	{"block": "FLIGHT", "action": &"boost", "says": "boost (burns the pool)"},
+	{"block": "FLIGHT", "action": &"jump", "says": "jump: aim the nose and hold"},
+	{"block": "FLIGHT", "action": &"toggle_gear", "says": "landing gear"},
+	{"block": "FLIGHT", "action": &"ship_fire", "says": "fire"},
+	{"block": "FLIGHT", "action": &"ship_fire_secondary", "says": "fire, second group"},
 
-	{"block": "KOMPUTER", "action": &"hold_prograde", "says": "dziobem w ruch"},
-	{"block": "KOMPUTER", "action": &"hold_retrograde", "says": "dziobem pod ruch"},
-	{"block": "KOMPUTER", "action": &"kill_rotation", "says": "zatrzymaj obrót"},
+	{"block": "COMPUTER", "action": &"hold_prograde", "says": "nose into the motion"},
+	{"block": "COMPUTER", "action": &"hold_retrograde", "says": "nose against the motion"},
+	{"block": "COMPUTER", "action": &"kill_rotation", "says": "kill rotation"},
 
-	{"block": "WIDOK", "action": &"camera_zoom_in", "says": "przybliż"},
-	{"block": "WIDOK", "action": &"camera_zoom_out", "says": "oddal"},
-	{"block": "WIDOK", "action": &"camera_rotate_left", "says": "obróć widok w lewo"},
-	{"block": "WIDOK", "action": &"camera_rotate_right", "says": "obróć widok w prawo"},
-	{"block": "WIDOK", "action": &"camera_level", "says": "wypoziomuj widok"},
+	{"block": "VIEW", "action": &"camera_zoom_in", "says": "zoom in"},
+	{"block": "VIEW", "action": &"camera_zoom_out", "says": "zoom out"},
+	{"block": "VIEW", "action": &"camera_rotate_left", "says": "turn the view left"},
+	{"block": "VIEW", "action": &"camera_rotate_right", "says": "turn the view right"},
+	{"block": "VIEW", "action": &"camera_level", "says": "level the view"},
 
-	{"block": "EKRANY", "action": &"toggle_help", "says": "ta plansza"},
-	{"block": "EKRANY", "action": &"toggle_map", "says": "mapa układu"},
-	{"block": "EKRANY", "action": &"toggle_loadout", "says": "ładownia"},
-	{"block": "EKRANY", "action": &"loadout_next", "says": "ładownia: następny"},
-	{"block": "EKRANY", "action": &"loadout_fit", "says": "ładownia: zamontuj"},
-	{"block": "EKRANY", "action": &"loadout_drop", "says": "ładownia: wyrzuć"},
-	{"block": "EKRANY", "action": &"toggle_editor", "says": "edytor statku"},
-	{"block": "EKRANY", "action": &"editor_stow", "says": "edytor: schowaj"},
-	{"block": "EKRANY", "action": &"editor_aim_ccw", "says": "edytor: obróć mocowanie w lewo"},
-	{"block": "EKRANY", "action": &"editor_aim_cw", "says": "edytor: obróć mocowanie w prawo"},
-	{"block": "EKRANY", "action": &"editor_trigger", "says": "edytor: zmień spust"},
+	{"block": "SCREENS", "action": &"toggle_help", "says": "this screen"},
+	{"block": "SCREENS", "action": &"toggle_map", "says": "system map"},
+	{"block": "SCREENS", "action": &"toggle_loadout", "says": "hold"},
+	{"block": "SCREENS", "action": &"loadout_next", "says": "hold: next"},
+	{"block": "SCREENS", "action": &"loadout_fit", "says": "hold: fit"},
+	{"block": "SCREENS", "action": &"loadout_drop", "says": "hold: drop"},
+	{"block": "SCREENS", "action": &"toggle_editor", "says": "ship editor"},
+	{"block": "SCREENS", "action": &"editor_stow", "says": "editor: stow"},
+	{"block": "SCREENS", "action": &"editor_aim_ccw", "says": "editor: turn the mount left"},
+	{"block": "SCREENS", "action": &"editor_aim_cw", "says": "editor: turn the mount right"},
+	{"block": "SCREENS", "action": &"editor_trigger", "says": "editor: change the trigger"},
 
-	{"block": "DEBUG", "action": &"debug_toggle", "says": "nakładka diagnostyczna"},
+	{"block": "DEBUG", "action": &"debug_toggle", "says": "debug overlay"},
 	{"block": "DEBUG", "action": &"debug_creative", "says": "sandbox"},
-	{"block": "DEBUG", "action": &"debug_planet", "says": "konfigurator planety"},
-	{"block": "DEBUG", "action": &"bench_toggle_panel", "says": "stanowisko: schowaj panel"},
-	{"block": "DEBUG", "action": &"debug_carve", "says": "wytnij krater"},
-	{"block": "DEBUG", "action": &"debug_damage_engine", "says": "uszkodź silnik"},
-	{"block": "DEBUG", "action": &"debug_repair", "says": "napraw silniki"},
-	{"block": "DEBUG", "action": &"toggle_presentation", "says": "warstwa graficzna"},
+	{"block": "DEBUG", "action": &"debug_planet", "says": "planet configurator"},
+	{"block": "DEBUG", "action": &"bench_toggle_panel", "says": "workbench: hide the panel"},
+	{"block": "DEBUG", "action": &"debug_carve", "says": "carve a crater"},
+	{"block": "DEBUG", "action": &"debug_damage_engine", "says": "damage an engine"},
+	{"block": "DEBUG", "action": &"debug_repair", "says": "repair the engines"},
+	{"block": "DEBUG", "action": &"toggle_presentation", "says": "presentation layer"},
 ]
 
 ## What each chord is for. Keyed by `ControlChords.Chord`.
 const CHORD_SAYS: Dictionary = {
-	ControlChords.Chord.KILL_ROTATION: "zatrzymaj obrót",
-	ControlChords.Chord.PROGRADE: "dziobem w ruch",
-	ControlChords.Chord.RETROGRADE: "dziobem pod ruch",
-	ControlChords.Chord.AUTO_ORBIT: "trzymaj orbitę kołową",
-	ControlChords.Chord.AUTO_LEVEL: "dziobem wzdłuż horyzontu",
-	ControlChords.Chord.ALTITUDE_HOLD: "trzymaj wysokość",
-	ControlChords.Chord.DEORBIT: "zniżaj orbitę",
+	ControlChords.Chord.KILL_ROTATION: "kill rotation",
+	ControlChords.Chord.PROGRADE: "nose into the motion",
+	ControlChords.Chord.RETROGRADE: "nose against the motion",
+	ControlChords.Chord.AUTO_ORBIT: "hold a circular orbit",
+	ControlChords.Chord.AUTO_LEVEL: "nose along the horizon",
+	ControlChords.Chord.ALTITUDE_HOLD: "hold altitude",
+	ControlChords.Chord.DEORBIT: "lower the orbit",
 }
 
 var _canvas: Control = null
@@ -157,7 +158,7 @@ func lines() -> Array[Dictionary]:
 			"text": entry["says"],
 		})
 
-	out.append({"kind": "head", "key": "", "text": "AKORDY"})
+	out.append({"kind": "head", "key": "", "text": "CHORDS"})
 	for chord: Dictionary in ControlChords.CHORDS:
 		var pressed: Array[String] = []
 		for action: StringName in chord["keys"]:
@@ -186,7 +187,7 @@ static func keys_for(action: StringName) -> String:
 			continue
 		var click: InputEventMouseButton = event as InputEventMouseButton
 		if click != null:
-			names.append("LPM" if click.button_index == MOUSE_BUTTON_LEFT else "PPM")
+			names.append("LMB" if click.button_index == MOUSE_BUTTON_LEFT else "RMB")
 	if names.is_empty():
 		return "?"
 	return names[0] if names.size() == 1 else "%s / %s" % [names[0], names[1]]
@@ -228,11 +229,11 @@ func _draw_help() -> void:
 		_text(
 			font,
 			Vector2(MARGIN, view.y - MARGIN),
-			"bez opisu: %s" % ", ".join(missing),
+			"undocumented: %s" % ", ".join(missing),
 			BAD,
 		)
 	else:
-		_text(font, Vector2(MARGIN, view.y - MARGIN), "ESC albo ? zamyka", DIM)
+		_text(font, Vector2(MARGIN, view.y - MARGIN), "ESC or ? closes", DIM)
 
 
 ## Where to break the list into two columns: at the block boundary that

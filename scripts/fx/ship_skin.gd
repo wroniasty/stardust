@@ -1,6 +1,6 @@
 class_name ShipSkin
 extends Node2D
-## Obraz statku: kadłub, dysze, pióropusze, działa, podwozie.
+## The picture of the ship: hull, nozzles, plumes, guns, legs.
 ##
 ## Reads the ship, never writes to it. Every number it uses -- throttle,
 ## gimbal, gun facing, gear extension, daylight -- the simulation was already
@@ -143,7 +143,7 @@ func rebuild() -> void:
 ## The hull picture, if this shape is one of the named ones.
 ##
 ## Matched on the outline rather than read off a field, which is the cheap
-## half of M3.5's "kadłuby jako zasoby". The expensive half is collapsing
+## half of M3.5's "hulls as resources". The expensive half is collapsing
 ## `CreativeTool.SHAPES` and the `ShipFitout` presets onto the resources, and
 ## until that happens a field on the ship would be a fourth copy of the
 ## catalogue for three callers to forget to set.

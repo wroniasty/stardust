@@ -1,6 +1,6 @@
 class_name SpeedVeil
 extends CanvasLayer
-## Pęd: rozmycie i smugi, kiedy się leci szybko i jest czym.
+## Rush: blur and streaks, when the ship is fast and there is air to carry them.
 ##
 ## The sibling of `TransitVeil` and deliberately the opposite kind of
 ## thing. A jump is an event that takes the screen away for two

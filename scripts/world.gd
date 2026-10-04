@@ -214,6 +214,12 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	if to_index >= 0:
 		Galaxy.here = to_index
 		Galaxy.at = Galaxy.map.positions[to_index]
+	# The pin was a point in the system being left, and system pixels mean
+	# nothing in the next one. Dropped rather than carried: a marker that
+	# quietly reappeared over a different world would be worse than one
+	# that is gone. Misjumps come through here too -- they emit `crossed`
+	# with -1 -- so this is the one place it has to happen.
+	NavMarker.unmark()
 	var landing: StarSystem = Galaxy.current()
 	StreamingManager.bind(landing, systems, Galaxy.time)
 	StreamingManager.track(ship)
@@ -510,6 +516,7 @@ func _open_system() -> void:
 		Galaxy.here = int(sky["here"])
 		Galaxy.at = sky["at"] as Vector2
 		Galaxy.time = float(sky["time"])
+		NavMarker.marked = sky.get("marked", Vector2.INF)
 		for key: Variant in sky["deltas"]:
 			Galaxy.deltas[key] = (sky["deltas"][key] as Dictionary).duplicate(true)
 	var here: StarSystem = Galaxy.current()
