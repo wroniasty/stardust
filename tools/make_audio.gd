@@ -41,9 +41,19 @@ func _build_buses() -> void:
 		AudioServer.set_bus_name(i, BUSES[i])
 		if i > 0:
 			AudioServer.set_bus_send(i, BUSES[0])
+	# Cleared before it is added, because the live server this is built
+	# from **already has the saved layout loaded**: the project points
+	# at it in `project.godot`, so the second run of this tool put a
+	# second low-pass on the Sfx bus, the third a third, and the file
+	# grew every time. `Soundscape` only ever drives effect zero, so the
+	# extras sat there wide open doing nothing -- harmless, invisible,
+	# and permanent.
+	var sfx: int = BUSES.find(&"Sfx")
+	while AudioServer.get_bus_effect_count(sfx) > 0:
+		AudioServer.remove_bus_effect(sfx, 0)
 	var muffle: AudioEffectLowPassFilter = AudioEffectLowPassFilter.new()
 	muffle.cutoff_hz = 20000.0
-	AudioServer.add_bus_effect(BUSES.find(&"Sfx"), muffle)
+	AudioServer.add_bus_effect(sfx, muffle)
 
 	var error: int = ResourceSaver.save(AudioServer.generate_bus_layout(), LAYOUT)
 	if error != OK:
@@ -62,6 +72,116 @@ func _build_samples() -> void:
 	_store(_crack(), "crack")
 	_store(_tick(), "tick")
 	_store(_bed(), "bed", true)
+	_build_engines()
+
+
+## One loop per kind of engine, and the two events that bracket them.
+##
+## Per kind rather than per engine, because what makes a main drive
+## sound different from an attitude thruster is what it **is**, not
+## which one it is: the pitch and the loudness come off the simulation
+## every tick, so two drives of the same kind at different throttles
+## already sound different without two samples.
+##
+## All three loop a whole number of cycles, or the loop point clicks --
+## which on a sound that is running for minutes at a time is the only
+## defect anybody would ever notice.
+func _build_engines() -> void:
+	_store(_drive_loop(), "engine_main", true)
+	_store(_thruster_loop(), "engine_thruster", true)
+	_store(_torque_loop(), "engine_torque", true)
+	_store(_ignite(), "engine_ignite")
+	_store(_cut(), "engine_cut")
+
+
+## A big drive: a low fundamental with its harmonics, and enough noise
+## over the top that it reads as combustion rather than as an organ.
+func _drive_loop() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 101
+	var length: int = RATE
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var tone: float = (
+			sin(TAU * 52.0 * at) * 0.50
+			+ sin(TAU * 104.0 * at) * 0.22
+			+ sin(TAU * 157.0 * at) * 0.10
+		)
+		out.append(tone + rng.randf_range(-1.0, 1.0) * 0.16)
+	return out
+
+
+## An attitude thruster: almost all noise, almost no tone. Small and
+## sharp, because that is what it is -- the loudness curve has to be
+## able to put one of these next to a main drive without them merging.
+func _thruster_loop() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 202
+	var length: int = RATE / 2
+	var rolling: float = 0.0
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		# A one-pole smoother on the noise, which is the cheapest way to
+		# get hiss rather than static: white noise at 22 kHz is a fizz
+		# and has no size to it at all.
+		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.35)
+		out.append(rolling * 0.75 + sin(TAU * 420.0 * at) * 0.08)
+	return out
+
+
+## A torque jet: harsh and buzzy, because an impulse engine is.
+##
+## The pulsing itself is **not** in here. The simulation switches these
+## fully on and fully off, tick by tick, at a rate that is the throttle
+## it was asked for -- so the modulation is already in the code, and
+## baking a second one into the sample would beat against it.
+func _torque_loop() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 303
+	var length: int = RATE / 2
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		# A squared-off tone rather than a sine: a jet that has only two
+		# states should not sound like something with a dial.
+		var square: float = 1.0 if sin(TAU * 138.0 * at) >= 0.0 else -1.0
+		out.append(square * 0.34 + rng.randf_range(-1.0, 1.0) * 0.22)
+	return out
+
+
+## Catching: noise swelling and a pitch climbing out of nothing.
+func _ignite() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 404
+	var length: int = int(RATE * 0.22)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		# Swelling, not decaying, which is the whole difference between
+		# this and everything else in the file: an ignition is the one
+		# sound in the game that gets louder as it goes.
+		var swell: float = along * along
+		var hz: float = lerpf(60.0, 190.0, along)
+		out.append((sin(TAU * hz * at) * 0.5 + rng.randf_range(-1.0, 1.0) * 0.5) * swell)
+	return out
+
+
+## And going out: the opposite, short.
+func _cut() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 505
+	var length: int = int(RATE * 0.16)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		var fade: float = (1.0 - along) * (1.0 - along)
+		var hz: float = lerpf(170.0, 55.0, along)
+		out.append((sin(TAU * hz * at) * 0.6 + rng.randf_range(-1.0, 1.0) * 0.3) * fade)
+	return out
 
 
 ## Something heavy arriving: a low tone that drops as it dies.

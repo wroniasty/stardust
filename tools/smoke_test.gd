@@ -1001,6 +1001,7 @@ func _evaluate_phase() -> void:
 			_check_camera_shake()
 			_check_ship_wear()
 			_check_soundscape()
+			_check_engine_choir()
 			_check_debris()
 			_check_rarity_travels()
 			_check_affix_pools()
@@ -8899,6 +8900,179 @@ func _check_sound_seams() -> void:
 	)
 
 	stage.free()
+	ship.queue_free()
+
+
+## Silniki slychać: pętla na typ, i modulacja, która jest w kodzie.
+##
+## Nothing here is scripted, which is the property worth checking. A
+## drive spooling up gets louder because `exhaust_flow()` went up; a
+## cutting-out engine goes quiet because the flow dropped. Pass an
+## assertion on a number the simulation produced and the sound is
+## following the game rather than running beside it.
+##
+## The torque jet is the one with a design decision in it. IDEAS.md
+## says these "sound pulsed because they are, and the modulation is in
+## the code": the simulation switches an impulse engine fully on and
+## fully off tick by tick, so the loudness only has to be allowed to
+## keep up. That is one number -- the response time -- and it is the
+## difference between a jet and a hum.
+func _check_engine_choir() -> void:
+	var ship: Ship = _spawn_ship()
+	var choir: EngineChoir = EngineChoir.new()
+	root.add_child(choir)
+	choir._ship = ship
+	choir.rebuild()
+
+	_expect(
+		choir.voice_count() == ship.engines.size() and ship.engines.size() > 1,
+		"every fitted engine gets a voice, and only the fitted ones (%d)" % [
+			choir.voice_count(),
+		],
+	)
+
+	var drive: EngineInstance = null
+	var jet: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.data.type == EngineData.Type.MAIN and drive == null:
+			drive = engine
+		if engine.data.type == EngineData.Type.TORQUE and jet == null:
+			jet = engine
+	_expect(drive != null and jet != null, "the hull has one of each kind to listen to")
+	if drive == null or jet == null:
+		choir.free()
+		ship.queue_free()
+		return
+
+	# Silent until something burns. An idle ship is an idle ship.
+	for tick: int in range(30):
+		choir.sing(1.0 / 60.0)
+	_expect(
+		choir.level_of(drive.mount.name) < EngineChoir.QUIETEST,
+		"a ship doing nothing makes no noise (%.3f)" % choir.level_of(drive.mount.name),
+	)
+
+	# Up with the flow, and the loudness is the flow rather than a
+	# switch: half a throttle is audibly less than a whole one.
+	drive.throttle = 0.5
+	for tick: int in range(60):
+		choir.sing(1.0 / 60.0)
+	var half: float = choir.level_of(drive.mount.name)
+	drive.throttle = 1.0
+	for tick: int in range(60):
+		choir.sing(1.0 / 60.0)
+	var full: float = choir.level_of(drive.mount.name)
+	_expect(
+		half > EngineChoir.QUIETEST and full > half * 1.5,
+		"the drive follows the throttle rather than switching on (%.2f against %.2f)" % [
+			half, full,
+		],
+	)
+
+	# And boost is louder than full, because the nozzle really is
+	# throwing three times as much. The plume had to learn this too.
+	drive.boosting = true
+	for tick: int in range(60):
+		choir.sing(1.0 / 60.0)
+	var boosted: float = choir.level_of(drive.mount.name)
+	drive.boosting = false
+	_expect(
+		boosted > full * 1.2 if drive.data.can_boost() else true,
+		"emergency power is heard as emergency power (%.2f against %.2f)" % [boosted, full],
+	)
+
+	# The torque jet. Held at a steady command, the simulation pulses it
+	# on and off, and the loudness has to swing with it: measured as the
+	# spread of the level over a second, against the main drive's, which
+	# is being asked for exactly the same thing and should be flat.
+	for tick: int in range(120):
+		choir.sing(1.0 / 60.0)
+	var jet_low: float = INF
+	var jet_high: float = 0.0
+	var drive_low: float = INF
+	var drive_high: float = 0.0
+	jet.target_throttle = 0.5
+	drive.throttle = 1.0
+	for tick: int in range(120):
+		jet.advance(1.0 / 60.0)
+		choir.sing(1.0 / 60.0)
+		if tick < 20:
+			continue
+		var heard: float = choir.level_of(jet.mount.name)
+		jet_low = minf(jet_low, heard)
+		jet_high = maxf(jet_high, heard)
+		var steady: float = choir.level_of(drive.mount.name)
+		drive_low = minf(drive_low, steady)
+		drive_high = maxf(drive_high, steady)
+	_expect(
+		jet_high - jet_low > 0.05,
+		"an impulse engine is heard pulsing, because that is what it does (%.2f to %.2f)" % [
+			jet_low, jet_high,
+		],
+	)
+	_expect(
+		drive_high - drive_low < (jet_high - jet_low) * 0.25,
+		"while a drive held at the same command sits still (%.3f against %.3f)" % [
+			drive_high - drive_low, jet_high - jet_low,
+		],
+	)
+
+	# A wrecked engine wanders. The **gaps** are not in this file: a
+	# failing engine already drops out in the simulation, which takes
+	# the flow down and the loudness with it. Only the wandering had to
+	# be added, because nothing in the model wobbles.
+	var sound: Array[float] = []
+	drive.health = 0.25
+	for tick: int in range(60):
+		choir.sing(1.0 / 60.0)
+		sound.append(choir._voices[drive.mount.name].pitch_scale)
+	var hurt_low: float = sound[0]
+	var hurt_high: float = sound[0]
+	for heard: float in sound:
+		hurt_low = minf(hurt_low, heard)
+		hurt_high = maxf(hurt_high, heard)
+	drive.health = 1.0
+	sound.clear()
+	for tick: int in range(60):
+		choir.sing(1.0 / 60.0)
+		sound.append(choir._voices[drive.mount.name].pitch_scale)
+	var well_low: float = sound[0]
+	var well_high: float = sound[0]
+	for heard: float in sound:
+		well_low = minf(well_low, heard)
+		well_high = maxf(well_high, heard)
+	_expect(
+		hurt_high - hurt_low > (well_high - well_low) + 0.02,
+		"a broken engine wanders and a sound one holds its note (%.3f against %.3f)" % [
+			hurt_high - hurt_low, well_high - well_low,
+		],
+	)
+
+	# And it lets go of its loops. A looping stream held by a player at
+	# exit is a resource Godot reports as still in use, and `check.ps1`
+	# cannot tell that apart from a leak that matters.
+	var quiet: bool = true
+	for key: Variant in choir._voices:
+		var voice: AudioStreamPlayer2D = choir._voices[key]
+		if voice.playing and choir.level_of(key as StringName) < EngineChoir.QUIETEST:
+			quiet = false
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 0.0
+		engine.target_throttle = 0.0
+	for tick: int in range(120):
+		choir.sing(1.0 / 60.0)
+	var still_running: int = 0
+	for key: Variant in choir._voices:
+		if (choir._voices[key] as AudioStreamPlayer2D).playing:
+			still_running += 1
+	_expect(
+		quiet and still_running == 0,
+		"a silent engine is stopped rather than played quietly (%d still going)" % [
+			still_running,
+		],
+	)
+
+	choir.free()
 	ship.queue_free()
 
 

@@ -521,10 +521,51 @@ cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
 
 ### S1: Silniki
 
-- [ ] Pętla na typ silnika, wysokość i głośność z `effective_output()`.
-- [ ] Silniki TORQUE brzmią impulsowo, bo takie są — modulacja jest w kodzie.
-- [ ] Zapłon i zgaszenie jako osobne zdarzenia (zadanie szwu).
-- [ ] Uszkodzony silnik brzmi gorzej: oscylacja, przerwy.
+- [x] Pętla na typ silnika, wysokość i głośność z `effective_output()`.
+  `EngineChoir`: jeden głos na zamontowany silnik, postawiony przy dyszy,
+  głośność i wysokość czytane co tik. Jedna próbka na **rodzaj**, nie na
+  sztukę — dwa napędy tego samego typu na różnym ciągu już brzmią inaczej,
+  bo różnica idzie z liczb. Czytane z `exhaust_flow()`, a nie z
+  `effective_output()`: dopalanie naprawdę wyrzuca trzy razy tyle i ma być
+  słyszać. **Zawsze przez konstrukcję** — silniki to najczystszy przypadek
+  reguły próżni, słychać je przez kadłub, w którym się siedzi.
+- [x] Silniki TORQUE brzmią impulsowo, bo takie są — modulacja jest w kodzie.
+  I rzeczywiście **nie trzeba jej nigdzie dopisywać**: symulacja włącza i
+  wyłącza silnik impulsowy co tik, z częstotliwością równą żądanemu ciągowi,
+  więc wystarczyło pozwolić głośności nadążyć. Cała decyzja to jedna liczba
+  — czas reakcji, 12 ms przeciwko 100 ms głównego napędu — i to jest różnica
+  między odrzutem a buczącym tonem. Widoczne w `soundcheck`:
+
+  | mount | typ | thr 0,25 | thr 0,50 | thr 1,00 |
+  |---|---|---|---|---|
+  | MainDrive | main | 0,25 ±0,00 | 0,50 ±0,00 | 1,00 ±0,00 |
+  | NoseLeftTorque | torque | 0,11 ±0,21 | 0,21 ±0,21 | 0,42 ±0,00 |
+  | StrafeLeftThruster | thruster | 0,12 ±0,00 | 0,25 ±0,00 | 0,50 ±0,00 |
+
+  Przy pełnym żądaniu dławik pali **co tik**, więc przestaje chlupać i
+  przechodzi w ciągły ryk — to też jest w kodzie, nie w próbce.
+- [x] Zapłon i zgaszenie jako osobne zdarzenia (zadanie szwu).
+  `Ship.engine_ignited` / `engine_cut`, z histerezą na `EngineInstance.lit`.
+  Grane przez `Soundscape`, nie przez własny głos silnika: pętla jest tym, co
+  trwa, zapłon tym, co się dzieje, a granie drugiego na pierwszym znaczyłoby
+  zatrzymanie pętli, żeby to zrobić.
+- [x] Uszkodzony silnik brzmi gorzej: oscylacja, przerwy.
+  **Przerwy były za darmo**: padający silnik już wypada w symulacji, co
+  zbija przepływ, a przepływ zbija głośność. Dopisana została sama
+  oscylacja — chwiejna wysokość proporcjonalna do `1 - health` — bo w
+  modelu nic nie drży.
+- Dwie rzeczy przy okazji. **Głos milczącego silnika jest zatrzymany, nie
+  wyciszony**: spauzowany odtwarzacz to nadal odtworzenie zarejestrowane w
+  serwerze audio, a ośmiu takich przeżywa zamknięcie na tyle długo, że Godot
+  zgłasza ich strumienie jako „still in use" — czego `check.ps1` nie odróżni
+  od prawdziwego wycieku. Wyjście **w trakcie palenia** nadal zostawia jeden
+  taki wpis i z GDScript nie da się tego domknąć: to wyścig z wątkiem audio
+  przy wyłączaniu silnika. Bezczynny przebieg `check.ps1` jest czysty.
+  I drugie: `make_audio.gd` **dokładał kolejny filtr** do magistrali `Sfx`
+  przy każdym uruchomieniu, bo buduje układ z żywego serwera, który ma już
+  wczytany zapisany układ. `Soundscape` steruje tylko efektem zerowym, więc
+  nadmiarowe siedziały otwarte i nie robiąc nic — nieszkodliwe, niewidoczne
+  i trwałe.
 
 ### S2: Kadłub, lądowanie, śmierć
 
