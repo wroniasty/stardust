@@ -289,6 +289,14 @@ signal landed(planet: Planet)
 ## wreck can be thrown in the right direction.
 signal destroyed(at: Vector2, velocity: Vector2)
 
+## Back in one piece, somewhere else.
+##
+## The counterpart to `destroyed`, and the same kind of seam: a
+## revival is a thing that happens once, and inferring it from the
+## hull integrity jumping back to one is inferring an event from a
+## number that has several other reasons to move.
+signal respawned()
+
 ## Emitted whenever the hull changes, for the HUD.
 signal hull_changed(integrity: float)
 
@@ -2058,6 +2066,7 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 
 	hull_changed.emit(hull_integrity)
 	flight_mode_changed.emit(flight_mode)
+	respawned.emit()
 
 
 ## How many hull points were inside rock last tick.

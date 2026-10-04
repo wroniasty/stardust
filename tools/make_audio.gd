@@ -73,6 +73,7 @@ func _build_samples() -> void:
 	_store(_tick(), "tick")
 	_store(_bed(), "bed", true)
 	_build_engines()
+	_build_hull()
 
 
 ## One loop per kind of engine, and the two events that bracket them.
@@ -92,6 +93,136 @@ func _build_engines() -> void:
 	_store(_torque_loop(), "engine_torque", true)
 	_store(_ignite(), "engine_ignite")
 	_store(_cut(), "engine_cut")
+
+
+## What the hull itself does: being hit, being put down on its feet,
+## being refused, and coming apart.
+##
+## The impact is deliberately **not** one sample per severity. A tap and
+## a crash are the same event at different speeds, and `hull_impact`
+## carries the speed -- so the pitch and the loudness do the work, and
+## the grind is layered on above a threshold rather than replacing
+## anything. One more sample per severity would be three numbers nobody
+## could keep in step.
+func _build_hull() -> void:
+	_store(_grind(), "hull_grind")
+	_store(_creak(), "hull_creak")
+	_store(_servo(), "gear_servo")
+	_store(_clunk(), "gear_touch")
+	_store(_deny(), "deny")
+	_store(_blast(), "explode")
+	_store(_revive(), "respawn")
+
+
+## Metal dragging on rock: noise with a slow flutter over it, so it
+## reads as a surface being scraped rather than as a hiss.
+func _grind() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 606
+	var length: int = int(RATE * 0.42)
+	var rolling: float = 0.0
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.5)
+		var flutter: float = 0.6 + 0.4 * sin(TAU * 37.0 * at)
+		out.append(rolling * flutter * exp(-at * 3.0) * 0.9)
+	return out
+
+
+## A hull settling: a low groan that goes nowhere.
+func _creak() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var length: int = int(RATE * 0.55)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		# Bowed in the middle: a creak starts, strains and lets go,
+		# which a plain decay does not do.
+		var swell: float = sin(PI * along)
+		var hz: float = lerpf(88.0, 76.0, along)
+		out.append((sin(TAU * hz * at) * 0.7 + sin(TAU * hz * 2.7 * at) * 0.2) * swell * 0.5)
+	return out
+
+
+## The gear coming down: a servo whine, flat and mechanical.
+func _servo() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 707
+	var length: int = int(RATE * 0.6)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		# Eased at both ends, because a motor that starts and stops at
+		# full volume reads as a click either side of a tone.
+		var shape: float = minf(along * 8.0, minf(1.0, (1.0 - along) * 8.0))
+		var hz: float = 330.0 + 18.0 * sin(TAU * 9.0 * at)
+		out.append((sin(TAU * hz * at) * 0.5 + rng.randf_range(-1.0, 1.0) * 0.1) * shape)
+	return out
+
+
+## Feet on ground: a dull clunk with no ring to it.
+func _clunk() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 808
+	var length: int = int(RATE * 0.18)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var fade: float = exp(-at * 26.0)
+		out.append((sin(TAU * 96.0 * at) * 0.7 + rng.randf_range(-1.0, 1.0) * 0.35) * fade)
+	return out
+
+
+## No. Two short falling blips, which is the shape of a refusal in every
+## cockpit anyone has ever sat in.
+func _deny() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var length: int = int(RATE * 0.2)
+	var gap: int = int(RATE * 0.055)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var within: int = i if i < gap else i - gap
+		var inside: float = float(within) / float(gap)
+		var blip: float = 0.0
+		if inside <= 1.0:
+			blip = sin(TAU * (520.0 if i < gap else 390.0) * at) * (1.0 - inside)
+		out.append(blip * 0.55)
+	return out
+
+
+## Coming apart: everything at once, then a long tail.
+func _blast() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 909
+	var length: int = RATE
+	var rolling: float = 0.0
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.6)
+		# Two decays: a crack that is gone in a tenth of a second over a
+		# rumble that takes a second. One rate cannot be both.
+		var snap: float = exp(-at * 22.0)
+		var roll: float = exp(-at * 2.2)
+		out.append(
+			rolling * snap * 0.8 + sin(TAU * lerpf(70.0, 30.0, minf(at, 1.0)) * at) * roll * 0.6
+		)
+	return out
+
+
+## Back in one piece: a tone climbing out of nothing and stopping.
+func _revive() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var length: int = int(RATE * 0.5)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		var hz: float = lerpf(180.0, 520.0, along * along)
+		var shape: float = minf(along * 6.0, 1.0) * (1.0 - along * along * 0.8)
+		out.append(sin(TAU * hz * at) * shape * 0.5)
+	return out
 
 
 ## A big drive: a low fundamental with its harmonics, and enough noise

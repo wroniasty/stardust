@@ -569,10 +569,30 @@ cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
 
 ### S2: Kadłub, lądowanie, śmierć
 
-- [ ] Uderzenie skalowane `impact_speed` — od stuknięcia do zgrzytu.
-- [ ] Wysuwanie podwozia, przyziemienie na nogach, skrzypienie przy postoju.
-- [ ] Odmowa lądowania (`landing_rejected`) jako krótki sygnał z powodem.
-- [ ] Eksplozja i respawn.
+- [x] Uderzenie skalowane `impact_speed` — od stuknięcia do zgrzytu.
+  **Jedno zdarzenie przy dwóch prędkościach, nie dwie próbki.** Sygnał i tak
+  niesie prędkość, więc robią to wysokość i głośność: 1,45 → 0,72 w skali
+  wysokości, bo opadająca wysokość to większość tego, co każe odbierać cios
+  jako masę, a nie jako po prostu głośno. Zgrzyt jest **nakładany** powyżej
+  progu, a nie podmieniany — złe lądowanie to łomot *i* tarcie. Poniżej
+  6% prędkości odniesienia nic nie gra: statek siadający na nóżki dotyka
+  gruntu kilkanaście razy na sekundę.
+- [x] Wysuwanie podwozia, przyziemienie na nogach, skrzypienie przy postoju.
+  Skrzypienie tylko na postoju i **z losowaną przerwą**, nie na zegarze —
+  skrzypnięcie w stałym odstępie przestaje być skrzypnięciem po drugim razie.
+  Przerwa losowana od nowa za każdym razem i zerowana przy starcie, żeby
+  statek, który odleci w połowie odliczania, nie skrzypiał natychmiast po
+  wylądowaniu gdzie indziej.
+- [x] Odmowa lądowania (`landing_rejected`) jako krótki sygnał z powodem.
+  Dwa opadające piki, drogą `INTERFACE` — i to jest tu cała decyzja.
+  Annuncjator w kabinie, który milknie w próżni, to annuncjator, który nie
+  zrozumiał, po której stronie szyby siedzi. Sprawdzane przy zerowym
+  powietrzu, bo inaczej test przechodziłby z przypadku.
+- [x] Eksplozja i respawn.
+  Doszedł jeden sygnał na linii głównej: `Ship.respawned`. Wnioskowanie
+  o powrocie z tego, że integralność kadłuba skoczyła do jedynki, to
+  wnioskowanie o zdarzeniu z liczby, która ma kilka innych powodów, żeby się
+  ruszyć.
 
 ### S3: Broń i teren
 

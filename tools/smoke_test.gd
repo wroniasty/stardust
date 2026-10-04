@@ -1002,6 +1002,7 @@ func _evaluate_phase() -> void:
 			_check_ship_wear()
 			_check_soundscape()
 			_check_engine_choir()
+			_check_hull_voice()
 			_check_debris()
 			_check_rarity_travels()
 			_check_affix_pools()
@@ -9073,6 +9074,140 @@ func _check_engine_choir() -> void:
 	)
 
 	choir.free()
+	ship.queue_free()
+
+
+## Kadłub: od stuknięcia do zgrzytu, podwozie, odmowa, koniec.
+##
+## Counted rather than listened to, the same way the vacuum rule is:
+## headless there is nothing to hear, so `Soundscape.play()` reports
+## whether it spent a voice and everything below is read off that.
+##
+## The impact is the one with a decision in it. A tap and a crash are
+## **one event at two speeds**, not two samples -- `hull_impact`
+## already carries the speed, so the pitch and the loudness do the
+## work. The grind is layered over the thump above a threshold rather
+## than replacing it, because a bad landing is a thud and a scrape.
+func _check_hull_voice() -> void:
+	var ship: Ship = _spawn_ship()
+	var sound: Soundscape = Soundscape.new()
+	root.add_child(sound)
+	var voice: HullVoice = HullVoice.new()
+	root.add_child(voice)
+	voice._ship = ship
+	ship.hull_impact.connect(voice._on_impact)
+	ship.landed.connect(voice._on_landed)
+	ship.landing_rejected.connect(voice._on_refused)
+	ship.destroyed.connect(voice._on_destroyed)
+	ship.respawned.connect(voice._on_respawned)
+
+	# `_next` counts voices actually spent, which is the only thing a
+	# headless run can know about a sound.
+	var spent: Callable = func() -> int: return sound._next
+
+	# A ship settling onto its feet touches the ground a dozen times a
+	# second, and none of those is a sound.
+	var before: int = spent.call()
+	ship.hull_impact.emit(HullVoice.REFERENCE_SPEED * 0.02, 0.0)
+	_expect(
+		spent.call() == before,
+		"a contact too gentle to notice is not a noise",
+	)
+
+	# A knock: one sound. A crash: two, because the grind goes on top.
+	before = spent.call()
+	ship.hull_impact.emit(HullVoice.REFERENCE_SPEED * 0.15, 0.05)
+	var knock: int = spent.call() - before
+	before = spent.call()
+	ship.hull_impact.emit(HullVoice.REFERENCE_SPEED * 1.0, 0.6)
+	var crash: int = spent.call() - before
+	_expect(
+		knock == 1 and crash == 2,
+		"a tap is a thud and a crash is a thud and a scrape (%d, %d)" % [knock, crash],
+	)
+
+	# And the thud itself is one sample at two pitches. Falling pitch is
+	# most of what makes a hit read as mass rather than as volume.
+	_expect(
+		HullVoice.KNOCK_PITCH.y < HullVoice.KNOCK_PITCH.x,
+		"the harder it lands the lower it sounds (%.2f down to %.2f)" % [
+			HullVoice.KNOCK_PITCH.x, HullVoice.KNOCK_PITCH.y,
+		],
+	)
+
+	# The gear, the feet, the blast.
+	before = spent.call()
+	if ship.gear != null:
+		voice._on_gear_moving(true)
+	ship.landed.emit(null)
+	ship.destroyed.emit(ship.global_position, Vector2.ZERO)
+	_expect(
+		spent.call() - before == 3,
+		"the gear, the touchdown and the end are each heard once (%d)" % [
+			spent.call() - before,
+		],
+	)
+
+	# The refusal and the revival are **interface** sounds, which is the
+	# part worth pinning. A cockpit annunciator that went quiet in
+	# vacuum would be one that had misunderstood which side of the glass
+	# it is on -- so they are checked with no air at all.
+	sound.density = 0.0
+	before = spent.call()
+	ship.landing_rejected.emit("za stromo")
+	ship.respawned.emit()
+	_expect(
+		spent.call() - before == 2,
+		"refusing a landing and coming back are heard in vacuum (%d)" % [
+			spent.call() - before,
+		],
+	)
+
+	# A hull only complains while it is standing on something, and it
+	# does not complain on a timer: a creak at a fixed interval stops
+	# being a creak after the second one.
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	before = spent.call()
+	for tick: int in range(1200):
+		voice.settle(1.0 / 60.0)
+	_expect(
+		spent.call() == before,
+		"a ship in flight does not creak (%d)" % [spent.call() - before],
+	)
+
+	ship.flight_mode = Ship.FlightMode.LANDED
+	var gaps: Array[float] = []
+	var waited: float = 0.0
+	before = spent.call()
+	for tick: int in range(3600):
+		var was: int = spent.call()
+		voice.settle(1.0 / 60.0)
+		waited += 1.0 / 60.0
+		if spent.call() > was:
+			gaps.append(waited)
+			waited = 0.0
+	_expect(
+		gaps.size() >= 3,
+		"a hull on its legs complains now and then (%d times in a minute)" % gaps.size(),
+	)
+	var same: bool = true
+	for step: int in range(1, gaps.size()):
+		if absf(gaps[step] - gaps[0]) > 0.05:
+			same = false
+	_expect(
+		not same and gaps.size() >= 3,
+		"and not on a metronome (%s)" % [gaps],
+	)
+	var outside: int = 0
+	for gap: float in gaps:
+		if gap < HullVoice.CREAK_GAP.x - 0.1 or gap > HullVoice.CREAK_GAP.y + 0.1:
+			outside += 1
+	_expect(outside == 0, "with every gap inside the band it rolls from")
+
+	for spoken: Node in sound.get_children():
+		(spoken as AudioStreamPlayer2D).stream = null
+	voice.free()
+	sound.free()
 	ship.queue_free()
 
 
