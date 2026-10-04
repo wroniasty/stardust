@@ -623,13 +623,56 @@ Zero dźwięku dzisiaj, więc pierwszy krok jest duży, a każdy następny mały
   zostawia samo `play()` czystym zapisem reguły, który test może pogonić.
 
 Gotowe, gdy: przelot przez atmosferę słychać jako wejście świata, a nie
-jako zmianę głośności. **Mechanizm stoi; same dźwięki to placeholdery** —
+jako zmianę głośności. **Mechanizm stoi; większość dźwięków to nadal
+placeholdery** — poza trzema pętlami silników, które są już prawdziwymi
+nagraniami (patrz S1) —
 cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
 żeby każde zdarzenie z S1 wzwyż miało co pożyczyć, zanim dostanie swoje.
 
 ### S1: Silniki
 
 - [x] Pętla na typ silnika, wysokość i głośność z `effective_output()`.
+  **Od nagrań, nie od syntezy** (druga wersja). `assets/audio/main1.wav`
+  napędza główny silnik, `thruster1.wav` — dławiki obrotowe i stery boczne.
+  Źródła leżą w `assets/`, bo to wejście, którego nikt nie powinien edytować
+  w miejscu; `resources/audio` to wyjście, które `make_audio.gd` nadpisuje bez
+  pytania.
+
+  **Żadne z dwóch nie było pętlą**, i to jest warte zapisania, bo oba trwają
+  równe sekundy i wyglądają jak pętle: zmierzony skok na zapięciu to 11680
+  przy typowej różnicy między sąsiednimi próbkami 74 (`main1`) i 14898 przy
+  52 (`thruster1`) — 158 i 286 razy. Klik co obrót, pod dźwiękiem, który gra
+  minutami. Ogon jest teraz **wmieszany w głowę** przeplotem o równej mocy
+  (90 ms); po tym zapięcie wynosi 0,0×, 1,1× i 0,7× typowego kroku, czyli
+  jest nie do odróżnienia od każdego innego przejścia w fali.
+
+  **Mono**, bo to dźwięki pozycyjne — silnik słychać przy jego własnej dyszy, a
+  `AudioStreamPlayer2D` nie ma co zrobić z dwoma kanałami. `thruster1` ma
+  realną szerokość (różnica stron 11012 przeciwko 2354 w `main1`) i jej
+  złożenie to strata warta poniesienia dla źródła punktowego.
+
+  **48 kHz zachowane**, nie zredukowane do 22050 reszty placeholderów:
+  symulacja podnosi wysokość do 1,28, a próbka zresamplowana w dół traci górę
+  dokładnie tam, gdzie wysokość o nią prosi.
+
+  **Poziomy dopasowane do tego, co zastępują** (0,40 / 0,36 / 0,21 FS RMS,
+  odczytane ze starych plików), żeby zmieniła się barwa, a nie balans —
+  głośności pasków i cała tabela soundchecku były strojone przeciwko tamtym.
+  Wymagało to **miękkiego kolana** zamiast sufitu: nagranie ma dużo wyższy
+  współczynnik szczytu niż kwadratowa synteza, więc samo przycinanie szczytów
+  zabrało dławikom 4,8 dB. Wzmocnienie jest **szukane iteracyjnie, a krzywa
+  nakładana raz** — nakładana dwa razy kompresuje kaskadowo i pierwsza wersja
+  chybiała każdego celu o ponad decybel.
+
+  **Dławik obrotowy jest obcięty i rozjaśniony** (górnoprzepustowy 420 Hz, 1,1 s
+  zamiast 4): dół czterosekundowego pomruku zamienia się w błoto, kiedy się go
+  siecze dwadzieścia razy na sekundę, a góra niesie krawędź każdego pyknięcia.
+  Pulsowania w próbce **nie ma i być nie może** — jest w kodzie.
+
+  Jedna pułapka po drodze: importer `.wav` Godota domyślnie **kompresuje**, a
+  generator czytał wtedy skompresowane bajty jak próbki — pętle wyszły
+  siedmiokrotnie za krótkie i pełne szumu, i nic tego nie zgłosiło.
+  `compress/mode=0` w obu `.import`, strażnik w generatorze i asercja w teście.
   `EngineChoir`: jeden głos na zamontowany silnik, postawiony przy dyszy,
   głośność i wysokość czytane co tik. Jedna próbka na **rodzaj**, nie na
   sztukę — dwa napędy tego samego typu na różnym ciągu już brzmią inaczej,

@@ -22,6 +22,33 @@ const TABLES: String = "res://resources/fx/sounds"
 
 const RATE: int = 22050
 
+## Where the recordings live, against `resources/audio` for what is
+## built out of them. Two directories because they are two kinds of
+## thing: one is an input nobody should edit in place, the other is
+## output this tool will overwrite without asking.
+const SOURCES: String = "res://assets/audio"
+
+## The rate the recordings came in at, kept rather than reduced.
+##
+## The engine loops are pitched up to 1.28 and down to 0.70 by the
+## simulation, and a sample resampled down first would lose the top of
+## its range exactly where the pitch is asking for it.
+const SOURCE_RATE: int = 48000
+
+## How much of the tail is folded back into the head to close a loop.
+##
+## Neither recording is a loop, which is worth saying plainly because
+## both are exactly whole seconds and look like one: measured, the
+## wrap in `main1` is a step of 11680 against a typical sample-to-
+## sample change of 74, and `thruster1` is 14898 against 52. That is a
+## click every time round, 158 and 286 times the size of anything else
+## in the waveform.
+const CROSSFADE: float = 0.09
+
+## Where the soft knee sits. Below this nothing is touched; above it
+## the curve bends, and nothing ever reaches one.
+const KNEE: float = 0.78
+
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SOUNDS))
@@ -96,9 +123,9 @@ func _build_samples() -> void:
 ## which on a sound that is running for minutes at a time is the only
 ## defect anybody would ever notice.
 func _build_engines() -> void:
-	_store(_drive_loop(), "engine_main", true)
-	_store(_thruster_loop(), "engine_thruster", true)
-	_store(_torque_loop(), "engine_torque", true)
+	_store(_drive_loop(), "engine_main", true, SOURCE_RATE)
+	_store(_thruster_loop(), "engine_thruster", true, SOURCE_RATE)
+	_store(_torque_loop(), "engine_torque", true, SOURCE_RATE)
 	_store(_ignite(), "engine_ignite")
 	_store(_cut(), "engine_cut")
 
@@ -371,61 +398,176 @@ func _revive() -> PackedFloat32Array:
 	return out
 
 
-## A big drive: a low fundamental with its harmonics, and enough noise
-## over the top that it reads as combustion rather than as an organ.
-func _drive_loop() -> PackedFloat32Array:
-	var out: PackedFloat32Array = PackedFloat32Array()
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = 101
-	var length: int = RATE
-	for i: int in range(length):
-		var at: float = float(i) / float(RATE)
-		var tone: float = (
-			sin(TAU * 52.0 * at) * 0.50
-			+ sin(TAU * 104.0 * at) * 0.22
-			+ sin(TAU * 157.0 * at) * 0.10
-		)
-		out.append(tone + rng.randf_range(-1.0, 1.0) * 0.16)
-	return out
-
-
-## An attitude thruster: almost all noise, almost no tone. Small and
-## sharp, because that is what it is -- the loudness curve has to be
-## able to put one of these next to a main drive without them merging.
-func _thruster_loop() -> PackedFloat32Array:
-	var out: PackedFloat32Array = PackedFloat32Array()
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = 202
-	var length: int = RATE / 2
-	var rolling: float = 0.0
-	for i: int in range(length):
-		var at: float = float(i) / float(RATE)
-		# A one-pole smoother on the noise, which is the cheapest way to
-		# get hiss rather than static: white noise at 22 kHz is a fizz
-		# and has no size to it at all.
-		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.35)
-		out.append(rolling * 0.75 + sin(TAU * 420.0 * at) * 0.08)
-	return out
-
-
-## A torque jet: harsh and buzzy, because an impulse engine is.
+## The main drive: `main1.wav`, closed into a loop.
 ##
-## The pulsing itself is **not** in here. The simulation switches these
-## fully on and fully off, tick by tick, at a rate that is the throttle
-## it was asked for -- so the modulation is already in the code, and
-## baking a second one into the sample would beat against it.
+## A recording rather than three sines and some noise, which is what
+## was here before. Everything else about it is left alone -- it is
+## the sound somebody chose -- so the only work is making it loop and
+## putting it at the level the thing it replaces sat at.
+func _drive_loop() -> PackedFloat32Array:
+	return _levelled(_seamless(_source("main1"), CROSSFADE), 0.40)
+
+
+## The attitude thrusters: `thruster1.wav`, two seconds of it.
+##
+## Two rather than all four: the loop is heard constantly while a
+## pilot is station-keeping, and four seconds of .tres is four
+## seconds of base64 in the repository for a second of extra variety
+## nobody will pick out under a gate that is opening and closing.
+func _thruster_loop() -> PackedFloat32Array:
+	return _levelled(
+		_seamless(_slice(_source("thruster1"), 0.35, 2.0), CROSSFADE), 0.21
+	)
+
+
+## The rotational jets: the same recording, cut tighter and brightened.
+##
+## The pulsing is **not** in here and must not be: the simulation
+## switches an impulse engine fully on and off tick by tick, so baking
+## a second modulation into the sample would beat against the one
+## already in the code. What the processing does is make a sound that
+## survives being gated -- a leaner, brighter jet, because the low end
+## of a four second rumble turns to mud when it is chopped at twenty
+## hertz and the top end is what carries the edge of each puff.
 func _torque_loop() -> PackedFloat32Array:
+	var cut: PackedFloat32Array = _slice(_source("thruster1"), 2.4, 1.1)
+	return _levelled(_seamless(_brightened(cut, 420.0), CROSSFADE), 0.36)
+
+
+## One recording, as mono samples.
+##
+## Mono because these are positional: an engine is heard at its own
+## nozzle, and `AudioStreamPlayer2D` has nothing useful to do with two
+## channels. `thruster1` has real width -- the two sides differ by
+## 11012 against the main drive's 2354 -- and folding it down is a
+## loss worth taking for a sound that is coming from a point.
+func _source(name: String) -> PackedFloat32Array:
 	var out: PackedFloat32Array = PackedFloat32Array()
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.seed = 303
-	var length: int = RATE / 2
-	for i: int in range(length):
-		var at: float = float(i) / float(RATE)
-		# A squared-off tone rather than a sine: a jet that has only two
-		# states should not sound like something with a dial.
-		var square: float = 1.0 if sin(TAU * 138.0 * at) >= 0.0 else -1.0
-		out.append(square * 0.34 + rng.randf_range(-1.0, 1.0) * 0.22)
+	var clip: AudioStreamWAV = load("%s/%s.wav" % [SOURCES, name]) as AudioStreamWAV
+	if clip == null:
+		push_error("no recording %s" % name)
+		return out
+	# Raw 16-bit or nothing. Godot's wav importer defaults to a
+	# compressed format, and `data` is then the compressed bytes --
+	# which decode as noise and come out the wrong length, quietly.
+	# The `.import` beside each recording says `compress/mode=0`; this
+	# is what notices when it stops saying it.
+	if clip.format != AudioStreamWAV.FORMAT_16_BITS:
+		push_error(
+			"%s is imported as format %d, not 16-bit PCM: set compress/mode=0"
+			% [name, clip.format]
+		)
+		return out
+	var bytes: PackedByteArray = clip.data
+	var channels: int = 2 if clip.stereo else 1
+	var frames: int = bytes.size() / (2 * channels)
+	for i: int in range(frames):
+		var total: float = 0.0
+		for channel: int in range(channels):
+			total += float(bytes.decode_s16((i * channels + channel) * 2)) / 32768.0
+		out.append(total / float(channels))
 	return out
+
+
+## A window of a recording, in seconds.
+func _slice(samples: PackedFloat32Array, from: float, seconds: float) -> PackedFloat32Array:
+	var first: int = clampi(int(from * SOURCE_RATE), 0, maxi(samples.size() - 1, 0))
+	var last: int = mini(first + int(seconds * SOURCE_RATE), samples.size())
+	return samples.slice(first, last)
+
+
+## Folds the tail back into the head so the loop joins without a click.
+##
+## The result is shorter than what went in by exactly the crossfade,
+## which is the point: the samples that used to be at the end are now
+## mixed into the beginning, so the last sample runs into the first
+## the way any two neighbours do.
+func _seamless(samples: PackedFloat32Array, seconds: float) -> PackedFloat32Array:
+	var fade: int = mini(int(seconds * SOURCE_RATE), samples.size() / 3)
+	if fade <= 0:
+		return samples
+	var length: int = samples.size() - fade
+	var out: PackedFloat32Array = PackedFloat32Array()
+	out.resize(length)
+	for i: int in range(length):
+		if i >= fade:
+			out[i] = samples[i]
+			continue
+		# Equal-power rather than linear: two uncorrelated noises
+		# crossfaded by amplitude dip in the middle, and an engine
+		# loop that got quieter once a second would be worse than the
+		# click this is removing.
+		var along: float = float(i) / float(fade)
+		out[i] = (
+			samples[i] * sqrt(along) + samples[length + i] * sqrt(1.0 - along)
+		)
+	return out
+
+
+## A one-pole high pass, for taking the body out of something that is
+## about to be chopped into puffs.
+func _brightened(samples: PackedFloat32Array, cutoff_hz: float) -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	out.resize(samples.size())
+	var rc: float = 1.0 / (TAU * maxf(cutoff_hz, 1.0))
+	var dt: float = 1.0 / float(SOURCE_RATE)
+	var keep: float = rc / (rc + dt)
+	var last_in: float = 0.0
+	var last_out: float = 0.0
+	for i: int in range(samples.size()):
+		last_out = keep * (last_out + samples[i] - last_in)
+		last_in = samples[i]
+		out[i] = last_out
+	return out
+
+
+## Brings a loop to a target RMS, then pulls it back if that would
+## clip.
+##
+## The targets are the levels of the synthesised loops these replace,
+## measured off the old files rather than chosen: 0.40, 0.21 and 0.36
+## of full scale. The strip volumes and every figure in the soundcheck
+## table were tuned against those, so matching them means the only
+## thing that changes is the timbre -- which is the only thing that
+## was asked to change.
+func _levelled(samples: PackedFloat32Array, target_rms: float) -> PackedFloat32Array:
+	if samples.is_empty():
+		return samples
+	var out: PackedFloat32Array = samples.duplicate()
+	var gain: float = target_rms / maxf(_rms_of(samples), 0.0001)
+	# Searched for, rather than applied twice.
+	#
+	# The knee is a soft ceiling rather than a hard one, because a
+	# recording has a far higher crest factor than the square-ish
+	# synthesis it replaces: scaling to the old RMS and then clamping
+	# the peaks cost the rotational jets 4.8 dB, which is a balance
+	# change nobody asked for. `tanh` gives that back, and on a gas
+	# jet the distortion it trades for is indistinguishable from the
+	# jet.
+	#
+	# Applied to the **original** each time, never to the previous
+	# result: stacking the curve compounds the compression, and the
+	# first version of this undershot every target by more than a dB
+	# for exactly that reason.
+	for attempt: int in range(5):
+		for i: int in range(samples.size()):
+			out[i] = tanh(samples[i] * gain / KNEE) * KNEE
+		var landed: float = _rms_of(out)
+		if absf(landed - target_rms) < target_rms * 0.01:
+			break
+		gain *= target_rms / maxf(landed, 0.0001)
+	return out
+
+
+## Root mean square of a buffer, which is what loudness follows far
+## more closely than the peak does.
+func _rms_of(samples: PackedFloat32Array) -> float:
+	if samples.is_empty():
+		return 0.0
+	var total: float = 0.0
+	for value: float in samples:
+		total += value * value
+	return sqrt(total / float(samples.size()))
 
 
 ## Catching: noise swelling and a pitch climbing out of nothing.
@@ -689,7 +831,12 @@ func _store_table(table: SoundTable, name: String) -> void:
 
 
 ## Writes one sample out as a 16 bit mono AudioStreamWAV.
-func _store(samples: PackedFloat32Array, name: String, loops: bool = false) -> void:
+func _store(
+	samples: PackedFloat32Array,
+	name: String,
+	loops: bool = false,
+	rate: int = RATE,
+) -> void:
 	var bytes: PackedByteArray = PackedByteArray()
 	bytes.resize(samples.size() * 2)
 	for i: int in range(samples.size()):
@@ -697,7 +844,7 @@ func _store(samples: PackedFloat32Array, name: String, loops: bool = false) -> v
 
 	var wav: AudioStreamWAV = AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate = RATE
+	wav.mix_rate = rate
 	wav.stereo = false
 	wav.data = bytes
 	if loops:
@@ -710,4 +857,9 @@ func _store(samples: PackedFloat32Array, name: String, loops: bool = false) -> v
 	if error != OK:
 		push_error("could not write %s (%d)" % [path, error])
 		return
-	print("audio: %-6s %5.2f s -> %s" % [name, float(samples.size()) / float(RATE), path])
+	var peak: float = 0.0
+	for value: float in samples:
+		peak = maxf(peak, absf(value))
+	print("audio: %-16s %5.2f s @ %5d Hz  peak %.2f rms %.3f -> %s" % [
+		name, float(samples.size()) / float(rate), rate, peak, _rms_of(samples), path,
+	])

@@ -1009,6 +1009,7 @@ func _evaluate_phase() -> void:
 			_check_hull_voice()
 			_check_ordnance_voice()
 			_check_sound_tables()
+			_check_engine_loops()
 			_check_debris()
 			_check_rarity_travels()
 			_check_affix_pools()
@@ -10016,6 +10017,114 @@ func _check_drawn_transform() -> void:
 	)
 
 	ship.queue_free()
+
+
+## Pętle silników: nagrania, które muszą się zapinać.
+##
+## The three engine loops are built from two recordings rather than
+## synthesised, and that moved the risk. A generated loop is seamless
+## because the arithmetic closed it; a recording is seamless only
+## because something made it so, and both sources arrived as exactly
+## whole seconds that were **not** loops -- `main1` wrapped with a
+## step 158 times the size of a typical sample-to-sample change and
+## `thruster1` with 286 times. A click once a second, under a sound
+## that runs for minutes.
+##
+## So what is pinned here is the property rather than the waveform: a
+## loop may sound like anything, and must not jump where it joins.
+func _check_engine_loops() -> void:
+	var seams: Array[String] = []
+	var levels: Dictionary = {}
+	for name: String in ["engine_main", "engine_torque", "engine_thruster"]:
+		var clip: AudioStreamWAV = load("res://resources/audio/%s.tres" % name)
+		_expect(clip != null, "there is a loop called %s" % name)
+		if clip == null:
+			continue
+		_expect(
+			clip.loop_mode == AudioStreamWAV.LOOP_FORWARD and clip.loop_end > 0,
+			"%s is marked as a loop and says where it ends (%d)" % [name, clip.loop_end],
+		)
+		var pcm: PackedFloat32Array = _pcm_of(clip)
+		if pcm.size() < 64:
+			continue
+		levels[name] = _rms(pcm)
+
+		# The join, against how much this particular waveform moves
+		# between any two samples. A ratio rather than a figure: a quiet
+		# loop and a loud one have different absolute steps and the same
+		# requirement.
+		var seam: float = absf(pcm[0] - pcm[pcm.size() - 1])
+		var typical: float = _typical_step(pcm)
+		if seam > typical * 4.0:
+			seams.append("%s %.1fx" % [name, seam / maxf(typical, 0.000001)])
+	_expect(
+		seams.is_empty(),
+		"every loop joins without a jump (%s)" % [
+			"all of them" if seams.is_empty() else ", ".join(seams),
+		],
+	)
+
+	# The three against each other. The strip volumes and every figure
+	# in the soundcheck table were tuned when these were synthesised,
+	# so swapping in recordings had to keep the proportions or it would
+	# have been a balance change wearing a timbre change's clothes.
+	_expect(
+		float(levels.get("engine_main", 0.0)) > float(levels.get("engine_torque", 0.0))
+		and float(levels.get("engine_torque", 0.0))
+		> float(levels.get("engine_thruster", 0.0)),
+		"a drive is louder than a jet is louder than a thruster (%.2f, %.2f, %.2f)" % [
+			levels.get("engine_main", 0.0), levels.get("engine_torque", 0.0),
+			levels.get("engine_thruster", 0.0),
+		],
+	)
+
+	# And the recordings themselves have to come in raw. Godot's wav
+	# importer defaults to a compressed format, and the generator then
+	# reads the compressed bytes as if they were samples: the loops it
+	# built came out a seventh of their length and full of noise, and
+	# nothing said so.
+	var compressed: Array[String] = []
+	for name: String in ["main1", "thruster1"]:
+		var source: AudioStreamWAV = load("res://assets/audio/%s.wav" % name)
+		if source == null or source.format != AudioStreamWAV.FORMAT_16_BITS:
+			compressed.append(name)
+	_expect(
+		compressed.is_empty(),
+		"the recordings are imported raw, so the generator reads samples",
+	)
+
+
+## An `AudioStreamWAV`'s 16-bit mono data, as floats.
+func _pcm_of(clip: AudioStreamWAV) -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	if clip == null or clip.format != AudioStreamWAV.FORMAT_16_BITS:
+		return out
+	var bytes: PackedByteArray = clip.data
+	var channels: int = 2 if clip.stereo else 1
+	for i: int in range(bytes.size() / (2 * channels)):
+		out.append(float(bytes.decode_s16(i * 2 * channels)) / 32768.0)
+	return out
+
+
+func _rms(samples: PackedFloat32Array) -> float:
+	var total: float = 0.0
+	for value: float in samples:
+		total += value * value
+	return sqrt(total / float(maxi(samples.size(), 1)))
+
+
+## How much this waveform usually moves between two samples.
+##
+## The median rather than the mean, because a recording has transients
+## and a mean would be dragged up by them until a click looked normal.
+func _typical_step(samples: PackedFloat32Array) -> float:
+	var steps: Array[float] = []
+	for i: int in range(0, samples.size() - 1, 7):
+		steps.append(absf(samples[i + 1] - samples[i]))
+	if steps.is_empty():
+		return 0.0
+	steps.sort()
+	return steps[steps.size() / 2]
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.
