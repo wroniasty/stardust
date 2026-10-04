@@ -1001,6 +1001,7 @@ func _evaluate_phase() -> void:
 			_check_camera_shake()
 			_check_ship_wear()
 			_check_entry()
+			_check_sky()
 			_check_soundscape()
 			_check_engine_choir()
 			_check_hull_voice()
@@ -9489,6 +9490,116 @@ func _check_entry() -> void:
 	trail.free()
 	rush.free()
 	shock.free()
+	ship.queue_free()
+
+
+## Niebo: warstwy paralaksy, mgławice z seeda, gwiazdy gasnące w dzień.
+##
+## The sky is the one part of the game that is drawn entirely in a
+## shader, which makes it the one part a test can say least about. So
+## what is checked here is what a shader cannot be trusted with: that
+## the numbers fed into it come from the seed and from the simulation,
+## and that two systems are two skies.
+func _check_sky() -> void:
+	var field: Starfield = (
+		(load("res://scenes/starfield.tscn") as PackedScene).instantiate() as Starfield
+	)
+	root.add_child(field)
+
+	# Three layers of parallax, which turned out to be done already and
+	# unticked. Read off the shader rather than off a comment: the whole
+	# claim is that the far stars move least, and a single number in the
+	# wrong place would undo it without anybody noticing.
+	var sky_shader: Shader = load("res://shaders/starfield.gdshader") as Shader
+	var source: String = sky_shader.code
+	var layers: int = source.count("star_layer(pixel + world_offset")
+	_expect(
+		layers >= 3,
+		"the field is drawn in %d layers rather than one" % layers,
+	)
+	_expect(
+		source.contains("world_offset * 0.10")
+		and source.contains("world_offset * 0.30")
+		and source.contains("world_offset * 0.65"),
+		"and they move at different rates, far to near, which is the depth",
+	)
+	_expect(
+		source.contains("world_offset * 0.04"),
+		"with the galaxy behind all three of them",
+	)
+
+	# Two systems, two skies, and the same system twice is one sky. The
+	# same rule every other generated thing lives under.
+	var paint: ShaderMaterial = field._sky.material as ShaderMaterial
+	field.dress(20260922)
+	var first: Dictionary = {
+		"seed": paint.get_shader_parameter("sky_seed"),
+		"angle": paint.get_shader_parameter("band_angle"),
+		"colour": paint.get_shader_parameter("band_color"),
+	}
+	field.dress(20260923)
+	var other: Vector2 = paint.get_shader_parameter("sky_seed")
+	field.dress(20260922)
+	_expect(
+		not (first["seed"] as Vector2).is_equal_approx(other),
+		"the next system along has a different sky",
+	)
+	_expect(
+		(paint.get_shader_parameter("sky_seed") as Vector2).is_equal_approx(
+			first["seed"] as Vector2
+		)
+		and is_equal_approx(
+			float(paint.get_shader_parameter("band_angle")), float(first["angle"])
+		),
+		"and coming back to one gives the sky it had",
+	)
+	_expect(
+		float(paint.get_shader_parameter("nebula_amount")) > 0.0
+		and float(paint.get_shader_parameter("band_width")) >= Starfield.BAND_WIDTH.x,
+		"every system gets some of a galaxy, inside the band it rolls from",
+	)
+
+	# And the stars go out in daylight -- which needs **both** air and a
+	# lit side. The day side of an airless moon has a sky full of stars
+	# and so does the night side of a thick atmosphere, so either one
+	# alone must do nothing.
+	var ship: Ship = _spawn_ship()
+	field._ship = ship
+	var system: StarSystem = StarSystem.generate(20260922)
+	var star: Star = (load("res://scenes/star.tscn") as PackedScene).instantiate() as Star
+	root.add_child(star)
+	star.adopt(system.star)
+	var planet: Planet = (load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	root.add_child(planet)
+	planet.adopt(system.planets()[0])
+
+	var towards: Vector2 = (
+		star.global_position - planet.global_position
+	).normalized()
+	var day: Vector2 = planet.global_position + towards * planet.surface_radius * 1.05
+	var night: Vector2 = planet.global_position - towards * planet.surface_radius * 1.05
+
+	ship.global_position = day
+	ship.air_density = 0.0
+	var airless_day: float = field.wanted_daylight()
+	ship.air_density = 1.0
+	var thick_day: float = field.wanted_daylight()
+	ship.global_position = night
+	var thick_night: float = field.wanted_daylight()
+	_expect(
+		is_equal_approx(airless_day, 0.0),
+		"noon on an airless rock still has a sky full of stars (%.2f)" % airless_day,
+	)
+	_expect(
+		thick_day > thick_night and thick_day > 0.5,
+		"and it takes air as well as sunlight to wash them out (%.2f day, %.2f night)" % [
+			thick_day, thick_night,
+		],
+	)
+
+	planet.free()
+	star.free()
+	field.free()
 	ship.queue_free()
 
 

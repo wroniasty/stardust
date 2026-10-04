@@ -27,6 +27,26 @@ uniform vec3 far_color : source_color = vec3(0.55, 0.60, 0.85);
 uniform vec3 mid_color : source_color = vec3(0.80, 0.85, 1.0);
 uniform vec3 near_color : source_color = vec3(1.0, 0.97, 0.90);
 
+// How much of the sky is washed out by being in lit air, 0..1.
+//
+// The stars are **dimmed, not painted over**. Tinting the whole quad
+// towards a sky colour would turn the frame blue in every direction,
+// including the half of it pointing away from the planet, and would
+// fight the atmosphere shader that is already drawing the real sky
+// over the disc. What a pilot actually loses in daylight is the
+// stars, so that is what is taken away.
+uniform float daylight : hint_range(0.0, 1.0) = 0.0;
+
+// The galactic band and the clouds hanging off it, rolled from the
+// system's seed by the script. Nothing here is hand-placed; a system
+// is the same sky every time you come back to it.
+uniform float nebula_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float band_angle = 0.0;
+uniform float band_width : hint_range(0.05, 1.0) = 0.25;
+uniform vec3 band_color : source_color = vec3(0.70, 0.74, 0.95);
+uniform vec3 nebula_color : source_color = vec3(0.55, 0.35, 0.75);
+uniform vec2 sky_seed = vec2(0.0);
+
 float hash1(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
@@ -59,6 +79,35 @@ float star_layer(vec2 pos, float cell, float fill, float radius) {
 	return clamp(light, 0.0, 1.0);
 }
 
+// Smoothed value noise, which is as much as a background needs: the
+// band is a shape and the clouds are texture on it, and neither is
+// being looked at closely enough to want anything better.
+float value_noise(vec2 p) {
+	vec2 cell = floor(p);
+	vec2 within = fract(p);
+	within = within * within * (3.0 - 2.0 * within);
+	float a = hash1(cell);
+	float b = hash1(cell + vec2(1.0, 0.0));
+	float c = hash1(cell + vec2(0.0, 1.0));
+	float d = hash1(cell + vec2(1.0, 1.0));
+	return mix(mix(a, b, within.x), mix(c, d, within.x), within.y);
+}
+
+
+float fbm(vec2 p) {
+	float sum = 0.0;
+	float amp = 0.5;
+	for (int i = 0; i < 4; i++) {
+		sum += value_noise(p) * amp;
+		// Not exactly two, or the octaves line up on the grid and the
+		// clouds come out as a plaid.
+		p *= 2.03;
+		amp *= 0.5;
+	}
+	return sum;
+}
+
+
 vec2 turn(vec2 v, float angle) {
 	float c = cos(angle);
 	float s = sin(angle);
@@ -76,10 +125,24 @@ void fragment() {
 	float mid = star_layer(pixel + world_offset * 0.30, 41.0, 0.45, 0.045);
 	float near = star_layer(pixel + world_offset * 0.65, 96.0, 0.40, 0.030);
 
+	// The band sits furthest away of anything here -- further than the
+	// far stars -- which is the whole reason it reads as the galaxy
+	// rather than as a cloud a few thousand pixels off the bow.
+	vec2 sky = (pixel + world_offset * 0.04 + sky_seed) * 0.0016;
+	float across = dot(sky, vec2(-sin(band_angle), cos(band_angle)));
+	float band = exp(-across * across / max(band_width * band_width, 0.0001));
+	float texture_ = fbm(sky * 3.1);
+	float clouds = smoothstep(0.52, 0.95, fbm(sky * 1.7 + vec2(11.3, 4.7)));
+
 	vec3 color = space_color;
+	color += band_color * band * (0.30 + 0.70 * texture_) * nebula_amount * 0.45;
+	color += nebula_color * clouds * nebula_amount * 0.40;
 	color += far_color * far * 0.30;
 	color += mid_color * mid * 0.60;
 	color += near_color * near;
 
-	COLOR = vec4(color, 1.0);
+	// Washed out by daylight, down to the empty-space colour rather
+	// than to black: what is left when the stars go is the sky the
+	// atmosphere shader is drawing over the top, not a hole.
+	COLOR = vec4(mix(color, space_color, daylight), 1.0);
 }

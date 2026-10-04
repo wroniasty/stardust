@@ -237,6 +237,7 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at)
 	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)
 	_map.bind(landing, ship, StreamingManager)
+	_dress_sky(landing)
 	print("jumped to %s (%s), out at %.0f px" % [
 		landing.display_name,
 		"adrift" if to_index < 0 else "#%d" % to_index,
@@ -253,6 +254,15 @@ func _on_misjumped(toward: int, adrift_at: Vector2) -> void:
 	print("misjump: fell short of %s, adrift at %.1f, %.1f ly" % [
 		Galaxy.system(toward).display_name, adrift_at.x, adrift_at.y,
 	])
+
+
+## Rolls this system's sky. From the system's own seed, so two systems
+## are two skies and the same system is the same sky every visit.
+func _dress_sky(system: StarSystem) -> void:
+	var sky: Starfield = get_node_or_null("Starfield") as Starfield
+	if sky != null and system != null:
+		sky.dress(system.seed)
+
 
 
 func _on_jump_refused(reason: String) -> void:
@@ -508,6 +518,7 @@ func _open_system() -> void:
 		StreamingManager.force_awake(here.planets()[0]) as Planet
 		if not here.planets().is_empty() else null
 	)
+	_dress_sky(here)
 	print("system %s (%s of %d): %s" % [
 		here.display_name,
 		"adrift" if Galaxy.here < 0 else "#%d" % Galaxy.here,

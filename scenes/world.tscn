@@ -19,6 +19,7 @@
 script = ExtResource("1_world")
 
 [node name="Starfield" parent="." unique_id=698607096 instance=ExtResource("6_starfield")]
+ship_path = NodePath("../Player/Ship")
 
 [node name="Systems" type="Node2D" parent="." unique_id=1267344365]
 

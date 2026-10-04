@@ -479,10 +479,52 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 
 ### V5: Niebo
 
-- [ ] Gwiazdy w kilku warstwach paralaksy zamiast jednej.
-- [ ] Mgławice i pasmo galaktyki jako tło systemu, z seeda.
-- [ ] Inne ciała widoczne na niebie: księżyc, druga planeta, pierścienie jako sylwetka.
-- [ ] Gwiazdy przygasają w dzień po stronie oświetlonej.
+- [x] Gwiazdy w kilku warstwach paralaksy zamiast jednej.
+  **Było zrobione od początku i nieodhaczone** — trzy warstwy po 0,10, 0,30
+  i 0,65 przesunięcia świata. Dopisany test czytający to z **kodu shadera**,
+  a nie z komentarza: całe twierdzenie brzmi „dalekie gwiazdy ruszają się
+  najmniej", a jedna liczba w złym miejscu obaliłaby je tak, że nikt by nie
+  zauważył.
+- [x] Mgławice i pasmo galaktyki jako tło systemu, z seeda.
+  Pasmo to gaussian wokół prostej pod kątem losowanym z seeda systemu, z FBM
+  jako fakturą; mgławice to drugie FBM z progiem. Oba **za wszystkimi trzema
+  warstwami gwiazd** (0,04 przesunięcia), bo to jest cały powód, dla którego
+  czytają się jako galaktyka, a nie jako chmura kilka tysięcy pikseli przed
+  dziobem. Z seeda systemu, więc dwa systemy to dwa nieba, a ten sam system
+  dwa razy to jedno niebo — ta sama reguła, pod którą żyje wszystko inne.
+  Chłodne i przyciemnione: tło, które konkuruje z pierwszym planem, jest tłem
+  w złym miejscu, a przy 640x360 pierwszego planu jest bardzo mało do
+  stracenia.
+- [ ] ~~Inne ciała widoczne na niebie: księżyc, druga planeta, pierścienie jako
+  sylwetka~~ — **tego nie da się zrobić w tej geometrii, i to jest pomiar, nie
+  wymówka.** Gra jest płaszczyzną oglądaną z góry: nie ma nieba, w którym
+  można by coś powiesić, a ciała są w kadrze albo poza nim.
+
+  Napisałem `SkyBodies` — węzeł rysujący płaską tarczę dla każdego ciała, które
+  jest w kadrze, ale którego streaming jeszcze nie zbudował — i zmierzyłem,
+  że **taka sytuacja nie zachodzi nigdy**. Najszerszy możliwy widok to
+  `ZOOM_LEVELS[2] × zoom_at_speed` = 0,55 × 0,7 = 0,385, czyli 640 / 0,385 =
+  **1662 px w poprzek** (831 px od środka). `StreamingManager` buduje
+  wszystko w promieniu co najmniej `SIGHT_RANGE` = **26 000 px**. Ciało jest
+  zbudowane trzydzieści razy dalej, niż sięga kadr; węzeł nie narysowałby
+  nigdy niczego. Skasowany.
+
+  Na pytanie „gdzie jest księżyc" odpowiada **skaner**, znacznikami na
+  krawędzi ekranu, i to jest odpowiedź właściwa dla widoku z góry. Pierścienie
+  wymagają poza tym cechy, której model nie ma — `SystemBody` nie wie nic o
+  pierścieniach — i należą do „typów planet" z M6.
+- [x] Gwiazdy przygasają w dzień po stronie oświetlonej.
+  **Powietrze razy oświetlenie**, i żadne z dwojga samo nie wystarcza:
+  południe na bezpowietrznej skale ma niebo pełne gwiazd, i noc w gęstej
+  atmosferze też. Przez `GravityWell.daylight_at()`, które już było — ta sama
+  reguła, co dla terenu i znaczników.
+
+  Gwiazdy są **przygaszane, nie zamalowywane**. Przeciągnięcie całego quada w
+  stronę koloru nieba zrobiłoby niebieską całą klatkę, w tym tę połowę, która
+  patrzy od planety, i kłóciłoby się z shaderem atmosfery, który i tak rysuje
+  prawdziwe niebo nad tarczą. To, co pilot traci w dzień, to gwiazdy — i to
+  jest to, co się zabiera. Wygładzane przez pół sekundy: przecięcie
+  terminatora z prędkością ma gwiazdy **wprowadzać**, a nie przełączać.
 
 ### V6: Interfejs
 
