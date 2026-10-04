@@ -29,13 +29,27 @@ uniform float smear : hint_range(0.0, 0.3) = 0.16;
 /// How hard the streaks come in on top.
 uniform float streak_gain : hint_range(0.0, 2.0) = 1.0;
 
-const int SAMPLES = 8;
+const int SAMPLES = 12;
 
 
 /// One value per lane across the direction of travel, constant along
 /// it. Constant along the travel is what makes a streak a streak.
 float lane(float across) {
 	return fract(sin(across * 311.7) * 43758.5453);
+}
+
+
+/// A different number for every pixel, used to jitter where each
+/// sample of the smear is taken.
+///
+/// This is the difference between a blur and a row of ghosts. Twelve
+/// samples spread over a hundred pixels put a copy every eight, and a
+/// star is one bright pixel on black -- so every copy is a separate
+/// star and the field reads as double. Offsetting each pixel's samples
+/// by a fraction of the step turns that banding into noise, which at
+/// this strength is invisible.
+float dither(vec2 at) {
+	return fract(sin(dot(at, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 
@@ -53,8 +67,9 @@ void fragment() {
 
 		vec3 sum = vec3(0.0);
 		float total = 0.0;
+		float jitter = dither(SCREEN_UV * 1024.0) / float(SAMPLES - 1);
 		for (int i = 0; i < SAMPLES; i++) {
-			float along = float(i) / float(SAMPLES - 1);
+			float along = float(i) / float(SAMPLES - 1) + jitter;
 			float w = 1.0 - along * 0.6;
 			sum += texture(
 				screen, SCREEN_UV - drift * smear * strength * weight * along

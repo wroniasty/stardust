@@ -372,7 +372,13 @@ func _fire_beam(
 		planet.carve(hit_at, firing.crater_radius)
 
 	var line: Beam = Beam.new()
-	line.from = global_position
+	# Drawn from the muzzle **as rendered**, not as simulated. The ray
+	# above was cast from the physics position and keeps it -- what is
+	# hit is a simulation question -- but the line put on screen has
+	# to start where the gun is seen to be, or at speed it hangs up to
+	# a tick of travel off the end of the barrel.
+	var hull: Ship = shooter as Ship
+	line.from = hull.drawn_point(global_position) if hull != null else global_position
 	line.to = hit_at
 	line.seconds = firing.beam_seconds
 	container.add_child(line)

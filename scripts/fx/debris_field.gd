@@ -226,14 +226,17 @@ func stir() -> float:
 	if well == null or not well.has_ground():
 		return _raise(Vector2.UP, Vector2.ZERO, 0.0)
 
-	var up: Vector2 = (_ship.global_position - well.global_position).normalized()
-	var height: float = well.height_above_terrain(_ship.global_position)
+	# The drawn position again: the cloud sits under the ship, and
+	# "under the ship" means under where the pilot can see it.
+	var hull_at: Vector2 = _ship.drawn_position()
+	var up: Vector2 = (hull_at - well.global_position).normalized()
+	var height: float = well.height_above_terrain(hull_at)
 	var closeness: float = 1.0 - clampf(height / DUST_REACH, 0.0, 1.0)
 	# The ground directly below, found by walking back down the height the
 	# well just reported rather than out to the nominal radius -- on a world
 	# with mountains those are different places, and the dust belongs at the
 	# one the ship is actually hovering over.
-	var ground: Vector2 = _ship.global_position - up * maxf(height, 0.0)
+	var ground: Vector2 = hull_at - up * maxf(height, 0.0)
 	return _raise(
 		up, ground, closeness * clampf(_ship.air_density, 0.0, 1.0) * _downwash(up)
 	)
@@ -296,17 +299,22 @@ func _on_hull_impact(impact_speed: float, _damage: float) -> void:
 	var away: Vector2 = -_ship.linear_velocity.normalized()
 	if away.is_zero_approx():
 		away = Vector2.UP
+	# Where the hull is **drawn**, not where it has got to. A burst
+	# placed from `global_position` appears up to a tick of travel
+	# ahead of the ship it came off -- thirty pixels at 1800 px/s,
+	# which reads as a second ship shedding sparks.
+	var off_the_hull: Vector2 = _ship.drawn_position()
 	# Two throws, not one. ASSETLIST has both a hot additive dot and a
 	# three frame strip of chips, and a strike is both: the light comes
 	# off instantly and the pieces it lit are still there afterwards.
 	# Which is also why the chips outlive the sparks.
 	burst(
-		_ship.global_position, away, _spark,
+		off_the_hull, away, _spark,
 		int(ceilf(MOST_SPARKS * share)), SPARK_SPEED * share, SPARK_LIFE,
 		SPARK_TINT
 	)
 	burst(
-		_ship.global_position, away, _grain,
+		off_the_hull, away, _grain,
 		int(ceilf(MOST_SPARKS * 0.5 * share)), SPARK_SPEED * share * 0.6, GRAIN_LIFE,
 		CHIP_TINT
 	)

@@ -233,6 +233,12 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	# nothing.
 	ship.linear_velocity *= JumpController.SPEED_KEPT
 	ship.angular_velocity = 0.0
+	# A crossing is not a movement. Without these the interpolator
+	# draws one tick of the ship sliding in from the system it left,
+	# and everything the presentation layer puts at the hull is placed
+	# somewhere along that streak.
+	ship.reset_physics_interpolation()
+	ship.snap_drawn()
 
 	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at)
 	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)

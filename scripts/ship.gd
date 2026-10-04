@@ -606,6 +606,33 @@ var _landed_angle: float = 0.0
 var _landed_radius: float = 0.0
 var _landed_heading: float = 0.0
 
+## Where this hull was at the end of the previous physics tick.
+##
+## Kept so the presentation layer can work out where the ship is being
+## **drawn**, which is not where `global_position` says it is. With
+## physics interpolation on -- it is, project-wide -- a body is
+## rendered between its last two physics transforms, while a script
+## reading `global_position` gets the newer of the two. Anything placed
+## in the world from that number therefore appears up to a full tick of
+## travel ahead of the ship it belongs to: thirty pixels at 1800 px/s,
+## which is a beam detaching from its own muzzle and a burst of sparks
+## floating off the hull.
+##
+## Godot 4 has `get_global_transform_interpolated()` for 3D and nothing
+## for 2D, so the two transforms have to be kept here and blended by
+## hand. This is a seam task in everything but name: the presentation
+## layer cannot get the number any other way.
+## Two of them, shifted along each tick, rather than one recorded at
+## the top of the tick. `_physics_process` runs **after** the body has
+## been integrated -- measured, by finding the two identical to the
+## pixel -- so reading `global_position` there gives the newer of the
+## pair and never the older. The only way to hold the previous one is
+## to have kept it.
+var _was_at: Vector2 = Vector2.INF
+var _was_facing: float = 0.0
+var _now_at: Vector2 = Vector2.INF
+var _now_facing: float = 0.0
+
 var _applied_force: Vector2 = Vector2.ZERO
 var _applied_torque: float = 0.0
 var _gravity: Vector2 = Vector2.ZERO
@@ -997,6 +1024,17 @@ func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid
 ## to leave the ground. A frozen body gets no _integrate_forces at all, so a
 ## landed ship that only listened there could never be told to take off again.
 func _physics_process(delta: float) -> void:
+	# Shift the pair along. After this, `_was_at` is where the renderer
+	# is interpolating from and `_now_at` is where it is interpolating
+	# to, which is what `drawn_transform()` blends between.
+	if _now_at == Vector2.INF:
+		_now_at = global_position
+		_now_facing = global_rotation
+	_was_at = _now_at
+	_was_facing = _now_facing
+	_now_at = global_position
+	_now_facing = global_rotation
+
 	if use_player_input:
 		read_player_input(delta)
 		# Through the canvas transform, so aiming survives the camera being
@@ -2063,10 +2101,59 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 	# Without this the interpolator draws a streak from where the wreck died to
 	# where the new ship appeared.
 	reset_physics_interpolation()
+	snap_drawn()
 
 	hull_changed.emit(hull_integrity)
 	flight_mode_changed.emit(flight_mode)
 	respawned.emit()
+
+
+## Where this hull is actually being drawn this frame, and facing.
+##
+## The interpolated transform, blended the way the renderer blends it.
+## Everything in the presentation layer that puts something **into the
+## world** at the ship -- a beam leaving the muzzle, sparks coming off
+## the plating, dust under the nozzles -- has to use this rather than
+## `global_transform`, or it lands where the ship will be rather than
+## where the ship is seen to be.
+##
+## Not used by anything that simulates. A gun aims and hits in physics
+## time and should; this is only about where the picture goes.
+func drawn_transform() -> Transform2D:
+	if _was_at == Vector2.INF:
+		return global_transform
+	var along: float = Engine.get_physics_interpolation_fraction()
+	return Transform2D(
+		lerp_angle(_was_facing, _now_facing, along),
+		_was_at.lerp(_now_at, along),
+	)
+
+
+## Forgets where the ship was, for a move that is not a movement.
+##
+## A respawn or a jump puts the hull somewhere else entirely, and
+## without this the picture spends one tick sliding there from the old
+## system -- the same streak `reset_physics_interpolation()` exists to
+## stop, which is why it is called in the same places.
+func snap_drawn() -> void:
+	_was_at = global_position
+	_now_at = global_position
+	_was_facing = global_rotation
+	_now_facing = global_rotation
+
+
+func drawn_position() -> Vector2:
+	return drawn_transform().origin
+
+
+## Where a point bolted to this hull is being drawn.
+##
+## For muzzles and nozzles: take where the thing is in physics terms,
+## carry it into the hull's frame, and put it back out through the
+## transform the renderer is actually using. A beam leaving a gun has
+## to start at the gun as drawn, not at the gun as simulated.
+func drawn_point(on_hull: Vector2) -> Vector2:
+	return drawn_transform() * (global_transform.affine_inverse() * on_hull)
 
 
 ## How many hull points were inside rock last tick.

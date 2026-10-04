@@ -104,7 +104,11 @@ func _draw() -> void:
 	if heat <= 0.0:
 		return
 	var ahead: Vector2 = facing()
-	global_position = _ship.global_position
+	# `top_level` is on, so this node is placed by hand every frame --
+	# which means it has to be placed where the hull is **drawn**. The
+	# ship is interpolated and this is not, so the physics position
+	# would hang the shock a tick of travel in front of its own nose.
+	global_position = _ship.drawn_position()
 	global_rotation = 0.0
 
 	var stand: float = lerpf(STANDOFF.x, STANDOFF.y, heat)

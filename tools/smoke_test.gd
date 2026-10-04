@@ -993,6 +993,7 @@ func _evaluate_phase() -> void:
 			_check_weapon_types(_planet)
 			_check_bays()
 			_check_sound_seams()
+			_check_drawn_transform()
 			_check_ship_fitouts()
 			_check_fitout_presets()
 			_check_creative_tool()
@@ -9937,6 +9938,84 @@ func _check_sound_tables() -> void:
 		empty == 0 and total > 20,
 		"every one of the %d entries points at a sample that exists" % total,
 	)
+
+
+## Gdzie statek jest **rysowany**, a nie gdzie doleciał.
+##
+## Physics interpolation is on project-wide, so a body is rendered
+## between its last two physics transforms while a script reading
+## `global_position` gets the newer of the two. Anything the
+## presentation layer puts **into the world** at the ship -- a beam
+## leaving the muzzle, sparks off the plating, dust under the nozzles,
+## the shock ahead of the nose -- lands up to a full tick of travel
+## ahead of the ship it belongs to unless it asks for this instead.
+## Thirty pixels at 1800 px/s, which is seen as two ships.
+##
+## Godot 4 has `get_global_transform_interpolated()` for 3D and
+## nothing for 2D, so the pair is kept by hand. Measured in a running
+## game: on screen the physics position wanders 16.4 px at 1800 px/s
+## and the drawn one 1.4. What is checked here is the blend, which is
+## the part that is logic rather than timing.
+func _check_drawn_transform() -> void:
+	var ship: Ship = _spawn_ship()
+
+	# With nothing recorded yet there is nothing to blend, and the
+	# honest answer is where the ship is. A fresh hull must not report
+	# itself drawn at the origin.
+	ship.global_position = Vector2(500.0, -300.0)
+	ship.global_rotation = 0.6
+	_expect(
+		ship.drawn_transform().origin.is_equal_approx(ship.global_position)
+		and is_equal_approx(ship.drawn_transform().get_rotation(), 0.6),
+		"a hull with no history is drawn where it is",
+	)
+
+	# Between the two, wherever the frame happens to fall. Driven by
+	# hand rather than by the clock: the fraction is the renderer's and
+	# a test that waited for a particular value would be a test of the
+	# frame rate.
+	ship._was_at = Vector2(0.0, 0.0)
+	ship._now_at = Vector2(120.0, 0.0)
+	ship._was_facing = 0.0
+	ship._now_facing = 1.0
+	var drawn: Vector2 = ship.drawn_transform().origin
+	_expect(
+		drawn.x >= -0.01 and drawn.x <= 120.01 and is_equal_approx(drawn.y, 0.0),
+		"and one with history is drawn between the two, never outside them (%.1f)" % drawn.x,
+	)
+	var turn: float = ship.drawn_transform().get_rotation()
+	_expect(
+		turn >= -0.01 and turn <= 1.01,
+		"including the way it is facing (%.2f)" % turn,
+	)
+
+	# A point bolted to the hull rides the same transform. This is what
+	# a muzzle needs: the ray is cast in physics terms and keeps its
+	# answer, but the line drawn from it starts where the gun is seen.
+	ship.global_position = Vector2(60.0, 0.0)
+	ship.global_rotation = 0.0
+	var nose: Vector2 = ship.global_position + Vector2(0.0, -12.0)
+	var carried: Vector2 = ship.drawn_point(nose)
+	_expect(
+		is_equal_approx(
+			carried.distance_to(ship.drawn_transform().origin), 12.0
+		),
+		"a muzzle keeps its place on the hull wherever the hull is drawn (%.2f)" % [
+			carried.distance_to(ship.drawn_transform().origin),
+		],
+	)
+
+	# And a teleport is not a movement. Without this the picture spends
+	# a tick sliding in from the system it left, which is the streak
+	# `reset_physics_interpolation()` exists to stop.
+	ship.global_position = Vector2(90000.0, 4000.0)
+	ship.snap_drawn()
+	_expect(
+		ship.drawn_transform().origin.is_equal_approx(ship.global_position),
+		"a jump puts the picture where the ship went, not on the way there",
+	)
+
+	ship.queue_free()
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.

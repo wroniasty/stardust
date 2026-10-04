@@ -63,12 +63,41 @@ static func state_color(state: Hardpoint.Aim) -> Color:
 			return BLOCKED
 
 
+## Where the crosshair goes, in screen pixels.
+##
+## **The pointer is a screen fact, so it is read as one.** It used to
+## be read back out of the world: the ship turns the pointer into
+## `aim_point` with the canvas transform in `_physics_process`, and
+## this turned it back with the canvas transform in `_process`. Those
+## are two different transforms whenever the camera has moved between
+## the tick and the frame, which with physics interpolation and a
+## render rate above the physics rate is nearly every frame.
+##
+## Measured on a stationary pointer: 0.05 px of wander at rest, 12 px
+## at 1200 px/s, 33 px at 2400, and 218 px during the camera's zoom
+## ease. At 97 frames against 60 ticks the crosshair snapped back
+## every tick, which is seen as two crosshairs rather than as one
+## moving -- and the real pointer is sitting still next to it the
+## whole time.
+##
+## The guns keep aiming at the world point, and should: they fire in
+## physics time, and a sub-tick of lag there is invisible. It is only
+## the drawing that has to agree with the pointer.
+func cursor_at() -> Vector2:
+	# Only when there is a pointer driving it. An AI ship, a test or
+	# the sandbox sets `aim_point` directly and has no mouse, and for
+	# those the round trip is the right answer rather than the wrong
+	# one -- there is no second transform to disagree with.
+	if _ship != null and is_instance_valid(_ship) and _ship.use_player_input:
+		return _canvas.get_local_mouse_position()
+	var sight: Vector2 = _ship.aim_point if _ship != null else Vector2.ZERO
+	return get_viewport().get_canvas_transform() * sight
+
+
 func _draw_cursor() -> void:
 	if _ship == null or not is_instance_valid(_ship):
 		return
-	# Where the aim point lands on screen, through the camera, so the
-	# crosshair sits on the cursor however the view is zoomed or turned.
-	var at: Vector2 = get_viewport().get_canvas_transform() * _ship.aim_point
+	var at: Vector2 = cursor_at()
 
 	for trigger: int in [0, 1]:
 		if not _ship.has_trigger(trigger):
