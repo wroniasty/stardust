@@ -1006,6 +1006,7 @@ func _evaluate_phase() -> void:
 			_check_engine_choir()
 			_check_hull_voice()
 			_check_ordnance_voice()
+			_check_sound_tables()
 			_check_debris()
 			_check_rarity_travels()
 			_check_affix_pools()
@@ -9129,12 +9130,15 @@ func _check_hull_voice() -> void:
 		"a tap is a thud and a crash is a thud and a scrape (%d, %d)" % [knock, crash],
 	)
 
-	# And the thud itself is one sample at two pitches. Falling pitch is
-	# most of what makes a hit read as mass rather than as volume.
+	# And the thud itself is one sample at two pitches, **falling**.
+	# Read off the strip rather than off a constant here: whether a
+	# harder hit reads higher or lower is a fact about the sound, so it
+	# belongs beside the sample and this is where that is checked.
+	var thud: SoundStrip = voice._table.pick(null, &"knock")
 	_expect(
-		HullVoice.KNOCK_PITCH.y < HullVoice.KNOCK_PITCH.x,
+		thud != null and thud.pitch.y < thud.pitch.x,
 		"the harder it lands the lower it sounds (%.2f down to %.2f)" % [
-			HullVoice.KNOCK_PITCH.x, HullVoice.KNOCK_PITCH.y,
+			thud.pitch.x, thud.pitch.y,
 		],
 	)
 
@@ -9279,16 +9283,16 @@ func _check_ordnance_voice() -> void:
 	# different: nothing leaves the barrel, so it must not sound like
 	# something did.
 	_expect(
-		guns._shots[cannon.type] != guns._shots[lance.type],
+		guns._shots.pick(cannon).stream != guns._shots.pick(lance).stream,
 		"a beam does not sound like a gun",
 	)
-	var kinds: Dictionary = {}
-	for kind: Variant in OrdnanceVoice.SHOTS:
-		kinds[OrdnanceVoice.SHOTS[kind]] = true
+	var samples: Dictionary = {}
+	for strip: SoundStrip in guns._shots.variants:
+		samples[strip.stream] = true
 	_expect(
-		OrdnanceVoice.SHOTS.size() == WeaponData.Type.size() and kinds.size() == 3,
+		guns._shots.variants.size() == WeaponData.Type.size() and samples.size() == 3,
 		"every weapon type has a shot, and six of them share three (%d, %d)" % [
-			OrdnanceVoice.SHOTS.size(), kinds.size(),
+			guns._shots.variants.size(), samples.size(),
 		],
 	)
 
@@ -9601,6 +9605,123 @@ func _check_sky() -> void:
 	star.free()
 	field.free()
 	ship.queue_free()
+
+
+## Tablice dźwięku: to samo, co tablice wyglądu, tylko dla ucha.
+##
+## The sound layer was built first with the samples picked by a flat
+## array indexed by the type enum, which is the under-built half of
+## what the art layer already had: a picture goes through `LookTable`
+## and can be changed by an affix, a noise went through an array and
+## could not. So an `overbored` drive looked different and sounded
+## identical.
+##
+## What is checked here is the symmetry, because that is the claim:
+## the two tables answer the same four ways, no module resource
+## carries a sample any more than it carries a texture, and the one
+## field nobody can hear -- which path a sound takes -- is written
+## down beside the sample rather than passed at a call site.
+func _check_sound_tables() -> void:
+	var loops: SoundTable = load("res://resources/fx/sounds/engine_loop.tres")
+	var hull: SoundTable = load("res://resources/fx/sounds/hull.tres")
+	var terrain: SoundTable = load("res://resources/fx/sounds/terrain.tres")
+	_expect(
+		loops != null and hull != null and terrain != null,
+		"the tables are where the look tables are, in resources/fx",
+	)
+
+	# No module resource carries a sample, the same way none carries a
+	# texture. This is the whole reason the tables exist rather than a
+	# field on `EngineData`, and it is one line to check.
+	var carried: int = 0
+	var loot: Node = LOOT_SCRIPT.new()
+	for module: ModuleData in [
+		loot.engine(7, 2), loot.weapon(7, 2), loot.generator(7, 2),
+		loot.scanner(7, 2), loot.jump_drive(7, 2), loot.tank(7, 2),
+	]:
+		for entry: Dictionary in module.get_property_list():
+			var kind: int = int(entry["type"])
+			if kind == TYPE_OBJECT and String(entry["hint_string"]).contains("AudioStream"):
+				carried += 1
+	loot.free()
+	_expect(
+		carried == 0,
+		"and no module resource carries one, so the loot generator stays deaf",
+	)
+
+	# Every way of answering, in the order `LookTable` answers them:
+	# the key beats the affix, the affix beats the measurement, the
+	# measurement beats the fallback.
+	var engine_common: EngineData = load(
+		"res://resources/engines/main_drive.tres"
+	).duplicate() as EngineData
+	engine_common.affixes = []
+	var plain: SoundStrip = loops.pick(engine_common)
+	var jet: EngineData = load(
+		"res://resources/engines/torque_jet.tres"
+	).duplicate() as EngineData
+	jet.affixes = []
+	_expect(
+		plain != null and loops.pick(jet) != null
+		and plain.stream != loops.pick(jet).stream,
+		"a drive and a jet are picked apart by their type",
+	)
+
+	# The response is what makes an impulse engine one, and it is on
+	# the strip rather than in the node now: twelve milliseconds
+	# against a hundred is the difference between a jet and a hum.
+	_expect(
+		loops.pick(jet).response < plain.response * 0.25,
+		"and the jet follows its own switching far faster (%.3f s against %.3f)" % [
+			loops.pick(jet).response, plain.response,
+		],
+	)
+
+	# The affix. This is the thing the first version could not do: a
+	# module that rolled something strange sounds strange.
+	var odd: EngineData = engine_common.duplicate() as EngineData
+	odd.affixes = [&"dynamo"]
+	var strange: SoundStrip = loops.pick(odd)
+	_expect(
+		strange != null and strange.stream != plain.stream,
+		"an engine with a generator in it does not sound like one without",
+	)
+	_expect(
+		not loops.by_affix.is_empty(),
+		"which is a table entry, not a branch in a node",
+	)
+
+	# And the path, which is the field this format exists for. Getting
+	# it backwards is invisible in an atmosphere, so it is the one
+	# nobody would catch by listening.
+	_expect(
+		int(hull.pick(null, &"knock").path) == int(Soundscape.Path.CONDUCTED)
+		and int(hull.pick(null, &"deny").path) == int(Soundscape.Path.INTERFACE),
+		"a hit comes through the hull and a refusal comes from the cockpit",
+	)
+	_expect(
+		int(terrain.pick(null, &"hit").path) == int(Soundscape.Path.AIRBORNE)
+		and int(terrain.pick(null, &"settle").path) == int(Soundscape.Path.AIRBORNE),
+		"and everything that happens to somebody else's rock comes through the air",
+	)
+
+	# Nothing in any table points at nothing. A strip with no stream is
+	# a legitimate entry in the format and a mistake in a generated
+	# file, and the generator is what writes these.
+	var empty: int = 0
+	var total: int = 0
+	for name: String in [
+		"engine_loop", "engine_event", "hull", "weapon_shot", "terrain", "missile",
+	]:
+		var table: SoundTable = load("res://resources/fx/sounds/%s.tres" % name)
+		for strip: SoundStrip in table.every_strip():
+			total += 1
+			if strip == null or not strip.is_valid():
+				empty += 1
+	_expect(
+		empty == 0 and total > 20,
+		"every one of the %d entries points at a sample that exists" % total,
+	)
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.

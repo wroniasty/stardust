@@ -15,11 +15,17 @@ const BUSES: Array[StringName] = [&"Master", &"Sfx", &"Ambient", &"Ui"]
 const LAYOUT: String = "res://resources/audio/bus_layout.tres"
 const SOUNDS: String = "res://resources/audio"
 
+## Where the tables live. Beside the look tables, in the presentation
+## layer, for the reason the look tables are there: no module resource
+## carries a sample any more than it carries a texture.
+const TABLES: String = "res://resources/fx/sounds"
+
 const RATE: int = 22050
 
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SOUNDS))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TABLES))
 	_build_buses()
 	_build_samples()
 	quit(0)
@@ -75,6 +81,7 @@ func _build_samples() -> void:
 	_build_engines()
 	_build_hull()
 	_build_ordnance()
+	_build_tables()
 
 
 ## One loop per kind of engine, and the two events that bracket them.
@@ -128,6 +135,7 @@ func _build_ordnance() -> void:
 	_store(_rock_hit(), "rock_hit")
 	_store(_rock_settle(), "rock_settle")
 	_store(_motor(), "missile_motor", true)
+	_store(_dynamo(), "engine_dynamo", true)
 
 
 ## A gun: a hard transient and almost nothing after it.
@@ -228,6 +236,27 @@ func _motor() -> PackedFloat32Array:
 		var at: float = float(i) / float(RATE)
 		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.45)
 		out.append(rolling * 0.55 + sin(TAU * 260.0 * at) * 0.12)
+	return out
+
+
+## An engine with a generator strapped to it: the burn with a whine
+## riding on top of it. A cross-stat affix should be a cross-stat
+## noise, or the strangest thing a pilot can find is the one thing
+## they cannot hear.
+func _dynamo() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1515
+	var length: int = RATE
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var burn: float = sin(TAU * 58.0 * at) * 0.34 + rng.randf_range(-1.0, 1.0) * 0.14
+		# A whole number of cycles, or the loop clicks -- 480 and 721
+		# both divide the second.
+		var whine: float = (
+			sin(TAU * 480.0 * at) * 0.16 + sin(TAU * 721.0 * at) * 0.08
+		)
+		out.append(burn + whine)
 	return out
 
 
@@ -481,6 +510,182 @@ func _bed() -> PackedFloat32Array:
 		var tone: float = sin(TAU * 70.0 * at) * 0.45 + sin(TAU * 105.0 * at) * 0.25
 		out.append(tone + rng.randf_range(-1.0, 1.0) * 0.12)
 	return out
+
+
+## The tables: which sound a thing gets, worked out from what it is.
+##
+## `SoundTable` is `LookTable` for the ear and these are its contents.
+## Written here rather than by hand for the same reason the look
+## tables are generated: a table of twenty entries maintained in the
+## inspector is twenty chances to point at the wrong file.
+##
+## **Every path is decided here, once.** Conducted for things bolted
+## to the hull you sit in, airborne for things happening out there,
+## interface for things that are not in the world at all. That is the
+## one field nobody can check by ear, because getting it backwards is
+## invisible in an atmosphere.
+func _build_tables() -> void:
+	_store_table(_engine_table(), "engine_loop")
+	_store_table(_engine_event_table(), "engine_event")
+	_store_table(_hull_table(), "hull")
+	_store_table(_weapon_table(), "weapon_shot")
+	_store_table(_terrain_table(), "terrain")
+	_store_table(_missile_table(), "missile")
+
+
+## One loop per kind of engine, and one affix that changes the machine.
+##
+## The variants are indexed by `EngineData.Type`, which is why the
+## thresholds are 0, 1, 2: "pick by a number on the item" covers an
+## enum as well as a measurement.
+##
+## Only `dynamo` is in `by_affix`, and that is a deliberate limit
+## rather than a thin table. An affix entry **replaces the whole
+## strip**, response included, so it suits an affix that changes what
+## the machine is and not one that scales it: an engine with a
+## generator strapped to it really is a different noise, while an
+## `overbored` torque jet is still an impulse engine and would lose
+## its chuff to whatever response the affix brought.
+func _engine_table() -> SoundTable:
+	var table: SoundTable = SoundTable.new()
+	table.stat = &"type"
+	table.thresholds = PackedFloat32Array([0.0, 1.0, 2.0])
+	table.variants = [
+		# MAIN: climbs a long way, because spooling is most of its
+		# character, and follows slowly because it is heavy.
+		_strip("engine_main", 1.00, Vector2(0.70, 1.20), 0.100, true),
+		# TORQUE: barely moves in pitch and follows almost instantly.
+		# Twelve milliseconds is the whole difference between a jet and
+		# a hum -- the simulation is already switching it on and off
+		# tick by tick, and this decides whether that gets through.
+		_strip("engine_torque", 0.42, Vector2(0.92, 1.08), 0.012, true),
+		_strip("engine_thruster", 0.50, Vector2(0.95, 1.28), 0.045, true),
+	]
+	table.by_affix = {
+		&"dynamo": _strip("engine_dynamo", 0.62, Vector2(0.80, 1.30), 0.060, true),
+	}
+	table.fallback = table.variants[2]
+	return table
+
+
+## The two events bracketing a burn. Conducted: you are inside the
+## structure they happen to.
+func _engine_event_table() -> SoundTable:
+	var table: SoundTable = SoundTable.new()
+	table.by_key = {
+		&"ignite": _strip("engine_ignite", 0.70, Vector2.ONE),
+		&"cut": _strip("engine_cut", 0.70, Vector2.ONE),
+	}
+	return table
+
+
+## What the hull does. Two of these are **interface** sounds and the
+## rest are conducted, which is the distinction this table exists to
+## hold: a landing refusal and a revival happen in the cockpit, not in
+## the world, so they are heard in vacuum.
+func _hull_table() -> SoundTable:
+	var table: SoundTable = SoundTable.new()
+	table.by_key = {
+		# Falling pitch, deliberately: an impact drops as it gets
+		# harder, and that is most of what makes a hit read as mass
+		# rather than as volume.
+		&"knock": _strip("thump", 1.0, Vector2(1.45, 0.72)),
+		&"grind": _strip("hull_grind", 1.0, Vector2(0.90, 1.10)),
+		&"creak": _strip("hull_creak", 0.35, Vector2(0.85, 1.20)),
+		&"servo": _strip("gear_servo", 0.50, Vector2.ONE),
+		&"touch": _strip("gear_touch", 0.80, Vector2(0.92, 1.08)),
+		&"blast": _strip("explode", 1.00, Vector2.ONE),
+		&"deny": _strip(
+			"deny", 0.60, Vector2.ONE, 0.1, false, Soundscape.Path.INTERFACE
+		),
+		&"revive": _strip(
+			"respawn", 0.70, Vector2.ONE, 0.1, false, Soundscape.Path.INTERFACE
+		),
+	}
+	return table
+
+
+## One shot per weapon type, six types sharing three samples: what
+## makes a gun sound unlike a beam is the mechanism, and the pitch
+## carries the rest. Conducted, every one: the gun is bolted to the
+## hull you are sitting in, so it fires on an airless moon.
+func _weapon_table() -> SoundTable:
+	var table: SoundTable = SoundTable.new()
+	table.stat = &"type"
+	table.thresholds = PackedFloat32Array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+	var gun: SoundStrip = _strip("shot_gun", 0.70, Vector2(0.72, 1.35))
+	var launch: SoundStrip = _strip("shot_launch", 0.70, Vector2(0.85, 1.10))
+	table.variants = [
+		gun,
+		# A beam has no transient, because nothing leaves the barrel.
+		_strip("shot_beam", 0.70, Vector2(0.92, 1.12)),
+		launch,
+		launch,
+		launch,
+		_strip("shot_gun", 0.60, Vector2(1.10, 1.60)),
+	]
+	table.fallback = gun
+	return table
+
+
+## What a shot does to the ground. **Airborne, both of them**, and
+## that is the whole point of the pair: the hit happens out there
+## against somebody else's rock, so on an airless moon the crater
+## appears in silence while the gun that made it was heard.
+func _terrain_table() -> SoundTable:
+	var table: SoundTable = SoundTable.new()
+	table.by_key = {
+		&"hit": _strip(
+			"rock_hit", 1.0, Vector2(1.25, 0.80), 0.1, false,
+			Soundscape.Path.AIRBORNE
+		),
+		&"settle": _strip(
+			"rock_settle", 0.45, Vector2(0.85, 1.15), 0.1, false,
+			Soundscape.Path.AIRBORNE
+		),
+	}
+	return table
+
+
+## A missile under power. Airborne, because it is out there.
+func _missile_table() -> SoundTable:
+	var table: SoundTable = SoundTable.new()
+	table.fallback = _strip(
+		"missile_motor", 0.55, Vector2(0.92, 1.10), 0.1, true,
+		Soundscape.Path.AIRBORNE
+	)
+	return table
+
+
+func _strip(
+	sample: String,
+	volume: float,
+	pitch: Vector2,
+	response: float = 0.1,
+	loops: bool = false,
+	path: Soundscape.Path = Soundscape.Path.CONDUCTED,
+) -> SoundStrip:
+	var strip: SoundStrip = SoundStrip.new()
+	strip.stream = load("%s/%s.tres" % [SOUNDS, sample]) as AudioStream
+	if strip.stream == null:
+		push_error("no sample %s" % sample)
+	strip.path = path
+	strip.volume = volume
+	strip.pitch = pitch
+	strip.response = response
+	strip.loops = loops
+	return strip
+
+
+func _store_table(table: SoundTable, name: String) -> void:
+	var path: String = "%s/%s.tres" % [TABLES, name]
+	var error: int = ResourceSaver.save(table, path)
+	if error != OK:
+		push_error("could not write %s (%d)" % [path, error])
+		return
+	print("table: %-14s %d entries -> %s" % [
+		name, table.every_strip().size(), path,
+	])
 
 
 ## Writes one sample out as a 16 bit mono AudioStreamWAV.

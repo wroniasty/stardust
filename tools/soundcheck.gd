@@ -55,6 +55,7 @@ func _ready() -> void:
 		print("air %.2f -> cutoff %6.0f Hz" % [air, muffle.cutoff_hz])
 
 	_engine_table()
+	_path_table()
 
 	# Freed rather than left to the quit. A player still holding a stream
 	# at exit is reported as a leaked resource, and `tools/check.ps1`
@@ -63,6 +64,45 @@ func _ready() -> void:
 		(voice as AudioStreamPlayer2D).stream = null
 	sound.free()
 	get_tree().quit()
+
+
+## Which way every sound in every table reaches the ear.
+##
+## The one field nobody can check by listening, printed so it can be
+## checked by looking. Getting conducted and airborne the wrong way
+## round is invisible in an atmosphere and wrong everywhere else: a
+## gun that fell silent in vacuum, a crater that did not.
+func _path_table() -> void:
+	print("")
+	print("sound tables: which way each one reaches the ear")
+	print("%-14s %-10s %-11s %6s  %s" % ["table", "entry", "path", "vol", "pitch"])
+	for name: String in [
+		"engine_loop", "engine_event", "hull", "weapon_shot", "terrain", "missile",
+	]:
+		var table: SoundTable = load("res://resources/fx/sounds/%s.tres" % name)
+		if table == null:
+			continue
+		for entry: Array in _entries_of(table):
+			var strip: SoundStrip = entry[1]
+			print("%-14s %-10s %-11s %6.2f  %.2f..%.2f" % [
+				name, entry[0],
+				Soundscape.Path.keys()[int(strip.path)].to_lower(),
+				strip.volume, strip.pitch.x, strip.pitch.y,
+			])
+
+
+## Every strip in a table with something to call it by.
+func _entries_of(table: SoundTable) -> Array[Array]:
+	var out: Array[Array] = []
+	for key: Variant in table.by_key:
+		out.append([String(key), table.by_key[key]])
+	for affix: Variant in table.by_affix:
+		out.append(["+%s" % affix, table.by_affix[affix]])
+	for i: int in range(table.variants.size()):
+		out.append(["#%d" % i, table.variants[i]])
+	if table.fallback != null:
+		out.append(["fallback", table.fallback])
+	return out
 
 
 ## What each kind of engine does as the throttle opens.

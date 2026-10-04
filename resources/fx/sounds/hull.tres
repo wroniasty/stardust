@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="SoundTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sound_strip.gd" id="1_n6xom"]
+[ext_resource type="AudioStream" path="res://resources/audio/thump.tres" id="2_4h2oh"]
+[ext_resource type="AudioStream" path="res://resources/audio/hull_grind.tres" id="3_8taov"]
+[ext_resource type="AudioStream" path="res://resources/audio/hull_creak.tres" id="4_3kgcl"]
+[ext_resource type="AudioStream" path="res://resources/audio/gear_servo.tres" id="5_hfblc"]
+[ext_resource type="AudioStream" path="res://resources/audio/gear_touch.tres" id="6_4ctg1"]
+[ext_resource type="AudioStream" path="res://resources/audio/explode.tres" id="7_laj4f"]
+[ext_resource type="AudioStream" path="res://resources/audio/deny.tres" id="8_6r04n"]
+[ext_resource type="AudioStream" path="res://resources/audio/respawn.tres" id="9_b8dqc"]
+[ext_resource type="Script" path="res://scripts/fx/sound_table.gd" id="10_glwmm"]
+
+[sub_resource type="Resource" id="Resource_txyju"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("2_4h2oh")
+pitch = Vector2(1.45, 0.72)
+
+[sub_resource type="Resource" id="Resource_75cw5"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("3_8taov")
+pitch = Vector2(0.9, 1.1)
+
+[sub_resource type="Resource" id="Resource_lvecl"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("4_3kgcl")
+volume = 0.35
+pitch = Vector2(0.85, 1.2)
+
+[sub_resource type="Resource" id="Resource_xgt2t"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("5_hfblc")
+volume = 0.5
+
+[sub_resource type="Resource" id="Resource_cmy7j"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("6_4ctg1")
+volume = 0.8
+pitch = Vector2(0.92, 1.08)
+
+[sub_resource type="Resource" id="Resource_cobi8"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("7_laj4f")
+
+[sub_resource type="Resource" id="Resource_n241u"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("8_6r04n")
+path = 2
+volume = 0.6
+
+[sub_resource type="Resource" id="Resource_vn083"]
+script = ExtResource("1_n6xom")
+stream = ExtResource("9_b8dqc")
+path = 2
+volume = 0.7
+
+[resource]
+script = ExtResource("10_glwmm")
+thresholds = PackedFloat32Array()
+by_key = {
+&"blast": SubResource("Resource_cobi8"),
+&"creak": SubResource("Resource_lvecl"),
+&"deny": SubResource("Resource_n241u"),
+&"grind": SubResource("Resource_75cw5"),
+&"knock": SubResource("Resource_txyju"),
+&"revive": SubResource("Resource_vn083"),
+&"servo": SubResource("Resource_xgt2t"),
+&"touch": SubResource("Resource_cmy7j")
+}

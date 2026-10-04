@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="SoundTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sound_strip.gd" id="1_r5bcb"]
+[ext_resource type="AudioStream" path="res://resources/audio/shot_gun.tres" id="2_plrwp"]
+[ext_resource type="Script" path="res://scripts/fx/sound_table.gd" id="3_opi1f"]
+[ext_resource type="AudioStream" path="res://resources/audio/shot_beam.tres" id="4_blvj2"]
+[ext_resource type="AudioStream" path="res://resources/audio/shot_launch.tres" id="5_udue4"]
+
+[sub_resource type="Resource" id="Resource_mrn56"]
+script = ExtResource("1_r5bcb")
+stream = ExtResource("2_plrwp")
+volume = 0.7
+pitch = Vector2(0.72, 1.35)
+
+[sub_resource type="Resource" id="Resource_hs86j"]
+script = ExtResource("1_r5bcb")
+stream = ExtResource("4_blvj2")
+volume = 0.7
+pitch = Vector2(0.92, 1.12)
+
+[sub_resource type="Resource" id="Resource_spmw7"]
+script = ExtResource("1_r5bcb")
+stream = ExtResource("5_udue4")
+volume = 0.7
+pitch = Vector2(0.85, 1.1)
+
+[sub_resource type="Resource" id="Resource_4tvtd"]
+script = ExtResource("1_r5bcb")
+stream = ExtResource("2_plrwp")
+volume = 0.6
+pitch = Vector2(1.1, 1.6)
+
+[resource]
+script = ExtResource("3_opi1f")
+stat = &"type"
+thresholds = PackedFloat32Array(0, 1, 2, 3, 4, 5)
+variants = Array[ExtResource("1_r5bcb")]([SubResource("Resource_mrn56"), SubResource("Resource_hs86j"), SubResource("Resource_spmw7"), SubResource("Resource_spmw7"), SubResource("Resource_spmw7"), SubResource("Resource_4tvtd")])
+fallback = SubResource("Resource_mrn56")

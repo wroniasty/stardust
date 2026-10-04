@@ -9,10 +9,16 @@ extends Node
 ##
 ## **Conducted, nearly all of it.** You are inside this hull, so you
 ## hear it hit things whether or not there is any air to carry the
-## sound. The one exception is the landing refusal, which is a cockpit
-## annunciator rather than a thing happening in the world -- a warning
-## that went quiet in vacuum would be a warning that had misunderstood
-## which side of the glass it is on.
+## sound. The exceptions are the landing refusal and the revival,
+## which are cockpit annunciators rather than things happening in the
+## world -- a warning that went quiet in vacuum would be a warning
+## that had misunderstood which side of the glass it is on.
+##
+## Which of those each one is lives in `resources/fx/sounds/hull.tres`
+## and not here. That field is the only one nobody can check by ear,
+## because getting it backwards is invisible in an atmosphere, so it
+## is written down once beside the sample it belongs to rather than
+## passed at three call sites.
 
 ## Impact speed at which a strike is as loud as it gets. The same
 ## figure `CameraShake` and `DebrisField` reason about, restated rather
@@ -29,28 +35,18 @@ const FAINTEST_KNOCK: float = 0.06
 ## bad landing is a thud **and** a scrape.
 const GRINDS_ABOVE: float = 0.35
 
-## How far the impact pitch falls between a tap and a crash. Falling
-## pitch is most of what makes a hit read as mass rather than volume.
-const KNOCK_PITCH: Vector2 = Vector2(1.45, 0.72)
-
 ## How often a hull resting on its legs complains, in seconds, and how
 ## loud. Irregular on purpose: a creak on a timer is a metronome.
 const CREAK_GAP: Vector2 = Vector2(2.4, 7.0)
 const CREAK_VOLUME: float = 0.35
 
+const TABLE: String = "res://resources/fx/sounds/hull.tres"
+
 @export var ship_path: NodePath
 
 var _ship: Ship = null
 var _gear: LandingGear = null
-
-var _knock: AudioStream = null
-var _grind: AudioStream = null
-var _creak: AudioStream = null
-var _servo: AudioStream = null
-var _touch: AudioStream = null
-var _deny: AudioStream = null
-var _blast: AudioStream = null
-var _revive: AudioStream = null
+var _table: SoundTable = null
 
 var _until_creak: float = 0.0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -58,14 +54,7 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.randomize()
-	_knock = load("res://resources/audio/thump.tres") as AudioStream
-	_grind = load("res://resources/audio/hull_grind.tres") as AudioStream
-	_creak = load("res://resources/audio/hull_creak.tres") as AudioStream
-	_servo = load("res://resources/audio/gear_servo.tres") as AudioStream
-	_touch = load("res://resources/audio/gear_touch.tres") as AudioStream
-	_deny = load("res://resources/audio/deny.tres") as AudioStream
-	_blast = load("res://resources/audio/explode.tres") as AudioStream
-	_revive = load("res://resources/audio/respawn.tres") as AudioStream
+	_table = load(TABLE) as SoundTable
 
 	_ship = get_node_or_null(ship_path) as Ship
 	if _ship == null:
@@ -102,7 +91,7 @@ func settle(delta: float) -> float:
 	if _until_creak > 0.0:
 		return _until_creak
 	_until_creak = _rng.randf_range(CREAK_GAP.x, CREAK_GAP.y)
-	_say(_creak, CREAK_VOLUME, _rng.randf_range(0.85, 1.2))
+	_say(&"creak", _rng.randf(), CREAK_VOLUME)
 	return _until_creak
 
 
@@ -117,51 +106,48 @@ func _on_impact(impact_speed: float, _damage: float) -> void:
 	var share: float = clampf(impact_speed / REFERENCE_SPEED, 0.0, 1.5)
 	if share < FAINTEST_KNOCK:
 		return
-	_say(
-		_knock,
-		minf(share, 1.0),
-		lerpf(KNOCK_PITCH.x, KNOCK_PITCH.y, minf(share, 1.0)),
-	)
+	# The share is handed to the strip rather than turned into a pitch
+	# here: whether a harder hit reads higher or lower is a fact about
+	# the sound, and this one falls.
+	_say(&"knock", minf(share, 1.0), minf(share, 1.0))
 	if share >= GRINDS_ABOVE:
 		var hard: float = (share - GRINDS_ABOVE) / maxf(1.0 - GRINDS_ABOVE, 0.001)
-		_say(_grind, clampf(hard, 0.15, 1.0), _rng.randf_range(0.9, 1.1))
+		_say(&"grind", _rng.randf(), clampf(hard, 0.15, 1.0))
 
 
 ## The gear, in both directions: the same motor runs either way.
 func _on_gear_moving(_deployed: bool) -> void:
-	_say(_servo, 0.5, 1.0)
+	_say(&"servo", 0.5)
 
 
 func _on_landed(_planet: Planet) -> void:
-	_say(_touch, 0.8, _rng.randf_range(0.92, 1.08))
+	_say(&"touch", _rng.randf())
 
 
 ## Refused, and the reason is not thrown away: a HUD will want it, and
 ## a short blip that cannot say which rule was broken is a blip the
 ## pilot learns to ignore.
 func _on_refused(_reason: String) -> void:
-	_say(_deny, 0.6, 1.0, Soundscape.Path.INTERFACE)
+	_say(&"deny")
 
 
 func _on_destroyed(at: Vector2, _velocity: Vector2) -> void:
 	var mixer: Soundscape = Soundscape.of()
-	if mixer != null and _blast != null:
-		mixer.play(_blast, at, Soundscape.Path.CONDUCTED, 1.0)
+	if mixer != null and _table != null:
+		mixer.play_strip(_table.pick(null, &"blast"), at)
 
 
 func _on_respawned() -> void:
-	_say(_revive, 0.7, 1.0, Soundscape.Path.INTERFACE)
+	_say(&"revive")
 
 
-## Everything goes out through `Soundscape`, at the ship, conducted
-## unless it is a thing in the cockpit rather than a thing in the world.
-func _say(
-	sample: AudioStream,
-	volume: float,
-	pitch: float,
-	path: Soundscape.Path = Soundscape.Path.CONDUCTED,
-) -> bool:
+## Everything goes out through `Soundscape`, at the ship, by whichever
+## path the strip says. `share` is how hard the thing happened, 0..1,
+## which the strip turns into a pitch its own way.
+func _say(which: StringName, share: float = 1.0, volume: float = 1.0) -> bool:
 	var mixer: Soundscape = Soundscape.of()
-	if mixer == null or sample == null or _ship == null or not is_instance_valid(_ship):
+	if mixer == null or _table == null or _ship == null or not is_instance_valid(_ship):
 		return false
-	return mixer.play(sample, _ship.global_position, path, volume, pitch)
+	return mixer.play_strip(
+		_table.pick(null, which), _ship.global_position, share, volume
+	)

@@ -143,6 +143,36 @@ func carries(path: Path) -> float:
 			return 1.0
 
 
+## Plays a `SoundStrip` once: the sound decides its own path, volume
+## and pitch, and the caller only says where and how hard.
+##
+## The reason this exists rather than four arguments at every call
+## site: `path` is the field that is invisible when it is wrong. A gun
+## marked airborne falls silent in vacuum and a crater marked
+## conducted is heard across a dead system, and neither shows up in an
+## atmosphere, which is where anybody testing by ear would be. As an
+## argument it was three chances to mistype in three different files.
+##
+## `share` is the caller's own 0..1 reading of how hard the thing
+## happened -- impact speed, crater size, muzzle velocity -- and the
+## strip decides what that does to the pitch.
+func play_strip(
+	strip: SoundStrip,
+	at: Vector2,
+	share: float = 1.0,
+	volume_scale: float = 1.0,
+) -> bool:
+	if strip == null or not strip.is_valid():
+		return false
+	return play(
+		strip.stream,
+		at,
+		strip.path,
+		strip.volume * volume_scale,
+		strip.pitch_at(share),
+	)
+
+
 ## Plays one sound once, at a place in the world.
 ##
 ## Returns whether a voice was spent on it, which is what

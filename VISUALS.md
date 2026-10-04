@@ -569,6 +569,35 @@ Zero dźwięku dzisiaj, więc pierwszy krok jest duży, a każdy następny mały
 
 ### S0: Fundament — **zamknięte**
 
+- [x] **Format zasobu**: `SoundStrip` (próbka, droga, głośność, zakres
+  wysokości, czas reakcji, pętla) i `SoundTable` (co jak brzmi — po kluczu,
+  po afiksie, po progu na statystyce). To jest **lustro `SpriteStrip` /
+  `LookTable`**, celowo ten sam plik z tymi samymi czterema sposobami
+  odpowiadania, bo pytanie jest to samo.
+
+  Dopisane po fakcie, i to jest tu najważniejsze. Tor dźwiękowy powstał
+  najpierw z płaskimi tablicami w kodzie, indeksowanymi enumem typu — czyli
+  **niedorobioną połową tego, co tor graficzny już miał**. Obrazek szedł
+  przez `LookTable` i afiks mógł go zmienić; dźwięk szedł przez `Array` i
+  nie mógł, więc silnik `overbored` **wyglądał inaczej i brzmiał
+  identycznie**. Pytanie „czy dźwięki nie powinny być częścią zasobów
+  silnika" ma odpowiedź „nie na `EngineData`, ale tak — w tablicy obok
+  tablic wyglądu", i to jest ta tablica.
+
+  **Żaden zasób modułu nie niesie próbki**, tak samo jak żaden nie niesie
+  tekstury; generator lootu pozostaje głuchy. Pilnuje tego test chodzący po
+  `get_property_list()` sześciu rodzajów modułów.
+
+  Pole, dla którego to w ogóle istnieje, to **`path`**. Pomylenie
+  `CONDUCTED` z `AIRBORNE` jest niewidoczne w atmosferze i błędne wszędzie
+  indziej — działo, które milknie w próżni, krater, który nie. Jako argument
+  przy wywołaniu było to trzy szanse na pomyłkę w trzech plikach; jako
+  własność dźwięku jest rzeczą, którą się czyta — i którą `soundcheck`
+  wypisuje w jednej tabeli, bo to jedyne pole, którego nie da się sprawdzić
+  uchem.
+
+  `Soundscape.play_strip()` zdejmuje ścieżkę, głośność i wysokość z zasobu;
+  wywołujący mówi tylko **gdzie** i **jak mocno**.
 - [x] **Magistrale** `Master`, `Sfx`, `Ambient`, `Ui`, z filtrem
   dolnoprzepustowym na `Sfx`. Układ generowany przez
   `tools/make_audio.gd`: ustawia się żywy serwer i prosi go o layout,

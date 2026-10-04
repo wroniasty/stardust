@@ -17,24 +17,19 @@ extends Node2D
 ## path each of the two takes, and getting it the other way round would
 ## make a dead moon sound like a quarry.
 
-## What a shot sounds like, by `WeaponData.Type`. Three samples rather
-## than six: what makes a gun sound unlike a beam is the mechanism, and
-## a siege slug is a pulse repeater at a different size -- which the
-## pitch says.
-const SHOTS: Dictionary = {
-	WeaponData.Type.PROJECTILE: "res://resources/audio/shot_gun.tres",
-	WeaponData.Type.PULSE: "res://resources/audio/shot_gun.tres",
-	WeaponData.Type.LASER: "res://resources/audio/shot_beam.tres",
-	WeaponData.Type.DUMB_MISSILE: "res://resources/audio/shot_launch.tres",
-	WeaponData.Type.HOMING_MISSILE: "res://resources/audio/shot_launch.tres",
-	WeaponData.Type.AOE: "res://resources/audio/shot_launch.tres",
-}
+## Which sound a weapon makes, keyed on its `type`: three samples for
+## six kinds, because what makes a gun sound unlike a beam is the
+## mechanism and a siege slug is a pulse repeater at a different size.
+## The table decides, not this file -- the same arrangement the nozzle
+## pictures have lived under since V0.
+const SHOTS: String = "res://resources/fx/sounds/weapon_shot.tres"
+const TERRAIN: String = "res://resources/fx/sounds/terrain.tres"
+const MOTORS_TABLE: String = "res://resources/fx/sounds/missile.tres"
 
-## Muzzle speed that fires a shot at its written pitch. Faster rounds
-## read higher, slower ones lower, which is the cheapest way to make a
-## siege slug and an autocannon tell themselves apart.
+## Muzzle speed that fires a shot at the top of its pitch range.
+## Faster rounds read higher, slower ones lower, which is the cheapest
+## way to make a siege slug and an autocannon tell themselves apart.
 const REFERENCE_SPEED: float = 900.0
-const SHOT_PITCH: Vector2 = Vector2(0.72, 1.35)
 
 ## Crater radius at which a hit is as loud as it gets.
 const REFERENCE_CRATER: float = 40.0
@@ -51,10 +46,9 @@ const MOTORS: int = 6
 @export var ship_path: NodePath
 
 var _ship: Ship = null
-var _shots: Dictionary = {}
-var _hit: AudioStream = null
-var _settle: AudioStream = null
-var _motor: AudioStream = null
+var _shots: SoundTable = null
+var _terrain: SoundTable = null
+var _motor: SoundStrip = null
 
 ## Missile -> the voice following it.
 var _flying: Dictionary = {}
@@ -77,16 +71,15 @@ class Motor extends AudioStreamPlayer2D:
 
 func _ready() -> void:
 	_rng.randomize()
-	for kind: Variant in SHOTS:
-		_shots[kind] = load(String(SHOTS[kind])) as AudioStream
-	_hit = load("res://resources/audio/rock_hit.tres") as AudioStream
-	_settle = load("res://resources/audio/rock_settle.tres") as AudioStream
-	_motor = load("res://resources/audio/missile_motor.tres") as AudioStream
+	_shots = load(SHOTS) as SoundTable
+	_terrain = load(TERRAIN) as SoundTable
+	var motors: SoundTable = load(MOTORS_TABLE) as SoundTable
+	_motor = motors.pick() if motors != null else null
 
 	for i: int in range(MOTORS):
 		var voice: Motor = Motor.new()
 		voice.bus = String(Soundscape.BUS_SFX)
-		voice.stream = _motor
+		voice.stream = _motor.stream if _motor != null else null
 		add_child(voice)
 		_spare.append(voice)
 
@@ -132,13 +125,12 @@ func advance(delta: float) -> void:
 			still.append(hole)
 			continue
 		var mixer: Soundscape = Soundscape.of()
-		if mixer != null:
-			mixer.play(
-				_settle,
+		if mixer != null and _terrain != null:
+			mixer.play_strip(
+				_terrain.pick(null, &"settle"),
 				hole["at"],
-				Soundscape.Path.AIRBORNE,
+				_rng.randf(),
 				SETTLE_VOLUME * float(hole["share"]),
-				_rng.randf_range(0.85, 1.15),
 			)
 	_settling = still
 
@@ -166,7 +158,9 @@ func _follow_missiles() -> void:
 				continue
 			var voice: AudioStreamPlayer2D = _spare.pop_back()
 			voice.global_position = missile.global_position
-			voice.volume_db = linear_to_db(_carried(0.55))
+			voice.volume_db = linear_to_db(
+				_carried(_motor.volume if _motor != null else 0.55)
+			)
 			voice.pitch_scale = _rng.randf_range(0.92, 1.1)
 			voice.play()
 			_flying[missile] = voice
@@ -179,12 +173,15 @@ func _follow_missiles() -> void:
 		_flying.erase(missile)
 
 
-## How loud an airborne thing is from here. The motor is a running
-## sound rather than a one-shot, so it cannot go through `play()` and
-## has to ask the rule itself.
+## How loud a running sound is from here. A loop cannot go through
+## `play_strip()` -- that spends a voice on a one-shot -- so it asks
+## the rule itself, by the path its own strip names.
 func _carried(volume: float) -> float:
 	var mixer: Soundscape = Soundscape.of()
-	var share: float = mixer.carries(Soundscape.Path.AIRBORNE) if mixer != null else 1.0
+	var path: Soundscape.Path = (
+		_motor.path if _motor != null else Soundscape.Path.AIRBORNE
+	)
+	var share: float = mixer.carries(path) if mixer != null else 1.0
 	return maxf(volume * share, 0.0001)
 
 
@@ -192,18 +189,15 @@ func _carried(volume: float) -> float:
 ## are sitting in. Audible on an airless moon, which is the point.
 func _on_fired(at: Vector2, _direction: Vector2, weapon: WeaponData) -> void:
 	var mixer: Soundscape = Soundscape.of()
-	if mixer == null or weapon == null:
+	if mixer == null or weapon == null or _shots == null:
 		return
-	var sample: AudioStream = _shots.get(weapon.type, null)
-	if sample == null:
-		return
-	var quick: float = clampf(weapon.muzzle_speed / REFERENCE_SPEED, 0.0, 2.0)
-	mixer.play(
-		sample,
+	# The weapon itself is handed to the table, so an affix could
+	# change what a gun sounds like the way one already changes what a
+	# nozzle looks like. Nothing claims that today; the seam is here.
+	mixer.play_strip(
+		_shots.pick(weapon),
 		at,
-		Soundscape.Path.CONDUCTED,
-		0.7,
-		lerpf(SHOT_PITCH.x, SHOT_PITCH.y, clampf(quick, 0.0, 1.0)),
+		clampf(weapon.muzzle_speed / REFERENCE_SPEED, 0.0, 1.0),
 	)
 
 
@@ -212,16 +206,10 @@ func _on_fired(at: Vector2, _direction: Vector2, weapon: WeaponData) -> void:
 ## and that is the rule working rather than a bug.
 func _on_carved(point: Vector2, radius: float) -> void:
 	var mixer: Soundscape = Soundscape.of()
-	if mixer == null:
+	if mixer == null or _terrain == null:
 		return
 	var share: float = clampf(radius / REFERENCE_CRATER, 0.15, 1.0)
-	mixer.play(
-		_hit,
-		point,
-		Soundscape.Path.AIRBORNE,
-		share,
-		lerpf(1.25, 0.8, share),
-	)
+	mixer.play_strip(_terrain.pick(null, &"hit"), point, share, share)
 	# The hole settling is a second event, late enough not to be heard
 	# as a tail on the first. A crater that stopped making noise the
 	# instant it appeared would read as a dent.

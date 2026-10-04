@@ -95,10 +95,15 @@ func every_strip() -> Array[SpriteStrip]:
 
 ## Affix names worn by `subject`, as a plain array.
 ##
-## Guarded rather than assumed: only WeaponData carries `affixes` today --
-## the engine generator throws its list away, which is one of M3.5's
-## checkboxes -- so every engine entry in `by_affix` is inert until that is
-## fixed. Inert, not broken: the table is already right, the item is not yet.
+## Guarded rather than assumed, because a table can be handed any
+## subject at all -- including none.
+##
+## This used to say that only `WeaponData` carried affixes and that
+## every engine entry in `by_affix` was therefore inert. That stopped
+## being true in M3.5, when `affixes` moved onto `ModuleData` and the
+## engine generator started keeping its roll; the `steerable` nozzle
+## has been live since. `SoundTable` leans on the same thing to give a
+## `dynamo` engine its own loop.
 func _affixes_of(subject: Object) -> Array:
 	if not ("affixes" in subject):
 		return []

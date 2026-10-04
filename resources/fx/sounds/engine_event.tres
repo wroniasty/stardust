@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="SoundTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sound_strip.gd" id="1_bjw8m"]
+[ext_resource type="AudioStream" path="res://resources/audio/engine_ignite.tres" id="2_vy16a"]
+[ext_resource type="AudioStream" path="res://resources/audio/engine_cut.tres" id="3_u0qwt"]
+[ext_resource type="Script" path="res://scripts/fx/sound_table.gd" id="4_cue8a"]
+
+[sub_resource type="Resource" id="Resource_kuy3m"]
+script = ExtResource("1_bjw8m")
+stream = ExtResource("2_vy16a")
+volume = 0.7
+
+[sub_resource type="Resource" id="Resource_dgkev"]
+script = ExtResource("1_bjw8m")
+stream = ExtResource("3_u0qwt")
+volume = 0.7
+
+[resource]
+script = ExtResource("4_cue8a")
+thresholds = PackedFloat32Array()
+by_key = {
+&"cut": SubResource("Resource_dgkev"),
+&"ignite": SubResource("Resource_kuy3m")
+}

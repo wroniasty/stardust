@@ -13,10 +13,18 @@ extends Node2D
 ## are sitting in, so they do not fade with the air. Everything else
 ## the ship does is argued about; this one is not.
 ##
-## One sample per **kind**, not per engine. What makes a main drive
+## **Which loop, how loud, at what pitch and how fast it follows all
+## come out of a `SoundTable`**, not out of this file. That was the
+## second attempt: the first held them in four parallel arrays indexed
+## by the type enum, which is the under-built half of what the art
+## layer already does. A picture goes through `LookTable` and can be
+## changed by an affix; a noise went through an array and could not,
+## so an `overbored` drive looked different and sounded identical.
+##
+## One strip per **kind**, not per engine. What makes a main drive
 ## sound unlike an attitude thruster is what it is, and two drives of
-## the same kind at different throttles already differ without a second
-## recording -- the difference is coming off the numbers.
+## the same kind at different throttles already differ without a
+## second recording -- the difference is coming off the numbers.
 
 ## Relative loudness at full flow, indexed by `EngineData.Type`:
 ## MAIN, TORQUE, THRUSTER.
@@ -25,26 +33,6 @@ extends Node2D
 ## `const Dictionary` in GDScript has to be constant-foldable and this
 ## project has already been bitten once by discovering which things are
 ## not.
-const LOUDNESS: Array[float] = [1.00, 0.42, 0.50]
-
-## Pitch at a trickle and at full, per kind. A main drive climbs a long
-## way because spooling is most of its character; a torque jet barely
-## moves, because it has only two states and the pitch is not where its
-## character lives.
-const PITCH_LOW: Array[float] = [0.70, 0.92, 0.95]
-const PITCH_HIGH: Array[float] = [1.20, 1.08, 1.28]
-
-## Seconds for the loudness to follow the flow, per kind.
-##
-## The torque figure is the interesting one and it is deliberately
-## almost nothing. The simulation switches an impulse engine fully on
-## and fully off, tick by tick, at a rate that is the throttle it was
-## asked for -- so **the modulation is already in the code**, and a
-## response fast enough to let it through is what makes a torque jet
-## sound like a torque jet. Smooth it like a main drive and it turns
-## into a hum.
-const RESPONSE: Array[float] = [0.10, 0.012, 0.045]
-
 ## Below this a voice is paused rather than played silently. Sixteen
 ## engines mixing nothing is sixteen streams being decoded for nothing.
 const QUIETEST: float = 0.015
@@ -58,14 +46,8 @@ const QUIETEST: float = 0.015
 const WOBBLE_DEPTH: float = 0.14
 const WOBBLE_HZ: float = 11.0
 
-## How loud the one-shots at either end are.
-const EVENT_VOLUME: float = 0.7
-
-const LOOPS: Array[String] = [
-	"res://resources/audio/engine_main.tres",
-	"res://resources/audio/engine_torque.tres",
-	"res://resources/audio/engine_thruster.tres",
-]
+const LOOPS: String = "res://resources/fx/sounds/engine_loop.tres"
+const EVENTS: String = "res://resources/fx/sounds/engine_event.tres"
 
 @export var ship_path: NodePath
 
@@ -76,16 +58,18 @@ var _voices: Dictionary = {}
 var _level: Dictionary = {}
 var _phase: Dictionary = {}
 
-var _streams: Array[AudioStream] = []
-var _ignite: AudioStream = null
-var _snuff: AudioStream = null
+## Which strip each mount is running, so the tick does not have to ask
+## the table sixty times a second for an answer that only changes on a
+## refit.
+var _strips: Dictionary = {}
+
+var _loops: SoundTable = null
+var _events: SoundTable = null
 
 
 func _ready() -> void:
-	for path: String in LOOPS:
-		_streams.append(load(path) as AudioStream)
-	_ignite = load("res://resources/audio/engine_ignite.tres") as AudioStream
-	_snuff = load("res://resources/audio/engine_cut.tres") as AudioStream
+	_loops = load(LOOPS) as SoundTable
+	_events = load(EVENTS) as SoundTable
 
 	_ship = get_node_or_null(ship_path) as Ship
 	if _ship == null:
@@ -108,11 +92,21 @@ func rebuild() -> void:
 	for engine: EngineInstance in _ship.engines:
 		var key: StringName = engine.mount.name
 		wanted[key] = true
+		# Asked afresh every rebuild, never cached across one: a refit
+		# can put a different engine in the same mount, and an affix
+		# is part of what chooses the loop.
+		var strip: SoundStrip = (
+			_loops.pick(engine.data) if _loops != null else null
+		)
+		_strips[key] = strip
 		if _voices.has(key):
+			(_voices[key] as AudioStreamPlayer2D).stream = (
+				strip.stream if strip != null else null
+			)
 			continue
 		var voice: Loop = Loop.new()
 		voice.bus = String(Soundscape.BUS_SFX)
-		voice.stream = _streams[clampi(int(engine.data.type), 0, _streams.size() - 1)]
+		voice.stream = strip.stream if strip != null else null
 		voice.volume_db = linear_to_db(QUIETEST)
 		voice.autoplay = false
 		add_child(voice)
@@ -126,6 +120,7 @@ func rebuild() -> void:
 		_voices.erase(key)
 		_level.erase(key)
 		_phase.erase(key)
+		_strips.erase(key)
 
 
 ## A voice that lets go of its loop on the way out.
@@ -145,9 +140,9 @@ class Loop extends AudioStreamPlayer2D:
 
 
 func _exit_tree() -> void:
-	_streams.clear()
-	_ignite = null
-	_snuff = null
+	_strips.clear()
+	_loops = null
+	_events = null
 
 
 func _physics_process(delta: float) -> void:
@@ -166,13 +161,15 @@ func sing(delta: float) -> void:
 		if not _voices.has(key):
 			continue
 		var voice: AudioStreamPlayer2D = _voices[key]
-		var kind: int = clampi(int(engine.data.type), 0, LOUDNESS.size() - 1)
+		var strip: SoundStrip = _strips.get(key, null)
+		if strip == null or not strip.is_valid():
+			continue
 
 		# Boost can push the flow past one, and it should be heard: the
 		# nozzle really is throwing three times as much.
 		var flow: float = maxf(engine.exhaust_flow(), 0.0)
-		var want: float = minf(flow, 2.0) * LOUDNESS[kind]
-		var ease: float = clampf(delta / maxf(RESPONSE[kind], 0.001), 0.0, 1.0)
+		var want: float = minf(flow, 2.0) * strip.volume
+		var ease: float = clampf(delta / maxf(strip.response, 0.001), 0.0, 1.0)
 		var now: float = lerpf(float(_level[key]), want, ease)
 		_level[key] = now
 
@@ -198,9 +195,7 @@ func sing(delta: float) -> void:
 		if not voice.playing:
 			voice.play()
 		voice.volume_db = linear_to_db(clampf(now, QUIETEST, 2.0))
-		voice.pitch_scale = clampf(
-			lerpf(PITCH_LOW[kind], PITCH_HIGH[kind], minf(flow, 1.0)) * wobble, 0.1, 4.0
-		)
+		voice.pitch_scale = clampf(strip.pitch_at(flow) * wobble, 0.1, 4.0)
 
 
 ## How loud one engine's loop is right now, 0 upwards. For the tests and
@@ -214,11 +209,11 @@ func voice_count() -> int:
 
 
 func _on_ignited(engine: EngineInstance) -> void:
-	_bracket(engine, _ignite)
+	_bracket(engine, &"ignite")
 
 
 func _on_cut(engine: EngineInstance) -> void:
-	_bracket(engine, _snuff)
+	_bracket(engine, &"cut")
 
 
 ## The one-shots at either end of a burn.
@@ -227,14 +222,17 @@ func _on_cut(engine: EngineInstance) -> void:
 ## a thing that is true for a while and an ignition is a thing that
 ## happens, and playing the second on the first would mean stopping the
 ## loop to do it.
-func _bracket(engine: EngineInstance, sample: AudioStream) -> void:
+func _bracket(engine: EngineInstance, which: StringName) -> void:
 	var mixer: Soundscape = Soundscape.of()
-	if mixer == null or sample == null:
+	if mixer == null or _events == null:
 		return
-	var kind: int = clampi(int(engine.data.type), 0, LOUDNESS.size() - 1)
-	mixer.play(
-		sample,
+	# Scaled by the loop's own loudness, so a thruster catching is as
+	# much quieter than a main drive catching as the two are while
+	# running. One number, in one place.
+	var running: SoundStrip = _strips.get(engine.mount.name, null)
+	mixer.play_strip(
+		_events.pick(null, which),
 		engine.mount.global_position,
-		Soundscape.Path.CONDUCTED,
-		EVENT_VOLUME * LOUDNESS[kind],
+		1.0,
+		running.volume if running != null else 1.0,
 	)

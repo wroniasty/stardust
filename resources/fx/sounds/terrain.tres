@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="SoundTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sound_strip.gd" id="1_0yrd8"]
+[ext_resource type="AudioStream" path="res://resources/audio/rock_hit.tres" id="2_ahdhx"]
+[ext_resource type="AudioStream" path="res://resources/audio/rock_settle.tres" id="3_4b0ws"]
+[ext_resource type="Script" path="res://scripts/fx/sound_table.gd" id="4_ybir1"]
+
+[sub_resource type="Resource" id="Resource_aj1f7"]
+script = ExtResource("1_0yrd8")
+stream = ExtResource("2_ahdhx")
+path = 1
+pitch = Vector2(1.25, 0.8)
+
+[sub_resource type="Resource" id="Resource_7qt8v"]
+script = ExtResource("1_0yrd8")
+stream = ExtResource("3_4b0ws")
+path = 1
+volume = 0.45
+pitch = Vector2(0.85, 1.15)
+
+[resource]
+script = ExtResource("4_ybir1")
+thresholds = PackedFloat32Array()
+by_key = {
+&"hit": SubResource("Resource_aj1f7"),
+&"settle": SubResource("Resource_7qt8v")
+}

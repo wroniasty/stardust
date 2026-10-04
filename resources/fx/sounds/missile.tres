@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="SoundTable" format=3]
+
+[ext_resource type="Script" path="res://scripts/fx/sound_strip.gd" id="1_hfml8"]
+[ext_resource type="AudioStream" path="res://resources/audio/missile_motor.tres" id="2_vqryq"]
+[ext_resource type="Script" path="res://scripts/fx/sound_table.gd" id="3_kv058"]
+
+[sub_resource type="Resource" id="Resource_1v03j"]
+script = ExtResource("1_hfml8")
+stream = ExtResource("2_vqryq")
+path = 1
+volume = 0.55
+pitch = Vector2(0.92, 1.1)
+loops = true
+
+[resource]
+script = ExtResource("3_kv058")
+thresholds = PackedFloat32Array()
+fallback = SubResource("Resource_1v03j")
