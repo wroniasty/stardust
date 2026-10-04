@@ -261,6 +261,23 @@ Poza kolejnością milestone'ów, wszystko zgłoszone z lotu.
   by go czytały, nie dadzą się nawet skompilować w teście. Przeskok między
   systemami ją wyrzuca (piksele układu nie podróżują), zapis ją niesie, a stary
   plik bez tego pola wczytuje się bez niej.
+- [x] **Przyrząd orbity: trzy znaczniki, trzy kształty, i zegar.** Statek jest
+  kwadratem w najjaśniejszym atramencie zamiast kółkiem w kolorze apoapsis;
+  kropki apsyd gasną wygaszeniem, kiedy orbita robi się kołowa (wektor, który
+  je wskazuje, jest wówczas czystym szumem), a wszystkie trzy siadają na
+  siatkę piksela — bez tego znaczek na cztery piksele rasteryzuje się co
+  klatkę inaczej i na przeskalowanym oknie to widać. Doszedł wiersz
+  `APO in 42s` liczony Keplerem na tej samej stożkowej, którą tarcza rysuje.
+  Szczegóły w IDEAS.md, „Przyrząd orbity".
+- [x] **Gwiazda wrze.** Powierzchnia jest próbkowana przez zniekształcenie,
+  które samo się porusza, więc granula pęcznieje, dzieli się i gaśnie **w
+  miejscu** zamiast przesuwać się za okno — poprzednia wersja przesuwała jedno
+  pole szumu, powoli, i to jest dokładnie to, co zdradza płaski obraz. Kolor
+  jest teraz **temperaturą**, nie jasnością: rampa od chłodniejszych pasów przez
+  własny odcień gwiazdy do białego, z przepaleniem na szczytach. Pasy biorą
+  kolor **klasy niżej** z `Star.COLOURS`, bo mnożenie odcienia przez czerwień
+  działa dla żółtej gwiazdy i robi z błękitnego olbrzyma błoto. Pięć klas
+  sprawdzone zrzutem, nie rozumowaniem.
 - [x] **Silniki gasną po wylądowaniu.** Zgłoszone z kokpitu: czasem płomień
   zostawał zapalony bez żadnego inputu. Statek na nogach nigdy nie dociera do
   `_integrate_forces`, więc nikt nie schodził mu z przepustnicy, którą miał w

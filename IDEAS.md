@@ -1056,6 +1056,47 @@ który kolor już niósł.
 
 Pierwsze miejsce, w które je wstawiłem — lewy górny róg tarczy — było złe: słowo siadało na pierścieniu orbity, który opisywało, w tym samym kolorze. Teraz jest nad panelem po prawej, a znak odmowy nad nim po lewej.
 
+**Trzy znaczniki, trzy kształty.** Zgłoszone z kokpitu: nie dało się odróżnić,
+która kropka jest statkiem. Bo i nie dało — statek był kółkiem w tej samej
+zieleni co apoapsis i o jedną piątą piksela mniejszym. Teraz statek to
+**kwadrat w najjaśniejszym atramencie**: kształt mówi, który to który, kolor
+mówi, co robi — ten sam porządek, co trójkąt, romb i krzyżyk na skanerze.
+
+**Migotanie miało dwie przyczyny i pierwsza diagnoza złapała tylko jedną.**
+
+Przy orbicie bliskiej kołowej wektor mimośrodu, który wskazuje apsydy, jest małą
+różnicą dużych liczb: jego długość to szum, a **kierunek** to nic — i właśnie
+kierunek jest całą treścią apsydy. Obie kropki skakały dookoła pierścienia co
+tik. Stożek przy tym stał nieruchomo, bo okrąg wygląda tak samo niezależnie od
+tego, gdzie się go wyceluje, i dlatego migotały wyłącznie kropki.
+
+Druga połowa jest tańsza do wyjaśnienia: znacznik ma niespełna cztery piksele i
+jest rysowany na płótnie 640x360, które okno skaluje trzy, cztery razy. Środek
+przesunięty o jedną trzecią piksela rasteryzuje się inaczej, a przy 3x ląduje na
+ekranie jako znaczek zmieniający kształt co klatkę. Elementy orbity faktycznie
+tyle dryfują między tikami, bo grawitacja jest tu łatana wygaszeniem przy
+krawędzi, a nie czystym odwrotnym kwadratem. Znaczniki **siadają więc na siatkę
+piksela**, i nie ma czego migotać.
+
+Próg „apsydy za blisko siebie" jest **wygaszeniem, nie przełącznikiem**: twardy
+próg to własne migotanie, bo orbita siedząca dokładnie na nim strobowałaby
+kropkami.
+
+**Odliczanie do następnej apsydy** (`APO in 42s`) liczone Keplerem na tej samej
+stożkowej, którą przyrząd rysuje — liczba i obrazek nie mogą się więc ze sobą
+kłócić nawet tam, gdzie żadne z dwojga nie jest dokładnie prawdziwe. Jedna
+linia, nie dwie: pytanie na orbicie brzmi „co będzie dalej", druga apsyda jest
+pół orbity dalej, a wysokości powyżej i tak mówią, która jest która. Pusto,
+kiedy nie ma czego odliczać — orbita kołowa nie ma apsydy, a ucieczka nie ma jej
+przed sobą — bo zero czytałoby się jako „teraz".
+
+Test na to łapie błąd znaku, który przeżyłby zwykłe sprawdzenie: apsydy są pół
+orbity od siebie niezależnie od tego, w którą stronę czyta się kierunek lotu,
+więc samo „pół okresu" niczego nie dowodzi. Potrzebny jest przypadek
+niesymetryczny: statek wznoszący się musi dotrzeć do apoapsis **przed**
+periapsis. Pierwsza wersja tego testu celowała prędkością do środka i twierdziła,
+że statek się wznosi — zegar bardzo słusznie zaprzeczył.
+
 ### Mapa układu: rysowana z modelu, bo tylko model wie
 
 Mapa (`M`) czyta `StarSystem`, nie scenę. To jest jej jedyny powód

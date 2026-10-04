@@ -5805,6 +5805,8 @@ func _check_star() -> void:
 		"but it is never the nearest planet -- it has no ground to be one",
 	)
 
+	_check_star_face(star)
+
 	var out: Vector2 = Vector2(system.planets()[0].orbit_radius, 0.0)
 	var pull: float = star.gravity_at(out).length()
 	_expect(pull > 0.0, "it pulls at the innermost orbit (%.3f px/s2)" % pull)
@@ -8488,6 +8490,7 @@ func _check_elements(planet: Planet) -> void:
 	var escape: Vector2 = planet.orbit_extremes(point, Vector2.RIGHT * circular * 1.45)
 	_expect(is_inf(escape.y), "escape velocity has no apoapsis")
 
+
 	# Being in orbit is read off the trajectory rather than switched on, so the
 	# reading is what has to be tested: each of the four answers, from a state
 	# that plainly deserves it.
@@ -8527,6 +8530,101 @@ func _check_elements(planet: Planet) -> void:
 		falling.x < 1.0 and falling.y < radius * 1.02,
 		"a straight drop has its periapsis at the centre (%.1f)" % falling.x,
 	)
+
+	_check_apsis_clock(planet, point, circular)
+
+
+## When the next apsis arrives, which is the one thing on the orbit
+## instrument that is a prediction rather than a reading.
+##
+## Checked against the two states whose answer can be written down
+## without integrating anything -- sitting at apoapsis and sitting at
+## periapsis -- and then against the thing that makes a sign error
+## survive both: an asymmetric point, where the two answers are not
+## interchangeable. Reading the direction of travel backwards swaps
+## them, and the apsides stay half an orbit apart either way, so
+## symmetry alone proves nothing.
+func _check_apsis_clock(planet: Planet, point: Vector2, circular: float) -> void:
+	# Slower than circular at this radius, so this point is the top of the
+	# ellipse: the ship falls from here.
+	var slow: Vector2 = Vector2.RIGHT * circular * 0.9
+	var extremes: Vector2 = planet.orbit_extremes(point, slow)
+	var axis: float = (extremes.x + extremes.y) * 0.5
+	var period: float = TAU * sqrt(pow(axis, 3.0) / planet.mu())
+
+	var at_apoapsis: Vector2 = planet.seconds_to_apsis(point, slow)
+	_expect(
+		at_apoapsis.y < period * 0.01,
+		"a ship at the top of its ellipse is at apoapsis now (%.1f s of %.0f)" % [
+			at_apoapsis.y, period,
+		],
+	)
+	_expect(
+		absf(at_apoapsis.x - period * 0.5) < period * 0.01,
+		"and half an orbit from the bottom (%.1f s against %.1f)" % [
+			at_apoapsis.x, period * 0.5,
+		],
+	)
+
+	# The same ellipse entered at its low point: faster than circular
+	# there by exactly as much, so the two readings have to swap.
+	var low: Vector2 = planet.global_position + Vector2.UP * extremes.x
+	var fast: Vector2 = Vector2.RIGHT * sqrt(
+		planet.mu() * (2.0 / extremes.x - 1.0 / axis)
+	)
+	var at_periapsis: Vector2 = planet.seconds_to_apsis(low, fast)
+	_expect(
+		at_periapsis.x < period * 0.01
+		and absf(at_periapsis.y - period * 0.5) < period * 0.01,
+		"and the other way round at the bottom (%.1f s, %.1f s)" % [
+			at_periapsis.x, at_periapsis.y,
+		],
+	)
+
+	# The asymmetric case, which is the one that earns its place: a ship
+	# on its way **up** has to reach apoapsis first. Read the direction
+	# of travel backwards and that swaps, while both checks above still
+	# pass -- the apsides are half an orbit apart whichever way round
+	# you read them.
+	#
+	# Built at the semi-major axis radius, where vis-viva hands back the
+	# circular speed, and tilted off the tangent so the path is an
+	# ellipse and not that circle. Tilted **outward**, and round the same
+	# way as the orbit above, which is what makes it climbing: the first
+	# version of this aimed the velocity inward and then asserted the
+	# ship was going up, which the clock quite correctly denied.
+	var climbing_at: Vector2 = planet.global_position + Vector2.RIGHT * axis
+	var speed: float = sqrt(planet.mu() / axis)
+	var climbing: Vector2 = planet.seconds_to_apsis(
+		climbing_at, Vector2.RIGHT.rotated(0.35) * speed
+	)
+	_expect(
+		climbing.y < climbing.x,
+		"a climbing ship reaches apoapsis before periapsis (%.1f s against %.1f)" % [
+			climbing.y, climbing.x,
+		],
+	)
+	_expect(
+		climbing.y > 0.0 and climbing.x < period * 1.001,
+		"and both answers are ahead of it, inside one orbit",
+	)
+
+	# A circle has no apsis to time, and saying "now" would be the worst
+	# available answer: the pin would sit wherever the noise in a vector
+	# of length nothing happened to point that tick.
+	var round_trip: Vector2 = planet.seconds_to_apsis(point, Vector2.RIGHT * circular)
+	_expect(
+		is_inf(round_trip.x) and is_inf(round_trip.y),
+		"a circular orbit has no apsis worth timing",
+	)
+
+	# And an outbound escape has no apoapsis ever and no periapsis ahead.
+	var leaving: Vector2 = planet.seconds_to_apsis(point, Vector2.RIGHT * circular * 1.45)
+	_expect(
+		is_inf(leaving.y),
+		"an escape has no apoapsis to count down to",
+	)
+
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number
@@ -10551,6 +10649,84 @@ func _check_marker_persists(ship: Ship) -> void:
 	)
 
 	sky.free()
+
+
+## The face of the star: the one thing about a shader a headless test can
+## hold on to.
+##
+## Not what it looks like -- that is what the screenshots are for -- but
+## that the dials the code turns are dials the shader has. Godot drops an
+## unknown shader parameter **without a word**, so a uniform renamed on
+## one side of this is a star that quietly falls back to its defaults:
+## every star the same yellow, every star the same cell size, and
+## nothing anywhere saying so. That is the failure this catches, and it
+## is the kind that survives a long time because it looks like nothing
+## going wrong.
+func _check_star_face(star: Star) -> void:
+	var surface: ColorRect = star.get_node_or_null("Surface") as ColorRect
+	_expect(surface != null, "the star has a face to paint")
+	if surface == null:
+		return
+	var paint: ShaderMaterial = surface.material as ShaderMaterial
+	_expect(paint != null and paint.shader != null, "and a shader on it")
+	if paint == null or paint.shader == null:
+		return
+
+	var declared: Array[String] = []
+	for entry: Dictionary in paint.shader.get_shader_uniform_list():
+		declared.append(String(entry["name"]))
+	var missing: Array[String] = []
+	for name: String in ["core_color", "lane_color", "cells", "boil", "warp_reach", "flare"]:
+		if not declared.has(name):
+			missing.append(name)
+	_expect(missing.is_empty(), "which declares every dial it is driven by (%s)" % [missing])
+
+	_expect(
+		(paint.get_shader_parameter("core_color") as Color).is_equal_approx(star.colour),
+		"the face is painted the colour the mass earned",
+	)
+	# The lanes are the hue the fault was in: a cooler class rather than
+	# the same colour multiplied by a red, which turns a blue giant
+	# brown. Checked as "not the same colour, and no further from the
+	# face than one class is", because the exact value is a look and the
+	# test has no business pinning a look.
+	var lane: Color = paint.get_shader_parameter("lane_color")
+	_expect(
+		not lane.is_equal_approx(star.colour),
+		"and the lanes between the granules are not the same colour as it",
+	)
+	_expect(
+		lane.b <= star.colour.b + 0.01 or star.colour.b < 0.7,
+		"and never bluer than the face, whatever class the star is (%s)" % lane,
+	)
+	_expect(
+		float(paint.get_shader_parameter("cells")) > 8.0,
+		"the cell count comes off the radius rather than the default (%.0f)" % [
+			paint.get_shader_parameter("cells"),
+		],
+	)
+	# And it boils without anybody turning anything on. A zero here is a
+	# star that has gone back to being a still picture.
+	var boil: float = _shader_default(paint.shader, "boil")
+	_expect(boil > 0.0, "and the surface boils out of the box (%.3f)" % boil)
+
+
+## The default a shader declares for one of its uniforms.
+##
+## Read out of the source, which is not the proper way round:
+## `RenderingServer.shader_get_parameter_default` is, and it answers
+## `null` under `--headless`, where there is no renderer to have
+## compiled anything. That is exactly where this test lives, so the
+## proper way is the one that cannot be used.
+func _shader_default(shader: Shader, name: String) -> float:
+	for line: String in shader.code.split("
+"):
+		var trimmed: String = line.strip_edges()
+		if not trimmed.begins_with("uniform ") or not trimmed.contains(" %s " % name):
+			continue
+		var at: int = trimmed.find("=")
+		return 0.0 if at < 0 else float(trimmed.substr(at + 1).strip_edges().rstrip(";"))
+	return -1.0
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.

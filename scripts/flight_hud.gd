@@ -39,11 +39,30 @@ const HEAT_GAP: float = 2.0
 ## The orbit diagram: a square, with the text column beside it.
 const DIAL: float = 66.0
 const PANEL_WIDTH: float = 158.0
-const PANEL_HEIGHT: float = 74.0
+const PANEL_HEIGHT: float = 84.0
 
 ## How the planet is drawn in the diagram, and the apsis dots.
 const PLANET_DOT: float = 2.5
 const APSIS_DOT: float = 1.8
+
+## Half-width of the square that marks the ship on the dial.
+##
+## A square and not a dot, because there are three marks on that dial
+## and two of them were already dots -- one of them in the same green
+## the ship was drawn in, a fifth of a pixel bigger. Shape carries which
+## is which and colour carries what it is doing, the same way round as
+## the scanner's triangle, diamond and cross.
+const SHIP_MARK: float = 1.8
+
+## How far apart the two apsides have to be on the dial before they are
+## worth marking separately, in pixels. Below it they are the same place
+## and the vector that aims them is noise -- see `GravityWell.CIRCULAR`.
+##
+## Faded in across this distance rather than switched on at it. A hard
+## threshold is a flicker of its own: an orbit sitting on the line would
+## strobe both dots on and off, tick after tick, which is the fault this
+## constant exists to stop.
+const APSIS_SPREAD: float = 2.0
 
 ## Segments the conic is drawn with. Sixty-four is smooth at sixty-six
 ## pixels across and cheap enough to do every frame.
@@ -257,6 +276,24 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 	y += ROW
 	_row(font, x, y, "APO", _apsis_text(planet, shape["apoapsis"], landed), _apoapsis_colour(shape))
 	y += ROW
+	# Which apsis comes first, and how long until it does. One line
+	# rather than two, because the question up here is "what happens
+	# next": the other apsis is half an orbit away and the two heights
+	# above already say which of them is which. Blank when there is
+	# nothing to count down to -- a circular orbit has no apsis and an
+	# outbound escape has none ahead of it -- because a zero would read
+	# as "now".
+	if not landed:
+		var due: Vector2 = planet.seconds_to_apsis(
+			_ship.global_position, _ship.linear_velocity
+		)
+		if due.y < due.x:
+			_text(font, Vector2(x, y), "APO in %s" % _countdown_text(due.y),
+				_apoapsis_colour(shape))
+		elif not is_inf(due.x):
+			_text(font, Vector2(x, y), "PERI in %s" % _countdown_text(due.x),
+				_orbit_colour(orbit))
+	y += ROW
 	_row(font, x, y, "ALT", "%6.0f" % altitude, _ink.value)
 	y += ROW
 	_row(font, x, y, "V/S", "%+6.1f" % -descent, _descent_colour(descent))
@@ -287,6 +324,19 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 				word,
 				_orbit_colour(orbit),
 			)
+
+
+## A countdown a pilot can act on.
+##
+## Seconds while they are worth counting, minutes after that: "in 412s"
+## is a number you have to divide before it means anything, and by the
+## time it is that far off the exact second has stopped mattering.
+func _countdown_text(seconds: float) -> String:
+	if seconds < 100.0:
+		return "%.0fs" % seconds
+	if seconds < 6000.0:
+		return "%.0fm" % (seconds / 60.0)
+	return "%.1fh" % (seconds / 3600.0)
 
 
 ## An apsis as a height above the nominal surface.
@@ -357,19 +407,51 @@ func _draw_conic(
 	if track.size() > 1:
 		_canvas.draw_polyline(track, colour, width)
 
-	_canvas.draw_circle(
-		focus + Vector2.from_angle(periapsis_angle + turn) * periapsis * scale,
-		APSIS_DOT,
-		colour,
-	)
-	if not is_inf(apoapsis):
-		_canvas.draw_circle(
-			focus + Vector2.from_angle(periapsis_angle + turn + PI) * apoapsis * scale,
-			APSIS_DOT,
-			_ink.ok,
+	# The apsides, and only while they are in different places. On a
+	# nearly circular orbit the eccentricity vector that aims them is a
+	# small difference of large numbers: its direction is noise, so both
+	# dots swing right round the ring from one tick to the next. That is
+	# the flicker this was reported as, and it is worth saying that the
+	# conic never moved -- a circle looks the same whichever way you aim
+	# it, so the dots were the only thing that could be seen doing it.
+	# Two dots a pixel apart would carry nothing anyway: the ring already
+	# says the height is the same all the way round.
+	var spread: float = (apoapsis - periapsis) * scale
+	var shown: float = clampf((spread - APSIS_SPREAD) / APSIS_SPREAD, 0.0, 1.0)
+	if shown > 0.0:
+		_dot(
+			focus + Vector2.from_angle(periapsis_angle + turn) * periapsis * scale,
+			Color(colour, colour.a * shown),
 		)
-	# Where the ship is on it, which is what turns a shape into a position.
-	_canvas.draw_circle(focus + arm.rotated(turn) * scale, 1.6, _ink.ok)
+		if not is_inf(apoapsis):
+			_dot(
+				focus + Vector2.from_angle(periapsis_angle + turn + PI) * apoapsis * scale,
+				Color(_ink.ok, _ink.ok.a * shown),
+			)
+	# Where the ship is on it, which is what turns a shape into a
+	# position. A square in the brightest ink: it used to be a circle in
+	# the apoapsis green, which is how a pilot ended up with three dots
+	# and no way of telling which was which.
+	var here: Vector2 = (focus + arm.rotated(turn) * scale).round()
+	_canvas.draw_rect(
+		Rect2(here - Vector2(SHIP_MARK, SHIP_MARK), Vector2(SHIP_MARK, SHIP_MARK) * 2.0),
+		_ink.value,
+	)
+
+
+## An apsis mark, snapped to the canvas grid.
+##
+## The snap is the whole of this function and it is not fussiness. The
+## mark is under four pixels across and the canvas is 640x360 before the
+## window scales it up three or four times, so a centre that moves by a
+## third of a pixel rasterises differently and arrives on screen as a
+## mark that changes shape every frame. The orbit's elements do wobble
+## that much from tick to tick -- gravity here is patched with a falloff
+## at the rim rather than being a clean inverse square -- so the
+## sub-pixel position never settles on its own. On the grid there is
+## nothing left to shimmer.
+func _dot(at: Vector2, colour: Color) -> void:
+	_canvas.draw_circle(at.round(), APSIS_DOT, colour)
 
 
 ## Out of every well: which way, and how fast. An orbit diagram around a

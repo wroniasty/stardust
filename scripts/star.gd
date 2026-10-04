@@ -69,6 +69,9 @@ func _build_quads() -> void:
 	var surface_material: ShaderMaterial = _own_material(_surface)
 	surface_material.set_shader_parameter("core_color", colour)
 	surface_material.set_shader_parameter(
+		"lane_color", lane_colour_for(surface_gravity)
+	)
+	surface_material.set_shader_parameter(
 		"cells", maxf(8.0, 2.0 * surface_radius / CELL_PIXELS)
 	)
 
@@ -135,11 +138,39 @@ static func of(tree: SceneTree) -> Star:
 
 ## Which of those a star of this surface gravity is.
 static func colour_for(gravity: float) -> Color:
+	return COLOURS[_class_of(gravity)]
+
+
+## And what the cooler lanes between its granules look like: the class
+## below it, darkened.
+##
+## Out of the same ladder rather than mixed towards a fixed ember,
+## because a hue cannot be cooled by arithmetic on its channels. The
+## first attempt multiplied the star's colour by a red-biased vector,
+## which is right for a yellow star and gives a blue giant brown lanes
+## -- mud, and the one colour a star cannot be. A class down the ladder
+## is what one class cooler actually looks like, and the coolest star
+## has nowhere to go, so its lanes are only darker than its face.
+static func lane_colour_for(gravity: float) -> Color:
+	var step: int = _class_of(gravity)
+	# Pulled a third of the way back towards the star's own face, and
+	# that is not timidity: a full class down against a white star gives
+	# khaki patches, which read as dirt on it rather than as cooler
+	# plasma. The hue shift has to be a hint on a hot star and can be
+	# the whole story on a cold one, which is what this gets for free --
+	# one class down from white is yellow, one class down from orange is
+	# red, and the gap between a face and its own lane is wider the
+	# redder the star already is.
+	var cooler: Color = COLOURS[maxi(step - 1, 0)].lerp(COLOURS[step], 0.35)
+	var dim: float = 0.78 if step > 0 else 0.5
+	return Color(cooler.r * dim, cooler.g * dim, cooler.b * dim)
+
+
+static func _class_of(gravity: float) -> int:
 	var across: float = inverse_lerp(
 		StarSystem.STAR_GRAVITY.x, StarSystem.STAR_GRAVITY.y, gravity
 	)
-	var step: int = floori(clampf(across, 0.0, 0.999) * float(COLOURS.size()))
-	return COLOURS[step]
+	return floori(clampf(across, 0.0, 0.999) * float(COLOURS.size()))
 
 
 func marker_color() -> Color:

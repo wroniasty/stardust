@@ -366,6 +366,90 @@ func orbit_state(point: Vector2, velocity: Vector2) -> OrbitState:
 	return OrbitState.ORBIT
 
 
+## Below this eccentricity an orbit is read as a circle and gets no
+## apsis times at all.
+##
+## Not shyness about small numbers: it is where the answer stops
+## existing. The eccentricity vector is a difference of large terms, so
+## near zero its length is noise and its **direction** is nothing at
+## all -- and the direction is the whole of what names an apsis. At a
+## 6000 px orbit this threshold is six pixels between the high point and
+## the low one, which is under what the dial can draw and well under
+## what a pilot can fly to.
+const CIRCULAR: float = 0.0005
+
+
+## How long until the ship next passes periapsis and apoapsis, in
+## seconds. `INF` for an apsis this path has not got, or will not see
+## again.
+##
+## Kepler rather than integration, and deliberately the same conic the
+## instrument draws, so the number and the picture cannot disagree.
+## Gravity here is patched per well with a falloff over the outer tenth
+## (IDEAS section 5), so a path crossing that rim is not quite this
+## conic; inside the well, which is where an orbit readout is worth
+## reading at all, they are the same thing.
+func seconds_to_apsis(point: Vector2, velocity: Vector2) -> Vector2:
+	var never: Vector2 = Vector2(INF, INF)
+	var pull: float = mu()
+	var arm: Vector2 = point - global_position
+	if pull <= 0.0 or arm.length() < 0.001:
+		return never
+
+	var shape: Dictionary = orbit_shape(point, velocity)
+	var periapsis: float = float(shape["periapsis"])
+	var aim: Vector2 = shape["eccentricity"]
+	var eccentricity: float = aim.length()
+	if periapsis <= 0.0 or eccentricity < CIRCULAR:
+		return never
+
+	# Which way round the ship is going. The angle from periapsis cannot
+	# say on its own whether the ship is on its way up or on its way
+	# back down, and reading it the wrong way round swaps the two
+	# answers -- which is a mistake that still looks plausible, since
+	# the apsides stay half an orbit apart either way.
+	var sweep: float = arm.cross(velocity)
+	if is_zero_approx(sweep):
+		return never
+	var nu: float = angle_difference(aim.angle(), arm.angle()) * signf(sweep)
+
+	if eccentricity < 1.0:
+		var axis: float = periapsis / (1.0 - eccentricity)
+		var rate: float = sqrt(pull / pow(axis, 3.0))
+		# Through the eccentric anomaly, because mean anomaly is the only
+		# one that advances at a constant rate and therefore the only one
+		# a time can be read off.
+		var eccentric: float = 2.0 * atan2(
+			sqrt(1.0 - eccentricity) * sin(nu * 0.5),
+			sqrt(1.0 + eccentricity) * cos(nu * 0.5),
+		)
+		var mean: float = eccentric - eccentricity * sin(eccentric)
+		# Periapsis is mean anomaly zero and apoapsis is pi, both of them
+		# ahead rather than behind: a countdown that could run backwards
+		# would be a clock, not a countdown.
+		return Vector2(fposmod(-mean, TAU) / rate, fposmod(PI - mean, TAU) / rate)
+
+	# Open path: no apoapsis at all, and periapsis is only ahead of the
+	# ship while it is still falling towards it. On the way out it is in
+	# the past and saying "in 0 s" would be a lie about the one number
+	# that matters out here.
+	var open: float = maxf(eccentricity, 1.0001)
+	var reach: float = periapsis / (open - 1.0)
+	var rate_open: float = sqrt(pull / pow(reach, 3.0))
+	var ratio: float = sqrt((open - 1.0) / (open + 1.0)) * tan(
+		clampf(nu, -PI * 0.999, PI * 0.999) * 0.5
+	)
+	if absf(ratio) >= 1.0:
+		# Past the asymptote: the ship is on the part of the hyperbola
+		# that never comes back.
+		return never
+	# 2 * atanh(ratio), written out because GDScript has no atanh.
+	var hyperbolic: float = log((1.0 + ratio) / (1.0 - ratio))
+	var mean_open: float = open * sinh(hyperbolic) - hyperbolic
+	var due: float = -mean_open / rate_open
+	return Vector2(due if due >= 0.0 else INF, INF)
+
+
 ## Smoothly takes gravity to zero over the outer tenth of the well.
 func _edge_falloff(distance: float) -> float:
 	var fade_start: float = influence_radius * 0.9
