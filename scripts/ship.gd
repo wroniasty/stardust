@@ -238,6 +238,16 @@ const BOOST_RESERVE: float = 0.10
 ## HP and death; for now it only accumulates.
 signal hull_impact(impact_speed: float, damage: float)
 
+## An engine lighting up, and the same one going out.
+##
+## Seam tasks for the sound track (VISUALS.md section 6): a loop can be
+## driven by polling `exhaust_flow()` every tick, but an ignition is a
+## thing that happens once and has to be announced once. The ship is
+## where they live because the ship is what ticks the engines; nothing
+## here changes how any of them behave.
+signal engine_ignited(engine: EngineInstance)
+signal engine_cut(engine: EngineInstance)
+
 ## Flight modes. Being landed is the only state that stops the solver; whether
 ## the ship is in orbit is read off its trajectory rather than switched on,
 ## because there is nothing for a mode to do about it (see IDEAS.md section 8).
@@ -1242,6 +1252,11 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	for engine: EngineInstance in engines:
 		engine.advance(state.step)
 		engine.mount.set_exhaust(engine.exhaust_flow())
+		if engine.settle_flame():
+			if engine.lit:
+				engine_ignited.emit(engine)
+			else:
+				engine_cut.emit(engine)
 	_resolve_boost(state.step)
 
 	_applied_force = Vector2.ZERO

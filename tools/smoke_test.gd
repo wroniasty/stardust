@@ -992,6 +992,7 @@ func _evaluate_phase() -> void:
 			_check_gear_module()
 			_check_weapon_types(_planet)
 			_check_bays()
+			_check_sound_seams()
 			_check_ship_fitouts()
 			_check_fitout_presets()
 			_check_creative_tool()
@@ -8771,6 +8772,133 @@ func _check_bays() -> void:
 		"a plain slot takes any kind, weighs nothing, and still has a size",
 	)
 	bare.free()
+	ship.queue_free()
+
+
+## Szwy dla toru dźwiękowego: zapłon, zgaśnięcie, wystrzał.
+##
+## Three signals, and the reason they exist rather than being polled.
+## A loop can be driven by reading `exhaust_flow()` every tick, because
+## a loop is a thing that is true for a while. An **ignition** is a
+## thing that happens, and it happens once -- so something has to say
+## so once, and nothing in the simulation was saying it.
+##
+## Which makes the interesting property not "does it fire" but "does it
+## fire exactly once". An engine on the edge of lighting is the case
+## that breaks a naive version, and an unreliable drive surges across
+## any single threshold several times a second.
+func _check_sound_seams() -> void:
+	var ship: Ship = _spawn_ship()
+	var lit: Array[String] = []
+	var out: Array[String] = []
+	ship.engine_ignited.connect(
+		func(engine: EngineInstance) -> void: lit.append(String(engine.mount.name))
+	)
+	ship.engine_cut.connect(
+		func(engine: EngineInstance) -> void: out.append(String(engine.mount.name))
+	)
+
+	var drive: EngineInstance = null
+	for engine: EngineInstance in ship.engines:
+		if engine.mount.name == "MainDrive":
+			drive = engine
+	_expect(drive != null, "the test ship has a drive to light")
+	if drive == null:
+		ship.queue_free()
+		return
+
+	_expect(
+		not drive.lit and is_equal_approx(drive.exhaust_flow(), 0.0),
+		"an engine starts out cold",
+	)
+
+	# Up, held, and down. Through `settle_flame()` rather than the ship's
+	# tick, which needs a world: the latch is the thing being checked and
+	# it is the ship that turns it into a signal.
+	var fires: int = 0
+	drive.throttle = 1.0
+	for tick: int in range(60):
+		if drive.settle_flame():
+			fires += 1
+	_expect(
+		fires == 1 and drive.lit,
+		"opening the throttle lights it once, not once a tick (%d)" % fires,
+	)
+	fires = 0
+	drive.throttle = 0.0
+	for tick: int in range(60):
+		if drive.settle_flame():
+			fires += 1
+	_expect(
+		fires == 1 and not drive.lit,
+		"and closing it puts it out once (%d)" % fires,
+	)
+
+	# The band. A throttle parked between the two figures must not make
+	# the engine announce itself at all -- which is the whole reason
+	# there are two of them, and what a single threshold gets wrong.
+	var between: float = (
+		(EngineInstance.IGNITES_AT + EngineInstance.GOES_OUT_AT) * 0.5
+	)
+	fires = 0
+	for tick: int in range(120):
+		drive.throttle = between * (1.2 if tick % 2 == 0 else 0.8)
+		if drive.settle_flame():
+			fires += 1
+	_expect(
+		fires == 0 and not drive.lit,
+		"an engine wobbling inside the band says nothing (%d times)" % fires,
+	)
+
+	# And the ship passes both on, naming the engine so a listener can
+	# put the sound where the nozzle is.
+	lit.clear()
+	out.clear()
+	for engine: EngineInstance in ship.engines:
+		engine.lit = false
+		engine.throttle = 0.0
+	drive.throttle = 1.0
+	var heard: int = 0
+	for engine: EngineInstance in ship.engines:
+		if engine.settle_flame():
+			heard += 1
+	_expect(heard == 1, "one engine lit, and only the one (%d)" % heard)
+
+	# The gun. Announced before the round exists, because a beam has no
+	# round: nothing travels, so there is nothing else whose birth a
+	# listener could hear.
+	var shots: Array[Dictionary] = []
+	var gun: Hardpoint = ship.hardpoints[0]
+	gun.fired.connect(
+		func(at: Vector2, direction: Vector2, weapon: WeaponData) -> void:
+			shots.append({"at": at, "direction": direction, "weapon": weapon})
+	)
+	var stage: Node2D = Node2D.new()
+	root.add_child(stage)
+	gun.weapon = load("res://resources/weapons/autocannon.tres") as WeaponData
+	gun.fire(Vector2.ZERO, stage)
+	_expect(
+		shots.size() == 1
+		and (shots[0]["at"] as Vector2).is_equal_approx(gun.global_position),
+		"a shot is announced once, from the muzzle",
+	)
+	_expect(
+		shots.size() == 1 and (shots[0]["weapon"] as WeaponData) == gun.effective(),
+		"and carries the weapon, so nobody has to keep a second catalogue",
+	)
+
+	# A beam too, which is the case that needs this signal rather than
+	# merely benefiting from it.
+	shots.clear()
+	gun.weapon = load("res://resources/weapons/beam_lance.tres") as WeaponData
+	gun._cooldown = 0.0
+	gun.fire(Vector2.ZERO, stage)
+	_expect(
+		shots.size() == 1,
+		"a beam is announced as well, and it is the only announcement it gets",
+	)
+
+	stage.free()
 	ship.queue_free()
 
 

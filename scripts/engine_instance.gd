@@ -205,6 +205,37 @@ func boost_demand() -> float:
 	return data.fuel_cost * data.boost_burn * effective_output()
 
 
+## What counts as lit, and what counts as out.
+##
+## Two figures rather than one, because an engine on the threshold is
+## not a question with a stable answer: an unreliable drive surging
+## around a single number would announce itself forty times a second,
+## and the thing listening would play forty ignitions. Hysteresis is the
+## cheapest way to make "is it running" a fact rather than a sample.
+const IGNITES_AT: float = 0.08
+const GOES_OUT_AT: float = 0.03
+
+## Whether this nozzle is throwing anything worth calling a flame.
+##
+## Latched, not computed: the value is only allowed to change when the
+## flow crosses one end of the band, so the two thresholds above mean
+## what they say.
+var lit: bool = false
+
+
+## Brings `lit` up to date and says whether it changed. The ship calls
+## this once a tick and announces what it hears back.
+func settle_flame() -> bool:
+	var flow: float = exhaust_flow()
+	if lit and flow <= GOES_OUT_AT:
+		lit = false
+		return true
+	if not lit and flow >= IGNITES_AT:
+		lit = true
+		return true
+	return false
+
+
 ## Which way this engine is actually pushing, with the nozzle where it is.
 func thrust_direction() -> Vector2:
 	return mount.force_direction().rotated(gimbal)

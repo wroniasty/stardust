@@ -586,8 +586,16 @@ pliku.
 Małe, mechaniczne, każde to jeden sygnał albo jedno pole publiczne. Wypisane
 tutaj, żeby tor wizualny nigdy nie musiał sam wchodzić w `ship.gd`.
 
-- [ ] `Ship`: sygnał zapłonu i zgaszenia silnika (`engine_ignited` / `engine_cut` z referencją do silnika).
-- [ ] `Hardpoint`: sygnał wystrzału z pozycją i kierunkiem.
+- [x] `Ship`: sygnał zapłonu i zgaszenia silnika (`engine_ignited` / `engine_cut` z referencją do silnika).
+  **Z histerezą**, i to jest cała treść tego zadania: silnik na progu nie jest
+  pytaniem o stabilnej odpowiedzi, a niepewny napęd przeskakuje pojedynczą
+  wartość kilkadziesiąt razy na sekundę — słuchacz zagrałby czterdzieści
+  zapłonów. Dwa progi (`IGNITES_AT` / `GOES_OUT_AT`) i zatrzask na
+  `EngineInstance.lit` robią z „czy się pali" fakt, a nie próbkę.
+- [x] `Hardpoint`: sygnał wystrzału z pozycją i kierunkiem. Niesie też broń,
+  bo to broń decyduje, jak strzał brzmi, a słuchacz odszukujący ją po nazwie
+  trzymałby drugą kopię katalogu. Emitowany **przed** powstaniem pocisku, bo
+  wiązka żadnego nie tworzy — i to jest jedyne ogłoszenie, jakie dostaje.
 - [x] `Planet`: sygnał wyrwania dziury (`carved(point, radius)`), dziś `carve()` tylko zwraca `bool`.
   Zrobione w M1.3, słuchacza doczekał się dopiero w V3.
 - [ ] `Ship`: sygnał przekroczenia granicy atmosfery w obie strony.

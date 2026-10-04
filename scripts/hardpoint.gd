@@ -18,6 +18,14 @@ const MUZZLE_DIRECTION: Vector2 = Vector2.UP
 
 ## What is bolted on. Empty mounts are normal -- a hull can carry more
 ## hardpoints than the pilot has guns for.
+## A shot leaving this mount: where from, which way, and out of what.
+##
+## A seam task for the sound track (VISUALS.md section 6). Carries the
+## weapon rather than a name, because what a shot sounds like is the
+## weapon's business and a listener that had to look it up would be a
+## listener keeping a second copy of the catalogue.
+signal fired(at: Vector2, direction: Vector2, weapon: WeaponData)
+
 @export var weapon: WeaponData = null
 
 ## Weapon types this mount will take. Empty means anything, which is what a
@@ -254,6 +262,10 @@ func fire(carrier_velocity: Vector2, container: Node, shooter: Node = null) -> P
 	var spread: float = deg_to_rad(firing.spread_degrees)
 	var aim: float = global_rotation + facing + randf_range(-spread * 0.5, spread * 0.5)
 	var direction: Vector2 = MUZZLE_DIRECTION.rotated(aim)
+	# Before the round exists and before the beam is drawn, because this
+	# is the only announcement a beam gets: nothing travels, so there is
+	# no projectile whose birth something else could listen for.
+	fired.emit(global_position, direction, firing)
 
 	if firing.is_beam():
 		_fire_beam(firing, direction, container, shooter)
