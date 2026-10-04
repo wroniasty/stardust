@@ -105,9 +105,10 @@ Gotowe, gdy: każdy stan z tabeli w sekcji 1 da się włączyć jednym ruchem i 
 
 ### D3: Strzelanie i cele
 
-- [ ] Panel „Ogień": przytrzymaj / przełącz auto-ogień, osobno dla spustu 0 i 1, aim myszą albo na stały punkt.
-- [ ] Manekiny: nieruchome i krążące cele z licznikiem trafień i obrażeń, żeby zobaczyć `damage_per_second()` w praktyce.
-- [ ] Odczyt: strzałów na sekundę, zużycie energii, zasięg, czas do wyczerpania puli.
+- [x] Panel „Ogień": trzymany ogień osobno dla spustu 0 i 1 (przez Input Map), celowanie myszą.
+- [ ] Celowanie w stały punkt. `Ship._physics_process` nadpisuje `aim_point` z myszy w każdym ticku, więc trzeba albo przesunąć kursor (`Viewport.warp_mouse`), albo dać statkowi tryb bez pilota.
+- [x] Manekiny: nieruchome i krążące cele z licznikiem trafień i obrażeń, żeby zobaczyć `damage_per_second()` w praktyce.
+- [x] Odczyt: strzałów na sekundę, zużycie energii, zasięg, czas do wyczerpania puli.
 - [ ] Pasek „modyfikatory": dorzucanie `ShotModData` do hardpointu (`add_mod`).
 
 Gotowe, gdy: każda z siedmiu broni z `resources/weapons/` strzela w workbenchu, a odczyt zgadza się z `WeaponData.stat_rows()`.

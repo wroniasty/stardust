@@ -32,11 +32,13 @@ const RESPAWN_DELAY: float = 1.6
 
 var ship: Ship = null
 var pins: BenchPins = null
+var dummies: BenchDummies = null
 
 var _panel: PanelContainer = null
 var _tabs: TabContainer = null
 var _ship_panel: BenchShipPanel = null
 var _state_panel: BenchStatePanel = null
+var _fire_panel: BenchFirePanel = null
 
 ## Actions the bench is holding down for the pilot, so the hover guard below
 ## lets go of the mouse buttons without letting go of these.
@@ -66,6 +68,10 @@ func _ready() -> void:
 	pins.name = "Pins"
 	pins.ship = ship
 	add_child(pins)
+
+	dummies = BenchDummies.new()
+	dummies.name = "Dummies"
+	add_child(dummies)
 
 	_build_presentation()
 	_build_camera()
@@ -142,6 +148,9 @@ func _build_ui() -> void:
 	_state_panel = BenchStatePanel.new()
 	_add_tab("Stany", _state_panel)
 	_state_panel.bind(self, ship)
+	_fire_panel = BenchFirePanel.new()
+	_add_tab("Ogień", _fire_panel)
+	_fire_panel.bind(self, ship)
 
 
 ## One scrolling page per panel, so a long form scrolls under its tab header

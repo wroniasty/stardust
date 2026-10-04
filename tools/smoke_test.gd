@@ -3478,6 +3478,35 @@ func _check_workbench() -> void:
 	_expect(not Input.is_action_pressed(&"boost"), "and lets go of it again")
 	states._on_clear()
 
+	# D3: targets and the gun readout.
+	var dummies: BenchDummies = bench.dummies
+	dummies.radius = 200.0
+	dummies.spawn(3)
+	_expect(dummies.count() == 3, "the bench can set out three targets")
+	var target: Ship = dummies._slots[0]["ship"] as Ship
+	_expect(target.freeze, "and they stay where they were put")
+	target.take_damage(0.1, "test")
+	dummies._physics_process(0.016)
+	_expect(
+		dummies.hits == 1 and absf(dummies.total_damage - 0.1) < 0.001,
+		"a hit on a target is counted and measured (%.3f)" % dummies.total_damage,
+	)
+	_expect(dummies.damage_per_second() > 0.0, "and shows up as damage per second")
+	target.take_damage(5.0, "test")
+	_expect(dummies.kills == 1, "a destroyed target is counted as a kill")
+	dummies._revive(target)
+	_expect(
+		is_equal_approx(target.hull_integrity, 1.0) and target.freeze,
+		"and is put back whole and frozen",
+	)
+	var fire: BenchFirePanel = bench._fire_panel
+	fire._refresh_guns()
+	_expect(
+		fire._guns_box.get_child_count() == maxi(ship.hardpoints.size(), 1),
+		"the fire panel describes every gun the ship has",
+	)
+	dummies.clear()
+
 	# Freed on the spot, not queued: the missiles fired above would still be
 	# alive for the checks that follow, and the next one counts motors.
 	root.remove_child(bench)
