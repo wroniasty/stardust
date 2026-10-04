@@ -78,6 +78,7 @@ const LABELS: Array[Dictionary] = [
 	{"block": "DEBUG", "action": &"debug_toggle", "says": "nakładka diagnostyczna"},
 	{"block": "DEBUG", "action": &"debug_creative", "says": "sandbox"},
 	{"block": "DEBUG", "action": &"debug_planet", "says": "konfigurator planety"},
+	{"block": "DEBUG", "action": &"bench_toggle_panel", "says": "stanowisko: schowaj panel"},
 	{"block": "DEBUG", "action": &"debug_carve", "says": "wytnij krater"},
 	{"block": "DEBUG", "action": &"debug_damage_engine", "says": "uszkodź silnik"},
 	{"block": "DEBUG", "action": &"debug_repair", "says": "napraw silniki"},

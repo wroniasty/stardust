@@ -996,6 +996,7 @@ func _evaluate_phase() -> void:
 			_check_ship_fitouts()
 			_check_fitout_presets()
 			_check_creative_tool()
+			_check_workbench()
 			_check_art()
 			_check_skin()
 			_check_camera_shake()
@@ -3383,6 +3384,62 @@ func _check_ship_fitouts() -> void:
 ## testing the gimbal. What has to hold is that nothing it conjures is
 ## something the game could not have dropped, and that every shape it offers
 ## actually goes through the machinery.
+func _check_workbench() -> void:
+	# DEVTOOLS.md D1: the bench has to survive being asked for every
+	# combination its forms offer. It is a tool nobody flies on a schedule,
+	# so without this it would rot the first time the ship's API moved.
+	var bench: Workbench = (
+		load("res://tools/workbench/workbench.tscn") as PackedScene
+	).instantiate() as Workbench
+	root.add_child(bench)
+	var ship: Ship = bench.ship
+	var panel: BenchShipPanel = bench._ship_panel
+	_expect(ship != null and panel != null, "the workbench builds a ship and its panel")
+
+	var presets: int = ShipFitout.all().size()
+	var wrong_rows: int = 0
+	for i: int in range(presets):
+		panel._presets.selected = i
+		panel._on_preset()
+		panel._refresh()
+		if panel._engine_box.get_child_count() != ship.engine_mounts().size():
+			wrong_rows += 1
+	_expect(wrong_rows == 0, "the panel lists one row per mount after every one of %d presets" % presets)
+
+	var hulls: int = HullData.catalogue().size()
+	for i: int in range(hulls):
+		panel._hulls.selected = i
+		panel._scale.value = 1.0 + 0.5 * float(i % 2)
+		panel._on_hull()
+	_expect(ship.hull_outline.size() >= 3, "every hull in the catalogue can be put on the bench ship")
+
+	panel._presets.selected = 0
+	panel._on_preset()
+	panel._refresh()
+	var swaps: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		var picker: OptionButton = panel._engine_picker(mount)
+		for index: int in range(picker.item_count):
+			panel._on_engine_picked(index, mount, picker)
+			swaps += 1
+		# Never in the tree, so nobody else will free it, and a popup menu
+		# leaked at exit is an error the whole check fails on.
+		picker.free()
+	for hardpoint: Hardpoint in ship.hardpoints:
+		var picker: OptionButton = panel._gun_picker(hardpoint)
+		for index: int in range(picker.item_count):
+			panel._on_gun_picked(index, hardpoint, picker)
+			swaps += 1
+			hardpoint.fire(Vector2.ZERO, bench.get_node("Projectiles"), ship)
+		picker.free()
+	_expect(swaps > 0, "every engine and gun the forms offer can be fitted (%d swaps)" % swaps)
+
+	# Freed on the spot, not queued: the missiles fired above would still be
+	# alive for the checks that follow, and the next one counts motors.
+	root.remove_child(bench)
+	bench.free()
+
+
 func _check_creative_tool() -> void:
 	# Hull mass follows the outline now. It was a flat constant, which went
 	# unnoticed while there was one hull and became obvious the moment the

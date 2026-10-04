@@ -85,11 +85,11 @@ Kolejność wynika z wartości: najpierw to, co od razu daje odsłuch i strzelan
 
 Cel: scena, w której wybierasz kadłub, silniki i broń i od razu lecisz.
 
-- [ ] `tools/workbench/workbench.tscn`: tło (gwiazdy), `Ship` z `ship.tscn`, kamera podążająca z zoomem, węzły prezentacji podpięte przez `ship_path` (dźwięk, chór silników, głos kadłuba, głos pocisków, szczątki).
-- [ ] Panel „Statek": lista presetów z `ShipFitout.all()`, wybór kadłuba z `HullData.all()` (zachowuje montaż), skala kadłuba.
-- [ ] Wybór silnika **per mount** z `resources/engines/*.tres` (zachowuje `scale`), wybór broni **per hardpoint** z `resources/weapons/*.tres`.
-- [ ] Odświeżenie po zmianie: `collect_parts()`, `rebuild_control_groups()`, przebudowa `ShipSkin`, bez zostawiania wiszących referencji.
-- [ ] Sterowanie jak w grze (`use_player_input`), przełącznik „statek wolny / zamrożony".
+- [x] `tools/workbench/workbench.tscn`: tło (gwiazdy), `Ship` z `ship.tscn`, kamera podążająca z zoomem, węzły prezentacji podpięte przez `ship_path` (dźwięk, chór silników, głos kadłuba, głos pocisków, szczątki).
+- [x] Panel „Statek": lista presetów z `ShipFitout.all()`, wybór kadłuba z `HullData.all()` (zachowuje montaż), skala kadłuba.
+- [x] Wybór silnika **per mount** z `resources/engines/*.tres` (zachowuje `scale`), wybór broni **per hardpoint** z `resources/weapons/*.tres`.
+- [x] Odświeżenie po zmianie: `collect_parts()`, `rebuild_control_groups()`, przebudowa `ShipSkin`, bez zostawiania wiszących referencji.
+- [x] Sterowanie jak w grze (`use_player_input`), przełącznik „statek wolny / zamrożony".
 
 Gotowe, gdy: z menu można zmienić dowolny kadłub, każdy silnik i każde działo, polecieć i nic nie wywala błędów w konsoli.
 
