@@ -236,6 +236,25 @@ z ciężkiego świata), drugie z tego, że klawiszy zrobiło się trzydzieści p
 
 ---
 
+## MAUX3: Hamowanie w próżni
+
+Poza kolejnością milestone'ów, z kokpitu: hamulec używał najsłabszych silników
+statku tam, gdzie nic nie stoi na przeszkodzie, żeby użył najmocniejszego.
+
+- [x] **Hamulec ma dwa tryby, granicą jest sfera wpływu planety.** Poza nią
+  statek obraca się retrograde i pali główny napęd; trzymane jednocześnie
+  dopalanie działa bez jednej dodatkowej linijki, bo mnoży to, czego
+  przepustnice już żądają. Pod planetą zostaje stary rozkład na osie z
+  nietkniętym obrotem — nisko dziób trzyma postawę nad terenem i hamulec nie ma
+  prawa mu jej zabrać. Zmierzone, 100 px/s do zera: skośnie **6,1 s** przeciwko
+  **6,5 s**, w bok **5,7 s**, na wprost z dopalaniem **3,4 s**; przy
+  prędkościach międzyplanetarnych różnica rośnie, bo zwrot to stałe dwie
+  sekundy, a przewaga ciągu to iloraz. Bramka zgodności 0,98, dryf poniżej
+  8 px/s idzie starym hamulcem. Szczegóły i dwa przypadki brzegowe w IDEAS.md,
+  „Hamowanie poza grawitacją planety".
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.

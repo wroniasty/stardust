@@ -157,5 +157,7 @@ func _command_summary() -> String:
 	if _ship.heading_command != ControlChords.Chord.NONE:
 		parts.append(ControlChords.Chord.keys()[int(_ship.heading_command)])
 	if _ship.brake_command:
-		parts.append("BRAKE")
+		# Which of the two, because they look nothing alike from the
+		# cockpit: one pushes, the other spins the ship first.
+		parts.append("RETROBURN" if _ship.brakes_by_turning() else "BRAKE")
 	return " ".join(parts) if not parts.is_empty() else "-"

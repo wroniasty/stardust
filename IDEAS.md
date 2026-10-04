@@ -352,6 +352,52 @@ modyfikatorem, czwarty klawisz wybiera funkcję — dlatego to się skaluje:
 komputer ma jeszcze długą listę rzeczy do powiedzenia i żadna nie potrzebuje
 własnego klawisza.
 
+### Hamowanie poza grawitacją planety: ten sam wniosek, drugi raz
+
+Hamulec ma dwa tryby, a granicą jest sfera wpływu planety.
+
+**Pod planetą zostaje stary**: rozkład prędkości na osie, obrót nietknięty.
+Nie z przyzwyczajenia — nisko dziób ma inną robotę, trzyma postawę nad terenem
+i ustawia lądowanie, a hamulec, który by go z niej zabrał, byłby zagrożeniem.
+Nisko i wolno słabsze silniki też wystarczają.
+
+**Poza sferą wpływu statek obraca się retrograde i pali główny napęd.** Powód
+jest ten sam, co przy auto-orbicie, i to jest ta sama anizotropia policzona
+drugi raz: **900 N z dziobu wobec 500 N wstecz i 262 N w bok**. Hamowanie tym,
+co akurat wskazuje właściwą stronę, oddaje dwie trzecie statku.
+
+Zmierzone na stokowym kadłubie, 100 px/s do zera: po skośnej **6,1 s** zwrotem
+i wypałem przeciwko **6,5 s** starym hamulcem, w bok **5,7 s**, a na wprost z
+dopalaniem **3,4 s**. Zysk przy stu pikselach jest skromny i trzeba to powiedzieć
+wprost: zwrot kosztuje około dwóch sekund stałego narzutu, a przy tej prędkości
+prawo proporcjonalne (przyspieszenie równe prędkości, stała czasowa sekundy)
+i tak rządzi końcówką. **Zysk rośnie z prędkością**, bo narzut jest stały,
+a przewaga ciągu jest ilorazem: boczny hamulec nasyca się dopiero przy 13 px/s,
+główny przy 45, więc z 1000 px/s to około 75 s przeciwko 21 s plus zwrot. To są
+prędkości międzyplanetarne, czyli dokładnie te, dla których ten tryb istnieje.
+
+Kolejność wymusza **bramka zgodności 0,98** (jedenaście stopni), ciąższa niż
+0,92 auto-orbity: tamta asysta poprawia orbitę przez minuty i może zacząć pchać
+w trakcie obrotu, a to jest klawisz, który pilot trzyma, kiedy chce, żeby
+prędkość zniknęła. Utrzymanie kursu siada w granicy półtora stopnia, więc
+bramka otwiera się raz i zostaje otwarta.
+
+**Dopalanie nie wymagało ani jednej linijki.** Trzymany klawisz mnoży to, czego
+przepustnice już żądają, a w trakcie wypału żąda ich główny napęd. Test to
+sprawdza, zamiast zakładać.
+
+Dwa przypadki brzegowe, oba znalezione przez test, nie przez myślenie:
+
+- **Dryf poniżej 8 px/s idzie starym hamulcem.** Pierwsza wersja goniła
+  znikający wektor: po zatrzymaniu silnik główny jeszcze schodzi z ciągu
+  (`spool_time` 0,6 s), spycha statek w drugą stronę, prędkość wraca ponad próg
+  i statek obraca się o 180° za trzema pikselami na sekundę. Asercja „kończy
+  dziobem wzdłuż własnego toru" złapała to jako 0,281 zamiast 1,000. Próg jest
+  ten sam, którego używa utrzymanie kursu, i z tego samego powodu: poniżej
+  niego kierunek ruchu przestaje być kierunkiem.
+- **Kadłub bez autorytetu obrotowego zostaje przy starym hamulcie.** Nie umie
+  się obrócić, więc alternatywą byłoby niehamowanie w ogóle.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne

@@ -46,7 +46,7 @@ const LABELS: Array[Dictionary] = [
 	{"block": "LOT", "action": &"rotate_right", "says": "obrót w prawo"},
 	{"block": "LOT", "action": &"strafe_left", "says": "w bok, w lewo"},
 	{"block": "LOT", "action": &"strafe_right", "says": "w bok, w prawo"},
-	{"block": "LOT", "action": &"brake", "says": "hamowanie"},
+	{"block": "LOT", "action": &"brake", "says": "hamowanie (w próżni: zwrot i wypał)"},
 	{"block": "LOT", "action": &"boost", "says": "dopalanie (pali pulę)"},
 	{"block": "LOT", "action": &"jump", "says": "skok: wyceluj dziobem i trzymaj"},
 	{"block": "LOT", "action": &"toggle_gear", "says": "podwozie"},

@@ -131,7 +131,8 @@ const DEATH_TICKS: int = 900
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
-	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, STRAFE, FREE_FALL, ORBIT,
+	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, BRAKE_IN_GRAVITY,
+	STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_DAMAGED, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
 	WEAPON, HULL, SELF_HIT, DEATH, DONE }
@@ -162,6 +163,21 @@ var _damaged_turn_spin: float = 0.0
 var _kill_ticks: int = -1
 var _peak_turn_during_brake: float = 0.0
 var _peak_speed: float = 0.0
+
+## The worst alignment at which the retro burn was caught asking for the
+## drive, which is how "turn first, then burn" is checked rather than
+## assumed; whether the boost key reached the engines while it burned; and
+## which way the ship was going when the brake went on, because the nose
+## is supposed to end up pointing back down that line.
+var _worst_burn_alignment: float = 1.0
+var _boosted_during_brake: bool = false
+var _brake_heading: Vector2 = Vector2.ZERO
+
+## When the speed first fell under a pixel a second. The phase runs its
+## full length whatever happens, so the elapsed time at the end says
+## nothing; this is the figure the two brakes are compared on, and the
+## comparison is the whole argument for turning the ship round.
+var _brake_stopped_at: float = -1.0
 var _flat_angle: float = 0.0
 var _steep_angle: float = 0.0
 ## Where the resting hull sat in the planet's own frame once it had settled,
@@ -280,10 +296,13 @@ func _physics_process(delta: float) -> bool:
 	elif _phase == Phase.KILL_ROTATION:
 		if _kill_ticks < 0 and absf(_ship.angular_velocity) < 0.001:
 			_kill_ticks = _ticks
-	elif _phase == Phase.BRAKE:
-		_peak_turn_during_brake = maxf(_peak_turn_during_brake, absf(_ship.angular_velocity))
-	elif _phase == Phase.BRAKE_SIDEWAYS or _phase == Phase.BRAKE_DIAGONAL:
-		_peak_speed = maxf(_peak_speed, _ship.linear_velocity.length())
+	elif (
+		_phase == Phase.BRAKE
+		or _phase == Phase.BRAKE_SIDEWAYS
+		or _phase == Phase.BRAKE_DIAGONAL
+		or _phase == Phase.BRAKE_IN_GRAVITY
+	):
+		_watch_brake()
 	elif _phase == Phase.HULL_HEAT:
 		_peak_heat = maxf(_peak_heat, _ship.hull_heat)
 	elif _phase == Phase.LANDING:
@@ -470,7 +489,7 @@ func _phase_ticks() -> int:
 			return HEADING_TICKS
 		Phase.AUTO_ORBIT:
 			return AUTO_ORBIT_TICKS
-		Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL:
+		Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.BRAKE_IN_GRAVITY:
 			return BRAKE_TICKS
 		Phase.AEROBRAKE:
 			return AEROBRAKE_TICKS
@@ -574,19 +593,44 @@ func _begin_phase() -> void:
 				else ControlChords.Chord.RETROGRADE
 			)
 		Phase.BRAKE:
+			# Nose already on the direction of travel, so the brake has the
+			# whole half turn to make before it is allowed to push -- the
+			# hardest case, and the one that would pass by accident if the
+			# gate were not there. Boost is held as well, because the two
+			# together are one manoeuvre to a pilot and not two features.
 			_ship.linear_velocity = Ship.FORWARD * BRAKE_SPEED
 			_ship.brake_command = true
-			_peak_turn_during_brake = 0.0
+			_ship.boost_command = true
+			_begin_brake()
 		Phase.BRAKE_SIDEWAYS:
-			# The axis the forward-only test never touched, which is how a
-			# reversed pair of strafe commands went unnoticed.
 			_ship.linear_velocity = Ship.FORWARD.orthogonal() * BRAKE_SPEED
 			_ship.brake_command = true
-			_peak_speed = 0.0
+			_begin_brake()
 		Phase.BRAKE_DIAGONAL:
 			_ship.linear_velocity = (Ship.FORWARD + Ship.FORWARD.orthogonal()).normalized() * BRAKE_SPEED
 			_ship.brake_command = true
-			_peak_speed = 0.0
+			_begin_brake()
+		Phase.BRAKE_IN_GRAVITY:
+			# The other brake, the one that still pushes against the
+			# velocity axis by axis and leaves the nose where the pilot
+			# put it.
+			#
+			# Parked at the rim of the sphere of influence, where the edge
+			# falloff has the pull down to a fifth of a pixel per second
+			# squared: inside a planet by the rule the brake reads, while
+			# what gets measured is still the brake and not the fall.
+			# Moving tangentially, so the run cannot carry the ship out of
+			# the sphere and change the answer half way through. And the
+			# hull turned 45 degrees, so one world velocity lands on both
+			# of its axes at once -- which is the axis a forward-only test
+			# never touched, and how a reversed pair of strafe commands
+			# went unnoticed.
+			var rim: float = _planet.influence_radius * 0.98
+			_ship.global_position = _planet.global_position + Vector2.UP * rim
+			_ship.global_rotation = PI * 0.25
+			_ship.linear_velocity = Vector2.RIGHT * BRAKE_SPEED
+			_ship.brake_command = true
+			_begin_brake()
 		Phase.STRAFE:
 			_ship.commands[ShipControl.Command.STRAFE_RIGHT] = 1.0
 			_peak_drift = 0.0
@@ -824,8 +868,9 @@ func _evaluate_phase() -> void:
 			var label: String = "sideways" if _phase == Phase.BRAKE_SIDEWAYS else "diagonal"
 			_expect(
 				_ship.linear_velocity.length() < 1.0,
-				"brake stops a %s %.0f px/s run (%.2f px/s left)" % [
-					label, BRAKE_SPEED, _ship.linear_velocity.length(),
+				"brake stops a %s %.0f px/s run in %.1f s (%.2f px/s left)" % [
+					label, BRAKE_SPEED, _brake_stopped_at,
+					_ship.linear_velocity.length(),
 				],
 			)
 			# The symptom of a reversed command: the brake accelerates instead.
@@ -833,6 +878,15 @@ func _evaluate_phase() -> void:
 				_peak_speed <= BRAKE_SPEED + 1.0,
 				"braking never speeds the ship up (peaked at %.1f px/s from %.0f)" % [
 					_peak_speed, BRAKE_SPEED,
+				],
+			)
+			# A sideways run out here is not braked sideways any more: the
+			# ship swings the nose round first, whichever way it was
+			# sliding, and finishes pointing back down its own track.
+			_expect(
+				_nose_now().dot(-_brake_heading) > 0.95,
+				"a %s run is turned into a retro burn like any other (%.3f)" % [
+					label, _nose_now().dot(-_brake_heading),
 				],
 			)
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
@@ -877,15 +931,70 @@ func _evaluate_phase() -> void:
 				"a computer without auto-orbit asks for nothing when it is engaged",
 			)
 		Phase.BRAKE:
+			# Four things, and the outcome is only the first of them. A
+			# brake that stopped the ship by pushing sideways with the
+			# strafe jets would pass that one on its own.
+			_expect(
+				not _ship.in_planetary_gravity() and _ship.brakes_by_turning(),
+				"out in the open the brake is the turning kind",
+			)
 			_expect(
 				_ship.linear_velocity.length() < 1.0,
-				"brake stops a %.0f px/s run (%.2f px/s left after %.1f s)" % [
-					BRAKE_SPEED, _ship.linear_velocity.length(), _elapsed,
+				"brake stops a %.0f px/s run in %.1f s (%.2f px/s left)" % [
+					BRAKE_SPEED, _brake_stopped_at, _ship.linear_velocity.length(),
 				],
 			)
 			_expect(
+				_peak_turn_during_brake > 0.3,
+				"by turning the ship round, not by pushing it backwards (%.2f rad/s peak)" % [
+					_peak_turn_during_brake,
+				],
+			)
+			_expect(
+				_nose_now().dot(-_brake_heading) > 0.95,
+				"and it is pointing back down its own track when it stops (%.3f)" % [
+					_nose_now().dot(-_brake_heading),
+				],
+			)
+			# The order, which is the part a pilot asked for: the drive
+			# must not light while the ship is still coming round. Sampled
+			# a tick late -- the commands were worked out from the attitude
+			# at the top of the tick and the hull has turned since -- so it
+			# is read with room rather than exactly.
+			_expect(
+				_worst_burn_alignment > Ship.RETRO_BURN_ALIGNMENT - 0.05,
+				"the drive never lit before the nose was round (worst %.3f against %.2f)" % [
+					_worst_burn_alignment, Ship.RETRO_BURN_ALIGNMENT,
+				],
+			)
+			_expect(
+				_boosted_during_brake,
+				"and holding boost through the burn reaches the engines",
+			)
+		Phase.BRAKE_IN_GRAVITY:
+			var pull: float = _ship.get_applied_gravity().length()
+			_expect(
+				_ship.in_planetary_gravity() and not _ship.brakes_by_turning(),
+				"under a planet the brake is the pushing kind (%.2f px/s^2 of pull)" % pull,
+			)
+			_expect(
+				_ship.linear_velocity.length() < 1.0,
+				"and it still stops a diagonal %.0f px/s run, in %.1f s (%.2f px/s left)" % [
+					BRAKE_SPEED, _brake_stopped_at, _ship.linear_velocity.length(),
+				],
+			)
+			_expect(
+				_peak_speed <= BRAKE_SPEED + 1.0,
+				"without ever speeding the ship up (peaked at %.1f px/s from %.0f)" % [
+					_peak_speed, BRAKE_SPEED,
+				],
+			)
+			# The half of the old rule that survives, and the reason it
+			# does: down here the nose is holding an attitude over terrain
+			# and the brake has no business taking it.
+			_expect(
 				_peak_turn_during_brake < 0.05,
-				"brake does not touch rotation (peak %.4f rad/s)" % _peak_turn_during_brake,
+				"and without touching rotation (peak %.4f rad/s)" % _peak_turn_during_brake,
 			)
 		Phase.STRAFE:
 			var sideways: float = _ship.linear_velocity.rotated(-_ship.global_rotation).x
@@ -8542,6 +8651,44 @@ func _spawn_ship() -> Ship:
 	# twenty times inside a test run.
 	ship.rebuild_control_groups(false)
 	return ship
+
+
+## Resets what every brake phase watches. Called after the velocity is
+## set, because the heading is read off it.
+func _begin_brake() -> void:
+	_peak_turn_during_brake = 0.0
+	_peak_speed = 0.0
+	_worst_burn_alignment = 1.0
+	_boosted_during_brake = false
+	_brake_stopped_at = -1.0
+	_brake_heading = _ship.linear_velocity.normalized()
+
+
+## One tick of what a brake phase is judged on.
+##
+## The alignment is only sampled while the drive is actually being asked
+## for and while there is still a direction of travel to measure against:
+## once the ship is stopped, "retrograde" is whatever rounding left behind.
+func _watch_brake() -> void:
+	_peak_turn_during_brake = maxf(_peak_turn_during_brake, absf(_ship.angular_velocity))
+	_peak_speed = maxf(_peak_speed, _ship.linear_velocity.length())
+	if _ship.boost_active:
+		_boosted_during_brake = true
+	var speed: float = _ship.linear_velocity.length()
+	if speed < 1.0 and _brake_stopped_at < 0.0:
+		_brake_stopped_at = _elapsed
+	if speed < Ship.BRAKE_EPS:
+		return
+	if float(_ship.active_commands.get(ShipControl.Command.FORWARD, 0.0)) <= 0.0:
+		return
+	_worst_burn_alignment = minf(
+		_worst_burn_alignment, _nose_now().dot(-_ship.linear_velocity / speed)
+	)
+
+
+## Which way the ship is pointing, in the world.
+func _nose_now() -> Vector2:
+	return Ship.FORWARD.rotated(_ship.global_rotation)
 
 
 func _spawn_planet() -> Planet:

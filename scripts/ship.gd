@@ -120,6 +120,17 @@ const LEG_CONTACT_REACH: float = 5.0
 ## Below this speed the brake stops the ship outright rather than chasing it.
 const BRAKE_EPS: float = 2.0
 
+## How closely the nose must already be on retrograde before the brake out
+## in the open lights the drive.
+##
+## Tighter than the orbit assist's 0.92, for a different job: that one is
+## nudging an orbit over minutes and can afford to start pushing while it
+## is still coming round, where this is the key a pilot holds when they
+## want the speed gone now. Eleven degrees, which is well inside what the
+## heading hold settles to anyway -- it stops within a degree and a half --
+## so the gate opens once and stays open rather than chattering.
+const RETRO_BURN_ALIGNMENT: float = 0.98
+
 ## The pool a ship has with no generator fitted: capacity, units per second,
 ## seconds of silence. Deliberately miserable. A ship whose generator was
 ## swapped out for something that does not fit still shoots, just very badly
@@ -2166,6 +2177,21 @@ func nearest_planet() -> Planet:
 	return Planet.nearest(get_tree(), global_position)
 
 
+## Whether a planet is close enough to be pulling on the ship.
+##
+## The sphere of influence, not the air and not the ground. A star does not
+## count: `nearest_planet` only looks at planets, and the question being
+## asked is whether there is a world under the ship, not whether anything
+## at all is pulling -- in a star system something always is.
+func in_planetary_gravity() -> bool:
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return false
+	return (
+		planet.global_position.distance_to(global_position) < planet.influence_radius
+	)
+
+
 ## Gravitational acceleration the ship felt last tick. Not get_gravity(),
 ## which is already taken by PhysicsBody2D.
 func get_applied_gravity() -> Vector2:
@@ -2588,13 +2614,50 @@ func _aim_gimbals() -> void:
 		engine.target_gimbal = clampf(wanted, -reach, reach)
 
 
-## Kills linear velocity by pushing against it, one axis at a time.
+## Whether holding the brake turns the ship around before it pushes.
 ##
-## Rotation is left alone entirely: brake is for stopping, aiming stays the
-## pilot's job. A direction with no engines behind it simply is not braked, so
-## a ship with no reverse thruster cannot stop itself going forward. That is
-## the intended consequence of building the groups from geometry, not a gap.
+## Out in the open it does, and the reason is the shape of the hull: 900 N
+## out of the nose against 500 N of reverse and 262 N sideways. Braking
+## with whatever happens to be pointing the right way throws away two
+## thirds of the ship, which at the speeds between planets is the
+## difference between stopping and not.
+##
+## Inside a planet's pull it does not, and that is not a simplification.
+## Down there the nose has another job -- holding an attitude over terrain,
+## lining a landing up, keeping the heat shield into the airflow -- and a
+## brake that spun the ship out of it would be a hazard. Low and slow is
+## also where the weak engines are enough.
+##
+## A hull with nothing to turn with keeps the old brake, because for that
+## hull the alternative is not braking at all.
+func brakes_by_turning() -> bool:
+	if in_planetary_gravity():
+		return false
+	return (
+		control.authority_of(ShipControl.Command.CW) > 0.0
+		and control.authority_of(ShipControl.Command.CCW) > 0.0
+	)
+
+
+## Kills linear velocity, one of two ways.
+##
+## Turning round and burning out in the open, pushing against the velocity
+## one axis at a time under a planet: see `brakes_by_turning` for why they
+## are not the same manoeuvre. Under a planet rotation is left alone
+## entirely -- brake is for stopping, aiming stays the pilot's job -- and a
+## direction with no engines behind it simply is not braked, so a ship with
+## no reverse thruster cannot stop itself going forward. That is the
+## intended consequence of building the groups from geometry, not a gap.
 func _apply_brake(state: PhysicsDirectBodyState2D) -> void:
+	# A drift too small to be worth turning for goes the old way too.
+	# Swinging the whole hull round to shed three pixels a second is a lot
+	# of ship for very little speed, and the strafe jets can have it. The
+	# threshold is the heading hold's, for the heading hold's reason:
+	# below it the direction of travel stops being a direction.
+	if brakes_by_turning() and state.linear_velocity.length() >= HEADING_MIN_SPEED:
+		_apply_retro_burn(state)
+		return
+
 	var local_velocity: Vector2 = state.linear_velocity.rotated(-state.transform.get_rotation())
 	if local_velocity.length() < BRAKE_EPS:
 		state.linear_velocity = Vector2.ZERO
@@ -2637,3 +2700,27 @@ func _brake_axis(
 		return
 	var amount: float = clampf(absf(component) * mass / authority, 0.0, 1.0)
 	active_commands[command] = maxf(float(active_commands.get(command, 0.0)), amount)
+
+
+## Swings the nose onto retrograde, and once it is there, burns.
+##
+## The order is the whole manoeuvre and the gate is what enforces it:
+## pushing while still coming round puts thrust somewhere the ship is not
+## going, and the turn is the quick part -- it is the burn that takes the
+## time. This is the same shape as the orbit assist, which found the same
+## answer for the same reason, and it is what a real pilot does.
+##
+## The push goes through `push_along` rather than straight at the drive, so
+## whatever is left over sideways gets the strafe engines. Once the nose is
+## round there is almost nothing left over, which is the point of putting
+## it round first.
+##
+## **Boost needs nothing here.** Holding the key multiplies whatever the
+## throttles are already asking for, and by the time this is burning, what
+## they are asking for is the main drive.
+func _apply_retro_burn(state: PhysicsDirectBodyState2D) -> void:
+	var back: Vector2 = -state.linear_velocity
+	point_nose_along(state, back)
+	var nose: Vector2 = FORWARD.rotated(state.transform.get_rotation())
+	if nose.dot(back.normalized()) > RETRO_BURN_ALIGNMENT:
+		push_along(state, back)
