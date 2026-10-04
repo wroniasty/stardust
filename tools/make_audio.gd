@@ -4,8 +4,13 @@ extends SceneTree
 ##
 ## Same reason the sprites are generated: the point is to have the right
 ## **set** of sounds, on the right buses, at the right lengths, so the
-## plumbing can be built and tested before anybody records anything. Every
-## sample here is four lines of arithmetic and is meant to be replaced.
+## plumbing can be built and tested before anybody records anything. Most
+## of what is here is four lines of arithmetic and is meant to be replaced.
+##
+## The three engine loops are the part that already has been: they are
+## cut out of two recordings in `assets/audio` rather than synthesised,
+## and everything this tool does to them is aimed at changing as little
+## as possible about how they sound.
 ##
 ## Once, not twice, unlike the sprites: an `AudioStreamWAV` carries its own
 ## samples, so a `.tres` needs no import pass behind it.
@@ -28,26 +33,55 @@ const RATE: int = 22050
 ## output this tool will overwrite without asking.
 const SOURCES: String = "res://assets/audio"
 
-## The rate the recordings came in at, kept rather than reduced.
+## The rate the recordings came in at. They leave at `RATE`.
 ##
-## The engine loops are pitched up to 1.28 and down to 0.70 by the
-## simulation, and a sample resampled down first would lose the top of
-## its range exactly where the pitch is asking for it.
-const SOURCE_RATE: int = 48000
+## Resampling down costs nothing here, which had to be checked rather
+## than assumed: both takes are steeply band limited and measure 70 dB
+## down by 2 kHz and 97 dB by 4 kHz, so 22 kHz is still eleven times
+## the room they need even with the torque jet pitched up to 1.4.
+const SOURCE_RATE: int = 44100
+
+## Taps in the filter that band limits a recording before it is
+## resampled. An odd number, so there is a centre.
+const TAPS: int = 33
 
 ## How much of the tail is folded back into the head to close a loop.
 ##
-## Neither recording is a loop, which is worth saying plainly because
-## both are exactly whole seconds and look like one: measured, the
-## wrap in `main1` is a step of 11680 against a typical sample-to-
-## sample change of 74, and `thruster1` is 14898 against 52. That is a
-## click every time round, 158 and 286 times the size of anything else
-## in the waveform.
+## These recordings join at **zero** -- they fade in over about 0.4 s
+## and fade out again -- so the fault they carry is not the click the
+## last pair had but a dip: measured second by second, the first and
+## the last of the ten are 2 dB under the body. The loops are cut out
+## of the steady middle for that reason, and a cut has two arbitrary
+## ends, which is what this closes.
 const CROSSFADE: float = 0.09
 
-## Where the soft knee sits. Below this nothing is touched; above it
-## the curve bends, and nothing ever reaches one.
-const KNEE: float = 0.78
+## The loudest a built loop may get, and how long the limiter takes to
+## pull the gain down ahead of a peak and let it back afterwards.
+const CEILING: float = 0.97
+const LIMIT_ATTACK: float = 0.004
+const LIMIT_RELEASE: float = 0.060
+
+## What all three engine loops are levelled to.
+##
+## One figure for the three rather than three, because the difference
+## between a drive and a thruster now lives in the strip volumes --
+## which is the right place for it: a volume is a number the workbench
+## can turn while the game runs, and a sample is not.
+##
+## 0.30 and not the 0.40 the old synthesised drive sat at, and that is
+## the limiter's doing rather than a preference. At 0.40 these need
+## between 3.6 and 4.5 dB taken off their peaks, and whatever is
+## doing that holding starts to be heard; at 0.30 it is 1.1 to 2.0 dB
+## and nothing is. The whole
+## engine section is 2.4 dB quieter than it was, in exact proportion,
+## and the section was already the one at risk of running out of
+## headroom when eight nozzles are lit at once.
+const LOOP_RMS: float = 0.30
+
+
+## Recordings already folded to mono, so three loops out of two
+## takes do that work twice rather than six times.
+var _recordings: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -123,9 +157,9 @@ func _build_samples() -> void:
 ## which on a sound that is running for minutes at a time is the only
 ## defect anybody would ever notice.
 func _build_engines() -> void:
-	_store(_drive_loop(), "engine_main", true, SOURCE_RATE)
-	_store(_thruster_loop(), "engine_thruster", true, SOURCE_RATE)
-	_store(_torque_loop(), "engine_torque", true, SOURCE_RATE)
+	_store(_drive_loop(), "engine_main", true)
+	_store(_thruster_loop(), "engine_thruster", true)
+	_store(_torque_loop(), "engine_torque", true)
 	_store(_ignite(), "engine_ignite")
 	_store(_cut(), "engine_cut")
 
@@ -398,50 +432,69 @@ func _revive() -> PackedFloat32Array:
 	return out
 
 
-## The main drive: `main1.wav`, closed into a loop.
+## The main drive and the braking bell: `engine_level_3`.
 ##
-## A recording rather than three sines and some noise, which is what
-## was here before. Everything else about it is left alone -- it is
-## the sound somebody chose -- so the only work is making it loop and
-## putting it at the level the thing it replaces sat at.
+## Low, and that is the whole of why it is on these two and not on the
+## thrusters: a quarter of its energy in each of the 20-60, 60-120 and
+## 120-250 Hz bands, centroid 121 Hz. A reverse engine is a main
+## engine pointed the other way and is the same `MAIN` type, so it
+## picks up the same loop without being named anywhere.
 func _drive_loop() -> PackedFloat32Array:
-	return _levelled(_seamless(_source("main1"), CROSSFADE), 0.40)
+	return _engine_loop("engine_level_3", 3.0, 2.2)
 
 
-## The attitude thrusters: `thruster1.wav`, two seconds of it.
+## The rotational jets: `engine_level_1`, from late in the take.
 ##
-## Two rather than all four: the loop is heard constantly while a
-## pilot is station-keeping, and four seconds of .tres is four
-## seconds of base64 in the repository for a second of extra variety
-## nobody will pick out under a gate that is opening and closing.
-func _thruster_loop() -> PackedFloat32Array:
-	return _levelled(
-		_seamless(_slice(_source("thruster1"), 0.35, 2.0), CROSSFADE), 0.21
-	)
-
-
-## The rotational jets: the same recording, cut tighter and brightened.
+## The same recording as the strafe thrusters, deliberately: a torque
+## jet and a manoeuvring thruster are the same machine pointed
+## differently. What separates them is in the table -- the jet is the
+## smallest engine in the game at 160 N against the thrusters' 180 to
+## 500, so it is pitched up, and it follows the throttle in twelve
+## milliseconds where they take forty-five.
 ##
-## The pulsing is **not** in here and must not be: the simulation
-## switches an impulse engine fully on and off tick by tick, so baking
-## a second modulation into the sample would beat against the one
-## already in the code. What the processing does is make a sound that
-## survives being gated -- a leaner, brighter jet, because the low end
-## of a four second rumble turns to mud when it is chopped at twenty
-## hertz and the top end is what carries the edge of each puff.
+## It is **not** brightened any more. The loop that was here was, and
+## for a reason that held: a four second rumble turns to mud when the
+## simulation chops it at twenty hertz. This recording is already a
+## narrow band around 400 Hz with nothing under 120 and nothing over
+## 1 kHz, and a high pass through it would take 88% of the sound away
+## and hand back something that is no longer the take.
 func _torque_loop() -> PackedFloat32Array:
-	var cut: PackedFloat32Array = _slice(_source("thruster1"), 2.4, 1.1)
-	return _levelled(_seamless(_brightened(cut, 420.0), CROSSFADE), 0.36)
+	return _engine_loop("engine_level_1", 5.6, 2.2)
 
 
-## One recording, as mono samples.
+## The strafe thrusters: `engine_level_1`, from early in the take.
+##
+## A different window rather than the same one, so that two engines
+## of different kinds firing together are two sounds and not one
+## sound played twice.
+func _thruster_loop() -> PackedFloat32Array:
+	return _engine_loop("engine_level_1", 2.5, 2.2)
+
+
+## A window of a recording, closed into a loop at the game's rate.
+##
+## The window comes out of the **middle** of the ten seconds. Both
+## takes fade in and out, and a loop with a fade in it breathes once
+## a cycle -- which is a worse fault than the click the last pair had,
+## because a click can be mistaken for part of an engine and a swell
+## cannot.
+func _engine_loop(source: String, from: float, seconds: float) -> PackedFloat32Array:
+	var cut: PackedFloat32Array = _slice(_source(source), from, seconds)
+	return _levelled(_seamless(_resampled(cut), CROSSFADE), LOOP_RMS)
+
+
+## One recording, as mono samples at `SOURCE_RATE`.
 ##
 ## Mono because these are positional: an engine is heard at its own
 ## nozzle, and `AudioStreamPlayer2D` has nothing useful to do with two
-## channels. `thruster1` has real width -- the two sides differ by
-## 11012 against the main drive's 2354 -- and folding it down is a
-## loss worth taking for a sound that is coming from a point.
+## channels. Both takes are wide, and that turns out to be the safe
+## case rather than the dangerous one -- the two sides correlate at
+## 0.09, which is to say not at all, so there is no delayed copy of
+## anything to cancel against. Measured across 60 Hz to 1.2 kHz the
+## fold costs 0.13 dB and combs nothing.
 func _source(name: String) -> PackedFloat32Array:
+	if _recordings.has(name):
+		return _recordings[name]
 	var out: PackedFloat32Array = PackedFloat32Array()
 	var clip: AudioStreamWAV = load("%s/%s.wav" % [SOURCES, name]) as AudioStreamWAV
 	if clip == null:
@@ -461,29 +514,98 @@ func _source(name: String) -> PackedFloat32Array:
 	var bytes: PackedByteArray = clip.data
 	var channels: int = 2 if clip.stereo else 1
 	var frames: int = bytes.size() / (2 * channels)
+	out.resize(frames)
 	for i: int in range(frames):
 		var total: float = 0.0
 		for channel: int in range(channels):
 			total += float(bytes.decode_s16((i * channels + channel) * 2)) / 32768.0
-		out.append(total / float(channels))
+		out[i] = total / float(channels)
+	# Three loops come out of two takes, and folding ten seconds of
+	# stereo down costs more than everything else in this file put
+	# together.
+	_recordings[name] = out
 	return out
 
 
-## A window of a recording, in seconds.
+## A window of a recording, in seconds, at the rate it came in at.
 func _slice(samples: PackedFloat32Array, from: float, seconds: float) -> PackedFloat32Array:
 	var first: int = clampi(int(from * SOURCE_RATE), 0, maxi(samples.size() - 1, 0))
 	var last: int = mini(first + int(seconds * SOURCE_RATE), samples.size())
 	return samples.slice(first, last)
 
 
-## Folds the tail back into the head so the loop joins without a click.
+## `SOURCE_RATE` down to `RATE`, band limited on the way.
+##
+## The band limiting is the part that is easy to leave out and wrong
+## to leave out: decimating straight away folds everything above the
+## new Nyquist back down into the sound as a mirror image of itself,
+## and the mirror does not sound like anything that was recorded.
+## These two takes have nothing up there to fold -- 123 dB down by
+## 8 kHz -- so skipping it would have worked by luck, and the next
+## recording handed to this tool will not be so quiet.
+func _resampled(samples: PackedFloat32Array) -> PackedFloat32Array:
+	if samples.is_empty() or SOURCE_RATE == RATE:
+		return samples
+	var half: int = TAPS / 2
+	# In cycles per **source** sample, a little under the new Nyquist
+	# so the skirt has somewhere to fall.
+	var cut: float = 0.45 * float(RATE) / float(SOURCE_RATE)
+	var taps: PackedFloat32Array = PackedFloat32Array()
+	taps.resize(TAPS)
+	var total: float = 0.0
+	for i: int in range(TAPS):
+		var n: int = i - half
+		var value: float = (
+			2.0 * cut if n == 0 else sin(TAU * cut * float(n)) / (PI * float(n))
+		)
+		# Hann, because a bare sinc cut off after 33 taps rings.
+		value *= 0.5 - 0.5 * cos(TAU * float(i) / float(TAPS - 1))
+		taps[i] = value
+		total += value
+	for i: int in range(TAPS):
+		taps[i] /= total
+
+	var step: float = float(SOURCE_RATE) / float(RATE)
+	var length: int = int(float(samples.size()) / step)
+	var out: PackedFloat32Array = PackedFloat32Array()
+	out.resize(length)
+	for i: int in range(length):
+		var at: float = float(i) * step
+		var k: int = int(at)
+		var along: float = at - float(k)
+		# Filtered only where a sample is being taken, rather than
+		# everywhere and then mostly thrown away: the same answer for
+		# half the work at 2:1, and the interpolation below is skipped
+		# entirely when the ratio is whole, which it is.
+		var value: float = _tapped(samples, taps, k)
+		if along > 0.0001:
+			value = value * (1.0 - along) + _tapped(samples, taps, k + 1) * along
+		out[i] = value
+	return out
+
+
+## One band-limited sample. Off the ends it reads zero, which puts a
+## 0.7 ms fade on each end of a window -- shorter than the crossfade
+## that is about to cover it.
+func _tapped(samples: PackedFloat32Array, taps: PackedFloat32Array, at: int) -> float:
+	var half: int = taps.size() / 2
+	var total: float = 0.0
+	for t: int in range(taps.size()):
+		var k: int = at + t - half
+		if k < 0 or k >= samples.size():
+			continue
+		total += samples[k] * taps[t]
+	return total
+
+
+## Folds the tail back into the head so the loop joins without a step.
 ##
 ## The result is shorter than what went in by exactly the crossfade,
 ## which is the point: the samples that used to be at the end are now
 ## mixed into the beginning, so the last sample runs into the first
 ## the way any two neighbours do.
 func _seamless(samples: PackedFloat32Array, seconds: float) -> PackedFloat32Array:
-	var fade: int = mini(int(seconds * SOURCE_RATE), samples.size() / 3)
+	var fade: int = mini(int(seconds * RATE), samples.size() / 3)
 	if fade <= 0:
 		return samples
 	var length: int = samples.size() - fade
@@ -496,7 +618,7 @@ func _seamless(samples: PackedFloat32Array, seconds: float) -> PackedFloat32Arra
 		# Equal-power rather than linear: two uncorrelated noises
 		# crossfaded by amplitude dip in the middle, and an engine
 		# loop that got quieter once a second would be worse than the
-		# click this is removing.
+		# step this is removing.
 		var along: float = float(i) / float(fade)
 		out[i] = (
 			samples[i] * sqrt(along) + samples[length + i] * sqrt(1.0 - along)
@@ -504,58 +626,63 @@ func _seamless(samples: PackedFloat32Array, seconds: float) -> PackedFloat32Arra
 	return out
 
 
-## A one-pole high pass, for taking the body out of something that is
-## about to be chopped into puffs.
-func _brightened(samples: PackedFloat32Array, cutoff_hz: float) -> PackedFloat32Array:
-	var out: PackedFloat32Array = PackedFloat32Array()
-	out.resize(samples.size())
-	var rc: float = 1.0 / (TAU * maxf(cutoff_hz, 1.0))
-	var dt: float = 1.0 / float(SOURCE_RATE)
-	var keep: float = rc / (rc + dt)
-	var last_in: float = 0.0
-	var last_out: float = 0.0
-	for i: int in range(samples.size()):
-		last_out = keep * (last_out + samples[i] - last_in)
-		last_in = samples[i]
-		out[i] = last_out
-	return out
-
-
-## Brings a loop to a target RMS, then pulls it back if that would
-## clip.
+## Brings a loop to a target RMS without letting it over the ceiling.
 ##
-## The targets are the levels of the synthesised loops these replace,
-## measured off the old files rather than chosen: 0.40, 0.21 and 0.36
-## of full scale. The strip volumes and every figure in the soundcheck
-## table were tuned against those, so matching them means the only
-## thing that changes is the timbre -- which is the only thing that
-## was asked to change.
+## The ceiling is held by a limiter now and not by a waveshaper, and
+## that swap is the one measured decision in this file. These takes
+## have a 13 dB crest factor -- the shape of noise, not of the
+## square-ish synthesis they replace -- so bending every sample
+## through `tanh` to reach the same loudness laid distortion products
+## 24 dB under the sound, in a band where the recording itself is
+## 47 dB down. Audible grit, on a take handed over with "it has to
+## sound like this". A limiter reaches the same figure 30 dB cleaner,
+## because it moves the gain and leaves the waveform alone.
+##
+## Applied to the **original** each pass, never to the previous
+## result: stacking compression compounds it, and the version of this
+## that did undershot every target by more than a dB.
 func _levelled(samples: PackedFloat32Array, target_rms: float) -> PackedFloat32Array:
 	if samples.is_empty():
 		return samples
-	var out: PackedFloat32Array = samples.duplicate()
+	var out: PackedFloat32Array = samples
 	var gain: float = target_rms / maxf(_rms_of(samples), 0.0001)
-	# Searched for, rather than applied twice.
-	#
-	# The knee is a soft ceiling rather than a hard one, because a
-	# recording has a far higher crest factor than the square-ish
-	# synthesis it replaces: scaling to the old RMS and then clamping
-	# the peaks cost the rotational jets 4.8 dB, which is a balance
-	# change nobody asked for. `tanh` gives that back, and on a gas
-	# jet the distortion it trades for is indistinguishable from the
-	# jet.
-	#
-	# Applied to the **original** each time, never to the previous
-	# result: stacking the curve compounds the compression, and the
-	# first version of this undershot every target by more than a dB
-	# for exactly that reason.
-	for attempt: int in range(5):
-		for i: int in range(samples.size()):
-			out[i] = tanh(samples[i] * gain / KNEE) * KNEE
+	for attempt: int in range(6):
+		out = _limited(samples, gain)
 		var landed: float = _rms_of(out)
-		if absf(landed - target_rms) < target_rms * 0.01:
+		if absf(landed - target_rms) < target_rms * 0.005:
 			break
 		gain *= target_rms / maxf(landed, 0.0001)
+	return out
+
+
+## A peak limiter, in two passes over the buffer.
+##
+## Backwards first, so the gain is already down by the time a peak
+## arrives instead of catching up after it. That is all lookahead is,
+## and done offline it costs a traverse rather than a delay line.
+## Forwards second, so the gain comes back over sixty milliseconds
+## rather than snapping. Neither pass ever lets the gain exceed what
+## the sample itself allows, so the ceiling is exact and not
+## approached.
+func _limited(samples: PackedFloat32Array, gain: float) -> PackedFloat32Array:
+	var length: int = samples.size()
+	var held: PackedFloat32Array = PackedFloat32Array()
+	held.resize(length)
+	var attack: float = 1.0 / maxf(LIMIT_ATTACK * float(RATE), 1.0)
+	var release: float = 1.0 / maxf(LIMIT_RELEASE * float(RATE), 1.0)
+	var run: float = 1.0
+	for i: int in range(length - 1, -1, -1):
+		var want: float = minf(
+			CEILING / maxf(absf(samples[i] * gain), 0.000001), 1.0
+		)
+		run = minf(want, run + attack)
+		held[i] = run
+	run = 1.0
+	var out: PackedFloat32Array = PackedFloat32Array()
+	out.resize(length)
+	for i: int in range(length):
+		run = minf(held[i], run + release)
+		out[i] = samples[i] * gain * run
 	return out
 
 
@@ -692,6 +819,13 @@ func _engine_table() -> SoundTable:
 	var table: SoundTable = SoundTable.new()
 	table.stat = &"type"
 	table.thresholds = PackedFloat32Array([0.0, 1.0, 2.0])
+	# All three loops leave the generator at the same loudness, so
+	# these volumes are the whole of the balance between a drive and a
+	# jet -- where it is worth having, because a volume is a number the
+	# workbench can turn while the game is running. The figures are not
+	# chosen: they are what keeps the three in exactly the proportion
+	# they were tuned to when the loops were synthesised and each
+	# carried its own level.
 	table.variants = [
 		# MAIN: climbs a long way, because spooling is most of its
 		# character, and follows slowly because it is heavy.
@@ -700,11 +834,17 @@ func _engine_table() -> SoundTable:
 		# Twelve milliseconds is the whole difference between a jet and
 		# a hum -- the simulation is already switching it on and off
 		# tick by tick, and this decides whether that gets through.
-		_strip("engine_torque", 0.42, Vector2(0.92, 1.08), 0.012, true),
-		_strip("engine_thruster", 0.50, Vector2(0.95, 1.28), 0.045, true),
+		#
+		# Pitched a third up, and that is what makes it a different
+		# machine from the one below it: the two share a recording, and
+		# a torque jet is the smallest engine in the game.
+		_strip("engine_torque", 0.38, Vector2(1.22, 1.40), 0.012, true),
+		_strip("engine_thruster", 0.26, Vector2(0.95, 1.28), 0.045, true),
 	]
 	table.by_affix = {
-		&"dynamo": _strip("engine_dynamo", 0.62, Vector2(0.80, 1.30), 0.060, true),
+		# Down with the rest of the section, so a dynamo-fitted engine is
+		# no louder against its neighbours than it was.
+		&"dynamo": _strip("engine_dynamo", 0.47, Vector2(0.80, 1.30), 0.060, true),
 	}
 	table.fallback = table.variants[2]
 	return table
@@ -831,12 +971,7 @@ func _store_table(table: SoundTable, name: String) -> void:
 
 
 ## Writes one sample out as a 16 bit mono AudioStreamWAV.
-func _store(
-	samples: PackedFloat32Array,
-	name: String,
-	loops: bool = false,
-	rate: int = RATE,
-) -> void:
+func _store(samples: PackedFloat32Array, name: String, loops: bool = false) -> void:
 	var bytes: PackedByteArray = PackedByteArray()
 	bytes.resize(samples.size() * 2)
 	for i: int in range(samples.size()):
@@ -844,7 +979,7 @@ func _store(
 
 	var wav: AudioStreamWAV = AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate = rate
+	wav.mix_rate = RATE
 	wav.stereo = false
 	wav.data = bytes
 	if loops:
@@ -860,6 +995,6 @@ func _store(
 	var peak: float = 0.0
 	for value: float in samples:
 		peak = maxf(peak, absf(value))
-	print("audio: %-16s %5.2f s @ %5d Hz  peak %.2f rms %.3f -> %s" % [
-		name, float(samples.size()) / float(rate), rate, peak, _rms_of(samples), path,
+	print("audio: %-16s %5.2f s  peak %.2f rms %.3f -> %s" % [
+		name, float(samples.size()) / float(RATE), peak, _rms_of(samples), path,
 	])

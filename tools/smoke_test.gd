@@ -10021,17 +10021,16 @@ func _check_drawn_transform() -> void:
 
 ## Pętle silników: nagrania, które muszą się zapinać.
 ##
-## The three engine loops are built from two recordings rather than
+## The three engine loops are cut out of two recordings rather than
 ## synthesised, and that moved the risk. A generated loop is seamless
 ## because the arithmetic closed it; a recording is seamless only
-## because something made it so, and both sources arrived as exactly
-## whole seconds that were **not** loops -- `main1` wrapped with a
-## step 158 times the size of a typical sample-to-sample change and
-## `thruster1` with 286 times. A click once a second, under a sound
-## that runs for minutes.
+## because something made it so, and neither take is one -- both fade
+## in and out across ten seconds, so looping either whole would
+## breathe once a cycle, and the windows cut out of their middles end
+## wherever the clock happened to stop.
 ##
-## So what is pinned here is the property rather than the waveform: a
-## loop may sound like anything, and must not jump where it joins.
+## So what is pinned here is the property rather than the waveform:
+## a loop may sound like anything, and must not jump where it joins.
 func _check_engine_loops() -> void:
 	var seams: Array[String] = []
 	var levels: Dictionary = {}
@@ -10064,18 +10063,48 @@ func _check_engine_loops() -> void:
 		],
 	)
 
-	# The three against each other. The strip volumes and every figure
-	# in the soundcheck table were tuned when these were synthesised,
-	# so swapping in recordings had to keep the proportions or it would
-	# have been a balance change wearing a timbre change's clothes.
+	# All three are built to one level, which is the thing that lets
+	# the balance live in the table. If a loop ever came out louder
+	# than its neighbours the volumes beside it would silently mean
+	# something else.
+	var spread: float = 0.0
+	for name: String in levels:
+		spread = maxf(spread, absf(float(levels[name]) / 0.30 - 1.0))
 	_expect(
-		float(levels.get("engine_main", 0.0)) > float(levels.get("engine_torque", 0.0))
-		and float(levels.get("engine_torque", 0.0))
-		> float(levels.get("engine_thruster", 0.0)),
-		"a drive is louder than a jet is louder than a thruster (%.2f, %.2f, %.2f)" % [
-			levels.get("engine_main", 0.0), levels.get("engine_torque", 0.0),
-			levels.get("engine_thruster", 0.0),
+		spread < 0.05,
+		"every loop is built to the one level the table assumes, within %.0f%%" % [
+			spread * 100.0,
 		],
+	)
+
+	# The three against each other, read **through the table** rather
+	# than off the files. What a pilot hears is the loop times the
+	# strip volume, and the strip volumes and every figure in the
+	# soundcheck table were tuned back when the loops were
+	# synthesised: swapping recordings in had to keep the proportions
+	# or it would have been a balance change wearing a timbre
+	# change's clothes.
+	var loops: SoundTable = load("res://resources/fx/sounds/engine_loop.tres")
+	var heard: Array[float] = []
+	var said: Array[String] = []
+	for strip: SoundStrip in loops.variants:
+		heard.append(_rms(_pcm_of(strip.stream as AudioStreamWAV)) * strip.volume)
+		said.append("%.3f" % heard[heard.size() - 1])
+	_expect(
+		heard.size() == 3 and heard[0] > heard[1] and heard[1] > heard[2],
+		"a drive is louder than a jet is louder than a thruster (%s)" % [
+			", ".join(said),
+		],
+	)
+
+	# And they are separated in pitch as well as in level, because
+	# the jet and the thruster are the same recording: two engines of
+	# different kinds firing together must not be one sound played
+	# twice.
+	_expect(
+		loops.variants[1].stream != loops.variants[2].stream
+		and loops.variants[1].pitch.x > loops.variants[2].pitch.x,
+		"the jet and the thruster share a take and nothing else",
 	)
 
 	# And the recordings themselves have to come in raw. Godot's wav
@@ -10084,7 +10113,7 @@ func _check_engine_loops() -> void:
 	# built came out a seventh of their length and full of noise, and
 	# nothing said so.
 	var compressed: Array[String] = []
-	for name: String in ["main1", "thruster1"]:
+	for name: String in ["engine_level_1", "engine_level_3"]:
 		var source: AudioStreamWAV = load("res://assets/audio/%s.wav" % name)
 		if source == null or source.format != AudioStreamWAV.FORMAT_16_BITS:
 			compressed.append(name)

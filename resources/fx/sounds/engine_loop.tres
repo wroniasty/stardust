@@ -10,7 +10,7 @@
 [sub_resource type="Resource" id="Resource_h51in"]
 script = ExtResource("1_ab8v3")
 stream = ExtResource("2_qulq7")
-volume = 0.62
+volume = 0.47
 pitch = Vector2(0.8, 1.3)
 response = 0.06
 loops = true
@@ -18,7 +18,7 @@ loops = true
 [sub_resource type="Resource" id="Resource_1tbns"]
 script = ExtResource("1_ab8v3")
 stream = ExtResource("3_44r48")
-volume = 0.5
+volume = 0.26
 pitch = Vector2(0.95, 1.28)
 response = 0.045
 loops = true
@@ -32,8 +32,8 @@ loops = true
 [sub_resource type="Resource" id="Resource_h0r8w"]
 script = ExtResource("1_ab8v3")
 stream = ExtResource("6_7uwu0")
-volume = 0.42
-pitch = Vector2(0.92, 1.08)
+volume = 0.38
+pitch = Vector2(1.22, 1.4)
 response = 0.012
 loops = true
 

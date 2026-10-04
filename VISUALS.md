@@ -632,47 +632,96 @@ cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
 ### S1: Silniki
 
 - [x] Pętla na typ silnika, wysokość i głośność z `effective_output()`.
-  **Od nagrań, nie od syntezy** (druga wersja). `assets/audio/main1.wav`
-  napędza główny silnik, `thruster1.wav` — dławiki obrotowe i stery boczne.
-  Źródła leżą w `assets/`, bo to wejście, którego nikt nie powinien edytować
-  w miejscu; `resources/audio` to wyjście, które `make_audio.gd` nadpisuje bez
-  pytania.
+  **Od nagrań, nie od syntezy** (trzecia wersja, i ta została).
+  `assets/audio/engine_level_3.wav` napędza wszystko typu `MAIN` — główny
+  silnik, napęd gimbalowy i dzwon hamujący; silnik wsteczny tego typu
+  dostaje głęboki dźwięk z samego typu i nie musi być nigdzie wymieniony
+  z nazwy (na seryjnym kadłubie to nie wystarcza — patrz "Otwarte" niżej).
+  `engine_level_1.wav` napędza dławiki obrotowe i stery boczne. Źródła leżą
+  w `assets/`, bo to wejście, którego nikt nie powinien edytować w miejscu;
+  `resources/audio` to wyjście, które `make_audio.gd` nadpisuje bez pytania.
 
-  **Żadne z dwóch nie było pętlą**, i to jest warte zapisania, bo oba trwają
-  równe sekundy i wyglądają jak pętle: zmierzony skok na zapięciu to 11680
-  przy typowej różnicy między sąsiednimi próbkami 74 (`main1`) i 14898 przy
-  52 (`thruster1`) — 158 i 286 razy. Klik co obrót, pod dźwiękiem, który gra
-  minutami. Ogon jest teraz **wmieszany w głowę** przeplotem o równej mocy
-  (90 ms); po tym zapięcie wynosi 0,0×, 1,1× i 0,7× typowego kroku, czyli
-  jest nie do odróżnienia od każdego innego przejścia w fali.
+  Przyszły jako 24-bitowe AIFF (44,1 kHz, stereo, równe 10 s). Godot nie
+  importuje AIFF, więc w repo leżą jako 16-bitowe WAV — **bez żadnej innej
+  zmiany**: ten sam czas, te same kanały, ten sam poziom, zero obciętych
+  próbek. Co z nimi robi generator, robi w jednym miejscu i widocznie.
 
-  **Mono**, bo to dźwięki pozycyjne — silnik słychać przy jego własnej dyszy, a
-  `AudioStreamPlayer2D` nie ma co zrobić z dwoma kanałami. `thruster1` ma
-  realną szerokość (różnica stron 11012 przeciwko 2354 w `main1`) i jej
-  złożenie to strata warta poniesienia dla źródła punktowego.
+  **Żadne z dwóch nie jest pętlą, ale inaczej niż poprzednia para.** Te
+  zapinają się na zerze — skok na złączeniu to dokładnie 0 — za to są
+  wyciszone z obu stron: mierzone sekunda po sekundzie, pierwsza i ostatnia
+  z dziesięciu są 2 dB pod resztą. Zapętlone w całości nie klikną, tylko
+  **odetchną** raz na cykl, co jest gorsze: klik można wziąć za część
+  silnika, nabrzmienie nie. Stąd okna po 2,2 s wycięte ze środka, zapięte
+  przeplotem o równej mocy (90 ms); po tym złączenie wynosi 0,50×, 0,29×
+  i 0,04× typowego kroku między sąsiednimi próbkami.
 
-  **48 kHz zachowane**, nie zredukowane do 22050 reszty placeholderów:
-  symulacja podnosi wysokość do 1,28, a próbka zresamplowana w dół traci górę
-  dokładnie tam, gdzie wysokość o nią prosi.
+  **Obie są wąskopasmowe i to decyduje o całym podziale.** `level_1` ma 82%
+  energii między 250 a 500 Hz, środek ciężkości 398 Hz, nic poniżej 120 Hz
+  i nic powyżej 1 kHz — mała, szybka dmuchawa. `level_3` rozkłada po ćwierci
+  energii na pasma 20-60, 60-120 i 120-250 Hz, środek 121 Hz — coś dużego,
+  nie coś szybkiego.
 
-  **Poziomy dopasowane do tego, co zastępują** (0,40 / 0,36 / 0,21 FS RMS,
-  odczytane ze starych plików), żeby zmieniła się barwa, a nie balans —
-  głośności pasków i cała tabela soundchecku były strojone przeciwko tamtym.
-  Wymagało to **miękkiego kolana** zamiast sufitu: nagranie ma dużo wyższy
-  współczynnik szczytu niż kwadratowa synteza, więc samo przycinanie szczytów
-  zabrało dławikom 4,8 dB. Wzmocnienie jest **szukane iteracyjnie, a krzywa
-  nakładana raz** — nakładana dwa razy kompresuje kaskadowo i pierwsza wersja
-  chybiała każdego celu o ponad decybel.
+  **22050 Hz na wyjściu**, a nie zachowane 44,1 (odwrotnie niż poprzednio, i
+  z tego samego powodu: policzone, nie założone). Oba nagrania są 70 dB niżej
+  przy 2 kHz i 97 dB przy 4 kHz, więc częstotliwość próbkowania reszty gry
+  daje wciąż jedenaście razy więcej miejsca, niż zajmują — nawet z dławikiem
+  podbitym do 1,4. Decymacja idzie przez **filtr pasmowy** (33 odczepy, okno Hanna),
+  choć tu nie ma czego zawinąć: to dla następnego nagrania, które nie
+  będzie tak ciche na górze.
 
-  **Dławik obrotowy jest obcięty i rozjaśniony** (górnoprzepustowy 420 Hz, 1,1 s
-  zamiast 4): dół czterosekundowego pomruku zamienia się w błoto, kiedy się go
-  siecze dwadzieścia razy na sekundę, a góra niesie krawędź każdego pyknięcia.
-  Pulsowania w próbce **nie ma i być nie może** — jest w kodzie.
+  **Mono**, bo to dźwięki pozycyjne — silnik słychać przy jego własnej dyszy.
+  Obie próbki są szerokie i to akurat jest przypadek bezpieczny, nie
+  niebezpieczny: strony korelują na 0,09, czyli wcale, więc nie ma opóźnionej
+  kopii niczego, co mogłoby się wyciąć. Złożenie kosztuje 0,13 dB w paśmie
+  60 Hz - 1,2 kHz i nie grzebieniuje.
 
-  Jedna pułapka po drodze: importer `.wav` Godota domyślnie **kompresuje**, a
-  generator czytał wtedy skompresowane bajty jak próbki — pętle wyszły
-  siedmiokrotnie za krótkie i pełne szumu, i nic tego nie zgłosiło.
-  `compress/mode=0` w obu `.import`, strażnik w generatorze i asercja w teście.
+  **Limiter zamiast miękkiego kolana** — i to jest zmierzony błąd poprzedniej
+  wersji, nie kosmetyka. Nagranie ma współczynnik szczytu 13 dB, kształt szumu
+  a nie kwadratowej syntezy, więc doprowadzenie go do tej samej głośności
+  przez `tanh` kładzie produkty zniekształceń **24 dB pod dźwiękiem, w paśmie
+  gdzie samo nagranie jest 47 dB w dół**. Słyszalny brud, na materiale oddanym
+  ze zdaniem "ma brzmieć tak". Limiter — wzmocnienie ściągane 4 ms **przed**
+  szczytem (przebieg wstecz) i oddawane przez 60 ms (przebieg w przód) —
+  dochodzi do tej samej liczby 30 dB czyściej: 54 do 65 dB pod dźwiękiem.
+  Rusza wzmocnienie, nie przebieg.
+
+  **Jeden poziom na wszystkie trzy** (0,30 FS RMS), a balans przeniósł się do
+  głośności pasków: 1,00 / 0,38 / 0,26 (i `dynamo` 0,62 → 0,47). To jest
+  właściwe miejsce — głośność to liczba, którą warsztat przekręci w biegu,
+  próbka nie. Proporcje są co do joty te, które były; **cała sekcja silników
+  jest 2,4 dB cichsza**, bo 0,30 kosztuje 1,1-2,0 dB pracy limitera, a 0,40
+  kosztowałoby 3,6-4,5 dB — i to już byłoby słychać. Sekcja i tak była tą,
+  której przy ośmiu zapalonych dyszach brakowało zapasu.
+
+  **Dławik obrotowy nie jest już rozjaśniany**, tylko podbity w wysokości
+  (1,22-1,40 przeciwko 0,95-1,28 steru bocznego). Stare uzasadnienie
+  górnoprzepustowego filtra trzymało się — czterosekundowy pomruk zamienia
+  się w błoto, kiedy go siekać dwadzieścia razy na sekundę — ale to nagranie
+  jest już wąskim pasmem wokół 400 Hz i filtr zabrałby 88% dźwięku. Dławik
+  i ster dzielą nagranie, więc różni je okno, głośność, czas reakcji
+  (12 ms przeciwko 45) i właśnie wysokość: dławik to najmniejszy silnik w
+  grze, 160 N przeciwko 180-500 sterów. Pulsowania w próbce **nie ma i być
+  nie może** — jest w kodzie.
+
+  **Sprawdzone, że brzmi tak samo**, a nie tylko że ma dobre liczby: w pasmach
+  niosących 99% energii gotowa pętla różni się od oryginalnego okna o
+  **najwyżej 0,22 dB**.
+
+  **Otwarte: hamowanie na seryjnym kadłubie brzmi mało.** Podział idzie po
+  `EngineData.Type`, bo tam mieszka reszta różnic (czas reakcji, wysokość),
+  a seryjny kadłub ma na dziobie `retro_thruster` — typ `THRUSTER`, 500 N —
+  nie `braking_bell`, który jest typu `MAIN`. Silnik wsteczny dostaje więc
+  `level_1`, choć z opisu wynika `level_3`. Tabela umie jedną próbkę na
+  **rodzaj**, nie na sztukę, a `affixes` to lista wylosowanych modyfikatorów
+  i nie wolno jej użyć jako etykiety. Dwa wyjścia, oba decyzją projektową,
+  nie techniczną: zamontować na tym gnieździe `braking_bell` (zmienia
+  autorytet BACK 500 → 700 i daje hamowaniu rozbieg 0,35 s, czyli zmienia
+  lot) albo dodać tabeli drugie kryterium obok typu.
+
+  Jedna pułapka, ta sama co poprzednio i znowu złapana dopiero przez strażnika:
+  importer `.wav` Godota domyślnie **kompresuje** (`compress/mode=2`), a
+  generator czyta wtedy skompresowane bajty jak próbki. `compress/mode=0`
+  w obu `.import`, strażnik w generatorze i asercja w teście.
   `EngineChoir`: jeden głos na zamontowany silnik, postawiony przy dyszy,
   głośność i wysokość czytane co tik. Jedna próbka na **rodzaj**, nie na
   sztukę — dwa napędy tego samego typu na różnym ciągu już brzmią inaczej,
@@ -690,8 +739,8 @@ cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
   | mount | typ | thr 0,25 | thr 0,50 | thr 1,00 |
   |---|---|---|---|---|
   | MainDrive | main | 0,25 ±0,00 | 0,50 ±0,00 | 1,00 ±0,00 |
-  | NoseLeftTorque | torque | 0,11 ±0,21 | 0,21 ±0,21 | 0,42 ±0,00 |
-  | StrafeLeftThruster | thruster | 0,12 ±0,00 | 0,25 ±0,00 | 0,50 ±0,00 |
+  | NoseLeftTorque | torque | 0,09 ±0,19 | 0,19 ±0,19 | 0,38 ±0,00 |
+  | StrafeLeftThruster | thruster | 0,06 ±0,00 | 0,13 ±0,00 | 0,26 ±0,00 |
 
   Przy pełnym żądaniu dławik pali **co tik**, więc przestaje chlupać i
   przechodzi w ciągły ryk — to też jest w kodzie, nie w próbce.
