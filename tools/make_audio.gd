@@ -74,6 +74,7 @@ func _build_samples() -> void:
 	_store(_bed(), "bed", true)
 	_build_engines()
 	_build_hull()
+	_build_ordnance()
 
 
 ## One loop per kind of engine, and the two events that bracket them.
@@ -112,6 +113,122 @@ func _build_hull() -> void:
 	_store(_deny(), "deny")
 	_store(_blast(), "explode")
 	_store(_revive(), "respawn")
+
+
+## Guns, and what they do to the ground.
+##
+## Three shots rather than one per weapon, for the same reason there is
+## one engine loop per kind: what makes an autocannon sound unlike a
+## beam is what it **is**, and the pitch carries the rest. A siege slug
+## and a pulse repeater are the same mechanism at different sizes.
+func _build_ordnance() -> void:
+	_store(_gunshot(), "shot_gun")
+	_store(_beamshot(), "shot_beam")
+	_store(_launch(), "shot_launch")
+	_store(_rock_hit(), "rock_hit")
+	_store(_rock_settle(), "rock_settle")
+	_store(_motor(), "missile_motor", true)
+
+
+## A gun: a hard transient and almost nothing after it.
+func _gunshot() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1010
+	var length: int = int(RATE * 0.11)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var crack: float = exp(-at * 55.0)
+		var body: float = exp(-at * 16.0)
+		out.append(
+			rng.randf_range(-1.0, 1.0) * crack * 0.7
+			+ sin(TAU * lerpf(220.0, 90.0, minf(at * 9.0, 1.0)) * at) * body * 0.45
+		)
+	return out
+
+
+## A beam: no transient at all. The whole point of a hitscan weapon is
+## that nothing leaves the barrel, so it should not sound like
+## something did -- it hums and stops.
+func _beamshot() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var length: int = int(RATE * 0.18)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		var shape: float = minf(along * 10.0, 1.0) * (1.0 - along) * (1.0 - along)
+		out.append(
+			(sin(TAU * 740.0 * at) * 0.5 + sin(TAU * 1123.0 * at) * 0.25) * shape
+		)
+	return out
+
+
+## A launcher: a soft thump and a motor catching.
+func _launch() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1111
+	var length: int = int(RATE * 0.3)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var along: float = float(i) / float(length)
+		var pop: float = exp(-at * 30.0)
+		# Swelling after the pop, which is the motor: a launcher is two
+		# events close together and it reads wrong as one.
+		var catch_: float = clampf((along - 0.15) * 2.2, 0.0, 1.0) * (1.0 - along)
+		out.append(
+			sin(TAU * 110.0 * at) * pop * 0.5 + rng.randf_range(-1.0, 1.0) * catch_ * 0.5
+		)
+	return out
+
+
+## Something hitting rock, and the rock losing.
+func _rock_hit() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1212
+	var length: int = int(RATE * 0.26)
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		out.append(
+			(rng.randf_range(-1.0, 1.0) * 0.6 + sin(TAU * 130.0 * at) * 0.4)
+			* exp(-at * 18.0)
+		)
+	return out
+
+
+## And the hole settling afterwards: loose stuff running back down the
+## sides. Quiet, long, and the reason a crater reads as a hole rather
+## than as a dent.
+func _rock_settle() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1313
+	var length: int = int(RATE * 0.7)
+	var rolling: float = 0.0
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.25)
+		# Grainy rather than smooth: a trickle of gravel is many small
+		# events, so the envelope is chopped rather than a clean decay.
+		var grain: float = 0.55 + 0.45 * sin(TAU * 23.0 * at + sin(TAU * 7.0 * at))
+		out.append(rolling * grain * exp(-at * 3.4) * 0.5)
+	return out
+
+
+## A missile under power. Thin, because it is small and far away more
+## often than not.
+func _motor() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 1414
+	var length: int = RATE / 2
+	var rolling: float = 0.0
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		rolling = lerpf(rolling, rng.randf_range(-1.0, 1.0), 0.45)
+		out.append(rolling * 0.55 + sin(TAU * 260.0 * at) * 0.12)
+	return out
 
 
 ## Metal dragging on rock: noise with a slow flutter over it, so it

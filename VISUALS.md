@@ -596,8 +596,31 @@ cztery kształty (łomot, trzask, tyknięcie, podkład), nie cztery zdarzenia,
 
 ### S3: Broń i teren
 
-- [ ] Wystrzał (zadanie szwu), lot pocisku, trafienie w skałę kontra w próżnię.
-- [ ] Osypywanie się terenu po wyrwaniu dziury.
+- [x] Wystrzał (zadanie szwu), lot pocisku, trafienie w skałę kontra w próżnię.
+  **Najczystszy przypadek reguły próżni w całej grze**, i dlatego jeden węzeł,
+  a nie dwa. Strzał i trafienie to to samo zdarzenie widziane z dwóch miejsc:
+  działo jest przykręcone do kadłuba, w którym siedzisz, więc idzie drogą
+  `CONDUCTED` i słychać je na bezpowietrznym księżycu; trafienie dzieje się
+  tam, w cudzej skale, więc idzie `AIRBORNE` i na tym samym księżycu krater
+  pojawia się **w ciszy**. Nic nie trzeba było na to budować — cała decyzja
+  to wybór drogi dla każdego z dwojga, a odwrotny sposób byłby niewidoczny w
+  atmosferze i błędny wszędzie indziej.
+
+  Trzy próbki na sześć typów broni: o brzmieniu decyduje **mechanizm**, a
+  resztę niesie wysokość (z `muzzle_speed`). Wiązka jest tym jednym, które
+  musi się różnić naprawdę — z lufy nic nie wylatuje, więc nie może brzmieć,
+  jakby wyleciało.
+
+  Lot: silnik dostają tylko rakiety, bo tylko one lecą pod ciągiem — zwykły
+  pocisk jest balistyczny i cisza w locie jest poprawna. Pociski są
+  **obchodzone**, nie podłączane: rodzą się i giną w środku klatki i nie mają
+  własnych sygnałów, a dopisanie im ich byłoby sięganiem warstwy prezentacji
+  do tego, co ma tylko obserwować. Sześć silników w puli; trzynasta rakieta
+  leci cicho i niczego nie alokuje.
+- [x] Osypywanie się terenu po wyrwaniu dziury.
+  **Drugie zdarzenie, nie ogon pierwszego**: opóźnione o 0,18–0,45 s, żeby
+  było słychać jako osobną rzecz. Krater, który milknie w chwili powstania,
+  czyta się jak wgniecenie, a nie jak dziura.
 
 ### S4: Atmosfera
 

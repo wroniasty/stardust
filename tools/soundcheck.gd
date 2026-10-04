@@ -10,6 +10,8 @@ extends Node
 const SAMPLES: Array[String] = [
 	"thump", "crack", "tick", "bed",
 	"engine_ignite", "engine_cut",
+	"hull_grind", "hull_creak", "gear_servo", "gear_touch", "deny", "explode", "respawn",
+	"shot_gun", "shot_beam", "shot_launch", "rock_hit", "rock_settle",
 ]
 
 ## What a throttle setting sounds like, per kind of engine. The loops

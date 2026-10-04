@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/fx/debris_field.gd" id="11_debris"]
 [ext_resource type="Script" path="res://scripts/fx/engine_choir.gd" id="12_choir"]
 [ext_resource type="Script" path="res://scripts/fx/hull_voice.gd" id="13_hull_voice"]
+[ext_resource type="Script" path="res://scripts/fx/ordnance_voice.gd" id="14_ordnance"]
 [ext_resource type="PackedScene" path="res://scenes/debug_overlay.tscn" id="5_overlay"]
 [ext_resource type="PackedScene" path="res://scenes/starfield.tscn" id="6_starfield"]
 [ext_resource type="PackedScene" path="res://scenes/debug_vectors.tscn" id="7_vectors"]
@@ -62,4 +63,8 @@ ship_path = NodePath("../../Player/Ship")
 
 [node name="HullVoice" type="Node" parent="Presentation"]
 script = ExtResource("13_hull_voice")
+ship_path = NodePath("../../Player/Ship")
+
+[node name="OrdnanceVoice" type="Node2D" parent="Presentation"]
+script = ExtResource("14_ordnance")
 ship_path = NodePath("../../Player/Ship")

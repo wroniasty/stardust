@@ -1003,6 +1003,7 @@ func _evaluate_phase() -> void:
 			_check_soundscape()
 			_check_engine_choir()
 			_check_hull_voice()
+			_check_ordnance_voice()
 			_check_debris()
 			_check_rarity_travels()
 			_check_affix_pools()
@@ -9209,6 +9210,136 @@ func _check_hull_voice() -> void:
 	voice.free()
 	sound.free()
 	ship.queue_free()
+
+
+## Broń i teren: strzał przez kadłub, trafienie przez powietrze.
+##
+## The clearest case of the vacuum rule in the game, and the one worth
+## checking hardest, because getting it backwards would be invisible in
+## an atmosphere and wrong everywhere else.
+##
+## A shot and its impact are the same event seen from two places. The
+## gun is bolted to the hull you are sitting in, so it fires on an
+## airless moon. The hit happens out there against somebody else's rock,
+## so on that same moon the crater appears in silence. Nothing had to be
+## built for either: the only decision is which path each one takes.
+func _check_ordnance_voice() -> void:
+	var sound: Soundscape = Soundscape.new()
+	root.add_child(sound)
+	var guns: OrdnanceVoice = OrdnanceVoice.new()
+	root.add_child(guns)
+
+	var spent: Callable = func() -> int: return sound._next
+	var cannon: WeaponData = load("res://resources/weapons/autocannon.tres") as WeaponData
+	var lance: WeaponData = load("res://resources/weapons/beam_lance.tres") as WeaponData
+
+	# Vacuum. The gun is heard and the rock is not, which is the whole
+	# rule in two lines.
+	sound.density = 0.0
+	var before: int = spent.call()
+	guns._on_fired(Vector2.ZERO, Vector2.UP, cannon)
+	var shot_in_vacuum: int = spent.call() - before
+	before = spent.call()
+	guns._on_carved(Vector2(100.0, 0.0), 20.0)
+	var hit_in_vacuum: int = spent.call() - before
+	_expect(
+		shot_in_vacuum == 1 and hit_in_vacuum == 0,
+		"on an airless moon you hear your own gun and not the crater (%d, %d)" % [
+			shot_in_vacuum, hit_in_vacuum,
+		],
+	)
+
+	# Air. Now both.
+	sound.density = 1.0
+	before = spent.call()
+	guns._on_fired(Vector2.ZERO, Vector2.UP, cannon)
+	guns._on_carved(Vector2(100.0, 0.0), 20.0)
+	_expect(
+		spent.call() - before == 2,
+		"and in air you hear both (%d)" % [spent.call() - before],
+	)
+
+	# A hole goes on making noise after it appears, as a second event
+	# rather than a tail on the first: a crater that fell silent the
+	# instant it was dug would read as a dent.
+	var waiting: int = guns.settling()
+	_expect(waiting > 0, "a fresh hole is still settling (%d)" % waiting)
+	before = spent.call()
+	for tick: int in range(120):
+		guns.advance(1.0 / 60.0)
+	_expect(
+		spent.call() > before and guns.settling() == 0,
+		"and it is heard doing it, a moment later (%d)" % [spent.call() - before],
+	)
+
+	# Three samples for six weapon types, because what makes a gun sound
+	# unlike a beam is the mechanism. A beam is the one that has to be
+	# different: nothing leaves the barrel, so it must not sound like
+	# something did.
+	_expect(
+		guns._shots[cannon.type] != guns._shots[lance.type],
+		"a beam does not sound like a gun",
+	)
+	var kinds: Dictionary = {}
+	for kind: Variant in OrdnanceVoice.SHOTS:
+		kinds[OrdnanceVoice.SHOTS[kind]] = true
+	_expect(
+		OrdnanceVoice.SHOTS.size() == WeaponData.Type.size() and kinds.size() == 3,
+		"every weapon type has a shot, and six of them share three (%d, %d)" % [
+			OrdnanceVoice.SHOTS.size(), kinds.size(),
+		],
+	)
+
+	# Missiles get a motor while they are in the air and give it back
+	# when they are not. Walked rather than hooked, because a round has
+	# no signals of its own and giving it some would be the presentation
+	# layer reaching into what it is supposed to be watching.
+	var hangar: Node2D = Node2D.new()
+	hangar.add_to_group(Ship.PROJECTILE_GROUP)
+	root.add_child(hangar)
+	var rocket: WeaponData = load("res://resources/weapons/seeker.tres") as WeaponData
+	var flock: Array[Missile] = []
+	for i: int in range(3):
+		var round_node: Missile = (
+			rocket.projectile_scene.instantiate() as Missile
+		)
+		round_node.global_position = Vector2(float(i) * 50.0, 0.0)
+		hangar.add_child(round_node)
+		flock.append(round_node)
+	guns.advance(1.0 / 60.0)
+	_expect(
+		guns.motors_running() == 3,
+		"three missiles in the air, three motors (%d)" % guns.motors_running(),
+	)
+	flock[0].free()
+	flock[1].free()
+	guns.advance(1.0 / 60.0)
+	_expect(
+		guns.motors_running() == 1,
+		"two of them gone, and their motors with them (%d)" % guns.motors_running(),
+	)
+
+	# The pool is a pool: more missiles than motors must not grow the
+	# node, and the ones left over simply fly quietly.
+	var before_children: int = guns.get_child_count()
+	for i: int in range(OrdnanceVoice.MOTORS * 2):
+		var extra: Missile = rocket.projectile_scene.instantiate() as Missile
+		extra.global_position = Vector2(0.0, float(i) * 40.0)
+		hangar.add_child(extra)
+	guns.advance(1.0 / 60.0)
+	_expect(
+		guns.get_child_count() == before_children
+		and guns.motors_running() <= OrdnanceVoice.MOTORS,
+		"%d missiles share %d motors and allocate nothing (%d running)" % [
+			OrdnanceVoice.MOTORS * 2 + 1, OrdnanceVoice.MOTORS, guns.motors_running(),
+		],
+	)
+
+	hangar.free()
+	for spoken: Node in sound.get_children():
+		(spoken as AudioStreamPlayer2D).stream = null
+	guns.free()
+	sound.free()
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.
