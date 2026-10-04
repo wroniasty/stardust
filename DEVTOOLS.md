@@ -124,9 +124,9 @@ Gotowe, gdy: nie trzeba już odpalać `soundcheck.tscn` ani `art_gallery.tscn` o
 
 ### D5: Auto-formularz zasobu i edycja na żywo
 
-- [ ] `resource_form.gd`: formularz z `get_property_list()` dla `HullData`, `EngineData`, `WeaponData`, tabel i pasków. Obsługa `float` / `int` / `bool` / `String` / `Color` / `Vector2` / enum / zakresy / `AudioStream` / `PackedVector2Array` (obrys: edycja punktów).
-- [ ] Zmiana w formularzu działa **od razu** na działającym statku (odświeżenie przez `emit_changed()` + przebudowa tylko tego, czego dotyczy).
-- [ ] Zapis do `.tres` jawnym przyciskiem; pole „brudne" oznaczone, „cofnij do pliku" dostępne.
+- [x] `bench_resource_form.gd`: formularz z `get_property_list()` dla `HullData`, `EngineData`, `WeaponData`, tabel i pasków. Obsługa `float` / `int` / `bool` / `String` / `Color` / `Vector2` / enum / zakresy / zagnieżdżone zasoby ze skryptem. Tablice i słowniki pokazane jako licznik; edycja obrysu kadłuba (`PackedVector2Array`) jeszcze nie.
+- [x] Zmiana w formularzu działa **od razu** na działającym statku (odświeżenie przez `emit_changed()` + przebudowa tylko tego, czego dotyczy).
+- [x] Zapis do `.tres` jawnym przyciskiem; pole „brudne" oznaczone, „cofnij do pliku" dostępne.
 - [ ] Debounce przy procedurach z seeda, żeby przeciągnięcie suwaka nie przebudowywało dźwięku sto razy na sekundę.
 
 Gotowe, gdy: zmiana `rounds_per_second` albo `max_thrust` suwakiem jest widoczna w następnym strzale / ciągu bez restartu i da się ją zapisać do pliku.

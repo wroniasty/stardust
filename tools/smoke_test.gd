@@ -3541,6 +3541,41 @@ func _check_workbench() -> void:
 	_expect(sounds._running.is_empty(), "and stopped")
 	scape.density = 0.0
 
+	# D5: the resource form writes into the live object and can undo it.
+	var resources: BenchResourcePanel = bench._resource_panel
+	var categories: Array = BenchResourcePanel.CATEGORIES.keys()
+	var empty_forms: int = 0
+	for index: int in range(categories.size()):
+		resources._category.selected = index
+		resources._fill_files()
+		if resources._form.get_child_count() == 0:
+			empty_forms += 1
+	_expect(empty_forms == 0, "every resource category opens a form with rows in it")
+
+	resources._category.selected = categories.find("silniki")
+	resources._fill_files()
+	var drive: EngineData = resources._current as EngineData
+	var before: float = drive.max_thrust
+	var seen: Array[Resource] = []
+	resources._form.edited.connect(func(r: Resource) -> void: seen.append(r))
+	resources._form._write("max_thrust", before * 2.0)
+	_expect(is_equal_approx(drive.max_thrust, before * 2.0), "the form writes into the live engine")
+	_expect(seen.size() == 1 and seen[0] == drive, "and says which resource it wrote to")
+	_expect(resources._dirty.has(drive.resource_path), "and marks the file as edited")
+	resources.revert_current()
+	_expect(is_equal_approx(drive.max_thrust, before), "reverting restores the file's value (%.1f)" % drive.max_thrust)
+	_expect(not resources._dirty.has(drive.resource_path), "and clears the mark")
+
+	var weapon_index: int = categories.find("bronie")
+	resources._category.selected = weapon_index
+	resources._fill_files()
+	var enum_rows: int = 0
+	for row: Node in resources._form.get_children():
+		for inner: Node in row.get_children():
+			if inner is OptionButton:
+				enum_rows += 1
+	_expect(enum_rows >= 1, "an enum field (the weapon type) becomes a drop-down")
+
 	# Freed on the spot, not queued: the missiles fired above would still be
 	# alive for the checks that follow, and the next one counts motors.
 	root.remove_child(bench)
