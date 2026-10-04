@@ -541,7 +541,28 @@ tylko kolejność prac.
 - [ ] `scripts/ui/ui_draw.gd`: wiersz odczytu i narożny nawias, plus `tools/gallery.tscn` do ich oglądania.
 - [ ] Oprawa kart modułów: ramki, ikony, **kolor wiersza wg kierunku zmiany** zamiast słów „lepiej / gorzej”. Treść karty jest zrobiona i mieszka na `ModuleData.card_lines()` (M2.3); zostało samo malowanie, więc siedzi tu, a nie w M2 — robione przed paletą i `ui_draw.gd` byłoby robione dwa razy.
 - [ ] Układ w czterech narożnikach, środek 400x220 pusty (UI_STYLE.md sekcja 5). Przeniesienie tego, co już jest, na ramę.
-- [ ] `scripts/ui/ui_value.gd`: wygładzanie geometrii (~120 ms) osobno od kwantowania cyfr (10 Hz). Bez tego HUD dalej wygląda na debugowy, choćby miał dobry font.
+- [x] `scripts/ui/ui_value.gd`: wygładzanie geometrii (~120 ms) osobno od
+  kwantowania cyfr (10 Hz). **Zapisane jako czas połowicznego zaniku, nie jako
+  ułamek na tik** — ułamek to inna krzywa przy 60 i przy 144 klatkach, a HUD
+  rysuje się w tempie klatek. Test karmi tę samą sekundę czasu dwoma krokami i
+  wymaga tej samej odpowiedzi (99,690 w obu).
+
+  **Histereza trzy czwarte kroku, nie pół.** Pół byłoby oczywiste i byłoby
+  błędem: dokładnie na granicy pół to brak histerezy, więc odczyt, który się nie
+  rusza, dalej skakałby między dwiema liczbami dziesięć razy na sekundę. Test
+  sadza odczyt na granicy z szumem i wymaga **zera** zmian przez trzy sekundy.
+
+  Cyfra kwantuje się z wartości **wygładzonej**, nie z surowej: surowa jest tym,
+  co szumi, a liczba próbkowana z szumu dziesięć razy na sekundę kłóci się sama
+  ze sobą. Kosztuje to jeden krok opóźnienia, czego na liczbie, której nikt nie
+  czyta co klatkę, nie widać.
+
+  Podpięte od razu do HUD-u lotu, bo sama klasa niczego nie naprawia: pasek
+  kadłuba bierze kształt z `smooth()`, a procent z `stepped()`; ALT, V/S, SLOPE
+  i V idą przez cyfrę; kolory biorą wartość wygładzoną, bo kolor przeskakujący
+  na progu to najgłośniejsza rzecz, jaką HUD potrafi zrobić. Arytmetyka
+  przeniosła się przy okazji z rysowania do jednego miejsca próbkowanego raz na
+  klatkę — rysowanie może się zdarzyć dwa razy albo wcale.
 - [ ] Stany ostrzegawcze czytelne bez czytania: kolor, puls prostokątny 2 Hz na tle a nie na tekście, stała pozycja.
 - [ ] Pasek energii: komórki z podziałką co koszt strzału, cisza timeoutu odróżnialna od doładowywania bez patrzenia na liczby (mechanika w IDEAS.md sekcja 14). Łuk segmentowy na ciepło kadłuba.
 - [x] **Przyrząd orbity zamiast ośmiu wierszy tekstu** (`scripts/flight_hud.gd`). Planeta jako kropka w ognisku, pierścień gruntu w skali, stożek toru z kropkami na perycentrum i apocentrum, kropka statku na krzywej. **W orbicie linia jest grubsza i zielona** — „czy jestem na orbicie” to pytanie tak/nie, a sam kolor to odcień, który trzeba pamiętać. Obok liczby, które naprawdę są liczbami: PERI, APO, ALT, V/S, SLOPE, GEAR. Odmowa lądowania jako **wykrzyknik i powód**, bez słowa „WAVE OFF” — etykieta na newsie, który kolor już niosł.

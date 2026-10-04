@@ -1175,6 +1175,7 @@ func _evaluate_phase() -> void:
 			_check_stat_cards()
 			_check_font()
 			_check_palette()
+			_check_ui_value()
 			_check_scanner(_planet)
 			_check_crate_physics(_planet)
 			_check_ejection()
@@ -8466,6 +8467,102 @@ func _fields_outside_limits(item: Resource) -> int:
 			print("  stray: %s = %.3f outside %.3f..%.3f" % [field, value, bounds.x, bounds.y])
 			strays += 1
 	return strays
+
+
+## Jedna liczba, dwa odczyty: igła i cyfra.
+##
+## UI_STYLE section 7: a bar has to be continuous, because it is a shape
+## and a shape that jumps reads as a glitch, while a printed figure has
+## to be still, because a digit changing sixty times a second cannot be
+## read even when every value it shows is true. Two requirements on one
+## quantity, and the class exists to stop them being averaged into one
+## answer that serves neither.
+func _check_ui_value() -> void:
+	# The half-life, which is the whole of the smoothing. Twelve
+	# hundredths of a second should close exactly half the gap.
+	var one: UiValue = UiValue.new(1.0)
+	one.jump(0.0)
+	for tick: int in range(12):
+		one.feed(100.0, 0.01)
+	_expect(
+		absf(one.smooth() - 50.0) < 1.0,
+		"one half-life closes half the gap (%.1f of 100)" % one.smooth(),
+	)
+
+	# And the reason it is written as a half-life rather than as a
+	# fraction per tick: a fraction is a different curve at 60 fps and
+	# at 144, and this is read by a HUD drawn at frame rate. Same second
+	# of time, two step sizes, one answer.
+	var slow: UiValue = UiValue.new(1.0)
+	var fast: UiValue = UiValue.new(1.0)
+	slow.jump(0.0)
+	fast.jump(0.0)
+	for tick: int in range(60):
+		slow.feed(100.0, 1.0 / 60.0)
+	for tick: int in range(144):
+		fast.feed(100.0, 1.0 / 144.0)
+	_expect(
+		absf(slow.smooth() - fast.smooth()) < 0.05,
+		"a second of smoothing is a second at any frame rate (%.3f against %.3f)" % [
+			slow.smooth(), fast.smooth(),
+		],
+	)
+
+	# The digit, sitting on a boundary with a little noise on it. This is
+	# where a plain quantiser chatters: half a step either way and the
+	# printed number alternates ten times a second while the thing it
+	# describes is not moving at all.
+	var steady: UiValue = UiValue.new(1.0)
+	steady.jump(100.0)
+	var was: float = steady.stepped()
+	var chatter: int = 0
+	for tick: int in range(180):
+		steady.feed(100.5 + sin(float(tick)) * 0.05, 1.0 / 60.0)
+		if not is_equal_approx(steady.stepped(), was):
+			chatter += 1
+			was = steady.stepped()
+	_expect(
+		chatter == 0,
+		"a figure on a boundary does not flick between two numbers (%d changes in 3 s)" % chatter,
+	)
+
+	# But it does follow a reading that is really moving, and not more
+	# than ten times in a second while doing it.
+	var climbing: UiValue = UiValue.new(1.0)
+	climbing.jump(0.0)
+	var last: float = climbing.stepped()
+	var steps: int = 0
+	for tick: int in range(60):
+		climbing.feed(float(tick) * 10.0, 1.0 / 60.0)
+		if not is_equal_approx(climbing.stepped(), last):
+			steps += 1
+			last = climbing.stepped()
+	_expect(
+		steps >= 5 and steps <= 11,
+		"and follows one that is, ten times a second at the most (%d in one second)" % steps,
+	)
+
+	# A jump is for the moments with nothing to ease from: first frame,
+	# respawn, arriving in another system. Without it an instrument
+	# spends its first tenth of a second sliding in from whatever the
+	# last ship was doing.
+	climbing.jump(-42.0)
+	_expect(
+		is_equal_approx(climbing.smooth(), -42.0)
+		and is_equal_approx(climbing.stepped(), -42.0),
+		"a jump puts both readings on the new value at once",
+	)
+
+	# And the step is the instrument's own: an altitude counts in
+	# pixels, a rate of climb in tenths.
+	var rate: UiValue = UiValue.new(0.1)
+	rate.jump(0.0)
+	for tick: int in range(120):
+		rate.feed(1.23, 1.0 / 60.0)
+	_expect(
+		absf(rate.stepped() - 1.2) < 0.001,
+		"a tenth-step reading prints tenths (%.3f)" % rate.stepped(),
+	)
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

@@ -101,6 +101,21 @@ var _canvas: Control = null
 ## with two panel fills, two borders and three ambers a pixel apart.
 var _ink: Palette = Palette.current()
 
+## Every reading that is both drawn and printed, which on this panel is
+## all of them (UI_STYLE section 7). The quantum is the step the figure
+## counts in: a pixel for a height, a tenth for a rate.
+##
+## Fed once a frame in `_process` and read in the draw. That split is
+## not tidiness -- a draw can run twice for one frame or not at all for
+## a skipped one, so a smoothing fed from inside it would advance at
+## whatever rate the renderer happened to feel like.
+var _hull: UiValue = UiValue.new(1.0)
+var _speed: UiValue = UiValue.new(1.0)
+var _altitude: UiValue = UiValue.new(1.0)
+var _descent: UiValue = UiValue.new(0.1)
+var _slope: UiValue = UiValue.new(deg_to_rad(0.1))
+
+
 func _ready() -> void:
 	layer = 10
 	# Keeps drawing while the tree is paused, so the planet configurator can
@@ -116,11 +131,48 @@ func _ready() -> void:
 
 func bind(ship: Ship) -> void:
 	_ship = ship
+	# Fresh readings for a fresh hull. Kept across the swap they would
+	# spend the first tenth of a second easing over from whatever the
+	# last ship was doing, which is a readout lying during the one
+	# moment a pilot is certain to be looking at it.
+	_hull = UiValue.new(1.0)
+	_speed = UiValue.new(1.0)
+	_altitude = UiValue.new(1.0)
+	_descent = UiValue.new(0.1)
+	_slope = UiValue.new(deg_to_rad(0.1))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_read(delta)
 	if _canvas != null:
 		_canvas.queue_redraw()
+
+
+## One sample of everything the panel shows, once a frame.
+##
+## The arithmetic lives here and only here. It used to sit inside the
+## draw, which meant the orbit panel worked out the descent rate and
+## nothing else could see it; now the draw reads what was sampled and
+## does no sums of its own.
+func _read(delta: float) -> void:
+	if _ship == null or not is_instance_valid(_ship):
+		return
+	_hull.feed(clampf(_ship.hull_integrity, 0.0, 1.0) * 100.0, delta)
+	_speed.feed(_ship.linear_velocity.length(), delta)
+
+	var planet: GravityWell = host()
+	if planet == null:
+		return
+	_altitude.feed(planet.height_above_terrain(_ship.global_position), delta)
+	# Against the ground, which moves on a spinning planet: the same
+	# quantity the landing check uses, so the two cannot disagree.
+	var up: Vector2 = (_ship.global_position - planet.global_position).normalized()
+	var relative: Vector2 = _ship.linear_velocity - planet.surface_velocity_at(
+		_ship.global_position
+	)
+	_descent.feed(-relative.dot(up), delta)
+	if planet.has_ground():
+		_slope.feed((planet as Planet).slope_at(_ship.global_position), delta)
 
 
 ## The body whose well the ship is actually in, or null out in the dark.
@@ -175,7 +227,10 @@ func _draw_hud() -> void:
 func _draw_hull(font: Font, view: Vector2) -> void:
 	var left: float = (view.x - BAR_WIDTH) * 0.5
 	var frame: Rect2 = Rect2(left, MARGIN, BAR_WIDTH, BAR_HEIGHT)
-	var health: float = clampf(_ship.hull_integrity, 0.0, 1.0)
+	# The bar off the smoothed reading and the figure off the stepped
+	# one: a bar that jumps reads as a glitch, a figure that does not
+	# hold still cannot be read at all.
+	var health: float = clampf(_hull.smooth() * 0.01, 0.0, 1.0)
 	var colour: Color = _ink.ok
 	if health < 0.25:
 		colour = _ink.alarm
@@ -183,7 +238,7 @@ func _draw_hull(font: Font, view: Vector2) -> void:
 		colour = _ink.caution
 	_canvas.draw_rect(Rect2(frame.position, Vector2(BAR_WIDTH * health, BAR_HEIGHT)), colour, true)
 	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
-	var reading: String = "%3.0f%%" % (health * 100.0)
+	var reading: String = "%3.0f%%" % _hull.stepped()
 	_text(font, Vector2(left - 4.0 - _width(font, reading), frame.end.y), reading, colour)
 	_draw_heat(font, left, frame.end.y + HEAT_GAP)
 
@@ -260,15 +315,6 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 		_canvas.draw_circle(dial.get_center(), PLANET_DOT, _ink.nav)
 		_canvas.draw_arc(dial.get_center(), DIAL * 0.5 - 3.0, 0.0, TAU, 48, _ink.nav, 1.0)
 
-	var up: Vector2 = (_ship.global_position - planet.global_position).normalized()
-	var altitude: float = planet.height_above_terrain(_ship.global_position)
-	# Against the ground, which moves on a spinning planet: the same
-	# quantity the landing check uses, so the two cannot disagree.
-	var relative: Vector2 = _ship.linear_velocity - planet.surface_velocity_at(
-		_ship.global_position
-	)
-	var descent: float = -relative.dot(up)
-
 	var x: float = dial.end.x + 6.0
 	var y: float = box.position.y + ROW
 	var landed: bool = landed_now()
@@ -294,17 +340,25 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 			_text(font, Vector2(x, y), "PERI in %s" % _countdown_text(due.x),
 				_orbit_colour(orbit))
 	y += ROW
-	_row(font, x, y, "ALT", "%6.0f" % altitude, _ink.value)
+	_row(font, x, y, "ALT", "%6.0f" % _altitude.stepped(), _ink.value)
 	y += ROW
-	_row(font, x, y, "V/S", "%+6.1f" % -descent, _descent_colour(descent))
+	# The colour off the smoothed value rather than the printed one: a
+	# descent rate sitting on a threshold would otherwise swap colours
+	# every frame, which is the loudest thing a HUD can do.
+	_row(
+		font, x, y, "V/S", "%+6.1f" % -_descent.stepped(),
+		_descent_colour(_descent.smooth()),
+	)
 	y += ROW
 	# The last two rows are about touching down, and there is nothing to
 	# touch down on out here. Left blank rather than filled with zeros: a
 	# slope of 0.0 degrees over a star reads as flat ground, which is a
 	# worse answer than no answer.
 	if planet.has_ground():
-		var slope: float = (planet as Planet).slope_at(_ship.global_position)
-		_row(font, x, y, "SLOPE", "%5.1f d" % rad_to_deg(slope), _slope_colour(absf(slope)))
+		_row(
+			font, x, y, "SLOPE", "%5.1f d" % rad_to_deg(_slope.stepped()),
+			_slope_colour(absf(_slope.smooth())),
+		)
 		y += ROW
 		_row(font, x, y, "GEAR", _gear_text(), _gear_colour())
 	else:
@@ -458,7 +512,7 @@ func _dot(at: Vector2, colour: Color) -> void:
 ## planet the ship is not near would be drawing a path it is not on.
 func _draw_transfer(font: Font, box: Rect2) -> void:
 	var centre: Vector2 = Vector2(box.position.x + DIAL * 0.5 + 2.0, box.get_center().y)
-	var speed: float = _ship.linear_velocity.length()
+	var speed: float = _speed.smooth()
 	_canvas.draw_arc(centre, DIAL * 0.5 - 3.0, 0.0, TAU, 32, _ink.edge, 1.0)
 	if speed > 0.01:
 		var along: Vector2 = _ship.linear_velocity.normalized().rotated(-_view_rotation())
@@ -470,7 +524,7 @@ func _draw_transfer(font: Font, box: Rect2) -> void:
 			)
 	var x: float = centre.x + DIAL * 0.5 + 4.0
 	var y: float = box.position.y + ROW * 2.0
-	_row(font, x, y, "V", "%6.0f" % speed, _ink.ok)
+	_row(font, x, y, "V", "%6.0f" % _speed.stepped(), _ink.ok)
 	_row(font, x, y + ROW, "GEAR", _gear_text(), _gear_colour())
 	_text(font, Vector2(x, y + ROW * 2.5), "in transit", _ink.value)
 
