@@ -95,11 +95,11 @@ Gotowe, gdy: z menu można zmienić dowolny kadłub, każdy silnik i każde dzia
 
 ### D2: Stany statku
 
-- [ ] `bench_pins.gd`: słownik przypięć stosowany po kroku fizyki statku, z zaznaczeniem, które są aktywne.
-- [ ] Panel „Stany": suwaki integralność / ciepło / gęstość powietrza / strumień gwiazdy / paliwo / energia, każdy z checkboxem „przypnij".
-- [ ] Zdrowie silników: suwak per silnik, przyciski „uszkodź losowy", „napraw wszystkie".
-- [ ] Zdarzenia: zniszczenie, odrodzenie, uderzenie (`hull_impact` z zadaną prędkością), podwozie, doładowanie, wyłączenie napędu.
-- [ ] Odczyt na żywo obok suwaków: co statek naprawdę ma teraz (różni się od przypięcia, gdy symulacja nadpisała).
+- [x] `bench_pins.gd`: słownik przypięć stosowany po kroku fizyki statku, z zaznaczeniem, które są aktywne.
+- [x] Panel „Stany": suwaki integralność / ciepło / gęstość powietrza / strumień gwiazdy / paliwo / energia, każdy z checkboxem „przypnij".
+- [x] Zdrowie silników: suwak per silnik, przyciski „uszkodź losowy", „napraw wszystkie".
+- [x] Zdarzenia: zniszczenie, odrodzenie (samo po 1,6 s), uderzenie (`hull_impact` z zadaną prędkością), podwozie, trzymane klawisze (ciąg, hamulec, doładowanie przez Input Map). „Wyłączenie napędu" to suwak zdrowia silnika na 0.
+- [x] Odczyt na żywo obok suwaków: co statek naprawdę ma teraz (różni się od przypięcia, gdy symulacja nadpisała).
 
 Gotowe, gdy: każdy stan z tabeli w sekcji 1 da się włączyć jednym ruchem i widać oraz słychać jego skutek (dym, światło, głos kadłuba, wygaszanie silnika).
 

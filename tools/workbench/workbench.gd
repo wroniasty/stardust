@@ -31,9 +31,16 @@ const BORDER: Color = Color(0.50, 0.45, 0.62, 1.0)
 const RESPAWN_DELAY: float = 1.6
 
 var ship: Ship = null
+var pins: BenchPins = null
 
 var _panel: PanelContainer = null
+var _tabs: TabContainer = null
 var _ship_panel: BenchShipPanel = null
+var _state_panel: BenchStatePanel = null
+
+## Actions the bench is holding down for the pilot, so the hover guard below
+## lets go of the mouse buttons without letting go of these.
+var _held: Dictionary = {}
 
 
 func _ready() -> void:
@@ -54,6 +61,11 @@ func _ready() -> void:
 	ship.name = "Ship"
 	add_child(ship)
 	ship.destroyed.connect(_on_ship_destroyed)
+
+	pins = BenchPins.new()
+	pins.name = "Pins"
+	pins.ship = ship
+	add_child(pins)
 
 	_build_presentation()
 	_build_camera()
@@ -120,15 +132,27 @@ func _build_ui() -> void:
 	_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	margin.add_child(_panel)
 
-	var scroll: ScrollContainer = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(PANEL_WIDTH, 0.0)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_panel.add_child(scroll)
+	_tabs = TabContainer.new()
+	_tabs.custom_minimum_size = Vector2(PANEL_WIDTH, 0.0)
+	_panel.add_child(_tabs)
 
 	_ship_panel = BenchShipPanel.new()
-	_ship_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_ship_panel)
+	_add_tab("Statek", _ship_panel)
 	_ship_panel.bind(self, ship)
+	_state_panel = BenchStatePanel.new()
+	_add_tab("Stany", _state_panel)
+	_state_panel.bind(self, ship)
+
+
+## One scrolling page per panel, so a long form scrolls under its tab header
+## instead of pushing the header off the screen.
+func _add_tab(title: String, content: Control) -> void:
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.name = title
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(content)
+	_tabs.add_child(scroll)
 
 
 func _unhandled_input(_event: InputEvent) -> void:
@@ -142,8 +166,21 @@ func _physics_process(_delta: float) -> void:
 	# release is repeated every tick because the held button would otherwise
 	# be read as pressed again.
 	if get_viewport().gui_get_hovered_control() != null:
-		Input.action_release(&"ship_fire")
-		Input.action_release(&"ship_fire_secondary")
+		for action: StringName in [&"ship_fire", &"ship_fire_secondary"]:
+			if not _held.has(action):
+				Input.action_release(action)
+
+
+## Presses or releases an input action on the pilot's behalf, through the
+## Input Map like a key would, so the ship's own reading of it is what is
+## being tested rather than a shortcut around it.
+func hold(action: StringName, on: bool) -> void:
+	if on:
+		_held[action] = true
+		Input.action_press(action)
+	else:
+		_held.erase(action)
+		Input.action_release(action)
 
 
 ## Reshapes the ship's hull and keeps everything bolted to it.

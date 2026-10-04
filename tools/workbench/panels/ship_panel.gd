@@ -10,9 +10,6 @@ extends VBoxContainer
 const ENGINES_DIR: String = "res://resources/engines"
 const WEAPONS_DIR: String = "res://resources/weapons"
 
-const HEADING_COLOR: Color = Color(0.72, 0.68, 0.92)
-const LABEL_WIDTH: float = 78.0
-
 var _bench: Workbench = null
 var _ship: Ship = null
 
@@ -40,14 +37,14 @@ func bind(bench: Workbench, ship: Ship) -> void:
 
 
 func _build() -> void:
-	add_child(_heading("preset"))
+	add_child(BenchForm.heading("preset"))
 	_presets = OptionButton.new()
 	for preset: Dictionary in ShipFitout.all():
 		_presets.add_item(String(preset["name"]))
 	add_child(_presets)
-	add_child(_button("załóż preset", _on_preset))
+	add_child(BenchForm.button("załóż preset", _on_preset))
 
-	add_child(_heading("kadłub"))
+	add_child(BenchForm.heading("kadłub"))
 	_hulls = OptionButton.new()
 	for hull: HullData in HullData.catalogue():
 		_hulls.add_item("%s (%s)" % [hull.display_name, hull.id])
@@ -57,23 +54,20 @@ func _build() -> void:
 	_scale.max_value = 4.0
 	_scale.step = 0.1
 	_scale.value = 1.0
-	add_child(_labelled("skala", _scale))
-	add_child(_button("zmień kadłub", _on_hull))
+	add_child(BenchForm.labelled("skala", _scale))
+	add_child(BenchForm.button("zmień kadłub", _on_hull))
 
-	add_child(_heading("silniki"))
+	add_child(BenchForm.heading("silniki"))
 	_engine_box = VBoxContainer.new()
 	add_child(_engine_box)
 
-	add_child(_heading("broń"))
+	add_child(BenchForm.heading("broń"))
 	_gun_box = VBoxContainer.new()
 	add_child(_gun_box)
 
-	add_child(_heading("statek"))
-	var frozen: CheckBox = CheckBox.new()
-	frozen.text = "zamrożony"
-	frozen.toggled.connect(func(on: bool) -> void: _ship.freeze = on)
-	add_child(frozen)
-	add_child(_button("wróć na środek", _bench.reset_ship))
+	add_child(BenchForm.heading("statek"))
+	add_child(BenchForm.check("zamrożony", func(on: bool) -> void: _ship.freeze = on))
+	add_child(BenchForm.button("wróć na środek", _bench.reset_ship))
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -96,11 +90,11 @@ func _refresh() -> void:
 			child.queue_free()
 
 	for mount: EngineMount in _ship.engine_mounts():
-		_engine_box.add_child(_labelled(String(mount.name), _engine_picker(mount)))
+		_engine_box.add_child(BenchForm.labelled(String(mount.name), _engine_picker(mount)))
 	for hardpoint: Hardpoint in _ship.hardpoints:
-		_gun_box.add_child(_labelled(String(hardpoint.name), _gun_picker(hardpoint)))
+		_gun_box.add_child(BenchForm.labelled(String(hardpoint.name), _gun_picker(hardpoint)))
 	if _ship.hardpoints.is_empty():
-		_gun_box.add_child(_note("brak hardpointów"))
+		_gun_box.add_child(BenchForm.note("brak hardpointów"))
 
 	_status.text = "%d silników, %d dział, masa %.1f" % [
 		_ship.engines.size(), _ship.hardpoints.size(), _ship.mass,
@@ -204,36 +198,3 @@ func _name_of(module: ModuleData) -> String:
 	if stem.is_empty():
 		return module.display_name
 	return stem
-
-
-func _heading(text: String) -> Label:
-	var label: Label = Label.new()
-	label.text = text
-	label.add_theme_color_override("font_color", HEADING_COLOR)
-	return label
-
-
-func _note(text: String) -> Label:
-	var label: Label = Label.new()
-	label.text = text
-	label.modulate = Color(1, 1, 1, 0.55)
-	return label
-
-
-func _labelled(text: String, control: Control) -> HBoxContainer:
-	var row: HBoxContainer = HBoxContainer.new()
-	var label: Label = Label.new()
-	label.text = text
-	label.custom_minimum_size = Vector2(LABEL_WIDTH, 0.0)
-	label.clip_text = true
-	row.add_child(label)
-	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(control)
-	return row
-
-
-func _button(text: String, handler: Callable) -> Button:
-	var button: Button = Button.new()
-	button.text = text
-	button.pressed.connect(handler)
-	return button

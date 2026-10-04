@@ -3434,6 +3434,50 @@ func _check_workbench() -> void:
 		picker.free()
 	_expect(swaps > 0, "every engine and gun the forms offer can be fitted (%d swaps)" % swaps)
 
+	# D2: states. A pin has to survive what the ship does to its own heat,
+	# and the forms have to reach the same doors the game does.
+	var states: BenchStatePanel = bench._state_panel
+	bench.pins.pin(&"hull_heat", 0.8)
+	bench.pins.pin(&"air_density", 0.6)
+	ship.hull_heat = 0.0
+	ship.air_density = 0.0
+	bench.pins._apply()
+	_expect(
+		is_equal_approx(ship.hull_heat, 0.8) and is_equal_approx(ship.air_density, 0.6),
+		"a pin puts back what the ship zeroed",
+	)
+	bench.pins.unpin(&"hull_heat")
+	ship.hull_heat = 0.1
+	bench.pins._apply()
+	_expect(is_equal_approx(ship.hull_heat, 0.1), "an unpinned field is left to the ship")
+
+	ship.repair_hull()
+	states._on_integrity(0.5)
+	_expect(is_equal_approx(ship.hull_integrity, 0.5), "the integrity slider sets the hull")
+	var hit: Array[float] = []
+	ship.hull_impact.connect(func(speed: float, _damage: float) -> void: hit.append(speed))
+	states._impact_speed.value = 100.0
+	states._on_impact()
+	_expect(hit.size() == 1 and is_equal_approx(hit[0], 100.0), "the impact button raises the same signal terrain does")
+	_expect(ship.hull_integrity < 0.5, "and charges the same price (%.2f)" % ship.hull_integrity)
+
+	var died: Array[bool] = []
+	ship.destroyed.connect(func(_at: Vector2, _velocity: Vector2) -> void: died.append(true))
+	states._on_destroy()
+	_expect(died.size() == 1, "the destroy button takes the real death path")
+	ship.respawn(Vector2.ZERO, Vector2.ZERO)
+
+	for engine: EngineInstance in ship.engines:
+		engine.health = 0.2
+	states._on_repair_engines()
+	_expect(ship.worst_engine_health() > 0.99, "repairing the engines repairs every engine")
+
+	bench.hold(&"boost", true)
+	_expect(Input.is_action_pressed(&"boost"), "a held action reaches the Input Map")
+	bench.hold(&"boost", false)
+	_expect(not Input.is_action_pressed(&"boost"), "and lets go of it again")
+	states._on_clear()
+
 	# Freed on the spot, not queued: the missiles fired above would still be
 	# alive for the checks that follow, and the next one counts motors.
 	root.remove_child(bench)
