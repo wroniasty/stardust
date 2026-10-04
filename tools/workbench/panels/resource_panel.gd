@@ -100,18 +100,11 @@ func _open_selected() -> void:
 	_status.text = _paths[_file.selected]
 
 
-## Lets the ship notice. Mounted weapons cache what they throw, and engines
-## feed the control groups and the mass, so both are asked to recompute;
-## a hull is not re-fitted on every nudge, because reshaping the ship under
-## a slider would throw away whatever was being tested.
 func _on_edited(resource: Resource) -> void:
 	_dirty[_paths[_file.selected]] = true
 	_file.set_item_text(_file.selected, _caption(_paths[_file.selected]))
 	_status.text = "zmieniony, nie zapisany: %s" % _paths[_file.selected]
-	for hardpoint: Hardpoint in _ship.hardpoints:
-		if hardpoint.weapon == resource:
-			hardpoint.fit(hardpoint.weapon)
-	_ship.rebuild_control_groups(false)
+	_bench.refresh_for(resource)
 
 
 func _on_apply_hull() -> void:

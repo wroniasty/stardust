@@ -40,6 +40,10 @@ texture={
 "mipmaps/generate": true
 }
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/stardust_devtools/plugin.cfg")
+
 [input]
 
 thrust_forward={

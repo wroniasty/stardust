@@ -3576,6 +3576,22 @@ func _check_workbench() -> void:
 				enum_rows += 1
 	_expect(enum_rows >= 1, "an enum field (the weapon type) becomes a drop-down")
 
+	# D6: an edit arriving from the editor lands on the live resource.
+	var drive_path: String = "res://resources/engines/main_drive.tres"
+	var live_drive: EngineData = load(drive_path) as EngineData
+	var original: float = live_drive.max_thrust
+	_expect(
+		bench.bridge.apply(drive_path, "max_thrust", original * 3.0)
+			and is_equal_approx(live_drive.max_thrust, original * 3.0),
+		"a property sent from the editor is written to the live engine",
+	)
+	_expect(
+		not bench.bridge.apply(drive_path, "no_such_property", 1.0),
+		"and a property that does not exist is refused",
+	)
+	live_drive.max_thrust = original
+	ship.rebuild_control_groups(false)
+
 	# Freed on the spot, not queued: the missiles fired above would still be
 	# alive for the checks that follow, and the next one counts motors.
 	root.remove_child(bench)

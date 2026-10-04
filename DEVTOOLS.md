@@ -133,10 +133,10 @@ Gotowe, gdy: zmiana `rounds_per_second` albo `max_thrust` suwakiem jest widoczna
 
 ### D6: Wtyczka edytora
 
-- [ ] `addons/stardust_devtools/`: `plugin.cfg`, `plugin.gd`, włączona w `project.godot`.
-- [ ] Dock „Stardust": lista zasobów po katalogach (`hulls`, `engines`, `weapons`, `fx`, `audio`), klik otwiera zasób w inspektorze Godota.
-- [ ] Przycisk „Uruchom Workbench" (`EditorInterface.play_custom_scene`).
-- [ ] Kanał edytor → gra: `EditorDebuggerPlugin` wysyła zmianę właściwości zasobu, gra stosuje ją przez `bridge_game.gd`. Zweryfikować w dokumentacji (`godot-docs`), czy działa też z osadzonym oknem gry.
+- [x] `addons/stardust_devtools/`: `plugin.cfg`, `plugin.gd`, włączona w `project.godot`.
+- [x] Dock „Stardust": lista zasobów po katalogach (`hulls`, `engines`, `weapons`, `fx`, `audio`), klik otwiera zasób w inspektorze Godota.
+- [x] Przycisk „Uruchom Workbench" (`EditorInterface.play_custom_scene`).
+- [x] Kanał edytor → gra (kod i test strony gry; **nie sprawdzony na żywo** w edytorze z oknem gry): `EditorDebuggerPlugin` wysyła zmianę właściwości zasobu, gra stosuje ją przez `bridge_game.gd`. Zweryfikować w dokumentacji (`godot-docs`), czy działa też z osadzonym oknem gry.
 - [ ] Kanał gra → edytor: odczyt stanu statku (przypięcia, zdrowie) w docku.
 - [ ] Undo/redo przez `EditorUndoRedoManager`; zapis przez `ResourceSaver` z zachowaniem UID.
 

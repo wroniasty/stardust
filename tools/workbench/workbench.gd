@@ -33,6 +33,7 @@ const RESPAWN_DELAY: float = 1.6
 var ship: Ship = null
 var pins: BenchPins = null
 var dummies: BenchDummies = null
+var bridge: BenchBridge = null
 
 var _panel: PanelContainer = null
 var _tabs: TabContainer = null
@@ -74,6 +75,11 @@ func _ready() -> void:
 	dummies = BenchDummies.new()
 	dummies.name = "Dummies"
 	add_child(dummies)
+
+	bridge = BenchBridge.new()
+	bridge.name = "Bridge"
+	add_child(bridge)
+	bridge.bind(self)
 
 	_build_presentation()
 	_build_camera()
@@ -186,6 +192,19 @@ func _physics_process(_delta: float) -> void:
 		for action: StringName in [&"ship_fire", &"ship_fire_secondary"]:
 			if not _held.has(action):
 				Input.action_release(action)
+
+
+## Lets the ship notice that a resource it may be using has changed.
+##
+## Mounted weapons cache what they throw, and engines feed the control groups
+## and the mass, so both are asked to recompute. A hull is not re-fitted on
+## every nudge: reshaping the ship under a slider would throw away whatever
+## was being tested, and the Zasoby tab has a button for it.
+func refresh_for(resource: Resource) -> void:
+	for hardpoint: Hardpoint in ship.hardpoints:
+		if hardpoint.weapon == resource:
+			hardpoint.fit(hardpoint.weapon)
+	ship.rebuild_control_groups(false)
 
 
 ## Presses or releases an input action on the pilot's behalf, through the
