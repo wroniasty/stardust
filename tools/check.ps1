@@ -1,5 +1,6 @@
 # Runs the project headless and then the smoke test, failing if Godot printed
-# any error in either. Usage: powershell -File tools/check.ps1 [-Frames 120]
+# any error in either.
+#   powershell -File tools/check.ps1 [-Frames 120] [-ImportTimeout 25]
 #
 # The smoke test is scanned for engine errors too, not just for its own verdict.
 # It used to report OK while Godot was printing "Can't change this state while
@@ -9,6 +10,7 @@
 # the better place to catch that class of bug.
 param(
     [int]$Frames = 120,
+    [int]$ImportTimeout = 25,
     [string]$Godot = "D:\Godot\Godot_v4.7.2-stable_win64_console.exe"
 )
 
@@ -38,8 +40,39 @@ function Invoke-Stage {
     return $output
 }
 
+# Bounded, and killed if it overruns.
+#
+# `--import` runs the editor, and a headless editor does not quit if the
+# saved session has a script open: `.godot/editor/editor_layout.cfg`
+# carries `open_scripts`, the script editor tries to restore itself with
+# no window to restore into, and the process sits at zero per cent CPU
+# for ever. Measured at 430 seconds before it was killed by hand, with
+# the 120 frame stage that follows it taking 1.7. Scenes and shaders in
+# the same file are harmless; only scripts do it.
+#
+# The work finishes long before the editor fails to shut down -- the
+# class cache is on disk by then -- so overrunning is survivable and the
+# right answer is to take the result and move on rather than to wait.
+# The timeout is short for the same reason: a real import of this
+# project takes three seconds, ten when it has work to do.
+#
+# The file is left alone. Editing somebody's editor session to suit a
+# build script is the kind of help nobody asked for, so this says what
+# is wrong and how to stop paying for it instead.
 Write-Host "Importing assets..."
-& $Godot --headless --path $root --import | Out-Null
+$layout = Join-Path $root ".godot\editor\editor_layout.cfg"
+if ((Test-Path $layout) -and ((Get-Content $layout -Raw) -match 'open_scripts=\[[^\]]')) {
+    Write-Host "  a script is open in the editor session, so the import will not quit on its own." -ForegroundColor Yellow
+    Write-Host "  close the script tabs, or delete .godot/editor/editor_layout.cfg, to skip the wait." -ForegroundColor Yellow
+}
+$import = Start-Process -FilePath $Godot -PassThru -NoNewWindow -ArgumentList @(
+    "--headless", "--path", $root, "--import"
+)
+if (-not $import.WaitForExit($ImportTimeout * 1000)) {
+    Write-Host ("  import did not return in {0}s; its work is done, stopping it" -f $ImportTimeout) -ForegroundColor Yellow
+    Stop-Process -Id $import.Id -Force -ErrorAction SilentlyContinue
+    $import.WaitForExit(5000) | Out-Null
+}
 
 Invoke-Stage "Running $Frames frames headless..." @("--headless", "--path", $root, "--quit-after", $Frames) | Out-Null
 
