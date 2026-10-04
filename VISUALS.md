@@ -436,9 +436,46 @@ Gotowe, gdy: na zrzucie z galerii widać, z której strony świeci gwiazda, bez 
 - [x] Ręczne obracanie kamery strzałkami i `H` — „planeta na dole" na jedno naciśnięcie. Ta sama odpowiedź co niżej, tylko pytana jednorazowo zamiast liczona co klatkę.
 - [x] Starfield obraca się z widokiem (`view_rotation` w shaderze). Obrót liczony wokół środka wyznaczonego z `SCREEN_PIXEL_SIZE`, nie podanego ze skryptu — `FRAGCOORD` jest w pikselach bufora, a `get_visible_rect()` przy rozciąganiu `canvas_items` zwraca bazowe 640x360, więc podany środek był o połowę za mały.
 - [x] Obracająca się kamera przy podejściu, automatycznie: promień w górę ekranu, ciągła waga z wysokości, wygładzanie wbudowane w `Camera2D`. Bramka to **podwozie i wysokość poniżej 300 px nad terenem** — dwa warunki mówiące co innego: podwozie to deklaracja zamiaru lądowania, wysokość to postęp tego zamiaru. Strzałka w ręce pilota wygrywa z blokadą na tę klatkę.
-- [ ] Smugi i rozmycie przy dużej prędkości w powietrzu.
-- [ ] Widoczne wejście w atmosferę: jonizacja przed dziobem narastająca z `hull_heat`.
-- [ ] Smugi kondensacyjne przerobione na zależne od gęstości powietrza, nie od samej prędkości.
+- [x] Smugi i rozmycie przy dużej prędkości w powietrzu.
+  `SpeedVeil` + `shaders/rush.gdshader`. Rodzeństwo zasłony skoku i
+  **celowo przeciwny rodzaj rzeczy**: skok to zdarzenie, które zabiera ekran
+  na dwie sekundy, a to jest **stan**, w którym się leci czasem minutami —
+  więc musi być czytelne **na wylot**. Stąd wszystko ważone odległością od
+  środka kadru: statek i przyrządy wokół niego zostają ostre, a świat ucieka
+  obok nich. Pułap 0,55, nie 1,0.
+
+  **Powietrze razy prędkość, nie prędkość.** Trzysta pikseli na sekundę w
+  próżni to wtorek; to samo w gęstym powietrzu grzeje kadłub i zrywa z niego
+  smugi. Kierunek liczony przez `canvas_transform`, więc kamera podejścia,
+  która obraca cały widok na krótkiej prostej, obraca też rozmycie — smuga
+  biegnąca w poprzek ekranu dokładnie wtedy, gdy pilot czyta wysokościomierz,
+  byłaby gorsza niż żadna.
+- [x] Widoczne wejście w atmosferę: jonizacja przed dziobem narastająca z `hull_heat`.
+  `BowShock`: zagnieżdżone łuki otulające krawędź natarcia, jasność i rozmiar
+  z `hull_heat`, kolor od chłodnego do gorącego — w tej kolejności, w jakiej
+  idzie prawdziwe wejście i w jakiej idzie już tint poszycia, więc jedno nie
+  kłóci się z drugim.
+
+  **Rysowane wzdłuż wektora prędkości, nie wzdłuż dziobu.** Fala powstaje
+  tam, gdzie uderza się w powietrze; statek wchodzący tyłem pali się na
+  ogonie. Tu to kosztuje zero, a dopisane później wymagałoby przerysowania
+  wszystkiego. Przy zerowej prędkości spada na dziób — statek wiszący w
+  gęstym powietrzu też się grzeje, a łuk wycelowany w wektor zerowy skakałby
+  co klatkę.
+
+  Dwie rzeczy znalezione zrzutem, nie testem. Pierwsza: łuk **wyśrodkowany na
+  kadłubie**, nie przed nim — pierwsza wersja kładła środek okręgu przed
+  dziobem i rysowała rozpiętość wokół kierunku lotu, czyli **daleki** kap tego
+  okręgu, i fala wychodziła jako oderwany uśmiech kilkadziesiąt pikseli przed
+  statkiem. Druga: pierwotna szerokość 17 px — mniej więcej tyle, co kadłub —
+  czytała się jak rysa na nosie. Fala musi być większa od tego, co ją robi.
+- [x] Smugi kondensacyjne przerobione na zależne od gęstości powietrza, nie od samej prędkości.
+  **Było zrobione od początku i nieodhaczone.** `Contrail` mierzy
+  `air_density * speed` — ten sam iloczyn, co opór i grzanie kadłuba — więc
+  to, co zrywa się z kadłuba, jest tym, co go hamuje. Dopisany test, bo
+  „jest już zrobione" to twierdzenie, a to jest tani sposób, żeby pozostało
+  prawdziwe: w próżni przy czterokrotnym przepływie odniesienia zero punktów,
+  w gęstym powietrzu 44, w rzadkim 35.
 
 ### V5: Niebo
 

@@ -1000,6 +1000,7 @@ func _evaluate_phase() -> void:
 			_check_skin()
 			_check_camera_shake()
 			_check_ship_wear()
+			_check_entry()
 			_check_soundscape()
 			_check_engine_choir()
 			_check_hull_voice()
@@ -9340,6 +9341,155 @@ func _check_ordnance_voice() -> void:
 		(spoken as AudioStreamPlayer2D).stream = null
 	guns.free()
 	sound.free()
+
+
+## Wejście w atmosferę: fala dziobowa, pęd, smuga kondensacyjna.
+##
+## Three readings of one thing. The hull has been heating since M1 --
+## `hull_heat` rises with the air and the square of the speed -- and
+## until V4 the only things that said so were a number on the debug
+## overlay and a tint on the plating.
+##
+## The property worth pinning in all three is that **air is required**.
+## Speed alone is a Tuesday: three hundred metres a second in vacuum
+## costs nothing and should look like nothing. Every one of these dies
+## when the air does, and each is checked for it separately, because a
+## version that multiplied by speed alone would look perfectly
+## convincing right up until the first airless moon.
+func _check_entry() -> void:
+	var ship: Ship = _spawn_ship()
+
+	# --- the shock ahead of the nose ---------------------------------
+	var shock: BowShock = BowShock.new()
+	root.add_child(shock)
+	shock._ship = ship
+
+	ship.hull_heat = 0.0
+	_expect(
+		is_equal_approx(shock.intensity(), 0.0),
+		"a cold hull pushes nothing ahead of it",
+	)
+	ship.hull_heat = BowShock.FAINTEST * 0.5
+	_expect(
+		is_equal_approx(shock.intensity(), 0.0),
+		"and a barely warm one still does not: a permanent faint smear "
+		+ "reads as a rendering fault, not as entry",
+	)
+	ship.hull_heat = 0.4
+	var warm: float = shock.intensity()
+	ship.hull_heat = 1.0
+	var hot: float = shock.intensity()
+	_expect(
+		warm > 0.0 and hot > warm,
+		"it grows with the heat (%.2f then %.2f)" % [warm, hot],
+	)
+
+	# Aimed by the velocity, not by the nose. A shock forms where the
+	# air is being hit, so a ship entering backwards burns on its tail
+	# -- which is free here and impossible to add later.
+	ship.global_rotation = 0.0
+	ship.linear_velocity = Vector2(300.0, -400.0)
+	_expect(
+		shock.facing().dot(ship.linear_velocity.normalized()) > 0.999,
+		"and stands off the way the ship is going, not the way it points",
+	)
+	ship.global_rotation = PI
+	_expect(
+		shock.facing().dot(ship.linear_velocity.normalized()) > 0.999,
+		"including when those are opposite, which is the case it is for",
+	)
+	# A ship hanging still in thick air still heats, slowly, and a
+	# shock aimed at a zero vector would snap about every frame the
+	# velocity rounded away.
+	ship.linear_velocity = Vector2.ZERO
+	ship.global_rotation = 0.7
+	_expect(
+		shock.facing().dot(Vector2.UP.rotated(0.7)) > 0.999,
+		"and falls back to the nose when there is no velocity to use",
+	)
+
+	# --- the rush past the edges of the frame -------------------------
+	var rush: SpeedVeil = SpeedVeil.new()
+	root.add_child(rush)
+	rush._ship = ship
+
+	ship.air_density = 1.0
+	ship.linear_velocity = Vector2(SpeedVeil.REFERENCE_FLOW, 0.0)
+	var flying: float = rush.wanted()
+	ship.air_density = 0.0
+	var in_vacuum: float = rush.wanted()
+	ship.air_density = 1.0
+	ship.linear_velocity = Vector2.ZERO
+	var hovering: float = rush.wanted()
+	_expect(
+		flying > 0.0 and is_equal_approx(in_vacuum, 0.0)
+		and is_equal_approx(hovering, 0.0),
+		"the rush needs air and speed, and either one alone is nothing (%.2f)" % flying,
+	)
+	ship.linear_velocity = Vector2(SpeedVeil.REFERENCE_FLOW * 10.0, 0.0)
+	_expect(
+		is_equal_approx(rush.wanted(), SpeedVeil.STRONGEST),
+		"and it has a ceiling, because this is a condition and not an event (%.2f)" % [
+			rush.wanted(),
+		],
+	)
+
+	# Through the canvas transform, so the approach camera turning the
+	# whole view on short finals turns the smear with it. A streak that
+	# ran sideways across the screen at exactly the moment the pilot is
+	# reading the altimeter would be worse than none.
+	ship.linear_velocity = Vector2(100.0, 0.0)
+	var turned: Transform2D = Transform2D(PI * 0.5, Vector2.ZERO)
+	_expect(
+		rush.drift(Transform2D.IDENTITY).dot(Vector2.RIGHT) > 0.999
+		and rush.drift(turned).dot(Vector2.DOWN) > 0.999,
+		"the smear runs with the view, not with the world",
+	)
+
+	# --- and the trail, which was already right -----------------------
+	#
+	# VISUALS asks for the condensation trail to depend on the air
+	# rather than on speed alone, and it has since it was written: the
+	# flow it measures is the same `density * speed` the drag and the
+	# hull heating use, so what streams off the hull is what is slowing
+	# it down. Checked rather than assumed, because "already done" is a
+	# claim and this is the cheap way to make it one that stays true.
+	var trail: Contrail = Contrail.new()
+	root.add_child(trail)
+	trail._ship = ship
+
+	ship.air_density = 0.0
+	ship.linear_velocity = Vector2(trail.reference_flow * 4.0, 0.0)
+	for tick: int in range(60):
+		trail._physics_process(1.0 / 60.0)
+	_expect(
+		trail.get_point_count() == 0,
+		"nothing streams off a hull in vacuum, however fast it is going (%d)" % [
+			trail.get_point_count(),
+		],
+	)
+	ship.air_density = 1.0
+	for tick: int in range(120):
+		trail._physics_process(1.0 / 60.0)
+	_expect(
+		trail.get_point_count() > 0,
+		"and the same speed in air leaves a rope (%d points)" % trail.get_point_count(),
+	)
+	var thick: int = trail.get_point_count()
+	ship.air_density = 0.2
+	for tick: int in range(240):
+		trail._physics_process(1.0 / 60.0)
+	_expect(
+		trail.get_point_count() < thick,
+		"thinner air, thinner thread (%d against %d)" % [
+			trail.get_point_count(), thick,
+		],
+	)
+
+	trail.free()
+	rush.free()
+	shock.free()
+	ship.queue_free()
 
 
 ## Co odpryskuje: iskry z kadluba, pyl z krateru, kurz spod dysz.

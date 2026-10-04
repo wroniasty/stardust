@@ -62,6 +62,7 @@ var _scanner: ScannerHud = null
 var _jump_hud: JumpHud = null
 var _jump: JumpController = null
 var _veil: TransitVeil = null
+var _rush: SpeedVeil = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
 var _help: HelpScreen = null
@@ -188,6 +189,10 @@ func _build_jump_hud() -> void:
 	_veil = TransitVeil.new()
 	add_child(_veil)
 	_veil.bind(_jump)
+
+	_rush = SpeedVeil.new()
+	_rush.ship_path = ship.get_path()
+	add_child(_rush)
 
 	_jump_hud = JumpHud.new()
 	add_child(_jump_hud)
