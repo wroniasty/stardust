@@ -3507,6 +3507,40 @@ func _check_workbench() -> void:
 	)
 	dummies.clear()
 
+	# D4: the sound panel plays through the game's own air rule.
+	var sounds: BenchSoundPanel = bench._sound_panel
+	var shots: SoundTable = load("res://resources/fx/sounds/weapon_shot.tres") as SoundTable
+	var strip: SoundStrip = shots.every_strip()[0]
+	sounds._path_pick.selected = 2
+	var scape: Soundscape = Soundscape.of()
+	_expect(scape != null, "the bench has the same soundscape the game has")
+	scape.density = 1.0
+	sounds._on_play(strip)
+	_expect(sounds._status.text.contains("zagrało"), "a sound through the air plays in air")
+	scape.density = 0.0
+	sounds._on_play(strip)
+	_expect(sounds._status.text.contains("cisza"), "and is silent in vacuum, by the same rule")
+
+	var rows: int = 0
+	for index: int in range(sounds._tables.size()):
+		sounds._table_pick.selected = index
+		sounds._fill()
+		rows += sounds._list.get_child_count()
+	_expect(rows >= sounds._tables.size(), "every table on disk lists something to press (%d rows)" % rows)
+
+	var loop: SoundStrip = null
+	for table: SoundTable in sounds._tables:
+		for candidate: SoundStrip in table.every_strip():
+			if candidate != null and candidate.loops and candidate.is_valid() and loop == null:
+				loop = candidate
+	_expect(loop != null, "there is a looping sound to test")
+	sounds._on_loop(true, loop)
+	sounds._process(0.016)
+	_expect(sounds._running.size() == 1, "a loop can be started")
+	sounds._stop_all()
+	_expect(sounds._running.is_empty(), "and stopped")
+	scape.density = 0.0
+
 	# Freed on the spot, not queued: the missiles fired above would still be
 	# alive for the checks that follow, and the next one counts motors.
 	root.remove_child(bench)

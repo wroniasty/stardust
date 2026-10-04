@@ -115,9 +115,9 @@ Gotowe, gdy: każda z siedmiu broni z `resources/weapons/` strzela w workbenchu,
 
 ### D4: Odsłuch i podgląd grafiki
 
-- [ ] Panel „Dźwięk": lista wszystkich `SoundTable` z `resources/fx/sounds/` i ich pasków (`every_strip()`), przycisk odtwórz, wybór drogi (`CONDUCTED` / `AIRBORNE` / `INTERFACE`) i gęstości powietrza.
-- [ ] Odsłuch tabeli jak w grze: „co zagra silnik typu X z affixem Y" przez `pick(subject, key)`.
-- [ ] Pętle silnika: suwak przepustnicy puszcza `engine_loop` z krzywą jak w `EngineChoir`.
+- [x] Panel „Dźwięk": lista wszystkich `SoundTable` z `resources/fx/sounds/` i ich pasków (`every_strip()`), przycisk odtwórz, wybór drogi (`CONDUCTED` / `AIRBORNE` / `INTERFACE`) i gęstości powietrza.
+- [x] Odsłuch tabeli jak w grze: wiersze po kluczu, affixie i progu, a dla tabel liczonych z pomiaru pole „wartość" (`by_value`). Nie ma jeszcze `pick(subject)` dla konkretnego modułu.
+- [x] Pętle silnika: suwak „siła" puszcza `engine_loop` z krzywą jak w `EngineChoir`.
 - [ ] Podgląd grafiki: wszystkie paski z `LookTable` (to, co dziś robi `art_gallery`) w tej samej scenie, z punktem zaczepienia.
 
 Gotowe, gdy: nie trzeba już odpalać `soundcheck.tscn` ani `art_gallery.tscn` osobno.

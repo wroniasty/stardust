@@ -39,6 +39,7 @@ var _tabs: TabContainer = null
 var _ship_panel: BenchShipPanel = null
 var _state_panel: BenchStatePanel = null
 var _fire_panel: BenchFirePanel = null
+var _sound_panel: BenchSoundPanel = null
 
 ## Actions the bench is holding down for the pilot, so the hover guard below
 ## lets go of the mouse buttons without letting go of these.
@@ -151,6 +152,9 @@ func _build_ui() -> void:
 	_fire_panel = BenchFirePanel.new()
 	_add_tab("Ogień", _fire_panel)
 	_fire_panel.bind(self, ship)
+	_sound_panel = BenchSoundPanel.new()
+	_add_tab("Dźwięk", _sound_panel)
+	_sound_panel.bind(self, ship)
 
 
 ## One scrolling page per panel, so a long form scrolls under its tab header
