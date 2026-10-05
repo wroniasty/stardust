@@ -267,6 +267,24 @@ func tier_of(index: int) -> int:
 	return TIERS - band
 
 
+## The system at the heart of the galaxy: the end of the road.
+##
+## Worked out rather than assumed to be index zero, which it is today --
+## `_scatter` seeds Bridson at the origin, so system zero stands exactly
+## in the middle. That is an accident of how the scatter is grown, and
+## the one thing the whole premise points at should not depend on an
+## accident.
+func centre_index() -> int:
+	var best: int = -1
+	var nearest: float = INF
+	for index: int in range(positions.size()):
+		var away: float = positions[index].length_squared()
+		if away < nearest:
+			nearest = away
+			best = index
+	return best
+
+
 ## Where a new game starts: the furthest system that is still in the
 ## galaxy the starting drive can fly.
 ##

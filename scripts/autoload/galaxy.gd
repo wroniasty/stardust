@@ -54,6 +54,49 @@ func _process(delta: float) -> void:
 	time += delta
 
 
+## Moves the player to a system and writes down that they were there.
+##
+## One call rather than two assignments, because the three have to stay
+## together. `here` and `at` are the same address said twice, and the
+## visit is the thing nobody would remember to record at the third place
+## that sets them -- which is exactly how fog of war rots.
+##
+## `point` is for the one caller that has somewhere to be that is not a
+## system: a misjump passes `-1` and the light years it actually came
+## out at.
+func enter(index: int, point: Vector2 = Vector2.INF) -> void:
+	here = index
+	at = point if point != Vector2.INF else position_of(index)
+	visit(index)
+
+
+## Writes down that the player has been in a system.
+##
+## In `deltas`, because that is the store for everything a seed cannot
+## reproduce, and keyed by the system's **own seed** like every other
+## entry in it. Not by index: the streaming manager is handed this same
+## dictionary and looks its bodies up by seed, so a second key scheme in
+## one store would be a collision waiting for a small index.
+##
+## A save needs no new field and no version bump for this, which is the
+## quiet argument for putting it here rather than in a set of its own.
+func visit(index: int) -> void:
+	if map == null or index < 0 or index >= map.count():
+		return
+	var key: int = StarSystem.derive(galaxy_seed, index)
+	var record: Dictionary = deltas.get(key, {})
+	record["seen"] = true
+	deltas[key] = record
+
+
+## Whether the player has ever been in a system.
+func has_visited(index: int) -> bool:
+	if map == null or index < 0 or index >= map.count():
+		return false
+	var key: int = StarSystem.derive(galaxy_seed, index)
+	return bool((deltas.get(key, {}) as Dictionary).get("seen", false))
+
+
 ## The system at `index`, generated on first ask.
 func system(index: int) -> StarSystem:
 	if not _systems.has(index):
@@ -113,5 +156,4 @@ func reset(new_seed: int) -> void:
 	_systems.clear()
 	_sectors.clear()
 	map = GalaxyMap.generate(new_seed)
-	here = map.start_index()
-	at = map.positions[here]
+	enter(map.start_index())

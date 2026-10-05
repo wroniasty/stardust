@@ -3355,6 +3355,110 @@ Pomiar nie mówi nic o tym, czy tiery po równej szerokości są dobre — mówi
 pierścieniu. Pod starą premisą jeden system w tier 1 byłby wadą, bo tam byłby
 start; pod nową jest zaletą, bo to finał.
 
+### Mapa galaktyki: trzy źródła widoczności, i nic poza nimi
+
+`GalaxyChart` (`N`) stoi warstwę wyżej niż mapa układu: tamta rysuje
+`StarSystem` w pikselach, ta `GalaxyMap` w latach świetlnych, i nigdy nie
+dzielą liczby. Wspólne mają to, co jest tu regułą: obie rysują z **modelu**,
+nie ze sceny. Instancjonowany jest jeden system naraz i nigdy nie będzie
+inaczej, więc mapa z żywych węzłów byłaby mapą jednej kropki.
+
+Widać trzy rzeczy i nie ma czwartej:
+
+1. **Systemy, w których byliśmy.** Wiedza. Nie da się jej odtworzyć z seeda,
+   więc mieszka w `Galaxy.deltas` — i nie znika nigdy.
+2. **Systemy w zasięgu skanera teraz.** Przyrząd. Znika, kiedy statek się
+   oddali, bo to nie jest wiedza, tylko odczyt.
+3. **Środek galaktyki.** Premisa. Gra polega na locie do środka; mapa, która
+   każe najpierw odkryć, gdzie jest środek, chowa nie drogę, tylko sens.
+
+Rozdzielenie 1 i 2 jest jedyną rzeczą, którą trzeba było tu naprawdę
+przetestować. Mapa, która raz narysowany kontakt zapisuje jako „odwiedzony",
+przechodzi każdy test oprócz jednego: przelecieć na drugi koniec galaktyki i
+spojrzeć wstecz. Ten test jest w zestawie — z rdzenia, gdzie żaden skaner nie
+sięga obrzeża, system startowy musi dalej być na mapie, a kontakt sprzed
+skoku musi z niej zniknąć.
+
+**Ile tego widać na starcie.** Pięć seedów, skaner seryjny (zasięg 14 ly):
+
+| seed | systemów | tier startu | do środka | kontaktów | na mapie | ciemnych |
+|---|---|---|---|---|---|---|
+| 20260922 | 111 | 3 | 45,4 ly | 5 | 7 | 104 |
+| 1 | 117 | 3 | 46,6 ly | 3 | 5 | 112 |
+| 7 | 108 | 3 | 44,1 ly | 4 | 6 | 102 |
+| 424242 | 113 | 3 | 47,2 ly | 5 | 7 | 106 |
+| 99999 | 109 | 3 | 45,7 ly | 4 | 6 | 103 |
+
+Czyli **około 5% galaktyki na pierwszej klatce nowej gry**, z czego jedna
+kropka to cel odległy o 45 lat świetlnych. To jest dokładnie ten obrazek, o
+który chodzi w premisie: jesteś tutaj, koniec jest tam, reszta jest ciemna.
+
+**Klucz w `deltas`.** Wizyta zapisuje się pod **seedem systemu**
+(`StarSystem.derive(galaxy_seed, index)`), nie pod indeksem. Powód jest
+prozaiczny i trudny do odkręcenia później: ten sam słownik dostaje
+`StreamingManager` i szuka w nim swoich ciał po seedzie, więc dwa schematy
+kluczy w jednym magazynie to kolizja czekająca na mały indeks. Przy okazji
+zapis gry nie potrzebował ani nowego pola, ani podbicia wersji — delty i tak
+szły do pliku w całości. To jest pierwszy wpis w `deltas`, który nie dotyczy
+ciała niebieskiego; schemat kluczy, którego M5 potrzebuje na pokonanych
+majorów i porzucone drony, zaczyna się tutaj.
+
+Samo zapamiętywanie dzieje się w `Galaxy.enter()`, jednym wywołaniu zamiast
+dwóch przypisań. `here` i `at` to ten sam adres powiedziany dwa razy, a wizyta
+jest tą rzeczą, której nikt nie zapisze w trzecim miejscu ustawiającym tę parę
+— i dokładnie tak gnije mgła wojny. System, w którym statek stoi, liczy się
+jako odwiedzony bez zapisu, co jest jedną regułą zamiast zapisu na każdej
+ścieżce przylotu i błędu na tej jednej, którą się pominęło.
+
+**Drabina zoomu.** Cztery szczeble, podane jako zasięgi w latach świetlnych, a
+nie jako mnożniki — ta sama decyzja co w mapie układu i z tego samego powodu:
+mnożnik sam w sobie nic nie znaczy. Na płótnie 640x360 (`room` = 156 px):
+
+| szczebel | zasięg | px na ly | odstęp systemów w rdzeniu |
+|---|---|---|---|
+| 0 | 63,6 ly (cała galaktyka) | 2,45 | 14,7 px |
+| 1 | 30 ly | 5,20 | 31,2 px |
+| 2 | 21 ly (dwa skoki) | 7,43 | 44,6 px |
+| 3 | 10,5 ly (jeden skok) | 14,86 | 89,1 px |
+
+Najciaśniejszy to `BASE_REACH`, a nie okrągła liczba, bo „sąsiad" **znaczy**
+tyle, co w zasięgu jednego skoku seryjnym napędem. Okrągła liczba znaczyłaby
+to samo tylko do pierwszej zmiany odstępu systemów.
+
+**Najszerszy szczebel celuje w galaktykę, nie w statek.** Każdy ciaśniejszy
+trzyma się statku. Zasięg, który mieści całą galaktykę, wycentrowany na
+statku stojącym **na obrzeżu**, zostawia połowę galaktyki poza kadrem — a
+pokazanie całości to jedyne zadanie tego szczebla.
+
+**Jeden przycisk, dwa gesty.** Lewy przeciąga albo wybiera, zależnie od tego,
+ile przejechał (próg 3 px). Osobny przycisk do przeciągania to przycisk,
+którego nikt nie znajdzie, a przeciąganie na prawym koliduje ze szpilką, którą
+mapa układu już tam położyła. Kółko zoomuje na kursorze tą samą arytmetyką co
+mapa układu — transformacja odwrotna przeczytana dwa razy — łącznie z wczesnym
+wyjściem na końcu drabiny, bez którego oparcie się o kółko przesuwałoby widok
+w bok przy nieruchomej skali.
+
+**Tiery narysowane jako pierścienie**, bo tier *jest* pasem promienia i
+rysowanie go czymkolwiek innym byłoby wymyśleniem drugiego pojęcia. Dziesięć
+bladych okręgów robi przy okazji to, co robiłaby legenda: widać, że pasy są
+równej szerokości i że środek jest jednym małym kółkiem.
+
+Kształt rozróżnia, kolor mówi o roli — ta sama reguła co na skanerze.
+Odwiedzony system to wypełniony kwadrat, kontakt to pusty romb, środek to romb
+w pierścieniu, statek to krzyż w kółku (ten sam, co na mapie układu: rzecz,
+którą pilot ma znaleźć natychmiast, nie zmienia kształtu między ekranami).
+Nazwy tylko od szczebla 2 w dół, bo sto jedenaście podpisów na 640x360 to jedna
+szara smuga — z wyjątkiem trzech, które są odpowiedzią na pytanie, a nie
+spisem treści: tu jesteśmy, tam idziemy, to właśnie kliknięto.
+
+Czego tu nie ma, a pewnie będzie: krawędzi grafu skoków między znanymi
+systemami (planowanie trasy na kilka skoków), markera nawigacyjnego w skali
+galaktyki — szpilka `NavMarker` jest w pikselach systemu i ginie przy skoku,
+więc „pin na mapie galaktyki" to druga szpilka, nie ta sama — oraz oznaczenia,
+które systemy są już wyczyszczone, bo to jest pytanie do M5.1.
+
+---
+
 ## 11. Grafika
 
 - Atmosfera: shader na kole nieco większym od planety. Szum FBM przewijany w czasie na chmury, rim light na krawędzi, kolor i gęstość z parametrów planety. Różne typy atmosfer (kolor, gęstość, prędkość chmur, wzór).

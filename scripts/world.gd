@@ -65,6 +65,7 @@ var _veil: TransitVeil = null
 var _rush: SpeedVeil = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
+var _chart: GalaxyChart = null
 var _help: HelpScreen = null
 var _flight: FlightHud = null
 var _energy: EnergyHud = null
@@ -96,6 +97,7 @@ func _ready() -> void:
 	_build_loadout()
 	_build_editor()
 	_build_map()
+	_build_chart()
 	_build_help()
 	_build_flight_hud()
 	_build_creative()
@@ -130,6 +132,17 @@ func _build_map() -> void:
 		Galaxy.system(Galaxy.here), (player as Player).ship, StreamingManager
 	)
 	_map.teleport_requested.connect(_on_map_teleport)
+
+
+## The galaxy chart, one layer out from the system map. Handed the
+## galaxy rather than left to fetch it, like everything else here: the
+## autoload does not exist under `--script` and the chart has tests.
+func _build_chart() -> void:
+	_chart = GalaxyChart.new()
+	add_child(_chart)
+	_chart.bind(
+		Galaxy.map, (player as Player).ship, Galaxy, Galaxy.here, Galaxy.at
+	)
 
 
 func _build_help() -> void:
@@ -212,8 +225,10 @@ func _build_jump_hud() -> void:
 func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -> void:
 	var ship: Ship = (player as Player).ship
 	if to_index >= 0:
-		Galaxy.here = to_index
-		Galaxy.at = Galaxy.map.positions[to_index]
+		# Through `enter` rather than by setting the two fields, because
+		# that is also where the visit is written down -- and the chart's
+		# fog is only ever as good as the one place that records one.
+		Galaxy.enter(to_index)
 	# The pin was a point in the system being left, and system pixels mean
 	# nothing in the next one. Dropped rather than carried: a marker that
 	# quietly reappeared over a different world would be worse than one
@@ -249,6 +264,7 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at)
 	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)
 	_map.bind(landing, ship, StreamingManager)
+	_chart.bind(Galaxy.map, ship, Galaxy, to_index, Galaxy.at)
 	_dress_sky(landing)
 	print("jumped to %s (%s), out at %.0f px" % [
 		landing.display_name,
@@ -261,8 +277,7 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 ## handled, because the crossing is going to ask for the system the ship
 ## is now in and there has to be one.
 func _on_misjumped(toward: int, adrift_at: Vector2) -> void:
-	Galaxy.here = -1
-	Galaxy.at = adrift_at
+	Galaxy.enter(-1, adrift_at)
 	print("misjump: fell short of %s, adrift at %.1f, %.1f ly" % [
 		Galaxy.system(toward).display_name, adrift_at.x, adrift_at.y,
 	])

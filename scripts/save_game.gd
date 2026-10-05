@@ -1,6 +1,6 @@
 class_name SaveGame
 extends RefCounted
-## Zapis gry: ziarno plus delty, i to, co ma na sobie statek.
+## A save: the seed, the deltas, and what the ship has on it.
 ##
 ## IDEAS.md section 10: *a save is the galaxy seed plus a dictionary of
 ## deltas*. The

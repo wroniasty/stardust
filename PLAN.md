@@ -595,7 +595,7 @@ doku), która odblokowała się sama w chwili, gdy bak stał się modułem.
 
 Cel: powód, żeby latać — i kierunek, w którym się leci.
 
-### 5.0 Tier jako jedna liczba
+### 5.0 Tier, start i kierunek
 
 - [x] **Tier systemu z promienia**, 1 na obrzeżu do 10 w środku, policzony w
   `GalaxyMap.tier_of()` i czytany przez wszystko inne. Jedna liczba, bo trzy
@@ -608,6 +608,20 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   funkcja i jej uzasadnienie.
 - [ ] **System środkowy jest końcem gry.** Tier 10 to jeden system na tym
   seedzie i to akurat jest zaletą: finał ma być jednym miejscem.
+  `GalaxyMap.centre_index()` już go wskazuje — zostaje to, co w nim stoi.
+- [x] **Mapa galaktyki na `N`.** `GalaxyChart`, warstwę wyżej niż mapa układu:
+  tamta rysuje `StarSystem` w pikselach, ta `GalaxyMap` w latach świetlnych, i
+  nigdy nie dzielą liczby. Widać **trzy rzeczy i nie ma czwartej**: systemy, w
+  których byliśmy (wiedza, w `deltas`), systemy w zasięgu skanera *teraz*
+  (przyrząd, znika razem z ruchem) i środek galaktyki (premisa — mapa, która
+  każe najpierw odkryć, gdzie jest środek, chowa nie drogę, tylko sens).
+  Zmierzone: na pierwszej klatce nowej gry widać 5–7 systemów ze 108–117, czyli
+  około 5% galaktyki, i jedną kropkę odległą o 45 lat świetlnych. Cztery
+  szczeble zoomu od całej galaktyki do „ten system i sąsiedzi" (najciaśniejszy
+  to `BASE_REACH`, bo sąsiad **znaczy** tyle, co w zasięgu jednego skoku), kółko
+  zoomuje na kursorze, lewy przycisk przeciąga albo wybiera zależnie od tego,
+  ile przejechał. Tiery narysowane jako pierścienie, bo tier **jest** pasem
+  promienia. Szczegóły i tabele w IDEAS.md sekcja 10.
 
 ### 5.1 Wrogowie
 
@@ -704,7 +718,9 @@ Gotowe, gdy: jest cel krótkoterminowy (loot, paliwo, przeżyć), długoterminow
 - [ ] Budynki, lądowiska, ruiny na powierzchni.
 - [ ] Dźwięk: silniki, broń, zderzenia, skok.
 - [ ] Menu, ustawienia, mapowanie klawiszy, pad.
-- [ ] Mapa galaktyki jako dodatek (odkryte systemy).
+- [ ] ~~Mapa galaktyki jako dodatek (odkryte systemy)~~ — **zrobiona w M5.0**.
+  Premisa przeniosła ją z dodatku do rzeczy podstawowej: gra, której celem jest
+  „dolecieć do środka", potrzebuje ekranu, na którym ten środek widać.
 - [ ] Optymalizacja i profilowanie na słabszym sprzęcie.
 - [ ] Ewentualne przeniesienie gorących pętli do GDExtension.
 

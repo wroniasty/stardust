@@ -1170,6 +1170,7 @@ func _evaluate_phase() -> void:
 			_check_system_tour()
 			_check_system_map()
 			_check_nav_marker()
+			_check_galaxy_chart()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -11071,6 +11072,290 @@ func _check_marker_on_scanner(ship: Ship) -> void:
 		"and with no marker there is nothing to report",
 	)
 	scanner.queue_free()
+
+
+## Co widac na mapie galaktyki, i dlaczego akurat to.
+##
+## Fog of war out of three sources, and the only way to be sure they are
+## three is to switch each one off on its own. A chart that drew
+## everything would pass a test that only counted what was on it, and a
+## chart that drew the scanner's contacts twice -- once as contacts and
+## once as "visited" -- would pass every test but the one below that
+## flies to the other side of the galaxy and looks back.
+##
+## Geometry through `layout` and a handed-in view, the way `SystemMap`
+## does it: a mark worked out from a rendered frame is a mark no
+## headless test can place.
+func _check_galaxy_chart() -> void:
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(TEST_SEED)
+	var map: GalaxyMap = galaxy.map
+	var home: int = galaxy.here
+	var core: int = map.centre_index()
+
+	# The end of the road, found rather than assumed to be system zero.
+	var innermost: float = INF
+	for index: int in range(map.count()):
+		innermost = minf(innermost, map.positions[index].length())
+	_expect(
+		absf(map.positions[core].length() - innermost) < 0.001
+		and map.tier_of(core) == GalaxyMap.TIERS,
+		"the core is the innermost system and the top tier (%d of %d)" % [
+			map.tier_of(core), GalaxyMap.TIERS,
+		],
+	)
+
+	var ship: Ship = _spawn_ship()
+	var chart: GalaxyChart = GalaxyChart.new()
+	root.add_child(chart)
+	chart.bind(map, ship, galaxy, home, galaxy.at)
+	var view: Vector2 = chart.view_size()
+
+	# Three sources and no fourth.
+	var eyes: ScannerData = ship.scanner()
+	var shown: Dictionary = _charted_by_index(chart)
+	_expect(
+		shown.has(home) and bool(shown[home]["here"]) and bool(shown[home]["visited"]),
+		"a new game charts the system it starts in",
+	)
+	var to_core: float = galaxy.at.distance_to(map.positions[core])
+	_expect(
+		shown.has(core) and to_core > eyes.reach,
+		"and the core, which no scanner found (%.1f ly against a reach of %.1f)" % [
+			to_core, eyes.reach,
+		],
+	)
+	var unexplained: int = 0
+	for index: Variant in shown:
+		var entry: Dictionary = shown[index]
+		if not (bool(entry["visited"]) or bool(entry["contact"]) or bool(entry["goal"])):
+			unexplained += 1
+	_expect(unexplained == 0, "and nothing on it is there for a fourth reason")
+	var unseen: int = 0
+	for index: int in map.within(galaxy.at, eyes.reach):
+		if not shown.has(index):
+			unseen += 1
+	_expect(unseen == 0, "everything the scanner reaches is on it")
+	_expect(
+		map.count() - shown.size() > map.count() / 2,
+		"and most of the galaxy is not (%d of %d dark)" % [
+			map.count() - shown.size(), map.count(),
+		],
+	)
+
+	# Reach is what decides the contacts, and nothing else is.
+	var kept: ScannerData = eyes
+	var blind: ScannerData = kept.duplicate() as ScannerData
+	blind.reach = 0.5
+	ship.scanner_bay.installed = blind
+	ship.rebuild_control_groups(false)
+	_expect(
+		chart.charted().size() == 2,
+		"with a blind scanner there is where we are and where we are going, and nothing else (%d)" % [
+			chart.charted().size(),
+		],
+	)
+
+	# Depth is what decides the names, which is the second of the three
+	# and is deliberately not the first.
+	var reader: ScannerData = kept.duplicate() as ScannerData
+	reader.depth = ScannerData.Depth.BEARING
+	ship.scanner_bay.installed = reader
+	ship.rebuild_control_groups(false)
+	var stranger: int = -1
+	for index: int in map.within(galaxy.at, reader.reach):
+		if index != home and index != core:
+			stranger = index
+			break
+	_expect(stranger >= 0, "there is a neighbour to read")
+	_expect(
+		chart.name_of(stranger).is_empty(),
+		"a bearing-only scanner draws a dot and does not name it",
+	)
+	_expect(
+		chart.name_of(home) == galaxy.system(home).display_name
+		and chart.name_of(core) == "core",
+		"while where we are and where we are going are named whatever it reads",
+	)
+	reader.depth = ScannerData.Depth.CLASS
+	_expect(
+		chart.name_of(stranger) == galaxy.system(stranger).display_name,
+		"and a scanner that reads class names it",
+	)
+
+	# Knowledge stays knowledge. Looked at from the far side of the
+	# galaxy, where no scanner of any size reaches it.
+	galaxy.enter(core)
+	chart.bind(map, ship, galaxy, galaxy.here, galaxy.at)
+	var later: Dictionary = _charted_by_index(chart)
+	_expect(
+		galaxy.has_visited(home)
+		and later.has(home)
+		and bool(later[home]["visited"])
+		and not bool(later[home]["contact"]),
+		"a system once visited stays on the chart from the other side of the galaxy",
+	)
+	_expect(
+		not galaxy.has_visited(stranger) and not later.has(stranger),
+		"and one that was only ever a contact goes dark again",
+	)
+
+	# And survives a save, with no field of its own and no version bump:
+	# the visit is a delta, and deltas were already written down.
+	var captured: Dictionary = SaveGame.capture(galaxy, ship)
+	var other: Node = GALAXY_SCRIPT.new()
+	root.add_child(other)
+	SaveGame.restore(captured, other, ship)
+	_expect(
+		other.has_visited(home) and other.has_visited(core),
+		"a save file that was never told about fog of war brings it back anyway",
+	)
+	other.queue_free()
+
+	_check_chart_geometry(chart, map, galaxy, home, view)
+
+	chart.queue_free()
+	ship.queue_free()
+	galaxy.queue_free()
+
+
+func _charted_by_index(chart: GalaxyChart) -> Dictionary:
+	var out: Dictionary = {}
+	for entry: Dictionary in chart.charted():
+		out[int(entry["index"])] = entry
+	return out
+
+
+## The half of the chart that is a view rather than a set of facts: what
+## each rung of the ladder holds, and what a hand on it does.
+func _check_chart_geometry(
+	chart: GalaxyChart, map: GalaxyMap, galaxy: Node, home: int, view: Vector2
+) -> void:
+	galaxy.enter(home)
+	chart.bind(map, chart_ship(chart), galaxy, home, galaxy.at)
+	chart.set_zoom_level(0)
+
+	var plan: Dictionary = chart.layout(view)
+	var off: int = 0
+	for index: int in range(map.count()):
+		if not Rect2(Vector2.ZERO, view).has_point(chart.to_chart(map.positions[index], plan)):
+			off += 1
+	_expect(
+		off == 0,
+		"the widest rung holds the whole galaxy (%d systems off the frame)" % off,
+	)
+
+	# And the tightest one holds exactly what the pilot asked for: this
+	# system and the ones a jump reaches. That is what `BASE_REACH` in
+	# the ladder buys over a round number.
+	chart.set_zoom_level(GalaxyChart.CHART_REACH.size() - 1)
+	var near: Dictionary = chart.layout(view)
+	var missing: int = 0
+	for index: int in map.neighbours(home, GalaxyMap.BASE_REACH):
+		if not Rect2(Vector2.ZERO, view).has_point(chart.to_chart(map.positions[index], near)):
+			missing += 1
+	_expect(
+		missing == 0,
+		"and the tightest one holds this system and everywhere one jump goes (%d missing)" % missing,
+	)
+	var descending: bool = true
+	for rung: int in range(1, GalaxyChart.CHART_REACH.size()):
+		if GalaxyChart.CHART_REACH[rung] >= GalaxyChart.CHART_REACH[rung - 1]:
+			descending = false
+	_expect(descending, "and every rung of the ladder is tighter than the last")
+
+	# The round trip closes, with the view turned, which is the only
+	# check that catches an inverse derived twice instead of read
+	# backwards.
+	var turned: Dictionary = chart.layout(view)
+	turned["turn"] = -PI * 0.5
+	var probe: Vector2 = Vector2(11.0, -4.0)
+	_expect(
+		chart.from_chart(chart.to_chart(probe, turned), turned).distance_to(probe) < 0.001,
+		"a point put on the chart and read back off it is the same point",
+	)
+
+	# The wheel magnifies about the pointer. Without this a pilot chases
+	# whatever they were looking at across the screen, one notch at a
+	# time.
+	chart.set_zoom_level(0)
+	var cursor: Vector2 = view * 0.5 + Vector2(70.0, -40.0)
+	var under: Vector2 = chart.from_chart(cursor, chart.layout(view))
+	chart.zoom_at(cursor, 1)
+	_expect(
+		chart.zoom_level() == 1
+		and chart.to_chart(under, chart.layout(view)).distance_to(cursor) < 0.5,
+		"the wheel magnifies about the pointer rather than about the middle",
+	)
+	chart.set_zoom_level(0)
+	var standing: Vector2 = Vector2(chart.layout(view)["focus"])
+	chart.zoom_at(cursor, -1)
+	_expect(
+		chart.zoom_level() == 0
+		and Vector2(chart.layout(view)["focus"]).distance_to(standing) < 0.001,
+		"and leaning on it at the end of the ladder does not drag the view sideways",
+	)
+
+	# A drag moves the galaxy with the hand, not away from it.
+	chart.set_zoom_level(1)
+	var held: Vector2 = chart.from_chart(view * 0.5, chart.layout(view))
+	var by: Vector2 = Vector2(40.0, 12.0)
+	chart.drag_from(view * 0.5)
+	chart.drag_to(view * 0.5 + by)
+	chart.drag_end(view * 0.5 + by)
+	_expect(
+		chart.from_chart(view * 0.5 + by, chart.layout(view)).distance_to(held) < 0.01,
+		"dragging carries the point under the hand along with it",
+	)
+	_expect(chart.picked() < 0, "and a drag is not a click")
+
+	# A press and a release in one place is. With no frame drawn yet,
+	# which is the bug the ship editor and the system map both had to be
+	# taught out of.
+	var neighbours: PackedInt32Array = map.neighbours(home, GalaxyMap.BASE_REACH)
+	var target: int = neighbours[0] if not neighbours.is_empty() else home
+	var spot: Vector2 = chart.to_chart(map.positions[target], chart.layout(view))
+	chart.drag_from(spot)
+	chart.drag_end(spot)
+	_expect(
+		chart.picked() == target,
+		"a press and a release in one place picks the system drawn there",
+	)
+
+	# And a click on empty black is how a pilot says never mind.
+	var nowhere: Vector2 = _empty_spot(chart, view)
+	chart.drag_from(nowhere)
+	chart.drag_end(nowhere)
+	_expect(
+		chart.picked() < 0
+		and Vector2(chart.layout(view)["focus"]).distance_to(galaxy.at) < 0.001,
+		"and a click on nothing drops the pick and puts the ship back in the middle",
+	)
+
+
+## The ship a chart is bound to, for a test that rebinds one. Reaching
+## into a private field rather than adding an accessor nothing in the
+## game would call.
+func chart_ship(chart: GalaxyChart) -> Ship:
+	return chart._ship
+
+
+## A screen point with no system anywhere near it. Searched rather than
+## written down, because where the empty black is depends on the seed
+## and a hard-coded point is a test that passes until the galaxy moves.
+func _empty_spot(chart: GalaxyChart, view: Vector2) -> Vector2:
+	var plan: Dictionary = chart.layout(view)
+	for step: int in range(36):
+		var tried: Vector2 = view * 0.5 + Vector2(90.0, 0.0).rotated(
+			TAU * float(step) / 36.0
+		)
+		var nearest: float = INF
+		for entry: Dictionary in chart.charted():
+			nearest = minf(nearest, tried.distance_to(chart.to_chart(entry["at"], plan)))
+		if nearest > GalaxyChart.PICK_RADIUS * 2.0:
+			return tried
+	return view * 0.5
 
 
 ## What a jump does to it, and what a save file does with it.

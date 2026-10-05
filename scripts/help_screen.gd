@@ -66,6 +66,7 @@ const LABELS: Array[Dictionary] = [
 
 	{"block": "SCREENS", "action": &"toggle_help", "says": "this screen"},
 	{"block": "SCREENS", "action": &"toggle_map", "says": "system map"},
+	{"block": "SCREENS", "action": &"toggle_galaxy_map", "says": "galaxy chart"},
 	{"block": "SCREENS", "action": &"toggle_loadout", "says": "hold"},
 	{"block": "SCREENS", "action": &"loadout_next", "says": "hold: next"},
 	{"block": "SCREENS", "action": &"loadout_fit", "says": "hold: fit"},
