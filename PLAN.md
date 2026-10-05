@@ -533,7 +533,9 @@ a dysza i pióropusz wynikają z typu i mocy.
 Cel: wiele systemów, podróż skokiem bez bramek.
 
 - [x] Generacja galaktyki: Poisson disk sampling, seedy systemów, sprawdzenie spójności grafu.
-  `GalaxyMap` — czysta dana, 109–117 systemów, odstęp rosnący ku obrzeżu.
+  `GalaxyMap` — czysta dana, 620 systemów, odstęp rosnący ku obrzeżu. (Promień
+  podniósł się później z 60 na 140 ly, bo nie mieściła się w nim drabina tierów
+  — M5.0; wszystkie ułamki poniżej przetrwały zmianę bez ruchu.)
   Zasięg bazowy zmierzony, nie zgadnięty: graf spina się dopiero przy ~1,75
   lokalnego odstępu, co daje 73–79% w jednym kawałku i 25–29 wysp na później.
   Szczegóły i tabela pomiarów w IDEAS.md sekcja 10.
@@ -597,15 +599,26 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
 
 ### 5.0 Tier, start i kierunek
 
-- [x] **Tier systemu z promienia**, 1 na obrzeżu do 10 w środku, policzony w
+- [x] **Tier systemu z promienia**, 1 na starcie do 10 w środku, policzony w
   `GalaxyMap.tier_of()` i czytany przez wszystko inne. Jedna liczba, bo trzy
   osobne skale (wrogowie, loot, ceny) rozjeżdżają się po pierwszym strojeniu, a
   wtedy „trudniejszy system" i „lepszy łup" przestają znaczyć tego samego
   miejsca.
+- [x] **Drabina, po której da się wejść po jednym szczeblu.** Zgłoszone z
+  kokpitu: nie zaczynaliśmy w tier 1, a czasem jedyną drogą naprzód był skok o
+  dwa tiery. Jedna arytmetyka, dwie połowy. Pasy mierzą teraz **drogę**
+  (`tier_span()` = promień systemu startowego), więc tier 1 jest tam, gdzie się
+  zaczyna, z definicji — a promień galaktyki podniósł się z 60 na **140 ly**,
+  bo szczebel musi być głębszy niż skok (dowód w jednej linijce, nie pomiar).
+  Zmierzone na pięciu seedach: 16–22 krawędzie przez dwa szczeble i 3–7
+  systemów bez łagodnego wyjścia → **0 i 0**. Koszt: 620 systemów zamiast 111,
+  48 ms na galaktykę, i droga ze startu do środka ma 14–18 skoków zamiast 6 —
+  co samo w sobie było powodem, bo na dziesięć szczebli nie da się wejść w
+  sześciu krokach. Szczegóły i tabele w IDEAS.md sekcja 10.
 - [x] **Start na obrzeżu: najdalszy system w największym spójnym kawałku.**
-  Pomiar na pięciu seedach w „Co ta premisa psuje", punkt 1: 51–55 ly z 60, tier
-  1 albo 2, i pełny zasięg do rdzenia. Geometria bez zmian — zmieniła się jedna
-  funkcja i jej uzasadnienie.
+  Pomiar na pięciu seedach w „Co ta premisa psuje", punkt 1. Po podniesieniu
+  promienia: 109–113 ly ze 140, **tier 1**, pełny zasięg do rdzenia i pierwszy
+  skok w łatwej części zakresu.
 - [ ] **System środkowy jest końcem gry.** Tier 10 to jeden system na tym
   seedzie i to akurat jest zaletą: finał ma być jednym miejscem.
   `GalaxyMap.centre_index()` już go wskazuje — zostaje to, co w nim stoi.
@@ -615,13 +628,16 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   których byliśmy (wiedza, w `deltas`), systemy w zasięgu skanera *teraz*
   (przyrząd, znika razem z ruchem) i środek galaktyki (premisa — mapa, która
   każe najpierw odkryć, gdzie jest środek, chowa nie drogę, tylko sens).
-  Zmierzone: na pierwszej klatce nowej gry widać 5–7 systemów ze 108–117, czyli
-  około 5% galaktyki, i jedną kropkę odległą o 45 lat świetlnych. Cztery
+  Zmierzone: na pierwszej klatce nowej gry widać 5–7 systemów z 620, czyli
+  około 1% galaktyki, i jedną kropkę odległą o 110 lat świetlnych. Cztery
   szczeble zoomu od całej galaktyki do „ten system i sąsiedzi" (najciaśniejszy
   to `BASE_REACH`, bo sąsiad **znaczy** tyle, co w zasięgu jednego skoku), kółko
   zoomuje na kursorze, lewy przycisk przeciąga albo wybiera zależnie od tego,
   ile przejechał. Tiery narysowane jako pierścienie, bo tier **jest** pasem
-  promienia. Szczegóły i tabele w IDEAS.md sekcja 10.
+  promienia, a obrys całej galaktyki idzie dalej — przestrzeń między nimi to
+  wyspy. `F4` zdejmuje mgłę (dev): cały projekt tego ekranu to mgła, więc
+  jedyną rzeczą, której nie da się sprawdzić patrząc na niego, jest to, czy
+  ciemna połowa w ogóle jest. Szczegóły i tabele w IDEAS.md sekcja 10.
 
 ### 5.1 Wrogowie
 

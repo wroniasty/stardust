@@ -3266,8 +3266,14 @@ położonemu wcześniej.
 
 **Pierwsza wersja była liniowa** (`lerp(1, 1.9, r/R)`) i dała 80 systemów
 zamiast spodziewanych dwustu, a rdzeń ściśnięty do promienia kilkunastu lat
-świetlnych. Sześcian przesuwa rozrzedzanie na sam brzeg: 109–117 systemów
-na cztery seedy, szeroki rdzeń po ~6–7 ly i obrzeże po ~11 ly.
+świetlnych. Sześcian przesuwa rozrzedzanie na sam brzeg: szeroki rdzeń po
+~6–7 ly i obrzeże po ~11 ly.
+
+Liczby bezwzględne z tego akapitu zmieniły się później — przy promieniu 60
+wychodziło 109–117 systemów, przy 140 wychodzi 620–629 — a **wszystkie
+ułamki zostały te same**, bo gradient zależy od `r/R`. Promień podniósł się
+dlatego, że nie mieściła się w nim drabina tierów; powody i pomiar w
+„Drabina tierów: szczebel musi być głębszy niż skok".
 
 **Zasięg skoku ma sens tylko jako wielokrotność odstępu, i to też zostało
 zmierzone.** Taki graf nie zaczyna się spinać, dopóki zasięg nie wynosi
@@ -3355,6 +3361,66 @@ Pomiar nie mówi nic o tym, czy tiery po równej szerokości są dobre — mówi
 pierścieniu. Pod starą premisą jeden system w tier 1 byłby wadą, bo tam byłby
 start; pod nową jest zaletą, bo to finał.
 
+### Drabina tierów: szczebel musi być głębszy niż skok
+
+Zgłoszone z kokpitu dwoma zdaniami — nie zaczynamy w tier 1, a czasem jedyną
+drogą naprzód jest skok o dwa tiery — i okazało się jedną arytmetyką.
+
+**Pierwsza połowa: dno drabiny.** Pasy były rozłożone na całym dysku, a
+najdalszy system, do którego startowy napęd dolatuje, stoi w czterech piątych
+promienia — bo obrzeże dysku jest z założenia za rzadkie, żeby się spinało.
+Start wypadał więc w tier 3 na **każdym** zmierzonym seedzie, a drabina, na
+której nikt nie stoi na pierwszym szczeblu, ma osiem szczebli i złą etykietę.
+Test nawet to zapisywał — `tier_of(home) <= 3` — czyli usterka była wpisana do
+zestawu tak, jakby była projektem.
+
+Poprawka: skala mierzy **drogę**, nie dysk. `tier_span()` to promień systemu
+startowego, więc tier 1 jest tam, gdzie się zaczyna, z definicji — a nie
+dlatego, że tak wyszło.
+
+**Druga połowa: głębokość szczebla.** To nie jest pomiar, tylko dowód w jednej
+linijce. Skok zbliża do środka o najwyżej `BASE_REACH`, pas ma szerokość
+`tier_span() / TIERS`, więc skok przecina najwyżej jedną granicę dokładnie
+wtedy, gdy pas jest szerszy od skoku. Przy promieniu 60 pas miał 6,0 ly, a skok
+10,5 — przeskoki były nieuniknione, nie pechowe.
+
+Pomiar na pięciu seedach, graf przy `BASE_REACH`:
+
+| skala | pas | tier startu | krawędzi przez dwa szczeble | systemów bez łagodnego wyjścia |
+|---|---|---|---|---|
+| dysk, R=60 | 6,0 ly | 3 | 16–22 | 3–7 |
+| droga, R=60 | 4,4–4,7 ly | 1 | 36–48 | 4–9 |
+| dysk, R=140 | 14,0 ly | 2–3 | 0 | 0 |
+| **droga, R=140** | **10,9–11,4 ly** | **1** | **0** | **0** |
+
+Drugi wiersz jest tu najważniejszy: sama zmiana skali **pogarsza** przeskoki,
+bo zwęża pasy. Obie połowy są potrzebne naraz, i dopiero razem dają zera.
+
+**Jedna liczba mówi to wszystko na raz: drabina miała dziesięć szczebli, a
+droga sześć kroków.** Ze startu do środka było 6 skoków na 45 latach
+świetlnych. Nie da się wejść na dziesięć szczebli w sześciu krokach,
+jakkolwiek narysować pasy — to nie był problem strojenia, tylko liczenia. Przy
+R=140 droga ma 109–113 ly i 14–18 skoków.
+
+**Ile to kosztuje.** 620 systemów zamiast 111 i 48 ms na rozłożenie galaktyki.
+Liczba systemów też nie jest wyborem: ustal dziesięć tierów, skok 1,75 odstępu
+i brak wymuszonych przeskoków, a liczba wychodzi z arytmetyki. Wszystko, co
+było zmierzone jako **ułamek**, przeżyło zmianę bez ruchu — bo gradient zależy
+od `r/R`, a nie od `r`: największy spójny kawałek dalej ma 76–79%, rdzeń dalej
+6 ly odstępu, obrzeże 11,4 ly, skaner dalej widzi 5–7 systemów ze startu. Tyle
+że teraz to jest 1% galaktyki, a nie 5%.
+
+**Podłoga pod pasem.** `tier_span()` to `max(droga, TIERS * BASE_REACH)`. Przy
+140 droga wychodzi 109–113 przy podłodze 105, więc podłoga nie zadziałała na
+żadnym seedzie — i dokładnie wtedy warto ją napisać, bo seed, który wypadnie
+krócej, to ten, którego nikt nie wygenerował. Z nią obie własności drabiny są
+prawdziwe **z konstrukcji**, a nie ze szczęścia.
+
+**Co z wyspami.** Wszystko poza drogą — ćwiartka galaktyki — przycina się do
+tier 1. To jest świadome: tier mówi, jak daleko jest się na drodze, a wyspa nie
+leży na drodze. Tym, co robi z niej late game, jest napęd potrzebny, żeby tam
+dolecieć, a nie tier tego, co w niej stoi. To druga oś i należy do M5.
+
 ### Mapa galaktyki: trzy źródła widoczności, i nic poza nimi
 
 `GalaxyChart` (`N`) stoi warstwę wyżej niż mapa układu: tamta rysuje
@@ -3383,15 +3449,16 @@ skoku musi z niej zniknąć.
 
 | seed | systemów | tier startu | do środka | kontaktów | na mapie | ciemnych |
 |---|---|---|---|---|---|---|
-| 20260922 | 111 | 3 | 45,4 ly | 5 | 7 | 104 |
-| 1 | 117 | 3 | 46,6 ly | 3 | 5 | 112 |
-| 7 | 108 | 3 | 44,1 ly | 4 | 6 | 102 |
-| 424242 | 113 | 3 | 47,2 ly | 5 | 7 | 106 |
-| 99999 | 109 | 3 | 45,7 ly | 4 | 6 | 103 |
+| 20260922 | 620 | 1 | 111,9 ly | 5 | 7 | 613 |
+| 1 | 621 | 1 | 113,5 ly | 5 | 7 | 614 |
+| 7 | 624 | 1 | 109,2 ly | 5 | 7 | 617 |
+| 424242 | 629 | 1 | 112,7 ly | 3 | 5 | 624 |
+| 99999 | 621 | 1 | 112,7 ly | 4 | 6 | 615 |
 
-Czyli **około 5% galaktyki na pierwszej klatce nowej gry**, z czego jedna
-kropka to cel odległy o 45 lat świetlnych. To jest dokładnie ten obrazek, o
-który chodzi w premisie: jesteś tutaj, koniec jest tam, reszta jest ciemna.
+Czyli **około 1% galaktyki na pierwszej klatce nowej gry**, z czego jedna
+kropka to cel odległy o 110 lat świetlnych i czternaście skoków. To jest
+dokładnie ten obrazek, o który chodzi w premisie: jesteś tutaj, koniec jest
+tam, reszta jest ciemna.
 
 **Klucz w `deltas`.** Wizyta zapisuje się pod **seedem systemu**
 (`StarSystem.derive(galaxy_seed, index)`), nie pod indeksem. Powód jest
@@ -3416,14 +3483,16 @@ mnożnik sam w sobie nic nie znaczy. Na płótnie 640x360 (`room` = 156 px):
 
 | szczebel | zasięg | px na ly | odstęp systemów w rdzeniu |
 |---|---|---|---|
-| 0 | 63,6 ly (cała galaktyka) | 2,45 | 14,7 px |
-| 1 | 30 ly | 5,20 | 31,2 px |
-| 2 | 21 ly (dwa skoki) | 7,43 | 44,6 px |
-| 3 | 10,5 ly (jeden skok) | 14,86 | 89,1 px |
+| 0 | 148 ly (cała galaktyka) | 1,05 | 6,3 px |
+| 1 | 56 ly (pół drogi, pięć tierów) | 2,79 | 16,7 px |
+| 2 | 21 ly (dwa tiery) | 7,43 | 44,6 px |
+| 3 | 10,5 ly (jeden tier) | 14,86 | 89,1 px |
 
 Najciaśniejszy to `BASE_REACH`, a nie okrągła liczba, bo „sąsiad" **znaczy**
-tyle, co w zasięgu jednego skoku seryjnym napędem. Okrągła liczba znaczyłaby
-to samo tylko do pierwszej zmiany odstępu systemów.
+tyle, co w zasięgu jednego skoku seryjnym napędem. Od chwili, gdy pas tiera
+został zwymiarowany na jeden skok, ten sam szczebel znaczy też „jeden tier"
+— i to jest zbieg okoliczności warty utrzymania, bo daje drabinie jednostkę,
+którą da się nazwać przy każdym szczeblu.
 
 **Najszerszy szczebel celuje w galaktykę, nie w statek.** Każdy ciaśniejszy
 trzyma się statku. Zasięg, który mieści całą galaktykę, wycentrowany na
@@ -3441,7 +3510,17 @@ w bok przy nieruchomej skali.
 **Tiery narysowane jako pierścienie**, bo tier *jest* pasem promienia i
 rysowanie go czymkolwiek innym byłoby wymyśleniem drugiego pojęcia. Dziesięć
 bladych okręgów robi przy okazji to, co robiłaby legenda: widać, że pasy są
-równej szerokości i że środek jest jednym małym kółkiem.
+równej szerokości i że środek jest jednym małym kółkiem. Pierścienie idą po
+**drodze**, nie po dysku, więc zewnętrzny przechodzi przez system startowy, a
+obrys całej galaktyki jest narysowany dalej — i przestrzeń między nimi to
+ćwiartka galaktyki, którą gradient zostawia w wyspach. Najuczciwszy obrazek
+„late game za lepszym napędem", jaki ten ekran umie dać bez słowa tekstu.
+
+**Klawisz dewelopera: `F4` zdejmuje mgłę.** Cały projekt tego ekranu to mgła,
+więc jedyna rzecz, której nie da się sprawdzić patrząc na niego, to czy ciemna
+połowa w ogóle **jest** — każdy błąd we mgle jest błędem, którego nie widać.
+Odkryte systemy rysują się jako przygaszone kropki w `inert`, nie jako
+kontakty: podgląd ma pokazać całość, a nie skłamać, że się ją zna.
 
 Kształt rozróżnia, kolor mówi o roli — ta sama reguła co na skanerze.
 Odwiedzony system to wypełniony kwadrat, kontakt to pusty romb, środek to romb

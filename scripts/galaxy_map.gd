@@ -15,7 +15,33 @@ extends RefCounted
 ## direction you point the nose in (IDEAS.md section 10).
 
 ## How far the galaxy reaches from its centre, in light years.
-const RADIUS: float = 60.0
+##
+## Not a taste in galaxy size. It is the smallest disc the tier ladder
+## fits inside, and it was measured rather than chosen.
+##
+## **A rung has to be at least one jump deep**, or a pilot is forced to
+## climb two at a time. That one is a proof, not a measurement: a jump
+## moves at most `BASE_REACH` towards the middle and a rung is
+## `tier_span() / TIERS` wide, so a jump crosses at most one boundary
+## exactly when the rung is the wider of the two. Ten rungs of 10.5
+## light years is a road 105 long; the road runs from the start to the
+## core and the start stands at about four fifths of the radius; so the
+## radius has to be about 140.
+##
+## At 60 it did not fit, and the ladder said so out loud: the road was
+## 45 light years and **six jumps** long, against ten rungs. Measured on
+## five seeds, sixteen to twenty-two edges of the jump graph crossed two
+## rungs at once, and three to seven systems had no gentler way forward
+## at all. Ten rungs in six steps was never a tuning problem; it was a
+## counting one. At 140 the same measurement gives zero and zero on
+## every seed, with fourteen to eighteen jumps from the rim to the
+## middle.
+##
+## It costs 620 systems instead of 111, and 48 ms to lay one out. The
+## count is not a free choice either: fix ten tiers, a jump of 1.75
+## spacings and no forced skips, and the number of systems follows from
+## the arithmetic.
+const RADIUS: float = 140.0
 
 ## Closest two systems may sit, in light years, at the galactic centre.
 ##
@@ -64,10 +90,19 @@ const CELL: float = SPACING * 0.70710678
 
 ## How many concentric bands the galaxy is cut into.
 ##
-## Tier 1 is the rim and tier `TIERS` is the centre, counting **up** the
-## way the player travels: the premise is a flight inwards, and a number
-## that fell as the game got harder would be a number read backwards
-## every time it was used.
+## Tier 1 is where the game starts and tier `TIERS` is the centre,
+## counting **up** the way the player travels: the premise is a flight
+## inwards, and a number that fell as the game got harder would be a
+## number read backwards every time it was used.
+##
+## Ten is the design's figure, and everything else here bends to it.
+## Two properties have to hold for a ladder to be a ladder, and neither
+## survived the first version of this file:
+##
+## - **somebody stands on the bottom rung.** Tier 1 has to be where a
+##   new game begins, which is what `tier_span()` is for.
+## - **no rung can be skipped by accident.** A jump has to land on the
+##   same rung or the next one, which is what `RADIUS` is for.
 const TIERS: int = 10
 
 ## Where every system stands, indexed the way the rest of the game indexes
@@ -78,6 +113,12 @@ var seed: int = 0
 
 ## Cell coordinate -> index of the one system in it.
 var _grid: Dictionary = {}
+
+## Worked out once and kept: picking the start walks the largest
+## component against itself and costs about 12 ms, and both the chart
+## and every tier reading ask for it.
+var _start: int = -1
+var _journey: float = -1.0
 
 
 ## Lays out a galaxy. The only way to make one.
@@ -246,7 +287,42 @@ func largest_component(reach: float) -> PackedInt32Array:
 	return best
 
 
-## Which band a system sits in: 1 at the rim, `TIERS` at the centre.
+## How long the road is: from the system a new game starts in, to the
+## middle.
+##
+## The tier scale is measured along this rather than across the disc,
+## and that is the only way tier 1 can mean "where you start". Pinned to
+## the radius instead, the start came out **tier 3 on every seed**, for
+## a reason that is structural rather than unlucky: the rim of the disc
+## is too thin to start on, so the furthest system a starting drive can
+## use sits two bands inside it. A ladder whose bottom rung nobody
+## stands on is a ladder with eight rungs and a wrong label.
+func journey_radius() -> float:
+	if _journey < 0.0:
+		var start: int = start_index()
+		_journey = positions[start].length() if start >= 0 else RADIUS
+	return _journey
+
+
+## The length the bands are spread over: the road, but never less than
+## one jump per band.
+##
+## The floor is what makes "a jump never skips a rung" true by
+## construction instead of by luck. It has not bound on any seed
+## measured at this radius -- the road comes out 109 to 113 light years
+## against a floor of 105 -- and that is exactly when an insurance line
+## is worth writing, because the seed that falls short is the one nobody
+## generated.
+func tier_span() -> float:
+	return maxf(journey_radius(), float(TIERS) * BASE_REACH)
+
+
+## Which band a place sits in: 1 where the game starts, `TIERS` at the
+## centre.
+##
+## A place rather than a system, because a ship adrift between two has a
+## band as surely as a system does, and because the chart draws the
+## bands as rings and needs the same arithmetic the systems get.
 ##
 ## One number, and everything that scales with difficulty reads it
 ## rather than keeping a scale of its own. Three separate scales --
@@ -255,16 +331,23 @@ func largest_component(reach: float) -> PackedInt32Array:
 ## place, which is the one thing the premise needs them to mean.
 ##
 ## Bands of equal width, so the tiers hold unequal numbers of systems:
-## on the test seed, one at the centre and eighteen in the eighth band.
-## That is not a fault to even out. The finale is meant to be one place,
-## and the middle of the journey is meant to be where most of the
-## flying happens.
+## one at the centre and dozens in the middle bands. That is not a fault
+## to even out. The finale is meant to be one place, and the middle of
+## the road is meant to be where most of the flying happens.
+##
+## Everything beyond the road -- the islands the gradient makes, a
+## quarter of the galaxy -- clamps to tier 1. What makes an island late
+## game is the drive it takes to reach one, not the tier of what is
+## inside it; that is a second axis and it belongs to M5.
+func tier_at(point: Vector2) -> int:
+	var out: float = point.length() / maxf(tier_span(), 0.0001)
+	return TIERS - clampi(int(out * float(TIERS)), 0, TIERS - 1)
+
+
 func tier_of(index: int) -> int:
 	if index < 0 or index >= positions.size():
 		return 0
-	var out: float = positions[index].length() / maxf(RADIUS, 0.0001)
-	var band: int = clampi(int(out * float(TIERS)), 0, TIERS - 1)
-	return TIERS - band
+	return tier_at(positions[index])
 
 
 ## The system at the heart of the galaxy: the end of the road.
@@ -304,6 +387,12 @@ func centre_index() -> int:
 ## connected" is not a check if the one system that has to be in it is
 ## picked afterwards.
 func start_index() -> int:
+	if _start < 0:
+		_start = _pick_start()
+	return _start
+
+
+func _pick_start() -> int:
 	var main: PackedInt32Array = largest_component(BASE_REACH)
 	# A first jump inside the comfortable part of the range, which is
 	# the half of this that cost a measurement. Taking simply the

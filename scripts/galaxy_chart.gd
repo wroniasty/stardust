@@ -38,9 +38,14 @@ const PAD: float = 8.0
 ## Reaches rather than magnifications, the same decision `SystemMap`
 ## arrived at and for a weaker version of the same reason: a multiplier
 ## means nothing on its own, and these four numbers each mean something
-## sayable. The whole galaxy with its rim inside the frame; a third of
-## it; everywhere two jumps could take a starting drive; everywhere one
-## could.
+## sayable. The whole galaxy with its rim inside the frame; five tiers,
+## which is half the road; two tiers; one tier -- which is also exactly
+## one jump, because that is what a tier is now sized to be.
+##
+## The middle rung is written as a fraction of the radius rather than
+## of the road because the ladder is a constant and the road is
+## measured, and 0.40 is five tenths of the four fifths of the radius
+## the road comes out at.
 ##
 ## The last is the view the pilot asked for -- "roughly this system and
 ## its neighbours" -- and it is `BASE_REACH` rather than a round number
@@ -49,7 +54,7 @@ const PAD: float = 8.0
 ## something else after a change to the spacing.
 const CHART_REACH: Array[float] = [
 	GalaxyMap.RADIUS * 1.06,
-	GalaxyMap.RADIUS * 0.5,
+	GalaxyMap.RADIUS * 0.40,
 	GalaxyMap.BASE_REACH * 2.0,
 	GalaxyMap.BASE_REACH,
 ]
@@ -124,6 +129,12 @@ var _focus_follows: bool = true
 
 var _picked: int = -1
 
+## The developer's key, and nothing a pilot can reach. Fog of war is
+## the whole design of this screen, so the one thing that could not be
+## checked by looking at it was whether the dark half is **there** --
+## every bug in a fog is a bug you cannot see.
+var _reveal: bool = false
+
 var _dragging: bool = false
 var _drag_last: Vector2 = Vector2.ZERO
 var _drag_travel: float = 0.0
@@ -193,6 +204,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"camera_zoom_out"):
 		zoom_at(view_size() * 0.5, -1)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"debug_reveal"):
+		reveal(not _reveal)
 		get_viewport().set_input_as_handled()
 
 
@@ -391,19 +405,34 @@ func charted() -> Array[Dictionary]:
 	for index: int in range(_map.count()):
 		var visited: bool = has_visited(index)
 		var contact: bool = contacts.has(index)
-		if not (visited or contact or index == goal):
+		var known: bool = visited or contact or index == goal
+		if not (known or _reveal):
 			continue
 		out.append({
 			"index": index,
 			"at": _map.positions[index],
 			"visited": visited,
 			"contact": contact,
+			"known": known,
 			"goal": index == goal,
 			"here": index == _here,
 			"tier": _map.tier_of(index),
 			"distance": _at.distance_to(_map.positions[index]),
 		})
 	return out
+
+
+## Lifts the fog, or puts it back. A development key: what it shows is
+## not drawn the way knowledge is drawn -- a system nobody has seen and
+## no scanner reaches comes out as a dim dot rather than as a contact,
+## so the picture still says which half is which.
+func reveal(on: bool) -> void:
+	_reveal = on
+	_canvas.queue_redraw()
+
+
+func revealed() -> bool:
+	return _reveal
 
 
 ## Whether the player has been here. The system the ship is in counts
@@ -432,7 +461,9 @@ func name_of(index: int) -> String:
 	var eyes: ScannerData = (
 		_ship.scanner() if _ship != null and is_instance_valid(_ship) else null
 	)
-	var reads: bool = eyes != null and eyes.knows(ScannerData.Depth.CLASS)
+	var reads: bool = (
+		_reveal or (eyes != null and eyes.knows(ScannerData.Depth.CLASS))
+	)
 	if not (has_visited(index) or reads):
 		return ""
 	if _galaxy == null or not _galaxy.has_method("system"):
@@ -498,19 +529,22 @@ func _draw_chart() -> void:
 ## Ten faint rings also do the job a legend would: the pilot can see
 ## that the bands are even and that the core is one small circle, which
 ## is the shape of the whole game.
+##
+## The bands are spread over the **road**, not over the disc, so the
+## outermost ring runs through the system a new game starts in. The
+## galaxy's own rim is drawn beyond it, and the gap between the two is
+## the quarter of the galaxy the gradient leaves in islands -- which is
+## the most honest picture of "late game, behind a better drive" this
+## screen can give without a word of text.
 func _draw_bands(plan: Dictionary) -> void:
 	var middle: Vector2 = to_chart(Vector2.ZERO, plan)
 	var scale: float = float(plan["scale"])
 	for band: int in range(1, GalaxyMap.TIERS + 1):
-		var ring: float = GalaxyMap.RADIUS * float(band) / float(GalaxyMap.TIERS) * scale
+		var ring: float = _map.tier_span() * float(band) / float(GalaxyMap.TIERS) * scale
 		if ring < 6.0:
 			continue
-		var rim: bool = band == GalaxyMap.TIERS
-		_canvas.draw_arc(
-			middle, ring, 0.0, TAU, 96,
-			_ink.edge if rim else _ink.over(_ink.grid, 0.30),
-			1.0,
-		)
+		_canvas.draw_arc(middle, ring, 0.0, TAU, 96, _ink.over(_ink.grid, 0.30), 1.0)
+	_canvas.draw_arc(middle, GalaxyMap.RADIUS * scale, 0.0, TAU, 128, _ink.edge, 1.0)
 
 
 ## How far one jump goes from where the ship stands, dashed.
@@ -534,6 +568,11 @@ func _draw_range(plan: Dictionary) -> void:
 func _draw_system(entry: Dictionary, plan: Dictionary) -> void:
 	var at: Vector2 = UiDraw.snap(to_chart(entry["at"], plan))
 	var index: int = int(entry["index"])
+	if not bool(entry["known"]):
+		# Only on screen because the fog is lifted. Drawn as the absence
+		# it is: `inert` is the palette's "there, and not in use".
+		_canvas.draw_rect(Rect2(at, Vector2.ONE), _ink.inert, true)
+		return
 	if bool(entry["goal"]):
 		# A ring round the end of the road, drawn whether or not
 		# anything is known about what is in it.
@@ -605,8 +644,15 @@ func _draw_name(font: Font, entry: Dictionary, plan: Dictionary) -> void:
 	# Clear of the widest mark here, which is the ring round the core:
 	# a name touching the circle it belongs to reads as part of it.
 	var at: Vector2 = UiDraw.snap(to_chart(entry["at"], plan) + Vector2(10.0, 3.0))
+	# Not into the hint line, which is the one row of this screen that is
+	# always written. A name landing there is two sentences in one place,
+	# and the one that loses is the one the pilot did not ask for.
+	if at.y > view_size().y - PAD - float(FONT_SIZE):
+		return
 	var ink: Color = _ink.label
-	if index == _picked:
+	if not bool(entry["known"]):
+		ink = _ink.inert
+	elif index == _picked:
 		ink = _ink.caution
 	elif bool(entry["here"]):
 		ink = _ink.accent
@@ -645,24 +691,17 @@ func _draw_heading(font: Font, view: Vector2, plan: Dictionary) -> void:
 		"reach %.0f ly" % float(plan["reach"]),
 		_ink.label,
 	)
-	_text(
-		font,
-		Vector2(PAD, view.y - PAD),
-		"N closes,  drag moves,  wheel or + / - zooms,  click reads",
-		_ink.label,
-	)
+	var hints: String = "N closes,  drag moves,  wheel or + / - zooms,  click reads"
+	if _reveal:
+		hints = "REVEALED (dev).  " + hints
+	_text(font, Vector2(PAD, view.y - PAD), hints, _ink.caution if _reveal else _ink.label)
 
 
-## The band the ship is in, which is a question about a place rather
-## than about a system: a tier is a radius, so a ship adrift between two
-## systems has one as surely as a system does.
+## The band the ship is in. Asked of the place rather than of the
+## system, which costs nothing when there is a system and is the only
+## answer there is when the ship is adrift between two.
 func tier_here() -> int:
-	if _map != null and _here >= 0:
-		return _map.tier_of(_here)
-	var out: float = _at.length() / maxf(GalaxyMap.RADIUS, 0.0001)
-	return GalaxyMap.TIERS - clampi(
-		int(out * float(GalaxyMap.TIERS)), 0, GalaxyMap.TIERS - 1
-	)
+	return 0 if _map == null else _map.tier_at(_at)
 
 
 ## What is known about the clicked system. Nothing until one is clicked,

@@ -84,6 +84,7 @@ const LABELS: Array[Dictionary] = [
 	{"block": "DEBUG", "action": &"debug_carve", "says": "carve a crater"},
 	{"block": "DEBUG", "action": &"debug_damage_engine", "says": "damage an engine"},
 	{"block": "DEBUG", "action": &"debug_repair", "says": "repair the engines"},
+	{"block": "DEBUG", "action": &"debug_reveal", "says": "galaxy chart: lift the fog"},
 	{"block": "DEBUG", "action": &"toggle_presentation", "says": "presentation layer"},
 ]
 

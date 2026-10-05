@@ -4104,9 +4104,15 @@ func _check_galaxy() -> void:
 			out_at, furthest,
 		],
 	)
+	# Tier 1 exactly, and this assertion used to read `<= 3` -- which was
+	# the defect written down as if it were the design. The start came
+	# out tier 3 on every seed because the bands were spread across the
+	# disc while the start stands four fifths of the way out, and a
+	# ladder whose bottom rung nobody stands on has eight rungs and a
+	# wrong label.
 	_expect(
-		map.tier_of(home) <= 3,
-		"so it begins in the outer tiers (%d of %d)" % [
+		map.tier_of(home) == 1,
+		"and it begins on the bottom rung of the ladder (tier %d of %d)" % [
 			map.tier_of(home), GalaxyMap.TIERS,
 		],
 	)
@@ -4144,32 +4150,38 @@ func _check_galaxy() -> void:
 	# inwards never lowers it. A band computed from a radius cannot get
 	# this wrong by accident, but a band computed from anything else
 	# later could, and this is where that would show.
-	var backwards: int = 0
-	var span: Array[int] = []
+	# Walked in order of radius rather than compared pair by pair: the
+	# same claim, and the galaxy is now six times the size the quadratic
+	# version was written against.
+	var order: Array[int] = []
 	for index: int in range(map.count()):
+		order.append(index)
+	order.sort_custom(func(a: int, b: int) -> bool:
+		return map.positions[a].length() < map.positions[b].length()
+	)
+	var backwards: int = 0
+	var span: Dictionary = {}
+	var highest: int = GalaxyMap.TIERS + 1
+	for index: int in order:
 		var tier: int = map.tier_of(index)
 		if tier < 1 or tier > GalaxyMap.TIERS:
 			backwards += 1
-		if not span.has(tier):
-			span.append(tier)
-		for inner: int in range(map.count()):
-			if (
-				map.positions[inner].length() < map.positions[index].length() - 0.001
-				and map.tier_of(inner) < tier
-			):
-				backwards += 1
-				break
+		if tier > highest:
+			backwards += 1
+		highest = tier
+		span[tier] = true
 	_expect(
 		backwards == 0,
 		"and nothing inside a system has a lower tier than it (%d exceptions)" % backwards,
 	)
-	span.sort()
 	_expect(
-		span.size() >= 6,
+		span.size() == GalaxyMap.TIERS,
 		"the galaxy really is cut into bands, not painted one colour (%d of %d used)" % [
 			span.size(), GalaxyMap.TIERS,
 		],
 	)
+
+	_check_tier_ladder(map, home)
 
 	# And the thing the whole premise rests on: from the start, the
 	# finale is reachable. Not "eventually with a better drive" --
@@ -11074,6 +11086,95 @@ func _check_marker_on_scanner(ship: Ship) -> void:
 	scanner.queue_free()
 
 
+## Drabina ma mieć szczeble, po których da się wejść po jednym.
+##
+## Reported from the cockpit, and it was two faults wearing one coat:
+## the game did not start on tier 1, and sometimes the only way forward
+## was a jump that climbed two rungs at once. Both come from the same
+## arithmetic. A rung was 6 light years deep and a jump reaches 10.5, so
+## a jump could cross two boundaries; and the bands were spread across
+## the disc while the furthest system a starting drive can use stands
+## four fifths of the way out, so the bottom two rungs had nobody on
+## them.
+##
+## The first claim below is the proof and the other two are the
+## measurement that the proof is about the right thing. A jump moves at
+## most `BASE_REACH` towards the middle, so it crosses at most one
+## boundary exactly when a rung is the deeper of the two -- which is
+## why the galaxy is 140 light years across rather than 60, and why
+## that number is not a taste.
+func _check_tier_ladder(map: GalaxyMap, home: int) -> void:
+	var rung: float = map.tier_span() / float(GalaxyMap.TIERS)
+	_expect(
+		rung >= GalaxyMap.BASE_REACH,
+		"a rung is at least one jump deep (%.1f ly against a reach of %.1f)" % [
+			rung, GalaxyMap.BASE_REACH,
+		],
+	)
+
+	# Which makes this one arithmetic rather than luck -- but it is the
+	# claim the pilot actually makes, so it is checked on the real graph
+	# and not left to the inequality above.
+	var skipped: int = 0
+	var forced: int = 0
+	var widest: int = 0
+	for index: int in range(map.count()):
+		var here: int = map.tier_of(index)
+		var neighbours: PackedInt32Array = map.neighbours(index, GalaxyMap.BASE_REACH)
+		if neighbours.is_empty():
+			continue
+		var gentle: bool = false
+		var leap: bool = false
+		for other: int in neighbours:
+			var step: int = map.tier_of(other) - here
+			widest = maxi(widest, absi(step))
+			if step >= 2:
+				skipped += 1
+				leap = true
+			elif step >= 0:
+				gentle = true
+		if leap and not gentle:
+			forced += 1
+	_expect(
+		skipped == 0 and widest <= 1,
+		"so no jump the starting drive can make climbs two of them (%d of them do)" % skipped,
+	)
+	_expect(
+		forced == 0,
+		"and nowhere is a pilot left with no gentler way forward (%d such systems)" % forced,
+	)
+
+	# And the count that says the ladder is worth having at all. Ten
+	# rungs and six steps was the old galaxy, which is not a tuning
+	# problem but a counting one: you cannot climb ten rungs in six
+	# steps however the bands are drawn.
+	var steps: int = _fewest_jumps(map, home, map.centre_index())
+	_expect(
+		steps >= GalaxyMap.TIERS,
+		"the road has at least a step per rung (%d jumps for %d tiers)" % [
+			steps, GalaxyMap.TIERS,
+		],
+	)
+
+
+## Fewest jumps between two systems on the starting drive, or -1.
+func _fewest_jumps(map: GalaxyMap, from: int, to: int) -> int:
+	var seen: Dictionary = {from: 0}
+	var queue: PackedInt32Array = PackedInt32Array([from])
+	var at: int = 0
+	while at < queue.size():
+		var index: int = queue[at]
+		at += 1
+		if index == to:
+			return int(seen[index])
+		for other: int in map.neighbours(index, GalaxyMap.BASE_REACH):
+			if not seen.has(other):
+				seen[other] = int(seen[index]) + 1
+				queue.append(other)
+	return -1
+
+
+
 ## Co widac na mapie galaktyki, i dlaczego akurat to.
 ##
 ## Fog of war out of three sources, and the only way to be sure they are
@@ -11182,6 +11283,27 @@ func _check_galaxy_chart() -> void:
 	_expect(
 		chart.name_of(stranger) == galaxy.system(stranger).display_name,
 		"and a scanner that reads class names it",
+	)
+
+	# The developer's key, which exists because the dark half of this
+	# screen cannot be checked by looking at it.
+	var before: int = chart.charted().size()
+	chart.reveal(true)
+	var everything: Array[Dictionary] = chart.charted()
+	var honest: int = 0
+	for entry: Dictionary in everything:
+		if not bool(entry["known"]):
+			honest += 1
+	_expect(
+		everything.size() == map.count() and honest == map.count() - before,
+		"the reveal key shows the whole galaxy (%d of %d) and still says which part is known" % [
+			everything.size(), map.count(),
+		],
+	)
+	chart.reveal(false)
+	_expect(
+		chart.charted().size() == before,
+		"and putting the fog back puts it back",
 	)
 
 	# Knowledge stays knowledge. Looked at from the far side of the
