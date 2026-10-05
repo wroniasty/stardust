@@ -3297,6 +3297,44 @@ obrzeżu, to nowa gra bez skoku, a „sprawdź spójność grafu" nie jest
 sprawdzeniem, jeśli jedyny system, który musi w nim być, wybiera się
 potem.
 
+### Premisa odwraca kierunek gry, ale nie odwraca geometrii
+
+Gra ma zaczynać się na obrzeżu i prowadzić do środka (PLAN.md, „Premisa").
+Zdanie wyżej mówi, dlaczego start jest w rdzeniu, i **nie przestaje być
+prawdziwe tylko dlatego, że zmienił się zamiar**. Zmierzone na seedzie
+testowym, 111 systemów, startowy zasięg 10,5 ly, pierścienie po jednej
+dziesiątej promienia:
+
+| pierścień | systemów | odciętych od sąsiada | najgorsza luka |
+|---|---|---|---|
+| 1 | 1 | 0 | 6,0 ly |
+| 2 | 7 | 0 | 6,9 ly |
+| 3 | 9 | 0 | 7,5 ly |
+| 4 | 11 | 0 | 8,9 ly |
+| 5 | 15 | 0 | 7,6 ly |
+| 6 | 14 | 0 | 9,8 ly |
+| 7 | 12 | 0 | 9,7 ly |
+| 8 | 18 | 2 | 10,9 ly |
+| 9 | 9 | 6 | 13,0 ly |
+| 10 | 15 | **15** | 15,1 ly |
+
+Start w rdzeniu sięga 86 ze 111 systemów. Start na najdalszym systemie sięga
+**jednego: siebie**. Powodem nie jest pech seeda, tylko arytmetyka: odstęp na
+obrzeżu to `6,0 * 1,9 = 11,4 ly`, a startowy zasięg `6,0 * 1,75 = 10,5 ly`.
+**Cały dziesiąty pierścień jest z definicji poza zasięgiem startowego napędu**,
+i tak został zaprojektowany — to są te „wyspy jako late game".
+
+Czyli: obrzeże jest niegrywalne jako start **dokładnie dlatego, że gradient
+działa**. Trzy wyjścia i ich ceny stoją w PLAN.md; rekomendowane jest
+najtańsze — start w siódmym pierścieniu, gdzie odcięć jeszcze nie ma, przy
+niezmienionej geometrii. „Obrzeża" są pojęciem fabularnym i nie muszą znaczyć
+ostatniego pierścienia siatki.
+
+Warto też zanotować, czego ten pomiar **nie** mówi. Nie mówi, że tiery po
+równej szerokości są złe — mówi tylko, że liczą nierówno: od jednego systemu do
+osiemnastu. Pod starą premisą jeden system w tier 1 byłby zły, bo to byłby
+start; pod nową jest dobry, bo to finał.
+
 ## 11. Grafika
 
 - Atmosfera: shader na kole nieco większym od planety. Szum FBM przewijany w czasie na chmury, rim light na krawędzi, kolor i gęstość z parametrów planety. Różne typy atmosfer (kolor, gęstość, prędkość chmur, wzór).

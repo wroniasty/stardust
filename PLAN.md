@@ -10,6 +10,99 @@ tego zależeć.
 
 ---
 
+## Premisa
+
+**Eksploracja i loot, z kierunkiem.** Zaczynamy na obrzeżach galaktyki i lecimy
+do środka. W środku jest główne wyzwanie — co dokładnie, jeszcze nie wiadomo, i
+to jest otwarte pytanie, nie luka.
+
+Galaktyka dzieli się na **koncentryczne pierścienie, tier 1 do 10**. Im bliżej
+środka, tym groźniejsi wrogowie i lepszy loot. Tier jest jedną liczbą policzoną
+z promienia i wszystko inne — spawnery, rzadkość, cena — czyta ją zamiast mieć
+własną skalę.
+
+To jest pierwsze zdanie w tym pliku, które mówi, **czym gra jest**, a nie co ma
+w sobie działać, i dlatego stoi przed milestone'ami: kolejność prac wynika z
+ryzyka, ale ryzyko mierzy się względem czegoś.
+
+### Co ta premisa psuje w dotychczasowych zapisach
+
+Nie jest to lista życzeń — to są miejsca, w których nowa premisa stoi w
+sprzeczności z decyzją podjętą wcześniej i uzasadnioną pomiarem. Każde trzeba
+rozstrzygnąć świadomie, bo każde ma koszt.
+
+**1. Start na obrzeżu jest dziś grą bez skoku. Zmierzone.** `start_index()`
+wybiera system najbliższy środkowi i ma to zapisane uzasadnienie: rdzeń jest
+gęsty, więc startowy napęd ma dokąd polecieć. Gradient gęstości
+(`RIM_SPREAD = 1.9`) jest celowy — to on tworzy „wyspy poza grafem jako late
+game" (IDEAS sekcja 10). Premisa odwraca kierunek gry, ale nie odwraca
+geometrii. Pomiar na seedzie testowym, 111 systemów, zasięg startowy 10,5 ly:
+
+| pierścień | systemów | odciętych | najgorsza luka do sąsiada |
+|---|---|---|---|
+| 1 | 1 | 0 | 6,0 ly |
+| 5 | 15 | 0 | 7,6 ly |
+| 8 | 18 | 2 | 10,9 ly |
+| 9 | 9 | 6 | 13,0 ly |
+| 10 | 15 | **15** | 15,1 ly |
+
+Start w rdzeniu sięga **86 ze 111** systemów. Start na najdalszym systemie sięga
+**jednego: siebie**. Cały dziesiąty pierścień jest odcięty od startowego napędu,
+bo odstęp na obrzeżu (11,4 ly) jest **większy niż zasięg** (10,5 ly). Trzy
+wyjścia, każde z ceną:
+
+- **Odwrócić gradient** — gęsto na obrzeżu, rzadko w środku. Najspójniejsze z
+  premisą: trudna część jest zarazem rzadsza, więc lepszy napęd kupuje dostęp
+  do tego, co groźniejsze. Cena: galaktyka z dziurą w środku wygląda źle.
+- **Zaczynać pierścień lub dwa do wewnątrz** (tier 7–8, gdzie odcięcia są
+  rzadkie). „Obrzeża" znaczą wówczas tier 7, a 9–10 to dzikie pole, do którego
+  wraca się z lepszym napędem. Najtańsze: nie zmienia ani jednej liczby.
+- **Dać startowemu napędowi 2,5 odstępu zamiast 1,75.** Spina obrzeże, ale z
+  tabeli w IDEAS widać, że przy 2,33 graf jest już spięty w 98–100% — czyli
+  lepszy napęd przestaje cokolwiek kupować. To kasuje całą progresję zasięgu.
+
+Rekomendacja: **drugie**, z tierów 1–10 liczonych od środka i startem w tier 7.
+Nie wymaga ruszania geometrii, a „obrzeża" i tak są pojęciem fabularnym.
+
+**2. Pierścienie równej szerokości dają bardzo nierówne tiery.** Z tej samej
+tabeli: tier 1 to **jeden** system, tier 8 to osiemnaście. Jeden system na
+najniższym tierze to nie jest miejsce, gdzie da się czegokolwiek nauczyć — a
+pod nową premisą tier 1 jest ostatni, nie pierwszy, więc jeden system to finisz
+i to akurat jest dobre. Decyzja: **pierścienie równej szerokości zostają**, ale
+trzeba wiedzieć, że liczba systemów na tier nie jest równa i nie ma być.
+
+**3. „Skalowanie z odległości od startu" trzeba przepisać na „od środka".** Dziś
+M5 mówi o odległości od startu. Przy starcie na obrzeżu to prawie to samo — ale
+tylko prawie: lot **wzdłuż** obrzeża oddala od startu, nie zbliżając do środka, i
+pod starą regułą podnosiłby zagrożenie bez powodu.
+
+**4. Przelot przez gwiazdę jest dziś niemożliwy z założenia.** `star.gd` ma to
+zapisane jako decyzję: statek lecący w gwiazdę umiera od ciepła kilka tysięcy
+pikseli, zanim cokolwiek dotknie, i dlatego gwiazda nie ma kształtu kolizji.
+Zbieranie stardustu „przelotem przez gwiazdę" wymaga więc albo moda, który
+realnie przesuwa próg `BURN_HEAT`, albo przeniesienia zbierania do **korony** —
+poza promień spalenia, ale w strumień. Drugie jest tańsze i nie kłóci się z
+modelem ciepła, który już działa.
+
+**5. Wyjątki od generatora a reguła seeda.** CLAUDE.md mówi: wszystko
+proceduralne odtwarzalne z seeda, żadnych ręcznie stawianych planet. Scenka z
+„gwiazdą śmierci" wygląda na złamanie tej reguły i **nie musi nią być**: jeśli
+to, **który** indeks systemu staje się scenką, wynika z seeda galaktyki, to
+galaktyka zostaje odtwarzalna. Ręcznie napisana jest *zawartość* scenki — tak
+samo jak ręcznie napisany jest każdy zasób broni. Reguła mówi „nie stawiaj
+planet ręką", a nie „nie pisz treści".
+
+**6. Dwa paliwa rozcinają to, co dziś jest jedną liczbą.** `JumpDriveData.fuel_for()`
+liczy koszt skoku w tym samym paliwie, którym się lata, `TankData` ma jedno
+`fuel_capacity`, a `JumpController` obciąża `Ship.fuel`. Rozdzielenie dotyka
+tych trzech miejsc i jednej asercji w teście.
+
+**7. „Loot galore" a ładownia.** Dużo lootu przy małej ładowni to ciąg decyzji;
+przy dużej — odkurzanie. Pojemność ładowni jest więc teraz **parametrem
+projektowym tej premisy**, nie liczbą wziętą z kadłuba.
+
+---
+
 ## M0: Szkielet projektu
 
 Cel: pusty, ale poprawnie ustawiony projekt Godot 4.x z repo.
@@ -498,23 +591,99 @@ doku), która odblokowała się sama w chwili, gdy bak stał się modułem.
 
 ## M5: Wrogowie, zasoby, pętla gry
 
-Cel: powód, żeby latać.
+Cel: powód, żeby latać — i kierunek, w którym się leci.
+
+### 5.0 Tier jako jedna liczba
+
+- [ ] **Tier systemu z promienia**, 1 w środku do 10 na obrzeżu, policzony w
+  `GalaxyMap` i czytany przez wszystko inne. Jedna liczba, bo trzy osobne skale
+  (wrogowie, loot, ceny) rozjeżdżają się po pierwszym strojeniu, a wtedy
+  „trudniejszy system" i „lepszy łup" przestają znaczyć to samo miejsce.
+- [ ] **Start w tier 7, nie na samym brzegu** — powód i pomiar w „Co ta premisa
+  psuje", punkt 1. `start_index()` i jego komentarz są do przepisania: dziś
+  wybierają środek i tłumaczą, dlaczego środek.
+- [ ] **System środkowy jest końcem gry.** Tier 1 to jeden system na tym
+  seedzie i to akurat jest zaletą: finał ma być jednym miejscem.
+
+### 5.1 Wrogowie
 
 - [ ] AI wrogów: steering behaviours, maszyna stanów, kilka archetypów (patrol, agresor, uciekinier).
-- [ ] Wrogowie na planetach i w przestrzeni, spawnery z timerami respawnu.
-- [ ] Zasoby na planetach: zbieranie, wartość, sprzedaż na stacjach.
-- [ ] Ekonomia paliwa: skąd się bierze, ile kosztuje.
-- [ ] Poziom zagrożenia systemu, skalowanie lootu i wrogów z odległością od startu.
-- [ ] Zasady śmierci: co gracz traci, co zostaje.
-- [ ] Eventy w deep space: wraki, zasadzki, anomalie.
+- [ ] **Minor i major, i dwie różne zasady powrotu.** Minor respawnuje się
+  **tylko przy ponownym wejściu do systemu**, nigdy w trakcie pobytu: system, w
+  którym wrogowie dosypują się w czasie rzeczywistym, to system, z którego się
+  ucieka, a nie taki, który się czyści. Major (elite) zrzuca dobry loot i
+  **pokonany nie wraca nigdy**; niepokonany wraca od zera, z pełnym zdrowiem —
+  bo inaczej wpadanie i uciekanie jest zawsze tańsze niż walka.
+- [ ] Wrogowie na planetach i w przestrzeni, spawnery czytające tier.
+- [ ] Zasady śmierci: co gracz traci, co zostaje. **Pokonany major zostaje
+  pokonany** — śmierć tego nie cofa, bo to jedyny nieodwracalny postęp, jaki
+  gracz ma poza sprzętem.
+- [ ] Jedno i drugie to stan, którego seed nie odtworzy, więc mieszka w
+  `Galaxy.deltas` — ten magazyn istnieje i ma dokładnie ten opis. Dojdzie mu
+  trzeci rodzaj wpisu, więc potrzebny będzie schemat kluczy, którego dziś nie
+  ma.
 
-Gotowe, gdy: jest cel krótkoterminowy (loot, paliwo, przeżyć) i długoterminowy (dalej, lepszy statek).
+### 5.2 Zasoby: mało rodzajów, dużo decyzji
+
+Nie symulacja rynku. Trzy rzeczy, które się zużywają, i jedna, z której się je
+robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zabrać.
+
+- [ ] **Spare parts** — naprawa kadłuba i modułów.
+- [ ] **Paliwo w dwóch postaciach**: stałe (silniki) i **hyperdrive charges**
+  (skok). Rozcina to, co dziś jest jedną liczbą — szczegóły w punkcie 6
+  analizy. Powód jest taki, że inaczej każdy skok to decyzja „czy starczy mi
+  na powrót silnikami", która jest ta sama decyzja co zawsze.
+- [ ] **Stardust** — surowiec, z którego robi się jedno i drugie.
+- [ ] **Raw ore**, kilka rodzajów. Złoża leżą na powierzchni i pod nią, losowane
+  z seeda planety — więc odtwarzalne, a wykopane znikają przez `deltas`, tak jak
+  już znika teren.
+- [ ] **Przetwarzanie na statku**: każdy raw ore idzie na jeden z zasobów, a
+  **wydajność zależy od miejsca** — zadokowany, wylądowany, w przestrzeni.
+  Jedna liczba na trzy stany, bez cen i bez podaży: to ma być powód, żeby
+  gdzieś usiąść, a nie arkusz kalkulacyjny.
+- [ ] **Stardust z korony gwiazdy** przy odpowiednim modzie. Nie „przez
+  gwiazdę" — powód w punkcie 4 analizy.
+- [ ] Pojemność ładowni jako parametr tej premisy (punkt 7).
+
+### 5.3 Drony zamiast pojazdu
+
+- [ ] **Dron jako moduł**, kilka na statku. `ModuleBay` jest już jedną klasą
+  slotu z `accepts()`, więc nowy rodzaj nie wymaga nowej mechaniki gniazd.
+- [ ] Rodzaje: atmosferyczne i kosmiczne — dron, który nie radzi sobie wszędzie,
+  jest wyborem; dron uniwersalny jest tylko drugim statkiem.
+- [ ] Zadania: kopanie, **tractor beam** do przenoszenia lootu, **skaner
+  orbitalny** — postawiony na orbicie prześwietla powierzchnię i odkrywa złoża.
+  To ostatnie wiąże się z `ScannerData.Depth`, który już ma cztery poziomy
+  głębokości, i z `deltas`, bo „odkryte" to wiedza gracza, nie własność planety.
+- [ ] **Ograniczony czas** i co się dzieje po nim: dron wraca się doładować albo
+  spada / zostaje tam, gdzie był, i trzeba po niego polecieć. Porzucony dron to
+  też `deltas`.
+- [ ] Różne sposoby sterowania — otwarte, bo to jest pytanie o to, ile uwagi
+  gracz ma wolnej, a nie o to, co dron potrafi.
+
+### 5.4 Wyjątki od generatora
+
+- [ ] **Scenki jako wyjątki, wybierane z seeda.** Czasem system jest inny: mały
+  układ z samą „gwiazdą śmierci", pilot mówi „This is no moon...", startują dwa
+  myśliwce. To nie łamie reguły seeda — powód w punkcie 5 analizy.
+- [ ] Eventy w deep space: wraki, zasadzki, anomalie. Ta sama maszyneria, mniejszy kaliber.
+- [ ] **Główne wyzwanie w środku galaktyki** — co to jest, jest otwarte. Wiadomo
+  tylko, że stoi na końcu drogi, którą reszta tego milestone'u buduje.
+
+Gotowe, gdy: jest cel krótkoterminowy (loot, paliwo, przeżyć), długoterminowy
+(dalej do środka, lepszy statek) i widać, że tier rośnie, kiedy się leci do
+środka.
 
 ---
 
 ## M6: Szlif
 
-- [ ] Pojazd naziemny: wyjazd z wylądowanego statku, koła próbkujące teren, kamera, zbieranie zasobów z pojazdu.
+- [ ] ~~Pojazd naziemny: wyjazd z wylądowanego statku, koła próbkujące teren,
+  kamera, zbieranie zasobów z pojazdu~~ — **zastąpione dronami** (M5.3). Pojazd
+  robi jedno miejsce naraz i tylko tam, gdzie się wylądowało; dron robi to samo
+  kopanie, a przy okazji orbitę, próżnię i przenoszenie lootu — i może być ich
+  kilka. Koła próbkujące teren były też jedyną pozycją w planie wymagającą
+  drugiego modelu fizyki.
 - [ ] Typy atmosfer i planet (kolory, gęstości, wzory chmur, biomy powierzchni).
 - [ ] Budynki, lądowiska, ruiny na powierzchni.
 - [ ] Dźwięk: silniki, broń, zderzenia, skok.
