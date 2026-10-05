@@ -1177,6 +1177,7 @@ func _evaluate_phase() -> void:
 			_check_palette()
 			_check_ui_value()
 			_check_ui_warning()
+			_check_ui_frame()
 			_check_scanner(_planet)
 			_check_crate_physics(_planet)
 			_check_ejection()
@@ -8649,6 +8650,75 @@ func _check_ui_warning() -> void:
 	)
 
 	ship.queue_free()
+
+
+## Rama, nie okno: środek ekranu należy do pilota.
+##
+## One invariant carries this whole section of UI_STYLE, and it is the
+## one worth a test: **no panel stands in the pilot's field**. A pilot
+## flying at a cliff is looking at the middle of the screen, and a
+## readout that creeps into it is a readout bought with the thing it
+## was meant to protect.
+##
+## It is also the rule that breaks silently. Nobody adds a panel over
+## the middle; what happens is a panel grows by one row, or somebody
+## raises the ceiling in `MOST` because a number would not fit, and the
+## corner quietly eats into the field a few pixels at a time.
+func _check_ui_frame() -> void:
+	for view: Vector2 in [Vector2(640.0, 360.0), Vector2(960.0, 540.0)]:
+		var field: Rect2 = UiFrame.field(view)
+		_expect(
+			field.size.is_equal_approx(UiFrame.FIELD)
+			and field.get_center().is_equal_approx(view * 0.5),
+			"the pilot's field is %s, in the middle, at %s" % [UiFrame.FIELD, view],
+		)
+
+		var taken: Array[Rect2] = []
+		var trespass: Array[String] = []
+		var spilled: Array[String] = []
+		var oversize: Array[String] = []
+		for which: int in [
+			UiFrame.Slot.SHIP, UiFrame.Slot.WORLD,
+			UiFrame.Slot.CONTEXT, UiFrame.Slot.INSTRUMENTS,
+		]:
+			var box: Rect2 = UiFrame.slot(view, which)
+			if box.intersects(field):
+				trespass.append(UiFrame.Slot.keys()[which])
+			if (
+				box.position.x < UiFrame.EDGE - 0.01
+				or box.position.y < UiFrame.EDGE - 0.01
+				or box.end.x > view.x - UiFrame.EDGE + 0.01
+				or box.end.y > view.y - UiFrame.EDGE + 0.01
+			):
+				spilled.append(UiFrame.Slot.keys()[which])
+			if box.size.x > UiFrame.MOST.x or box.size.y > UiFrame.MOST.y:
+				oversize.append(UiFrame.Slot.keys()[which])
+			taken.append(box)
+
+		_expect(trespass.is_empty(), "and no panel stands in it (%s)" % [trespass])
+		_expect(spilled.is_empty(), "every panel clears the screen edge (%s)" % [spilled])
+		_expect(
+			oversize.is_empty(),
+			"and none grows past what a panel may be (%s)" % [oversize],
+		)
+
+		# Four corners, four panels, and no two of them the same place.
+		# Without this the whole arrangement could collapse into one
+		# box and every check above would still pass.
+		var overlap: int = 0
+		for i: int in range(taken.size()):
+			for j: int in range(i + 1, taken.size()):
+				if taken[i].intersects(taken[j]):
+					overlap += 1
+		_expect(overlap == 0, "and the four of them are four places (%d overlaps)" % overlap)
+
+	# The corner a panel puts its brackets on faces the screen edge it
+	# is anchored to, which is what makes four boxes read as one ring.
+	_expect(
+		UiFrame.corner(UiFrame.Slot.SHIP) == UiDraw.Corner.TOP_LEFT
+		and UiFrame.corner(UiFrame.Slot.INSTRUMENTS) == UiDraw.Corner.BOTTOM_RIGHT,
+		"a panel brackets the corner it is anchored to",
+	)
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

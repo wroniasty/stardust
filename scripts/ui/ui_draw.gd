@@ -93,7 +93,14 @@ static func row(
 	)
 	var unit_width: float = 0.0 if unit.is_empty() else text_width(font, " " + unit)
 	var right: float = corner.x + width - unit_width
-	var at_value: float = maxf(right - text_width(font, value), corner.x + LABEL_WIDTH)
+	# The floor is the label's own width rather than the column width.
+	# A fixed floor is what pushed a six-character value off the side of
+	# a 60 px panel: the value is right-aligned, which is the rule that
+	# matters, and the column only has to stop the two colliding.
+	var at_value: float = maxf(
+		right - text_width(font, value),
+		corner.x + text_width(font, label) + 3.0,
+	)
 	canvas.draw_string(
 		font, snap(Vector2(at_value, corner.y)), value,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, ink,

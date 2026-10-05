@@ -19,7 +19,6 @@ extends CanvasLayer
 
 const FONT_SIZE: int = 8
 const ROW: float = 10.0
-const MARGIN: float = 6.0
 
 
 ## Slope and descent turn amber at this fraction of what the gear will take.
@@ -29,7 +28,6 @@ const CAUTION_FRACTION: float = 0.6
 ## a glance, which is the only thing a bar is better at than a number.
 ## Narrow enough to sit between the debug overlay's two columns, which is
 ## where the top of the screen is free even with F7 on.
-const BAR_WIDTH: float = 160.0
 const BAR_HEIGHT: float = 5.0
 
 ## The heat bar under it, thinner because it is the second question.
@@ -53,9 +51,16 @@ const WARNING_LIT: float = 0.42
 const WARNING_DIM: float = 0.14
 
 ## The orbit diagram: a square, with the text column beside it.
-const DIAL: float = 66.0
-const PANEL_WIDTH: float = 158.0
-const PANEL_HEIGHT: float = 84.0
+## The orbit dial. Forty-six rather than sixty-six, because the
+## untouchable field leaves a corner 116 px wide and the apsides have
+## to stand beside the picture rather than under it.
+const DIAL: float = 46.0
+
+## The heading dial out in the open, where there is no orbit to draw.
+const ARROW_DIAL: float = 40.0
+
+## How much world shows through a panel.
+const PANEL_OPACITY: float = 0.86
 
 ## How the planet is drawn in the diagram, and the apsis dots.
 const PLANET_DOT: float = 2.5
@@ -105,8 +110,8 @@ const STATE_WORDS: Dictionary = {
 }
 
 ## The transfer arrow, for when there is no well to be in.
-const ARROW_LENGTH: float = 26.0
-const ARROW_HEAD: float = 6.0
+const ARROW_LENGTH: float = 15.0
+const ARROW_HEAD: float = 4.0
 
 var _ship: Ship = null
 var _canvas: Control = null
@@ -222,108 +227,129 @@ func _draw_hud() -> void:
 		return
 	var font: Font = ModuleData.card_font()
 	var view: Vector2 = _canvas.size
-	_draw_hull(font, view)
+	var well: GravityWell = host()
+
+	_draw_ship_corner(font, _panel(view, UiFrame.Slot.SHIP))
+	if well != null:
+		_draw_world_corner(font, _panel(view, UiFrame.Slot.WORLD), well)
+	# The instruments get the only full border in the interface: at
+	# landing they lie over terrain, which is the messiest ground the
+	# game owns, and corner brackets vanish into it.
+	_draw_instrument_corner(font, _panel(view, UiFrame.Slot.INSTRUMENTS, true), well)
+	# The context corner is left undrawn while there is nothing to put
+	# in it. An empty panel is not restraint -- it is a box that
+	# teaches the eye to skip that part of the screen, which is the one
+	# habit an interface must not train.
 	_draw_warning_band(font, view)
 
-	var box: Rect2 = Rect2(
-		view.x - MARGIN - PANEL_WIDTH, view.y - MARGIN - PANEL_HEIGHT,
-		PANEL_WIDTH, PANEL_HEIGHT
+
+## One panel in its slot, handing back the room left inside it.
+func _panel(view: Vector2, which: int, edged: bool = false) -> Rect2:
+	var box: Rect2 = UiFrame.slot(view, which)
+	UiDraw.panel(
+		_canvas,
+		box,
+		_ink.over(_ink.panel, PANEL_OPACITY),
+		_ink.edge if edged else _ink.grid,
+		UiFrame.corner(which),
+		edged,
 	)
-	var well: GravityWell = host()
-	if well == null:
-		_draw_transfer(font, box)
-		return
-	_draw_orbit_panel(font, box, well)
+	return UiFrame.inside(box)
 
 
-## Hull, as a bar across the top.
+## Top left: what will kill me.
 ##
-## A bar because hull is the one reading whose *trend* matters more than
-## its value: nobody flies on 63 per cent, they fly on "still most of it"
-## or "nearly gone", and a length says that without being read.
-func _draw_hull(font: Font, view: Vector2) -> void:
-	var left: float = (view.x - BAR_WIDTH) * 0.5
-	var frame: Rect2 = Rect2(left, MARGIN, BAR_WIDTH, BAR_HEIGHT)
-	# The bar off the smoothed reading and the figure off the stepped
-	# one: a bar that jumps reads as a glitch, a figure that does not
-	# hold still cannot be read at all.
+## Hull as a bar, because hull is the one reading whose *trend* matters
+## more than its value -- nobody flies on 63 per cent, they fly on
+## "still most of it" or "nearly gone", and a length says that without
+## being read.
+func _draw_ship_corner(font: Font, at: Rect2) -> void:
 	var health: float = clampf(_hull.smooth() * 0.01, 0.0, 1.0)
 	var colour: Color = _ink.ok
 	if health < 0.25:
 		colour = _ink.alarm
-	elif health < 0.6:
+	elif health < CAUTION_FRACTION:
 		colour = _ink.caution
-	_canvas.draw_rect(Rect2(frame.position, Vector2(BAR_WIDTH * health, BAR_HEIGHT)), colour, true)
-	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
-	var reading: String = "%3.0f%%" % _hull.stepped()
-	_text(font, Vector2(left - 4.0 - _width(font, reading), frame.end.y), reading, colour)
-	_draw_heat(font, left, frame.end.y + HEAT_GAP)
 
-	# Emergency power, beside the hull rather than down in the panel: it
-	# is the one reading a pilot needs while looking at the ground coming
-	# up. Shown when asked for and refused as well as when running --
-	# "nothing happened when I pressed it" has to have an answer on the
-	# screen, and the answer is an empty pool.
+	var y: float = at.position.y
+	var bar: Rect2 = Rect2(Vector2(at.position.x, y), Vector2(at.size.x, BAR_HEIGHT))
+	_canvas.draw_rect(
+		Rect2(bar.position, Vector2(roundf(at.size.x * health), BAR_HEIGHT)), colour, true
+	)
+	_canvas.draw_rect(bar, _ink.edge, false, 1.0)
+	y += BAR_HEIGHT + 2.0
+	y = _draw_heat(at.position.x, y, at.size.x)
+
+	UiDraw.row(
+		_canvas, font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x,
+		"HULL", "%.0f" % _hull.stepped(), colour, _ink.label, "%",
+	)
+	y += ROW
+
+	# Emergency power up here rather than down in the instruments: it
+	# is the one reading a pilot wants while looking at the ground
+	# coming up. Shown when asked for and refused as well as when
+	# running -- "nothing happened when I pressed it" has to have an
+	# answer on the screen, and the answer is an empty pool.
 	if _ship.boost_command:
-		_text(
-			font,
-			Vector2(frame.end.x + 4.0, frame.end.y),
-			"BOOST" if _ship.boost_active else "BOOST --",
-			_ink.caution if _ship.boost_active else _ink.alarm,
+		UiDraw.row(
+			_canvas, font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x,
+			"BOOST", "ON" if _ship.boost_active else "--",
+			_ink.caution if _ship.boost_active else _ink.alarm, _ink.label,
 		)
-	_draw_dock(font, left, frame.end.y + ROW)
+		y += ROW
+	_draw_dock(font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x)
 
 
-## Whether a dock will have you, beside the hull bar.
-##
-## On the left and a row under the hull reading: the right-hand side is
-## where boost and heat go, and those are things the pilot is doing,
-## while this is something the world is saying back. It appears only within reach of a station, and says which
-## of the two numbers is being failed -- "no" is not an answer anyone can
-## fly on.
-func _draw_dock(font: Font, left: float, top: float) -> void:
+## Whether a dock will have you, and which of the two numbers is being
+## failed. "No" is not an answer anybody can fly on.
+func _draw_dock(font: Font, at: Vector2, width: float) -> void:
 	var says: String = ""
 	var colour: Color = _ink.ok
 	if _ship.flight_mode == Ship.FlightMode.DOCKED:
-		says = "DOK" if _ship.fully_serviced() else "DOK -- naprawa"
+		says = "tied" if _ship.fully_serviced() else "repairing"
 		colour = _ink.ok if _ship.fully_serviced() else _ink.caution
 	elif not _ship.last_dock_rejection.is_empty():
-		says = "DOK: %s" % _ship.last_dock_rejection
+		says = _ship.last_dock_rejection
 		colour = _ink.caution
 	if says.is_empty():
 		return
-	_text(font, Vector2(left - 6.0 - _width(font, says), top), says, colour)
+	UiDraw.row(_canvas, font, at, width, "DOCK", says, colour, _ink.label)
 
 
 ## Heat, as a second bar under the hull, and only when there is any.
+## Returns where the next thing starts.
 ##
-## Hidden at zero deliberately. In ordinary flight it would be an empty box
-## that never moves, and a gauge the pilot has learned to ignore is worse
-## than no gauge at all -- which is roughly what the heat reading was
-## before it could hurt anyone. It appears on the first hot air or the
-## first sunlight, and it brings its own threshold mark, so "how close am
-## I to burning" is answered by looking rather than by remembering a
+## Hidden at zero deliberately. In ordinary flight it would be an empty
+## box that never moves, and a gauge the pilot has learned to ignore is
+## worse than no gauge at all. It appears on the first hot air or the
+## first sunlight and brings its own threshold mark, so "how close am I
+## to burning" is answered by looking rather than by remembering a
 ## number.
-func _draw_heat(font: Font, left: float, top: float) -> void:
+func _draw_heat(left: float, top: float, width: float) -> float:
 	var heat: float = clampf(_ship.hull_heat, 0.0, 1.0)
 	if heat <= 0.01:
-		return
-	var frame: Rect2 = Rect2(left, top, BAR_WIDTH, HEAT_HEIGHT)
+		return top
+	var frame: Rect2 = Rect2(left, top, width, HEAT_HEIGHT)
 	var burning: bool = heat >= Ship.BURN_HEAT
 	var colour: Color = _ink.alarm if burning else _ink.caution
-	_canvas.draw_rect(Rect2(frame.position, Vector2(BAR_WIDTH * heat, HEAT_HEIGHT)), colour, true)
+	_canvas.draw_rect(
+		Rect2(frame.position, Vector2(roundf(width * heat), HEAT_HEIGHT)), colour, true
+	)
 	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
-	var mark: float = left + BAR_WIDTH * Ship.BURN_HEAT
+	var mark: float = roundf(left + width * Ship.BURN_HEAT)
 	_canvas.draw_line(Vector2(mark, top - 1.0), Vector2(mark, frame.end.y + 1.0), _ink.alarm, 1.0)
-	# No word here any more. Heat used to label itself the moment it
-	# passed the mark, which put one warning in one place and every
-	# other warning somewhere else -- so the pilot had to know the
-	# screen rather than know the spot. The band below owns all of
-	# them now, this one included, and it says BURN.
+	# No word here. Heat used to label itself the moment it passed the
+	# mark, which put one warning in one place and every other warning
+	# somewhere else, so a pilot had to know the screen rather than
+	# know the spot. The band owns that case now and calls it BURN.
+	return frame.end.y + 2.0
 
 
-func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
-	var dial: Rect2 = Rect2(box.position + Vector2(2.0, 4.0), Vector2(DIAL, DIAL))
+## Top right: where I am. The conic, the two apsides, and when the next
+## one arrives.
+func _draw_world_corner(font: Font, at: Rect2, planet: GravityWell) -> void:
+	var dial: Rect2 = Rect2(at.position, Vector2(DIAL, DIAL))
 	var orbit: GravityWell.OrbitState = planet.orbit_state(
 		_ship.global_position, _ship.linear_velocity
 	)
@@ -335,69 +361,118 @@ func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
 		_canvas.draw_circle(dial.get_center(), PLANET_DOT, _ink.nav)
 		_canvas.draw_arc(dial.get_center(), DIAL * 0.5 - 3.0, 0.0, TAU, 48, _ink.nav, 1.0)
 
-	var x: float = dial.end.x + 6.0
-	var y: float = box.position.y + ROW
+	var x: float = dial.end.x + 4.0
+	var width: float = at.end.x - x
+	var y: float = at.position.y + float(UiFont.BODY)
 	var landed: bool = landed_now()
-	_row(font, x, y, "PERI", _apsis_text(planet, shape["periapsis"], landed), _orbit_colour(orbit))
+	UiDraw.row(
+		_canvas, font, Vector2(x, y), width, "PERI",
+		_apsis_text(planet, shape["periapsis"], landed), _orbit_colour(orbit), _ink.label,
+	)
 	y += ROW
-	_row(font, x, y, "APO", _apsis_text(planet, shape["apoapsis"], landed), _apoapsis_colour(shape))
+	UiDraw.row(
+		_canvas, font, Vector2(x, y), width, "APO",
+		_apsis_text(planet, shape["apoapsis"], landed), _apoapsis_colour(shape), _ink.label,
+	)
 	y += ROW
 	# Which apsis comes first, and how long until it does. One line
-	# rather than two, because the question up here is "what happens
-	# next": the other apsis is half an orbit away and the two heights
-	# above already say which of them is which. Blank when there is
-	# nothing to count down to -- a circular orbit has no apsis and an
-	# outbound escape has none ahead of it -- because a zero would read
-	# as "now".
+	# rather than two: the question up here is "what happens next", the
+	# other apsis is half an orbit away, and the heights above already
+	# say which of them is which. Blank when there is nothing to count
+	# to, because a zero would read as "now".
 	if not landed:
 		var due: Vector2 = planet.seconds_to_apsis(
 			_ship.global_position, _ship.linear_velocity
 		)
 		if due.y < due.x:
-			_text(font, Vector2(x, y), "APO in %s" % _countdown_text(due.y),
+			_text(font, Vector2(x, y), "APO %s" % _countdown_text(due.y),
 				_apoapsis_colour(shape))
 		elif not is_inf(due.x):
-			_text(font, Vector2(x, y), "PERI in %s" % _countdown_text(due.x),
+			_text(font, Vector2(x, y), "PER %s" % _countdown_text(due.x),
 				_orbit_colour(orbit))
 	y += ROW
-	_row(font, x, y, "ALT", "%6.0f" % _altitude.stepped(), _ink.value)
+	if not planet.has_ground():
+		UiDraw.row(
+			_canvas, font, Vector2(x, y), width, "NAME",
+			planet.catalogue_name(), _ink.value, _ink.label,
+		)
+
+	# The state of the track as a word, along the bottom of the panel.
+	# Inside the dial it used to sit on the orbit ring it was
+	# describing, in the same colour, which is a word you have to
+	# already know is there in order to read it.
+	if not landed:
+		var says: String = state_text(orbit)
+		if not says.is_empty():
+			_text(font, Vector2(at.position.x, at.end.y), says, _orbit_colour(orbit))
+
+
+## Bottom right: what I am doing now, and the only panel with a border.
+func _draw_instrument_corner(font: Font, at: Rect2, planet: GravityWell) -> void:
+	var y: float = at.position.y + float(UiFont.BODY)
+	if planet == null:
+		_draw_heading(at)
+		var x: float = at.position.x + ARROW_DIAL + 4.0
+		var width: float = at.end.x - x
+		UiDraw.row(
+			_canvas, font, Vector2(x, y), width, "V",
+			"%.0f" % _speed.stepped(), _ink.ok, _ink.label,
+		)
+		y += ROW
+		UiDraw.row(
+			_canvas, font, Vector2(x, y), width, "GEAR",
+			_gear_text(), _gear_colour(), _ink.label,
+		)
+		y += ROW
+		_text(font, Vector2(x, y), "in transit", _ink.label)
+		return
+
+	UiDraw.row(
+		_canvas, font, Vector2(at.position.x, y), at.size.x, "ALT",
+		"%.0f" % _altitude.stepped(), _ink.value, _ink.label,
+	)
 	y += ROW
 	# The colour off the smoothed value rather than the printed one: a
 	# descent rate sitting on a threshold would otherwise swap colours
 	# every frame, which is the loudest thing a HUD can do.
-	_row(
-		font, x, y, "V/S", "%+6.1f" % -_descent.stepped(),
-		_descent_colour(_descent.smooth()),
+	UiDraw.row(
+		_canvas, font, Vector2(at.position.x, y), at.size.x, "V/S",
+		"%+.1f" % -_descent.stepped(), _descent_colour(_descent.smooth()), _ink.label,
 	)
 	y += ROW
-	# The last two rows are about touching down, and there is nothing to
-	# touch down on out here. Left blank rather than filled with zeros: a
-	# slope of 0.0 degrees over a star reads as flat ground, which is a
-	# worse answer than no answer.
+	# The last two rows are about touching down and there is nothing to
+	# touch down on over a star. Left blank rather than filled with
+	# zeros: a slope of 0.0 degrees over a star reads as flat ground,
+	# which is a worse answer than no answer.
 	if planet.has_ground():
-		_row(
-			font, x, y, "SLOPE", "%5.1f d" % rad_to_deg(_slope.stepped()),
-			_slope_colour(absf(_slope.smooth())),
+		UiDraw.row(
+			_canvas, font, Vector2(at.position.x, y), at.size.x, "SLOPE",
+			"%.1f" % rad_to_deg(_slope.stepped()),
+			_slope_colour(absf(_slope.smooth())), _ink.label, "d",
 		)
 		y += ROW
-		_row(font, x, y, "GEAR", _gear_text(), _gear_colour())
-	else:
-		_row(font, x, y, "NAME", planet.catalogue_name(), _ink.value)
+		UiDraw.row(
+			_canvas, font, Vector2(at.position.x, y), at.size.x, "GEAR",
+			_gear_text(), _gear_colour(), _ink.label,
+		)
+	_draw_warning(font, Rect2(at.position - Vector2(UiFrame.PAD, UiFrame.PAD), at.size))
 
-	_draw_warning(font, box)
-	# Above the panel and to the right, where the refusal mark is above it
-	# and to the left. Inside the dial it sat on the orbit ring it was
-	# describing, in the same colour, which is a word you have to already
-	# know is there to read.
-	if not landed_now():
-		var word: String = state_text(orbit)
-		if not word.is_empty():
-			_text(
-				font,
-				Vector2(box.end.x - _width(font, word), box.position.y - 4.0),
-				word,
-				_orbit_colour(orbit),
-			)
+
+## Which way the ship is going, for when there is no orbit to draw.
+func _draw_heading(at: Rect2) -> void:
+	var centre: Vector2 = (
+		at.position + Vector2(ARROW_DIAL, ARROW_DIAL) * 0.5
+	).round()
+	_canvas.draw_arc(centre, ARROW_DIAL * 0.5 - 2.0, 0.0, TAU, 24, _ink.edge, 1.0)
+	if _ship.linear_velocity.length() <= 0.01:
+		return
+	var along: Vector2 = _ship.linear_velocity.normalized().rotated(-_view_rotation())
+	var tip: Vector2 = (centre + along * ARROW_LENGTH).round()
+	_canvas.draw_line(centre, tip, _ink.ok, 1.0)
+	for side: float in [-1.0, 1.0]:
+		_canvas.draw_line(
+			tip, (tip - along.rotated(side * 0.4) * ARROW_HEAD).round(), _ink.ok, 1.0
+		)
 
 
 ## A countdown a pilot can act on.
@@ -421,10 +496,16 @@ func _countdown_text(seconds: float) -> String:
 ## planet is named by.
 func _apsis_text(planet: GravityWell, value: float, landed: bool) -> String:
 	if landed:
-		return "    --"
+		return "--"
 	if is_inf(value):
-		return " ESCAPE"
-	return "%6.0f" % (value - planet.surface_radius)
+		return "ESC"
+	# Thousands above ten thousand. A corner panel is 116 px wide and
+	# six digits of apsis is most of its text column; past ten thousand
+	# the last three of them are not a reading anybody acts on.
+	var height: float = value - planet.surface_radius
+	if absf(height) < 10000.0:
+		return "%.0f" % height
+	return "%.1fk" % (height * 0.001)
 
 
 ## The conic, with the planet at its focus and a dot at each end of it.
@@ -528,27 +609,6 @@ func _dot(at: Vector2, colour: Color) -> void:
 	_canvas.draw_circle(at.round(), APSIS_DOT, colour)
 
 
-## Out of every well: which way, and how fast. An orbit diagram around a
-## planet the ship is not near would be drawing a path it is not on.
-func _draw_transfer(font: Font, box: Rect2) -> void:
-	var centre: Vector2 = Vector2(box.position.x + DIAL * 0.5 + 2.0, box.get_center().y)
-	var speed: float = _speed.smooth()
-	_canvas.draw_arc(centre, DIAL * 0.5 - 3.0, 0.0, TAU, 32, _ink.edge, 1.0)
-	if speed > 0.01:
-		var along: Vector2 = _ship.linear_velocity.normalized().rotated(-_view_rotation())
-		var tip: Vector2 = centre + along * ARROW_LENGTH
-		_canvas.draw_line(centre, tip, _ink.ok, 1.0)
-		for side: float in [-1.0, 1.0]:
-			_canvas.draw_line(
-				tip, tip - along.rotated(side * 0.4) * ARROW_HEAD, _ink.ok, 1.0
-			)
-	var x: float = centre.x + DIAL * 0.5 + 4.0
-	var y: float = box.position.y + ROW * 2.0
-	_row(font, x, y, "V", "%6.0f" % _speed.stepped(), _ink.ok)
-	_row(font, x, y + ROW, "GEAR", _gear_text(), _gear_colour())
-	_text(font, Vector2(x, y + ROW * 2.5), "in transit", _ink.value)
-
-
 ## The one thing wrong, in the one place a warning is ever shown.
 ##
 ## The ground pulses and the word does not, which is UI_STYLE section 7
@@ -609,11 +669,6 @@ func _draw_warning(font: Font, box: Rect2) -> void:
 	_canvas.draw_line(at + Vector2(0.0, -6.0), at + Vector2(0.0, -2.0), _ink.alarm, 2.0)
 	_canvas.draw_line(at + Vector2(0.0, -0.5), at, _ink.alarm, 2.0)
 	_text(font, at + Vector2(5.0, 0.0), warning().to_upper(), _ink.alarm)
-
-
-func _row(font: Font, x: float, y: float, label: String, value: String, colour: Color) -> void:
-	_text(font, Vector2(x, y), label, _ink.value)
-	_text(font, Vector2(x + 34.0, y), value, colour)
 
 
 func _text(font: Font, at: Vector2, text: String, colour: Color) -> void:

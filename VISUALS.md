@@ -558,7 +558,29 @@ tylko kolejność prac.
   statyczny sprawdzacz już go nie oddaje, więc wywołujący z tabelą paneli nie
   ma jak go podać.
 - [ ] Oprawa kart modułów: ramki, ikony, **kolor wiersza wg kierunku zmiany** zamiast słów „lepiej / gorzej”. Treść karty jest zrobiona i mieszka na `ModuleData.card_lines()` (M2.3); zostało samo malowanie, więc siedzi tu, a nie w M2 — robione przed paletą i `ui_draw.gd` byłoby robione dwa razy.
-- [ ] Układ w czterech narożnikach, środek 400x220 pusty (UI_STYLE.md sekcja 5). Przeniesienie tego, co już jest, na ramę.
+- [x] Układ w czterech narożnikach, środek 400x220 pusty (UI_STYLE.md sekcja 5).
+  `UiFrame` wydaje cztery prostokąty i pole pilota; HUD lotu stał się trzema
+  panelami zamiast paska u góry i jednego pudełka w rogu.
+
+  **Dwie liczby z sekcji 5 nie mieszczą się razem.** Panel wolno mieć 140x120, a
+  nietykalne pole zostawia po bokach 120x70. Wygrywa pole, bo to ono ma za sobą
+  powód — pilot lecący w ścianę patrzy na środek — więc maksimum panelu jest
+  sufitem, którego dziś się nie dotyka. Zostaje zapisane zamiast skasowane: to
+  jest to, do czego panel może urosnąć na szerszym ekranie.
+
+  **Zrzut z działającej gry złapał to, czego kod nie pokazuje**: panel świata
+  wylewał się za prawą krawędź. Wszystkie liczby były dopełniane spacjami
+  (`%6.0f`), co miało sens przy ręcznej stałej kolumnie, a przy wyrównaniu do
+  prawej jest już tylko szerokością zabraną z 60-pikselowej kolumny. Do tego
+  dolna granica kolumny etykiety była stała, więc sześcioznakowa wartość nie
+  miała gdzie się cofnąć. Teraz granica bierze się z szerokości etykiety, a
+  apsydy powyżej dziesięciu tysięcy liczą się w tysiącach.
+
+  Narożnik KONTEKST zostaje **nienarysowany**, dopóki nie ma czego w nim
+  postawić: pusty panel to nie powiściągliwość, tylko pudełko uczące oko omijać
+  ten kawałek ekranu. Test pilnuje niezmiennika, który jest całą treścią tej
+  sekcji — żaden panel nie stoi w polu pilota — bo ta reguła łamie się po cichu:
+  nikt nie dokłada panelu na środku, tylko panel rośnie o wiersz.
 - [x] `scripts/ui/ui_value.gd`: wygładzanie geometrii (~120 ms) osobno od
   kwantowania cyfr (10 Hz). **Zapisane jako czas połowicznego zaniku, nie jako
   ułamek na tik** — ułamek to inna krzywa przy 60 i przy 144 klatkach, a HUD
