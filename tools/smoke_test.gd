@@ -4083,6 +4083,105 @@ func _check_galaxy() -> void:
 		share > 0.6,
 		"and the starting drive reaches most of the galaxy (%.0f%%)" % [share * 100.0],
 	)
+
+	# The premise flies inwards, so the start is the furthest system that
+	# is still in the galaxy the starting drive can use. Not the furthest
+	# outright: that one is an island by construction and reaches
+	# nothing, which an earlier reading of this measured and drew the
+	# wrong conclusion from.
+	var out_at: float = map.positions[home].length()
+	var furthest: float = 0.0
+	for index: int in range(map.count()):
+		furthest = maxf(furthest, map.positions[index].length())
+	_expect(
+		out_at > GalaxyMap.RADIUS * 0.7,
+		"a new game starts out on the rim (%.0f of %.0f ly)" % [out_at, GalaxyMap.RADIUS],
+	)
+	_expect(
+		out_at < furthest,
+		"but not on the furthest system of all, which is an island (%.0f against %.0f)" % [
+			out_at, furthest,
+		],
+	)
+	_expect(
+		map.tier_of(home) <= 3,
+		"so it begins in the outer tiers (%d of %d)" % [
+			map.tier_of(home), GalaxyMap.TIERS,
+		],
+	)
+
+	# And the invariant that cost the most to find: a new game's first
+	# jump is not a gamble. Taking simply the outermost member of the
+	# component put the nearest system at 93% of the drive's reach, and
+	# strain starts at 85%, so the opening act of the game was a 56%
+	# chance of coming out somewhere else -- with a tank that covered
+	# the fare six times over. Fuel was never the problem and checking
+	# fuel would never have found it.
+	var easy: float = GalaxyMap.BASE_REACH * JumpController.STRAIN_FROM
+	var first_hop: float = map.nearest_gap(home, biggest)
+	_expect(
+		first_hop <= easy,
+		"and its first jump is inside the easy part of the range (%.1f of %.1f ly)" % [
+			first_hop, easy,
+		],
+	)
+
+	# Tier itself: one number, counting up the way the player travels.
+	var middle: int = 0
+	var inmost: float = INF
+	for index: int in range(map.count()):
+		if map.positions[index].length() < inmost:
+			inmost = map.positions[index].length()
+			middle = index
+	_expect(
+		map.tier_of(middle) == GalaxyMap.TIERS,
+		"the middle of the galaxy is the top tier (%d of %d)" % [
+			map.tier_of(middle), GalaxyMap.TIERS,
+		],
+	)
+	# Monotone, which is the whole of what a tier promises: flying
+	# inwards never lowers it. A band computed from a radius cannot get
+	# this wrong by accident, but a band computed from anything else
+	# later could, and this is where that would show.
+	var backwards: int = 0
+	var span: Array[int] = []
+	for index: int in range(map.count()):
+		var tier: int = map.tier_of(index)
+		if tier < 1 or tier > GalaxyMap.TIERS:
+			backwards += 1
+		if not span.has(tier):
+			span.append(tier)
+		for inner: int in range(map.count()):
+			if (
+				map.positions[inner].length() < map.positions[index].length() - 0.001
+				and map.tier_of(inner) < tier
+			):
+				backwards += 1
+				break
+	_expect(
+		backwards == 0,
+		"and nothing inside a system has a lower tier than it (%d exceptions)" % backwards,
+	)
+	span.sort()
+	_expect(
+		span.size() >= 6,
+		"the galaxy really is cut into bands, not painted one colour (%d of %d used)" % [
+			span.size(), GalaxyMap.TIERS,
+		],
+	)
+
+	# And the thing the whole premise rests on: from the start, the
+	# finale is reachable. Not "eventually with a better drive" --
+	# the top tier has to be in the component the first jump can enter,
+	# or the game has no route to its own ending.
+	var reaches_middle: bool = false
+	for index: int in reachable:
+		if index == middle:
+			reaches_middle = true
+	_expect(
+		reaches_middle,
+		"and the road from the rim to the centre exists on the starting drive",
+	)
 	var stranded: int = map.count() - biggest.size()
 	_expect(
 		stranded >= 5,
@@ -4491,11 +4590,24 @@ func _check_jump_hud() -> void:
 	# reach is grey however full the tank; something in reach is amber
 	# when the tank cannot pay and blue when it can.
 	var ink: Palette = Palette.current()
-	# A deliberately short drive, so that some of the six nearest are out
-	# of its reach. With the stock one they all are within it, which would
-	# have made the grey branch below a branch no test ever took.
+	# A deliberately short drive, so that some of what the scanner sees
+	# is out of its reach. With the stock one everything on the list is
+	# within it, which would make the grey branch below a branch no test
+	# ever took.
+	#
+	# Measured off the list rather than written down. Seven light years
+	# was the figure while a new game started in the dense core and
+	# every neighbour sat about six away; out on the rim the nearest is
+	# nine, so a fixed seven made **everything** grey and the test was
+	# suddenly checking one branch instead of two. A test that assumes
+	# how close the neighbours are is a test of the galaxy.
+	var spans: Array[float] = []
+	for contact: Dictionary in seen:
+		spans.append(float(contact["distance"]))
+	spans.sort()
+	_expect(spans.size() >= 2, "the scanner sees more than one system (%d)" % spans.size())
 	var stubby: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
-	stubby.reach = 7.0
+	stubby.reach = (spans[0] + spans[spans.size() - 1]) * 0.5
 	ship.jump_bay.installed = stubby
 	seen = hud.contacts(flat, view)
 	var far_off: Dictionary = {}
@@ -4726,6 +4838,22 @@ func _check_jump_sequence() -> void:
 	)
 
 	# Charging is spending, so a dry tank cannot start one.
+	#
+	# Aimed again first, because the ship is in the **next** system now
+	# and the heading it crossed on points at wherever it came from. Out
+	# on the rim that direction has nothing in it, so the controller
+	# refused for want of a target and never reached the question this
+	# is asking. In the dense core it happened to find something, which
+	# is how the test passed while testing the wrong refusal.
+	var onward: PackedInt32Array = map.neighbours(
+		pilot.here(), GalaxyMap.BASE_REACH
+	)
+	_expect(onward.size() > 0, "there is somewhere to aim from the far side")
+	if onward.size() > 0:
+		var ahead: Vector2 = (
+			map.positions[onward[0]] - map.positions[pilot.here()]
+		).normalized()
+		ship.global_rotation = ahead.angle() - Vector2.UP.angle()
 	ship.fuel = 0.0
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
@@ -4868,6 +4996,15 @@ func _check_misjump() -> void:
 
 	# Pick a near neighbour and a far one, so that both halves of the
 	# rule have somewhere to be measured.
+	#
+	# With a drive long enough to have a choice, which the stock one is
+	# not out here: a rim start has one door most seeds, and a rule
+	# about near against far cannot be measured through a single
+	# opening. The drive is this test's instrument, not its subject.
+	var roomy: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
+	roomy.reach = GalaxyMap.BASE_REACH * 1.6
+	ship.jump_bay.installed = roomy
+	ship.rebuild_control_groups(false)
 	var reachable: PackedInt32Array = map.neighbours(here, ship.jump_drive().reach)
 	_expect(reachable.size() >= 2, "there are two places to go (%d)" % reachable.size())
 	var near: int = reachable[0]

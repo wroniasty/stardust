@@ -62,6 +62,14 @@ const BASE_REACH: float = SPACING * 1.75
 ## one system per cell, because no two are closer than `SPACING`.
 const CELL: float = SPACING * 0.70710678
 
+## How many concentric bands the galaxy is cut into.
+##
+## Tier 1 is the rim and tier `TIERS` is the centre, counting **up** the
+## way the player travels: the premise is a flight inwards, and a number
+## that fell as the game got harder would be a number read backwards
+## every time it was used.
+const TIERS: int = 10
+
 ## Where every system stands, indexed the way the rest of the game indexes
 ## them: `Galaxy.system(i)` is the system at `positions[i]`.
 var positions: PackedVector2Array = PackedVector2Array()
@@ -238,19 +246,83 @@ func largest_component(reach: float) -> PackedInt32Array:
 	return best
 
 
-## Where a new game starts.
+## Which band a system sits in: 1 at the rim, `TIERS` at the centre.
 ##
-## The system nearest the centre, which is the densest part and therefore
-## the part a starting drive can leave. Not chosen at random: a start
-## that could land on a rim island would be a new game that cannot jump,
-## and "check the graph is connected" is not a check if the one system
-## that has to be in it is picked afterwards.
+## One number, and everything that scales with difficulty reads it
+## rather than keeping a scale of its own. Three separate scales --
+## enemies, rarity, price -- drift apart at the first tuning pass, and
+## then "a harder system" and "a better haul" stop meaning the same
+## place, which is the one thing the premise needs them to mean.
+##
+## Bands of equal width, so the tiers hold unequal numbers of systems:
+## on the test seed, one at the centre and eighteen in the eighth band.
+## That is not a fault to even out. The finale is meant to be one place,
+## and the middle of the journey is meant to be where most of the
+## flying happens.
+func tier_of(index: int) -> int:
+	if index < 0 or index >= positions.size():
+		return 0
+	var out: float = positions[index].length() / maxf(RADIUS, 0.0001)
+	var band: int = clampi(int(out * float(TIERS)), 0, TIERS - 1)
+	return TIERS - band
+
+
+## Where a new game starts: the furthest system that is still in the
+## galaxy the starting drive can fly.
+##
+## The rim, because the premise is a flight inwards. Not the furthest
+## system outright -- that one is an island **by construction**, which
+## is what the density gradient is for, and it reaches nothing. In this
+## galaxy "the furthest system" and "the furthest system you can get
+## to" are two different places, and only the second is a start.
+##
+## Measured over five seeds: 51 to 55 light years out of 60, the ninth
+## or tenth band, and from every one of them the starting drive reaches
+## the whole main component with the centre in it (IDEAS.md section 10).
+##
+## Deliberate rather than random, which is the half of the old reason
+## that survives the premise reversing: a start that could land on an
+## island would be a new game that cannot jump, and "check the graph is
+## connected" is not a check if the one system that has to be in it is
+## picked afterwards.
 func start_index() -> int:
+	var main: PackedInt32Array = largest_component(BASE_REACH)
+	# A first jump inside the comfortable part of the range, which is
+	# the half of this that cost a measurement. Taking simply the
+	# outermost member put the nearest system at 93% of the drive's
+	# reach, and `JumpController.STRAIN_FROM` starts charging risk at
+	# 85% -- so a new game opened with a 56% chance of misjumping, on
+	# its very first act, with a tank that covered the fare six times
+	# over. The rule was right and had never been aimed at a starting
+	# position before.
+	var easy: float = BASE_REACH * JumpController.STRAIN_FROM
 	var best: int = -1
-	var nearest: float = INF
-	for index: int in range(positions.size()):
+	var furthest: float = -1.0
+	var fallback: int = -1
+	var fallback_out: float = -1.0
+	for index: int in main:
 		var away: float = positions[index].length_squared()
-		if away < nearest:
-			nearest = away
+		if away > fallback_out:
+			fallback_out = away
+			fallback = index
+		if nearest_gap(index, main) > easy:
+			continue
+		if away > furthest:
+			furthest = away
 			best = index
-	return best
+	# The fallback cannot be hit on any galaxy this generator makes --
+	# the core is dense enough that something always qualifies -- but a
+	# start of -1 would be a new game with no system at all, and that is
+	# too quiet a way to fail.
+	return best if best >= 0 else fallback
+
+
+## How far the nearest of `group` is from `index`, or `INF` when it
+## stands alone.
+func nearest_gap(index: int, group: PackedInt32Array) -> float:
+	var nearest: float = INF
+	for other: int in group:
+		if other == index:
+			continue
+		nearest = minf(nearest, positions[index].distance_to(positions[other]))
+	return nearest

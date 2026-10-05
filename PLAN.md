@@ -16,8 +16,10 @@ tego zależeć.
 do środka. W środku jest główne wyzwanie — co dokładnie, jeszcze nie wiadomo, i
 to jest otwarte pytanie, nie luka.
 
-Galaktyka dzieli się na **koncentryczne pierścienie, tier 1 do 10**. Im bliżej
-środka, tym groźniejsi wrogowie i lepszy loot. Tier jest jedną liczbą policzoną
+Galaktyka dzieli się na **koncentryczne pierścienie, tier 1 na obrzeżu do 10 w
+środku**. Im bliżej środka, tym wyższy tier: groźniejsi wrogowie i lepszy loot.
+Liczba rośnie w tę stronę, w którą się leci — liczba malejąca w miarę
+trudnienia byłaby liczbą czytaną od tyłu za każdym razem. Tier jest jedną liczbą policzoną
 z promienia i wszystko inne — spawnery, rzadkość, cena — czyta ją zamiast mieć
 własną skalę.
 
@@ -65,11 +67,11 @@ są miejsca, które widać na skanerze od pierwszej minuty i do których nie da 
 polecieć, dopóki nie kupi się napędu.
 
 **2. Pierścienie równej szerokości dają bardzo nierówne tiery.** Z tej samej
-tabeli: tier 1 to **jeden** system, tier 8 to osiemnaście. Jeden system na
-najniższym tierze to nie jest miejsce, gdzie da się czegokolwiek nauczyć — a
-pod nową premisą tier 1 jest ostatni, nie pierwszy, więc jeden system to finisz
-i to akurat jest dobre. Decyzja: **pierścienie równej szerokości zostają**, ale
-trzeba wiedzieć, że liczba systemów na tier nie jest równa i nie ma być.
+tabeli: tier 10 (środek) to **jeden** system, tier 3 to osiemnaście. Jeden
+system na najwyższym tierze jest zaletą, bo to finał, a finał ma być jednym
+miejscem. Decyzja: **pierścienie równej szerokości zostają**, ale trzeba
+wiedzieć, że liczba systemów na tier nie jest równa i nie ma być — najwięcej
+latania przypada na środek drogi, nie na jej końce.
 
 **3. „Skalowanie z odległości od startu" trzeba przepisać na „od środka".** Dziś
 M5 mówi o odległości od startu. Przy starcie na obrzeżu to prawie to samo — ale
@@ -595,16 +597,16 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
 
 ### 5.0 Tier jako jedna liczba
 
-- [ ] **Tier systemu z promienia**, 1 w środku do 10 na obrzeżu, policzony w
-  `GalaxyMap` i czytany przez wszystko inne. Jedna liczba, bo trzy osobne skale
-  (wrogowie, loot, ceny) rozjeżdżają się po pierwszym strojeniu, a wtedy
-  „trudniejszy system" i „lepszy łup" przestają znaczyć to samo miejsce.
-- [ ] **Start na obrzeżu: najdalszy system w największym spójnym kawałku.**
-  `start_index()` i jego komentarz są do przepisania — dziś wybierają środek i
-  tłumaczą, dlaczego środek. Pomiar na pięciu seedach w „Co ta premisa psuje",
-  punkt 1: wychodzi 51–55 ly z 60 i pełny zasięg do rdzenia. Geometria zostaje
-  bez zmian.
-- [ ] **System środkowy jest końcem gry.** Tier 1 to jeden system na tym
+- [x] **Tier systemu z promienia**, 1 na obrzeżu do 10 w środku, policzony w
+  `GalaxyMap.tier_of()` i czytany przez wszystko inne. Jedna liczba, bo trzy
+  osobne skale (wrogowie, loot, ceny) rozjeżdżają się po pierwszym strojeniu, a
+  wtedy „trudniejszy system" i „lepszy łup" przestają znaczyć tego samego
+  miejsca.
+- [x] **Start na obrzeżu: najdalszy system w największym spójnym kawałku.**
+  Pomiar na pięciu seedach w „Co ta premisa psuje", punkt 1: 51–55 ly z 60, tier
+  1 albo 2, i pełny zasięg do rdzenia. Geometria bez zmian — zmieniła się jedna
+  funkcja i jej uzasadnienie.
+- [ ] **System środkowy jest końcem gry.** Tier 10 to jeden system na tym
   seedzie i to akurat jest zaletą: finał ma być jednym miejscem.
 
 ### 5.1 Wrogowie

@@ -3332,6 +3332,24 @@ Co zostaje prawdą: ostatni pierścień to wyspy poza zasięgiem startowego nap�
 Pod nową premisą to jest nawet lepsze niż pod starą — są widoczne na skanerze od
 pierwszej minuty i nieosiągalne, dopóki nie kupi się zasięgu.
 
+**I jeszcze jedno, czego ten pomiar też nie złapał.** „Najdalszy w spójnym
+kawałku" postawił start tam, gdzie najbliższy system leży 9,8 ly przy zasięgu
+10,5 — czyli na **93% zasięgu**. `JumpController.STRAIN_FROM` nalicza ryzyko
+misjumpu od 85%, więc pierwsza czynność nowej gry miała **56% szansy na
+wyrzucenie gdzie indziej**. Nie z braku paliwa: pełny bak pokrywa ten skok
+blisko sześciokrotnie, co też zostało zmierzone, zanim podejrzenie o paliwo
+upadło. Reguła napięcia była poprawna; nigdy wcześniej nie była wycelowana w
+pozycję startową.
+
+Stąd ostateczna zasada: **najdalszy system w głównym kawałku, którego pierwszy
+skok mieści się w wygodnej części zasięgu** (`BASE_REACH * STRAIN_FROM`, czyli
+8,92 ly). Na pięciu seedach daje start 44–47,5 ly z 60, tier 3, ryzyko
+pierwszego skoku **0%** i jedno do trzech wyjść. Lejek zostaje, hazard znika.
+
+Trzy podejścia, trzy różne podejrzenia — spójność, paliwo, napięcie — i tylko
+trzecie było prawdziwe. Warte zapisania, bo wszystkie trzy brzmiały tak samo z
+zewnątrz: „z obrzeża nie da się polecieć".
+
 Pomiar nie mówi nic o tym, czy tiery po równej szerokości są dobre — mówi tylko,
 że liczą nierówno: od jednego systemu w środku do osiemnastu w ósmym
 pierścieniu. Pod starą premisą jeden system w tier 1 byłby wadą, bo tam byłby
