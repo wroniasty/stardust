@@ -538,7 +538,25 @@ tylko kolejność prac.
   `UiFont.face()` podaje jeden krój każdemu ekranowi, dwa rozmiary (8 i 16,
   bo bitmapa skaluje się tylko całkowicie), a `ModuleData.card_font()`
   przestał prosić system o Consolas. Sam krój to jeszcze placeholder. Dziś HUD ma font proporcjonalny, więc cyfry drgają — to jest najtańsza poprawka o największym skutku. Wspólne z V0.
-- [ ] `scripts/ui/ui_draw.gd`: wiersz odczytu i narożny nawias, plus `tools/gallery.tscn` do ich oglądania.
+- [x] `scripts/ui/ui_draw.gd`: wiersz odczytu i narożny nawias, plus
+  `tools/widget_gallery.tscn` do ich oglądania — dwa arkusze PNG, stan normalny
+  i alarmowy, 1:1 na 640x360 (galeria, która złamałaby regułę skali, żeby ją
+  pokazać, byłaby nic niewarta). Zrobione **przed** drugim widgetem, jak każe
+  UI_STYLE sekcja 9, i powodów dostarczył ten sam dzień: przy gwieździe
+  napisałem narzędzie do zrzutów od zera i skasowałem je godzinę później.
+
+  Pierwszy arkusz z tej galerii od razu wyrzucił dwie rzeczy. **Narożne nawiasy
+  w `edge` są niewidoczne** — rola brzmi „krawędź panelu", ale `edge` jest dla
+  linii, która dzieli dwa obszary i ma na to cały bok, a 4-pikselowy znaczek to
+  drobna struktura, czyli `grid`. I **cztery czerwone wiersze naraz to ściana**:
+  kiedy wszystko krzyczy, kolor przestaje cokolwiek znaczyć. To jest wynik, nie
+  usterka — stany ostrzegawcze muszą mieć priorytet, i UI_STYLE sekcja 10 ma na
+  to gotową regułę warstw.
+
+  Pułapka GDScriptu po drodze: `panel()` bierze narożnik jako `int`, nie jako
+  `Corner`. Enum włożony do nietypowanego kontenera wychodzi z niego intem i
+  statyczny sprawdzacz już go nie oddaje, więc wywołujący z tabelą paneli nie
+  ma jak go podać.
 - [ ] Oprawa kart modułów: ramki, ikony, **kolor wiersza wg kierunku zmiany** zamiast słów „lepiej / gorzej”. Treść karty jest zrobiona i mieszka na `ModuleData.card_lines()` (M2.3); zostało samo malowanie, więc siedzi tu, a nie w M2 — robione przed paletą i `ui_draw.gd` byłoby robione dwa razy.
 - [ ] Układ w czterech narożnikach, środek 400x220 pusty (UI_STYLE.md sekcja 5). Przeniesienie tego, co już jest, na ramę.
 - [x] `scripts/ui/ui_value.gd`: wygładzanie geometrii (~120 ms) osobno od
