@@ -36,6 +36,22 @@ const BAR_HEIGHT: float = 5.0
 const HEAT_HEIGHT: float = 3.0
 const HEAT_GAP: float = 2.0
 
+## The warning band: where it sits, and how much air it gets.
+##
+## A fixed place whether or not there is anything in it, which is the
+## point of it. A pilot who has to find the red is a pilot reading the
+## panel to discover that something is wrong, and by then they have
+## spent the quarter second the warning was buying them.
+const WARNING_TOP: float = 19.0
+const WARNING_HEIGHT: float = 11.0
+const WARNING_PAD: float = 4.0
+
+## How much of the band's ground is lit, pulsing and between pulses.
+## Never nothing: the band going dark would be the band disappearing,
+## and half of a square wave is a long time to be invisible.
+const WARNING_LIT: float = 0.42
+const WARNING_DIM: float = 0.14
+
 ## The orbit diagram: a square, with the text column beside it.
 const DIAL: float = 66.0
 const PANEL_WIDTH: float = 158.0
@@ -207,6 +223,7 @@ func _draw_hud() -> void:
 	var font: Font = ModuleData.card_font()
 	var view: Vector2 = _canvas.size
 	_draw_hull(font, view)
+	_draw_warning_band(font, view)
 
 	var box: Rect2 = Rect2(
 		view.x - MARGIN - PANEL_WIDTH, view.y - MARGIN - PANEL_HEIGHT,
@@ -298,8 +315,11 @@ func _draw_heat(font: Font, left: float, top: float) -> void:
 	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
 	var mark: float = left + BAR_WIDTH * Ship.BURN_HEAT
 	_canvas.draw_line(Vector2(mark, top - 1.0), Vector2(mark, frame.end.y + 1.0), _ink.alarm, 1.0)
-	if burning:
-		_text(font, Vector2(frame.end.x + 4.0, frame.end.y + 1.0), "HEAT", _ink.alarm)
+	# No word here any more. Heat used to label itself the moment it
+	# passed the mark, which put one warning in one place and every
+	# other warning somewhere else -- so the pilot had to know the
+	# screen rather than know the spot. The band below owns all of
+	# them now, this one included, and it says BURN.
 
 
 func _draw_orbit_panel(font: Font, box: Rect2, planet: GravityWell) -> void:
@@ -527,6 +547,41 @@ func _draw_transfer(font: Font, box: Rect2) -> void:
 	_row(font, x, y, "V", "%6.0f" % _speed.stepped(), _ink.ok)
 	_row(font, x, y + ROW, "GEAR", _gear_text(), _gear_colour())
 	_text(font, Vector2(x, y + ROW * 2.5), "in transit", _ink.value)
+
+
+## The one thing wrong, in the one place a warning is ever shown.
+##
+## The ground pulses and the word does not, which is UI_STYLE section 7
+## and the rule worth repeating: a number that is missing half the time
+## is missing exactly when it is wanted. Only the red pulses -- amber
+## states its case once and goes on stating it, and if both flashed the
+## pulse would stop meaning "now".
+func _draw_warning_band(font: Font, view: Vector2) -> void:
+	if _ship == null or not is_instance_valid(_ship):
+		return
+	var trouble: Dictionary = UiWarning.worst(_ship, host())
+	if trouble.is_empty():
+		return
+
+	var says: String = trouble["says"]
+	var alarm: bool = int(trouble["level"]) == UiWarning.Level.ALARM
+	var ink: Color = _ink.alarm if alarm else _ink.caution
+	var width: float = _width(font, says) + WARNING_PAD * 2.0
+	var box: Rect2 = Rect2(
+		Vector2(roundf((view.x - width) * 0.5), WARNING_TOP),
+		Vector2(roundf(width), WARNING_HEIGHT),
+	)
+	var share: float = (
+		WARNING_LIT if (not alarm or UiDraw.pulse()) else WARNING_DIM
+	)
+	_canvas.draw_rect(box, Color(ink, share), true)
+	UiDraw.bracket(_canvas, box, ink)
+	_text(
+		font,
+		Vector2(box.position.x + WARNING_PAD, box.end.y - 3.0),
+		says,
+		_ink.value,
+	)
 
 
 ## Why the landing was refused, as a mark rather than a sentence. The

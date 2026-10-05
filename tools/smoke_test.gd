@@ -1176,6 +1176,7 @@ func _evaluate_phase() -> void:
 			_check_font()
 			_check_palette()
 			_check_ui_value()
+			_check_ui_warning()
 			_check_scanner(_planet)
 			_check_crate_physics(_planet)
 			_check_ejection()
@@ -8563,6 +8564,91 @@ func _check_ui_value() -> void:
 		absf(rate.stepped() - 1.2) < 0.001,
 		"a tenth-step reading prints tenths (%.3f)" % rate.stepped(),
 	)
+
+
+## Jedno ostrzeżenie, w jednym miejscu, w kolejności śmierci.
+##
+## The gallery's alarm sheet is what asked for this: four red rows at
+## once and the panel read as one undifferentiated warning. The answer
+## is not a quieter red, it is **one** band that names the worst thing,
+## so what has to be tested is the ordering -- and specifically that it
+## is ordered by how soon a thing kills rather than by how bad it
+## sounds. An empty tank and a hull at a fifth are both "a bar near
+## zero" and they are nowhere near each other on this list.
+func _check_ui_warning() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.hull_integrity = 1.0
+	ship.hull_heat = 0.0
+	ship.fuel = ship.fuel_capacity()
+	_expect(
+		UiWarning.worst(ship, null).is_empty(),
+		"a ship with nothing wrong gets no band at all",
+	)
+
+	# Each on its own, so the thresholds are checked before the order
+	# between them is.
+	ship.hull_integrity = 0.5
+	var dented: Dictionary = UiWarning.worst(ship, null)
+	_expect(
+		dented.get("says", "") == "HULL"
+		and int(dented.get("level", 0)) == UiWarning.Level.CAUTION,
+		"a dented hull states its case in amber (%s)" % [dented],
+	)
+
+	ship.hull_integrity = 0.2
+	var wrecked: Dictionary = UiWarning.worst(ship, null)
+	_expect(
+		wrecked.get("says", "") == "HULL"
+		and int(wrecked.get("level", 0)) == UiWarning.Level.ALARM,
+		"and a hull at a fifth insists, in red (%s)" % [wrecked],
+	)
+
+	ship.hull_integrity = 1.0
+	ship.hull_heat = Ship.BURN_HEAT + 0.05
+	_expect(
+		UiWarning.worst(ship, null).get("says", "") == "BURN",
+		"past the burn mark the band says so, and says BURN rather than HEAT",
+	)
+	ship.hull_heat = Ship.BURN_HEAT * 0.9
+	_expect(
+		UiWarning.worst(ship, null).get("says", "") == "HEAT",
+		"and short of it, the quieter word",
+	)
+
+	ship.hull_heat = 0.0
+	ship.fuel = ship.fuel_capacity() * 0.02
+	_expect(
+		UiWarning.worst(ship, null).get("says", "") == "FUEL",
+		"a tank with nothing in it is worth a band of its own",
+	)
+
+	# And the ordering, which is the whole point. Everything wrong at
+	# once still gets one word, and it is the one that ends the flight
+	# first.
+	ship.hull_integrity = 0.2
+	ship.hull_heat = Ship.BURN_HEAT + 0.1
+	ship.fuel = 0.0
+	var everything: Dictionary = UiWarning.worst(ship, null)
+	_expect(
+		everything.get("says", "") == "HULL",
+		"everything wrong at once still gets one word, and it is the hull (%s)" % [
+			everything.get("says", ""),
+		],
+	)
+
+	# A hull that is merely dented loses to a fire, because the fire is
+	# what is happening now. This is the pair that a list ordered by how
+	# bad a thing sounds would get backwards.
+	ship.hull_integrity = 0.5
+	var burning: Dictionary = UiWarning.worst(ship, null)
+	_expect(
+		burning.get("says", "") == "BURN",
+		"but a dent loses to a fire, because the fire is already happening (%s)" % [
+			burning.get("says", ""),
+		],
+	)
+
+	ship.queue_free()
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

@@ -137,26 +137,36 @@ func _panels(font: Font, at: Vector2) -> void:
 ## be photographed, so the gallery shows the two states side by side and
 ## labels which is which.
 func _pulse(font: Font, at: Vector2) -> void:
-	_title(font, at, "7  PULSE  2 Hz, square, 50%")
+	_title(font, at, "WARNING BAND  2 Hz, square, ground only")
 	var y: float = at.y + LINE
-	var lit: Rect2 = Rect2(Vector2(at.x, y), Vector2(64.0, 20.0))
-	var dark: Rect2 = Rect2(Vector2(at.x + 74.0, y), Vector2(64.0, 20.0))
-	# The rule the shapes are here to show: the pulse is on the ground
-	# or on the bracket, never on the text. A number that is missing
-	# half the time is missing exactly when it is wanted.
-	draw_rect(lit, _ink.over(_ink.alarm, 0.35), true)
-	UiDraw.bracket(self, lit, _ink.alarm)
-	draw_rect(dark, _ink.over(_ink.panel, 0.86), true)
-	UiDraw.bracket(self, dark, _ink.edge)
-	for box: Rect2 in [lit, dark]:
+	# Three states of the one band, because a square wave cannot be
+	# photographed: amber steady, red lit, red between pulses. The rule
+	# they are here to show is that the **ground** moves and the word
+	# never does -- a word missing half the time is missing exactly when
+	# it is wanted -- and that only red pulses at all, because if amber
+	# flashed too the pulse would stop meaning "now".
+	var states: Array = [
+		["HEAT", _ink.caution, 0.42, "amber, steady"],
+		["HULL", _ink.alarm, 0.42, "red, lit"],
+		["HULL", _ink.alarm, 0.14, "red, between"],
+	]
+	var x: float = at.x
+	for entry: Array in states:
+		var ink: Color = entry[1]
+		var says: String = entry[0]
+		var width: float = UiDraw.text_width(font, says) + 8.0
+		var box: Rect2 = Rect2(Vector2(x, y), Vector2(width, 11.0))
+		draw_rect(box, Color(ink, float(entry[2])), true)
+		UiDraw.bracket(self, box, ink)
 		draw_string(
-			font, box.position + Vector2(6.0, 14.0), "  0.92",
+			font, box.position + Vector2(4.0, 8.0), says,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, _ink.value,
 		)
-	draw_string(
-		font, Vector2(at.x, y + 32.0), "lit              dark",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, _ink.label,
-	)
+		draw_string(
+			font, Vector2(x, y + 24.0), entry[3],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, _ink.label,
+		)
+		x += maxf(width, UiDraw.text_width(font, entry[3])) + 12.0
 
 
 func _title(font: Font, at: Vector2, text: String) -> void:

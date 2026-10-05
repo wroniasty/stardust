@@ -581,7 +581,23 @@ tylko kolejność prac.
   na progu to najgłośniejsza rzecz, jaką HUD potrafi zrobić. Arytmetyka
   przeniosła się przy okazji z rysowania do jednego miejsca próbkowanego raz na
   klatkę — rysowanie może się zdarzyć dwa razy albo wcale.
-- [ ] Stany ostrzegawcze czytelne bez czytania: kolor, puls prostokątny 2 Hz na tle a nie na tekście, stała pozycja.
+- [x] Stany ostrzegawcze czytelne bez czytania: kolor, puls prostokątny 2 Hz na
+  tle a nie na tekście, stała pozycja. **Jeden pasek, jedno miejsce**, bo arkusz
+  alarmowy galerii postawił pytanie, czego jest za dużo: nie czerwieni, tylko
+  **miejsc, w których wolno krzyczeć**. Wiersze zachowują stopniowanie, bo
+  liczba przechodząca z zieleni w bursztyn to *odczyt*; puls dostaje dokładnie
+  jedno miejsce, które nazywa najgorszą rzecz. Pilot uczy się miejsca raz i
+  nigdy nie czyta panelu po to, żeby się dowiedzieć, że coś jest nie tak.
+
+  Kolejność jest po tym, **jak szybko coś zabija**, nie po tym, jak groźnie
+  brzmi: pusty bak i kadłub na jednej piątej to oba „pasek przy zerze" i leżą
+  daleko od siebie. Test pilnuje pary, która przy liście ułożonej po głośności
+  wyszłaby odwrotnie: wgniecenie przegrywa z pożarem, bo pożar już się dzieje.
+
+  Czerwień pulsuje, bursztyn nie — gdyby migały oba, puls przestałby znaczyć
+  „teraz". Znikło przy okazji słowo „HEAT", które pasek ciepła dopisywał sobie
+  sam: jedno ostrzeżenie było w jednym miejscu, a wszystkie inne gdzie indziej,
+  więc pilot musiał znać ekran zamiast znać punkt.
 - [ ] Pasek energii: komórki z podziałką co koszt strzału, cisza timeoutu odróżnialna od doładowywania bez patrzenia na liczby (mechanika w IDEAS.md sekcja 14). Łuk segmentowy na ciepło kadłuba.
 - [x] **Przyrząd orbity zamiast ośmiu wierszy tekstu** (`scripts/flight_hud.gd`). Planeta jako kropka w ognisku, pierścień gruntu w skali, stożek toru z kropkami na perycentrum i apocentrum, kropka statku na krzywej. **W orbicie linia jest grubsza i zielona** — „czy jestem na orbicie” to pytanie tak/nie, a sam kolor to odcień, który trzeba pamiętać. Obok liczby, które naprawdę są liczbami: PERI, APO, ALT, V/S, SLOPE, GEAR. Odmowa lądowania jako **wykrzyknik i powód**, bez słowa „WAVE OFF” — etykieta na newsie, który kolor już niosł.
 - [x] Poza studnią grawitacyjną przyrząd zmienia się na **strzałkę kierunku lotu i prędkość**. Wewnątrz pytanie brzmi „co robi ta orbita”, na zewnątrz „gdzie lecę i jak szybko”, a diagram orbity wokół planety, przy której nie jesteś, nie odpowiada na żadne z nich.
