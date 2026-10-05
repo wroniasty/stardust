@@ -31,38 +31,38 @@ Nie jest to lista życzeń — to są miejsca, w których nowa premisa stoi w
 sprzeczności z decyzją podjętą wcześniej i uzasadnioną pomiarem. Każde trzeba
 rozstrzygnąć świadomie, bo każde ma koszt.
 
-**1. Start na obrzeżu jest dziś grą bez skoku. Zmierzone.** `start_index()`
-wybiera system najbliższy środkowi i ma to zapisane uzasadnienie: rdzeń jest
-gęsty, więc startowy napęd ma dokąd polecieć. Gradient gęstości
-(`RIM_SPREAD = 1.9`) jest celowy — to on tworzy „wyspy poza grafem jako late
-game" (IDEAS sekcja 10). Premisa odwraca kierunek gry, ale nie odwraca
-geometrii. Pomiar na seedzie testowym, 111 systemów, zasięg startowy 10,5 ly:
+**1. Start na obrzeżu działa i nie wymaga żadnej zmiany geometrii. Zmierzone —
+za drugim razem.** `start_index()` wybiera dziś system najbliższy środkowi, więc
+zmienić trzeba tę funkcję i jej uzasadnienie, i tyle.
 
-| pierścień | systemów | odciętych | najgorsza luka do sąsiada |
-|---|---|---|---|
-| 1 | 1 | 0 | 6,0 ly |
-| 5 | 15 | 0 | 7,6 ly |
-| 8 | 18 | 2 | 10,9 ly |
-| 9 | 9 | 6 | 13,0 ly |
-| 10 | 15 | **15** | 15,1 ly |
+Nowa zasada: **najdalszy system należący do największego spójnego kawałka**. To
+jest ta sama dyscyplina, którą ta funkcja już ma — start wybiera się celowo, a
+nie losowo, bo inaczej „sprawdź spójność grafu" nie jest sprawdzeniem. Pomiar na
+pięciu seedach:
 
-Start w rdzeniu sięga **86 ze 111** systemów. Start na najdalszym systemie sięga
-**jednego: siebie**. Cały dziesiąty pierścień jest odcięty od startowego napędu,
-bo odstęp na obrzeżu (11,4 ly) jest **większy niż zasięg** (10,5 ly). Trzy
-wyjścia, każde z ceną:
+| seed | systemów | główny kawałek | najdalszy w nim | zasięg stamtąd | widzi rdzeń |
+|---|---|---|---|---|---|
+| 20260922 | 111 | 86 | 52,6 ly | 86 | tak |
+| 1 | 117 | 92 | 51,3 ly | 92 | tak |
+| 7 | 108 | 74 | 51,0 ly | 74 | tak |
+| 31337 | 113 | 84 | 51,1 ly | 84 | tak |
+| 99 | 115 | 89 | 55,5 ly | 89 | tak |
 
-- **Odwrócić gradient** — gęsto na obrzeżu, rzadko w środku. Najspójniejsze z
-  premisą: trudna część jest zarazem rzadsza, więc lepszy napęd kupuje dostęp
-  do tego, co groźniejsze. Cena: galaktyka z dziurą w środku wygląda źle.
-- **Zaczynać pierścień lub dwa do wewnątrz** (tier 7–8, gdzie odcięcia są
-  rzadkie). „Obrzeża" znaczą wówczas tier 7, a 9–10 to dzikie pole, do którego
-  wraca się z lepszym napędem. Najtańsze: nie zmienia ani jednej liczby.
-- **Dać startowemu napędowi 2,5 odstępu zamiast 1,75.** Spina obrzeże, ale z
-  tabeli w IDEAS widać, że przy 2,33 graf jest już spięty w 98–100% — czyli
-  lepszy napęd przestaje cokolwiek kupować. To kasuje całą progresję zasięgu.
+Czyli: **51–55 ly z 60**, dziewiąty albo dziesiąty pierścień, i z każdego z nich
+startowy napęd sięga całego głównego kawałka — ze środkiem włącznie. To jest
+obrzeże w każdym sensie, w jakim fabuła tego słowa używa.
 
-Rekomendacja: **drugie**, z tierów 1–10 liczonych od środka i startem w tier 7.
-Nie wymaga ruszania geometrii, a „obrzeża" i tak są pojęciem fabularnym.
+Pierwszy pomiar, który tu stał, mówił coś przeciwnego i był pomiarem **innego
+pytania**: brał najdalszy system w ogóle, czyli wyspę z definicji — dokładnie tę,
+którą gradient gęstości ma tworzyć jako late game. Oczywiście nie sięga
+niczego; po to tam jest. Zapisane, bo to jest pomyłka łatwa do powtórzenia:
+„najdalszy" i „najdalszy, do którego da się dolecieć" to w tej galaktyce dwa
+różne miejsca, i tylko drugie jest kandydatem na start.
+
+Co z tego **zostaje** prawdą: ostatni pierścień to wyspy poza zasięgiem
+startowego napędu i to się nie zmienia. Pod nową premisą jest nawet lepsze — to
+są miejsca, które widać na skanerze od pierwszej minuty i do których nie da się
+polecieć, dopóki nie kupi się napędu.
 
 **2. Pierścienie równej szerokości dają bardzo nierówne tiery.** Z tej samej
 tabeli: tier 1 to **jeden** system, tier 8 to osiemnaście. Jeden system na
@@ -599,9 +599,11 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   `GalaxyMap` i czytany przez wszystko inne. Jedna liczba, bo trzy osobne skale
   (wrogowie, loot, ceny) rozjeżdżają się po pierwszym strojeniu, a wtedy
   „trudniejszy system" i „lepszy łup" przestają znaczyć to samo miejsce.
-- [ ] **Start w tier 7, nie na samym brzegu** — powód i pomiar w „Co ta premisa
-  psuje", punkt 1. `start_index()` i jego komentarz są do przepisania: dziś
-  wybierają środek i tłumaczą, dlaczego środek.
+- [ ] **Start na obrzeżu: najdalszy system w największym spójnym kawałku.**
+  `start_index()` i jego komentarz są do przepisania — dziś wybierają środek i
+  tłumaczą, dlaczego środek. Pomiar na pięciu seedach w „Co ta premisa psuje",
+  punkt 1: wychodzi 51–55 ly z 60 i pełny zasięg do rdzenia. Geometria zostaje
+  bez zmian.
 - [ ] **System środkowy jest końcem gry.** Tier 1 to jeden system na tym
   seedzie i to akurat jest zaletą: finał ma być jednym miejscem.
 
