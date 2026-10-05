@@ -1205,6 +1205,7 @@ func _evaluate_phase() -> void:
 			_check_system_map()
 			_check_nav_marker()
 			_check_galaxy_chart()
+			_check_garrison()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -11351,6 +11352,195 @@ func _fewest_jumps(map: GalaxyMap, from: int, to: int) -> int:
 				queue.append(other)
 	return -1
 
+
+
+## Co stoi w systemie, i co z tego wraca.
+##
+## The first thing in the game that reads `tier_of()`. Until this, the
+## tier was a number describing itself -- the galaxy had a shape, a
+## ladder and a chart, and tier 9 held exactly what tier 1 held.
+##
+## Two rules of coming back, and they are checked separately because
+## they are opposites and the cheap mistake is to implement one twice. A
+## minor comes back because nothing was ever written down; a major stays
+## dead because something was. A roster that recorded minors would pass
+## every test about majors and quietly turn the galaxy into a place that
+## stays cleared.
+func _check_garrison() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(TEST_SEED)
+	var home: int = map.start_index()
+	var home_seed: int = StarSystem.derive(TEST_SEED, home)
+
+	var roster: Array[Dictionary] = Garrison.of(home_seed, map.tier_of(home))
+	var again: Array[Dictionary] = Garrison.of(home_seed, map.tier_of(home))
+	_expect(roster == again, "the same system holds the same enemies, every time")
+	_expect(
+		not roster.is_empty(),
+		"and the system a new game starts in holds some (%d)" % roster.size(),
+	)
+
+	# Identity, which everything else here hangs off. A member sharing a
+	# seed with a body would share a `deltas` key with it, and the first
+	# thing to break would be a dug crater bringing an elite back.
+	var seen: Dictionary = {}
+	var repeats: int = 0
+	var clashes: int = 0
+	for index: int in range(map.count()):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		var bodies: Dictionary = {}
+		for body: SystemBody in system.bodies:
+			bodies[body.seed] = true
+		for entry: Dictionary in Garrison.of(system.seed, map.tier_of(index)):
+			var key: int = int(entry["seed"])
+			if seen.has(key):
+				repeats += 1
+			seen[key] = true
+			if bodies.has(key):
+				clashes += 1
+	_expect(repeats == 0, "every enemy in the galaxy has a seed of its own (%d repeats)" % repeats)
+	_expect(
+		clashes == 0,
+		"and none of them shares one with a planet, moon or dock (%d clashes)" % clashes,
+	)
+
+	_check_garrison_ladder(map)
+	_check_garrison_memory(home_seed, map.tier_of(home))
+
+
+## The ladder, read off the galaxy rather than off the constants.
+##
+## Averages over the real layout, because the question is not whether
+## the arithmetic lerps -- of course it does -- but whether a pilot
+## flying inwards meets more and meets worse. A constant checked against
+## itself proves nothing.
+func _check_garrison_ladder(map: GalaxyMap) -> void:
+	var count: Array[float] = []
+	var strength: Array[float] = []
+	var majors: Array[float] = []
+	var systems: Array[float] = []
+	for tier: int in range(GalaxyMap.TIERS + 1):
+		count.append(0.0)
+		strength.append(0.0)
+		majors.append(0.0)
+		systems.append(0.0)
+
+	for index: int in range(map.count()):
+		var tier: int = map.tier_of(index)
+		var roster: Array[Dictionary] = Garrison.of(
+			StarSystem.derive(TEST_SEED, index), tier
+		)
+		systems[tier] += 1.0
+		count[tier] += float(roster.size())
+		for entry: Dictionary in roster:
+			if int(entry["rank"]) == Garrison.Rank.MAJOR:
+				majors[tier] += 1.0
+			else:
+				strength[tier] += float(entry["strength"])
+
+	var rim: int = 1
+	var core: int = GalaxyMap.TIERS
+	_expect(
+		systems[rim] > 0.0 and systems[core] > 0.0,
+		"both ends of the ladder have systems on them to measure",
+	)
+	var thin: float = count[rim] / maxf(systems[rim], 1.0)
+	var thick: float = count[core] / maxf(systems[core], 1.0)
+	_expect(
+		thick > thin * 2.0,
+		"the middle of the galaxy is crowded against the rim (%.1f enemies against %.1f)" % [
+			thick, thin,
+		],
+	)
+	var weak: float = strength[rim] / maxf(count[rim] - majors[rim], 1.0)
+	var hard: float = strength[core] / maxf(count[core] - majors[core], 1.0)
+	_expect(
+		hard > weak * 3.0,
+		"and they are worse when you get there (%.2f against %.2f)" % [hard, weak],
+	)
+	_expect(
+		majors[core] / maxf(systems[core], 1.0) > majors[rim] / maxf(systems[rim], 1.0) * 5.0,
+		"elites are a core thing without being only a core thing (%.0f%% against %.0f%%)" % [
+			100.0 * majors[core] / maxf(systems[core], 1.0),
+			100.0 * majors[rim] / maxf(systems[rim], 1.0),
+		],
+	)
+	# Not zero at the rim, deliberately: a pilot who meets their first
+	# elite halfway in has nothing to read it against.
+	_expect(
+		majors[rim] > 0.0,
+		"and the rim has a few, so the first one is not a surprise with no name",
+	)
+
+
+## The two rules of coming back, which are opposites.
+func _check_garrison_memory(system_seed: int, tier: int) -> void:
+	var deltas: Dictionary = {}
+	var roster: Array[Dictionary] = Garrison.of(system_seed, tier, deltas)
+	var minor: Dictionary = {}
+	for entry: Dictionary in roster:
+		if int(entry["rank"]) == Garrison.Rank.MINOR:
+			minor = entry
+			break
+	_expect(not minor.is_empty(), "there is a minor to shoot")
+	_expect(
+		not Garrison.beat(deltas, minor) and deltas.is_empty(),
+		"shooting a minor writes nothing down",
+	)
+	_expect(
+		Garrison.of(system_seed, tier, deltas).size() == roster.size(),
+		"so it is standing there again the next time you come in",
+	)
+
+	# And the opposite. Searched for rather than assumed, because whether
+	# a given system has an elite is a roll and a test that needed one
+	# would be a test about the seed.
+	var elite: Dictionary = {}
+	var elite_seed: int = 0
+	var where: int = 0
+	for index: int in range(GalaxyMap.TIERS * 40):
+		var tried: int = StarSystem.derive(system_seed, index)
+		for entry: Dictionary in Garrison.of(tried, GalaxyMap.TIERS):
+			if int(entry["rank"]) == Garrison.Rank.MAJOR:
+				elite = entry
+				elite_seed = int(entry["seed"])
+				where = tried
+				break
+		if not elite.is_empty():
+			break
+	_expect(not elite.is_empty(), "there is an elite somewhere to make an example of")
+	if elite.is_empty():
+		return
+
+	var before: int = Garrison.of(where, GalaxyMap.TIERS, deltas).size()
+	_expect(Garrison.beat(deltas, elite), "beating an elite is written down")
+	var after: Array[Dictionary] = Garrison.of(where, GalaxyMap.TIERS, deltas)
+	var still_there: bool = false
+	for entry: Dictionary in after:
+		if int(entry["seed"]) == elite_seed:
+			still_there = true
+	_expect(
+		not still_there and after.size() == before - 1,
+		"and it is gone, with the rest of the garrison exactly where it was",
+	)
+
+	# Through a save, because "never comes back" is a claim about next
+	# week rather than about this session -- and it needs no new field,
+	# which is the whole argument for keying it the way the rest of
+	# `deltas` is keyed.
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+	sky.deltas[elite_seed] = {"beaten": true}
+	var carried: Dictionary = SaveGame.capture(sky, null)
+	var other: Node = GALAXY_SCRIPT.new()
+	root.add_child(other)
+	SaveGame.restore(carried, other, null)
+	_expect(
+		Garrison.beaten(other.deltas, elite_seed),
+		"a save brings back which elites are already dead",
+	)
+	sky.queue_free()
+	other.queue_free()
 
 
 ## Co widac na mapie galaktyki, i dlaczego akurat to.

@@ -3732,6 +3732,85 @@ uderzył blisko gruntu, więc śmierć zostawia ślad w terenie.
 
 ## 12. AI i zawartość planet
 
+### Garnizon: pierwsza rzecz, która czyta tier
+
+Do tej pory `tier_of()` opisywał sam siebie. Galaktyka miała kształt, drabinę i
+mapę, a tier 9 trzymał dokładnie to, co tier 1 — lot do środka był dojazdem.
+`Garrison` jest arytmetyką, która robi z drabiny powód.
+
+Czysta dana, jak `StarSystem` i `GalaxyMap`: roster istnieje, zanim powstanie
+jakikolwiek węzeł, a ten sam seed daje tych samych wrogów w tych samych
+miejscach. Nic tu nie lata i nie strzela — to jest robota spawnera i AI, które
+oba **czytają** tę listę. `deltas` są podawane z zewnątrz, nie pobierane, z tego
+samego powodu co wszędzie: autoload nie istnieje w biegu `--script`.
+
+**Dwie zasady powrotu, i pierwsza nie kosztuje nic.**
+
+Roster wyprowadzony z seeda **jest** regułą „minor wraca, kiedy ty wracasz,
+nigdy w trakcie pobytu". Nic się nie zapisuje, nic nie tyka zegara, a system
+wyczyszczony i opuszczony jest tym samym systemem, kiedy się do niego wróci.
+Spawner dosypujący wrogów w trakcie pobytu robi system, z którego się ucieka,
+a nie taki, który się czyści — i dlatego reguła brzmi tak, jak brzmi.
+
+Odwrotność — „major pokonany nie wraca nigdy" — to jedyna rzecz, której seed
+nie odtworzy, więc jedyna, która tu się zapisuje. Major **niepokonany** nie
+zapisuje się wcale i wraca cały, bo inaczej wlatywanie i uciekanie jest zawsze
+tańsze niż walka. Minor zastrzelony też nie zapisuje się wcale, i to nie jest
+przeoczenie: model już mówi, że wróci, więc notatka o jego śmierci byłaby
+notatką, którą następny roster albo zignoruje, albo — gorzej — posłucha, co po
+cichu zamieniłoby każdy system w taki, który zostaje wyczyszczony.
+
+**Schemat kluczy w `deltas`**, którego M5.1 potrzebowało i który zaczął się przy
+mapie galaktyki. Jedna reguła: **wpis leży pod seedem tej rzeczy, której
+dotyczy**. Dziś są trzy rodzaje — ciało niebieskie (`crust`, wykopany teren),
+system (`seen`, czy tu byliśmy) i członek garnizonu (`beaten`). Seed członka
+idzie **dwustopniowo**: garnizon dostaje własny seed z systemu (indeks 1000,
+poza zakresem, którego używają ciała), a członkowie numerują się od niego. Jeden
+stopień z dużym indeksem też by zadziałał i zostawiłby garnizon bez własnej
+tożsamości, którą następna rzecz wisząca na systemie musiałaby wymyślić jeszcze
+raz. Kolizja seeda z ciałem niebieskim jest sprawdzana testem na całej
+galaktyce — wspólny klucz znaczyłby, że wykopany krater wskrzesza elitę.
+
+**Co ta arytmetyka naprawdę rozstawia.** Zmierzone na seedzie 20260922, 620
+systemów:
+
+| tier | systemów | wrogów na system | z majorem | siła minora | na powierzchni |
+|---|---|---|---|---|---|
+| 1 | 204 | 2,1 | 4% | 1,00 | 18% |
+| 2 | 68 | 2,6 | 22% | 1,34 | 21% |
+| 3 | 72 | 3,3 | 29% | 1,66 | 23% |
+| 4 | 63 | 3,7 | 33% | 2,00 | 22% |
+| 5 | 57 | 4,4 | 39% | 2,37 | 29% |
+| 6 | 58 | 4,8 | 41% | 2,68 | 37% |
+| 7 | 39 | 5,2 | 38% | 3,03 | 35% |
+| 8 | 35 | 6,2 | 77% | 3,32 | 43% |
+| 9 | 17 | 6,5 | 53% | 3,66 | 41% |
+| 10 | 7 | 6,3 | 86% | 4,00 | 45% |
+
+Szarpnięcia w kolumnie majorów między tierem 7 a 9 to wielkość próbki (39, 35
+i 17 systemów), nie krzywa. Test nie sprawdza zresztą stałych przeciwko samym
+sobie, tylko średnie po prawdziwej galaktyce: pytanie nie brzmi, czy `lerp`
+lerpuje, tylko czy pilot lecący do środka spotyka więcej i gorszych.
+
+**Tier 1 to 204 systemy, czyli jedna trzecia galaktyki** — i to jest cena
+przycinania wysp do pierwszego szczebla. Dopóki wyspy są nieosiągalne, nie
+przeszkadza; w chwili, gdy lepszy napęd je otworzy, gracz znajdzie tam tier 1.
+To jest ta sama otwarta sprawa, którą zapisałem przy skali tierów, tyle że ma
+teraz liczbę.
+
+**Elity nie są wyłącznie rzeczą rdzenia** (8% szansy na obrzeżu, nie zero).
+Pilot, który spotyka pierwszą elitę w połowie drogi, nie ma jej do czego
+przyrównać. I odwrotnie: rdzeń nie ma ich wszędzie, bo wtedy finał byłby
+formalnością, zanim się do niego dotrze.
+
+Major jest **agresorem z definicji, nie z rzutu**: elita, która przelatuje obok
+i wraca na patrol, to elita, której gracz nigdy nie spotkał, a jedyny wróg, z
+którego pamięta się system, powinien przylecieć po ciebie. Jest wart 2,5 minora
+swojego tiera — „przyprowadź kogoś albo miej plan", a nie „wróć później" — i
+ma podłogę rzadkości łupu, bo to jest powód, żeby go nie ominąć.
+
+### Reszta, jeszcze nieruszona
+
 - Wrogowie sterowani steering behaviours (seek, pursue, orbit, flee) plus maszyna stanów. Drzewa zachowań (LimboAI) jeśli zajdzie potrzeba.
 - Na planetach: zasoby do zbierania, loot, budynki, lądowiska, spawnery wrogów.
 - Stacje: handel, naprawa, tankowanie, misje.

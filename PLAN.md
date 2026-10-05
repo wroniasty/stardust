@@ -662,20 +662,27 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
 ### 5.1 Wrogowie
 
 - [ ] AI wrogów: steering behaviours, maszyna stanów, kilka archetypów (patrol, agresor, uciekinier).
-- [ ] **Minor i major, i dwie różne zasady powrotu.** Minor respawnuje się
-  **tylko przy ponownym wejściu do systemu**, nigdy w trakcie pobytu: system, w
-  którym wrogowie dosypują się w czasie rzeczywistym, to system, z którego się
-  ucieka, a nie taki, który się czyści. Major (elite) zrzuca dobry loot i
-  **pokonany nie wraca nigdy**; niepokonany wraca od zera, z pełnym zdrowiem —
-  bo inaczej wpadanie i uciekanie jest zawsze tańsze niż walka.
-- [ ] Wrogowie na planetach i w przestrzeni, spawnery czytające tier.
+- [x] **Minor i major, i dwie różne zasady powrotu.** `Garrison` — czysta dana,
+  jak `StarSystem`: roster systemu wyprowadzony z seeda i tiera, zanim cokolwiek
+  powstanie. Pierwsza połowa reguły nie kosztuje nic, bo roster z seeda **jest**
+  regułą „minor wraca, kiedy ty wracasz, nigdy w trakcie pobytu". Druga — major
+  pokonany nie wraca — to jedyna rzecz, której seed nie odtworzy, więc jedyna
+  zapisana. Niepokonany nie zapisuje się wcale i wraca cały. **Model gotowy i
+  przypięty szesnastoma asercjami; spawner i AI to osobne pozycje poniżej.**
+  Zmierzona tabela rozstawienia w IDEAS.md sekcja 12.
+- [ ] Wrogowie na planetach i w przestrzeni, spawnery czytające tier. Roster
+  już mówi **ilu, jacy, jak silni i gdzie** (`Post.SPACE` / `Post.SURFACE`);
+  zostało postawić to w świecie i związać `SURFACE` z konkretną planetą.
 - [ ] Zasady śmierci: co gracz traci, co zostaje. **Pokonany major zostaje
   pokonany** — śmierć tego nie cofa, bo to jedyny nieodwracalny postęp, jaki
   gracz ma poza sprzętem.
-- [ ] Jedno i drugie to stan, którego seed nie odtworzy, więc mieszka w
-  `Galaxy.deltas` — ten magazyn istnieje i ma dokładnie ten opis. Dojdzie mu
-  trzeci rodzaj wpisu, więc potrzebny będzie schemat kluczy, którego dziś nie
-  ma.
+- [x] Jedno i drugie to stan, którego seed nie odtworzy, więc mieszka w
+  `Galaxy.deltas`. **Schemat kluczy jest**: wpis leży pod seedem tej rzeczy,
+  której dotyczy. Trzy rodzaje — ciało niebieskie (`crust`), system (`seen`),
+  członek garnizonu (`beaten`). Seed członka dwustopniowo, przez własny seed
+  garnizonu, żeby nie kolidować z ciałami; kolizja sprawdzana testem na całej
+  galaktyce, bo wspólny klucz znaczyłby, że wykopany krater wskrzesza elitę.
+  Zapis nie potrzebował ani nowego pola, ani podbicia wersji.
 
 ### 5.2 Zasoby: mało rodzajów, dużo decyzji
 
