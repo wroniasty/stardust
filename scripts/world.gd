@@ -260,6 +260,12 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	# somewhere along that streak.
 	ship.reset_physics_interpolation()
 	ship.snap_drawn()
+	# The camera too: it follows with weight, and weight across half a
+	# galaxy is a sweep through every system in between. Invisible under
+	# the transit veil, which is exactly why it would have stayed.
+	var eye: ShipCamera = get_viewport().get_camera_2d() as ShipCamera
+	if eye != null:
+		eye.snap()
 
 	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at)
 	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)

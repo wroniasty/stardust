@@ -203,6 +203,13 @@ var _respawn_radius: float = 0.0
 var _self_hit_hull: float = 1.0
 var _ride_moved: float = 0.0
 var _ride_slip: float = 0.0
+
+## What a parked ship says about its own motion: the speed the rush
+## veil reads, and the descent rate the flight panel prints.
+var _ride_speed: float = -1.0
+var _ride_descent: float = -1.0
+var _ground_airspeed: float = 0.0
+var _ground_descent: float = 0.0
 var _spin_in_air: float = 0.0
 var _spin_in_vacuum: float = 0.0
 var _peak_rebound: float = 0.0
@@ -295,6 +302,19 @@ func _physics_process(delta: float) -> bool:
 			# gets measured is a parked ship rather than one taking off. A
 			# second and a half have gone by, against the 0.6 s a main
 			# drive takes to spool down.
+			# The two numbers the pilot is shown about a ship that is not
+			# moving. Worked out exactly as the two readers work them
+			# out, rather than by asking them, because the fault could
+			# as easily be in what they are given as in what they do
+			# with it.
+			_ride_speed = _ship.airspeed()
+			var up: Vector2 = (
+				_ship.global_position - _planet.global_position
+			).normalized()
+			var relative: Vector2 = _ship.linear_velocity - _planet.surface_velocity_at(
+				_ship.global_position
+			)
+			_ride_descent = -relative.dot(up)
 			_ride_still_lit = 0
 			for engine: EngineInstance in _ship.engines:
 				if engine.exhaust_flow() > 0.01:
@@ -308,6 +328,20 @@ func _physics_process(delta: float) -> bool:
 		if _ticks > GROUND_RIDE_SETTLE:
 			_ground_slip = absf(angle_difference(_polar_angle(), _ground_start_polar))
 			_ground_contacts = maxi(_ground_contacts, _ship.get_terrain_contacts())
+			# The same two readings as the landed ride, taken of the
+			# other way a ship comes to rest: a live body held down by
+			# its own weight rather than a frozen one walked along the
+			# ground. Different mechanism, same question, and a fix that
+			# only covered one of them would be half a fix.
+			_ground_airspeed = maxf(_ground_airspeed, _ship.airspeed())
+			var standing: Vector2 = (
+				_ship.global_position - _planet.global_position
+			).normalized()
+			_ground_descent = maxf(_ground_descent, absf(
+				-(_ship.linear_velocity - _planet.surface_velocity_at(
+					_ship.global_position
+				)).dot(standing)
+			))
 	elif _phase == Phase.DEATH:
 		if _death_reported and _respawn_radius == 0.0:
 			# The world is not in this scene, so the test stands in for it and
@@ -1256,6 +1290,26 @@ func _evaluate_phase() -> void:
 				_ride_slip < 0.001,
 				"the ship stays on the same patch of ground (%.5f rad of slip)" % _ride_slip,
 			)
+			# Reported from the cockpit, and it is one fault with two
+			# faces. A parked ship was telling the flight panel it was
+			# falling at five hundred pixels a second and telling the
+			# rush veil it was doing five hundred through the air, so
+			# the panel printed a dive and the screen streaked while the
+			# legs were on the ground. Both read `linear_velocity`;
+			# neither is wrong about what it does with it.
+			#
+			# The surface velocity is subtracted here because the ground
+			# moves: a ship riding a spinning planet is **stationary**
+			# in the only frame that matters, which is the one the
+			# landing check already uses.
+			_expect(
+				absf(_ride_descent) < 1.0,
+				"a parked ship is not falling (V/S reads %.1f px/s)" % _ride_descent,
+			)
+			_expect(
+				_ride_speed < 1.0,
+				"and is not rushing through the air (airspeed reads %.1f px/s)" % _ride_speed,
+			)
 			_expect(
 				_ride_lit > 0 and _ride_still_lit == 0,
 				"a ship that lands mid-burn winds its engines down (%d of %d still lit)" % [
@@ -1276,6 +1330,32 @@ func _evaluate_phase() -> void:
 			)
 		Phase.GROUND_RIDE:
 			_expect(_ground_contacts > 0, "the hull really is resting on the rock")
+			# Loose against the landed ride's figure, because this one is
+			# a live body in contact: the solver lets it breathe a pixel
+			# or two a second against the rock. What is being ruled out
+			# is the tens of pixels a second the turning ground was
+			# putting into the readings.
+			# Against the veil's own threshold rather than against a
+			# number chosen here. A live body in contact breathes a few
+			# pixels a second against the rock and always will; what
+			# must be true is that nothing downstream reads it as
+			# motion, and the strictest reader is the rush veil, which
+			# draws nothing below `FAINTEST` of `STRONGEST`.
+			var quiet: float = (
+				SpeedVeil.REFERENCE_FLOW * SpeedVeil.FAINTEST / SpeedVeil.STRONGEST
+			)
+			_expect(
+				_ground_airspeed < quiet,
+				"a hull resting on rock never lights the streaks (%.1f px/s of %.1f)" % [
+					_ground_airspeed, quiet,
+				],
+			)
+			_expect(
+				_ground_descent < quiet,
+				"nor reads as falling while it rests (%.1f px/s of %.1f)" % [
+					_ground_descent, quiet,
+				],
+			)
 			# What the ground did underneath it while it was watched. Sliding
 			# instead of being carried shows up as the hull keeping its world
 			# position while this angle runs away.
@@ -2245,6 +2325,102 @@ func _check_pause_gate() -> void:
 	configurator.queue_free()
 
 
+## Kamera nie ma zostawać w tyle za statkiem.
+##
+## Reported from the cockpit: accelerating in space slid the ship off
+## the middle of the frame towards where it was going, it never came
+## back, and at the closest framing it left the screen altogether.
+##
+## That is the standing error of a first-order follower, not a tuning
+## mistake: a camera that closes a tenth of the remaining distance each
+## tick, chasing a ship at a constant speed, settles a fixed distance
+## behind it -- speed divided by the rate. It is invisible at the speeds
+## a ship reaches near a planet and it is half a screen out in open
+## space, which is exactly where it was reported from.
+##
+## Driven by hand rather than by physics ticks, which is the only way
+## this can be a test at all: the engine's own camera smoothing happens
+## at draw time and a headless run draws nothing. That is the second
+## reason the follow moved into `ShipCamera.follow()`.
+func _check_camera_keeps_up(camera: ShipCamera, ship: Ship) -> void:
+	var step: float = 1.0 / 60.0
+	var middle: float = minf(
+		ShipCamera.design_frame().x, ShipCamera.design_frame().y
+	) * 0.5
+
+	# Four seconds at a speed a ship only reaches well away from
+	# anything. The old camera sat two hundred pixels behind this.
+	for framing: int in [0, ShipCamera.DEFAULT_LEVEL, ShipCamera.ZOOM_LEVELS.size() - 1]:
+		camera.set_zoom_level(framing)
+		ship.freeze = true
+		ship.global_position = Vector2.ZERO
+		ship.linear_velocity = Vector2(2000.0, -600.0)
+		camera.snap()
+		var worst: float = 0.0
+		for tick: int in range(240):
+			ship.global_position += ship.linear_velocity * step
+			camera.follow(step)
+			worst = maxf(
+				worst,
+				camera.global_position.distance_to(ship.global_position) * camera.zoom.x,
+			)
+		var behind: float = camera.global_position.distance_to(ship.global_position)
+		_expect(
+			behind < 1.0,
+			"at framing %d a ship at a constant 2090 px/s sits in the middle of the frame (%.1f px out)" % [
+				framing, behind,
+			],
+		)
+		_expect(
+			worst < middle,
+			"and was never off it on the way there (%.0f px of %.0f)" % [worst, middle],
+		)
+
+	# The hard stop, which is what the closest framing needed. A shove no
+	# follower could absorb, and the ship still has to be on the screen
+	# the next tick.
+	camera.set_zoom_level(0)
+	ship.global_position = Vector2.ZERO
+	ship.linear_velocity = Vector2.ZERO
+	camera.snap()
+	ship.global_position = Vector2(400000.0, 0.0)
+	camera.follow(step)
+	var slack: float = camera.global_position.distance_to(ship.global_position)
+	_expect(
+		slack <= camera.allowance() + 0.001 and slack * camera.zoom.x < middle,
+		"a jump across the galaxy leaves the ship on the frame, not somewhere behind it (%.0f px of %.0f)" % [
+			slack * camera.zoom.x, middle,
+		],
+	)
+	camera.snap()
+	_expect(
+		camera.global_position.is_equal_approx(ship.global_position),
+		"and a crossing puts the camera on the ship with no easing at all",
+	)
+
+	# The allowance is in screen pixels, which is the half of this that
+	# the old code could not say: the same world distance is a different
+	# fraction of the frame at every framing, and that is how the ship
+	# left the screen at the closest one while looking fine at the widest.
+	camera.set_zoom_level(0)
+	camera.follow(step)
+	var close: float = camera.allowance() * camera.zoom.x
+	camera.set_zoom_level(ShipCamera.ZOOM_LEVELS.size() - 1)
+	camera.follow(step)
+	var wide: float = camera.allowance() * camera.zoom.x
+	_expect(
+		absf(close - wide) < 0.001,
+		"the stop is the same fraction of the frame at every framing (%.1f px against %.1f)" % [
+			close, wide,
+		],
+	)
+	ship.freeze = false
+	camera.set_zoom_level(ShipCamera.DEFAULT_LEVEL)
+	ship.global_position = Vector2.ZERO
+	ship.linear_velocity = Vector2.ZERO
+	camera.snap()
+
+
 ## The pilot's own framing: three zoom levels and a view they can turn.
 ##
 ## The one that needs checking is levelling, because "put the planet at the
@@ -2261,6 +2437,8 @@ func _check_camera(planet: Planet) -> void:
 		not camera.ignore_rotation,
 		"the camera honours its own rotation, or none of this shows at all",
 	)
+
+	_check_camera_keeps_up(camera, ship)
 	_expect(
 		camera.zoom_level() == ShipCamera.DEFAULT_LEVEL
 		and is_equal_approx(ShipCamera.ZOOM_LEVELS[ShipCamera.DEFAULT_LEVEL], 1.0),

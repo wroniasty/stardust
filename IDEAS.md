@@ -757,6 +757,56 @@ trafia tam, gdzie przewiduje obrót, wobec 3 i 1 dla alternatyw — a 123/239 to
 dokładnie ten ułamek, który może zostać w kadrze, gdy obraca się ramkę 16:9
 (przeżywają tylko gwiazdy w okręgu wpisanym).
 
+### Kamera nie ma zostawać w tyle
+
+Zgłoszone z kokpitu: przyspieszanie w przestrzeni zsuwało statek ze środka
+kadru w stronę lotu, nie wracał on na środek, a przy najbliższym kadrowaniu
+wychodził poza ekran.
+
+To nie jest kwestia strojenia, tylko to, co filtr pierwszego rzędu **robi**.
+Kamera doganiająca cel ułamkiem pozostałej odległości na tik, puszczona za
+celem o stałej prędkości, ustala się w **stałej** odległości za nim: prędkość
+przez współczynnik. Przy 10 na sekundę to jedna dziesiąta sekundy lotu — 40 px
+świata przy 400 px/s, 200 px przy 2000 px/s. I to jest odległość **w świecie**,
+więc na ekranie mnoży się przez przybliżenie: przy najbliższym kadrowaniu
+więcej niż pół wysokości ramki 640x360. Dokładnie to, co zgłoszono.
+
+Opóźnienie jest więc **kasowane, nie zmniejszane**. Celowanie w miejsce, gdzie
+statek będzie za jedną dziesiątą sekundy, stawia stan ustalony dokładnie na
+statku: przy stałej prędkości, jakakolwiek by nie była, statek siedzi na
+środku. Wygładzanie zostaje dla tego, do czego było — szarpnięcia zderzenia,
+odbicia przy lądowaniu, kopnięcia zapalonego silnika — bo to są zmiany
+prędkości, a tych kompensacja nie kasuje.
+
+Wzór jest **dyskretnym bliźniakiem** wersji ciągłej (`v * dt * (1-c)/c` zamiast
+`v / rate`), bo tylko wówczas stan ustalony leży na statku co do piksela — a
+test, który może żądać środka kadru, jest wart więcej niż taki, który godzi
+się na „blisko środka". Zmierzone: 0,0 px odchyłki po czterech sekundach przy
+2090 px/s, na każdym z trzech kadrowań.
+
+**Twardy zderzak**, bo skasowany stan ustalony nie jest obietnicą o stanach
+przejściowych: statek nigdy nie stoi dalej niż 22% krótszej półosi od środka.
+Liczony **w pikselach ekranu**, co jest całym sensem tej liczby — ta sama
+odległość w świecie to inny ułamek kadru przy każdym kadrowaniu, i właśnie tak
+statek wyszedł poza ekran przy najbliższym, wyglądając poprawnie przy
+najszerszym. Zderzak przy okazji robi za skok po przeskoku między systemami:
+luz jest wtedy ogromny przez jeden tik i przycina się natychmiast, zamiast
+przeciągać kamerę przez pół galaktyki (niewidoczne pod zasłoną tranzytu —
+dlatego by tam zostało).
+
+Wygładzanie przeniosło się z silnika do `ShipCamera.follow()` i to jest drugi
+powód, ważniejszy od pierwszego: wbudowane dzieje się **przy rysowaniu**, a
+bieg bez okna nic nie rysuje — więc nie dawało się przetestować. Test własnej
+wersji przewija cztery sekundy lotu bez jednej klatki.
+
+**Zerowy kadr kasowałby zderzak po cichu.** Pierwsza wersja czytała
+`get_viewport_rect()`, które poza drzewem jest błędem i zwraca zero — a zerowy
+zderzak nie poluzowuje kamery, tylko przyspawa ją do kadłuba i odbiera jej
+cały ciężar, który ta klasa ma dawać. Stołem odniesienia jest teraz
+rozdzielczość projektowa z `ProjectSettings`: gra rysuje się w jednym rozmiarze
+i powiększa całkowicie, więc krótsza oś projektu to uczciwa półramka przy
+każdym oknie, a szersze okno pokazuje więcej świata, co może tylko pomóc.
+
 ### Akordy zamiast kolejnych klawiszy
 
 Klawiatura jest prawie pełna, a komputer lotu ma jeszcze długą listę rzeczy,
@@ -2542,6 +2592,41 @@ Zmierzone po zmianie (ten sam seed, ta sama planeta):
 Ślizg po skale nalicza się co tick kontaktu, więc długie tarcie o zbocze boli
 bardziej niż jedno uderzenie — i tak ma być: każde odbicie to osobne
 uderzenie, a statek koziołkujący po górze powinien się rozpadać.
+
+### Prędkość względem powietrza to nie prędkość
+
+Zgłoszone z kokpitu: smugi pędu leżały na ekranie, kiedy statek stał na
+nogach. Zmierzone: **zaparkowany statek melduje 21 px/s** na planecie testowej.
+
+Nie kłamie. On naprawdę się porusza — `_hold_landed_pose()` przestawia go co tik
+wzdłuż obracającego się gruntu, a bryła zamrożona jako `FREEZE_MODE_KINEMATIC`
+melduje to przestawianie jako prędkość. Błąd był gdzie indziej: **czterech
+czytelników pytało „jak szybko", a każdy z nich miał na myśli „jak szybko
+względem powietrza"** — a powietrze kręci się razem z planetą.
+
+Czytelnicy: zasłona pędu, smugi kondensacyjne, nagrzewanie kadłuba i kierunek
+rozmycia. Stąd `Ship.air_velocity()` / `airspeed()` jako jedna funkcja zamiast
+tego samego odejmowania wpisanego w cztery miejsca — względem
+`nearest_planet()`, czyli dokładnie tego ciała, z którego bierze się
+`air_density`: prędkość mierzona względem jednej planety i gęstość wzięta z
+drugiej to liczba o niczym.
+
+Przyrząd V/S robił to poprawnie od początku — odejmuje `surface_velocity_at()` i
+ma na to komentarz „to ta sama wielkość, której używa sprawdzenie lądowania,
+więc nie mogą się nie zgadzać". Trzeba było rozciągnąć tę regułę na resztę,
+a nie wymyślać nową.
+
+Przy okazji wyszła rzecz, która jest fizyką, nie usterką: lot zgodnie z
+obrotem planety grzeje mniej niż lot pod prąd. Za darmo, bo to ta sama
+odjęta wielkość.
+
+**Dwa stany spoczynku, nie jeden**, i to jest ta połowa, którą łatwo przegapić.
+Statek wylądowany (zamrożony, przestawiany) czyta teraz 0,0 px/s. Kadłub
+leżący na skale bez lądowania (żywa bryła trzymana przez solver kontaktów)
+czyta **4,3 px/s** i zawsze będzie coś czytał — solver oddycha. Test nie
+wymaga od niego zera, tylko tego, żeby żaden czytelnik nie wziął tego za ruch:
+próg to własna stała zasłony (`REFERENCE_FLOW * FAINTEST / STRONGEST` = 4,7
+px/s). Margines jest cienki i jest zapisany tutaj właśnie dlatego.
 
 ### Stan "wylądowany"
 

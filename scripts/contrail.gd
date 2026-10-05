@@ -47,7 +47,7 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	var flow: float = clampf(
-		_ship.air_density * _ship.linear_velocity.length() / reference_flow, 0.0, 1.0
+		_ship.air_density * _ship.airspeed() / reference_flow, 0.0, 1.0
 	)
 
 	if flow > MIN_FLOW:

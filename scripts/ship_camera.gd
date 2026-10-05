@@ -49,6 +49,32 @@ const LOCK_RATE: float = 2.5
 ## How fast the zoom follows the speed, per second.
 @export var zoom_response: float = 2.5
 
+## How fast the camera closes on the ship, per second.
+##
+## The same figure Godot's own `position_smoothing_speed` was set to,
+## and the smoothing is now done here instead. Two reasons, and the
+## second is the one that matters: the engine's version cannot be
+## stepped by a headless test -- it happens at draw time, and this
+## project's rule is that an instrument with no test is an instrument
+## nobody can defend -- and it has no way to express the two corrections
+## below.
+const FOLLOW_RATE: float = 10.0
+
+## The furthest the ship may sit from the middle of the frame, as a
+## fraction of the shorter half-axis.
+##
+## **In screen pixels**, which is the whole point of it. The lag is a
+## distance in the world, and the same forty pixels of world is forty
+## pixels of screen pulled back and seventy magnified -- so a cap
+## written in world units is a different cap at every framing, which is
+## exactly how the ship left the screen at the closest one.
+##
+## It doubles as the snap after a jump: a crossing moves the ship half a
+## galaxy, the slack is enormous for one tick, and clamping it puts the
+## camera back on the ship immediately instead of sweeping it across the
+## system.
+const MOST_OFF_CENTRE: float = 0.22
+
 var _target: Node2D = null
 
 ## Index into ZOOM_LEVELS.
@@ -58,8 +84,8 @@ var _level: int = DEFAULT_LEVEL
 func _ready() -> void:
 	if not target_path.is_empty():
 		_target = get_node_or_null(target_path) as Node2D
-	position_smoothing_enabled = true
-	position_smoothing_speed = 10.0
+	# Off, because the follow is done here. See `FOLLOW_RATE`.
+	position_smoothing_enabled = false
 	# Rotation has to be honoured for any of this to show: with
 	# ignore_rotation true -- the default -- the node's rotation is simply not
 	# applied to the view, and rotation smoothing is ignored with it. Starting
@@ -79,7 +105,7 @@ func _physics_process(delta: float) -> void:
 	if _target == null:
 		return
 
-	global_position = _target.global_position
+	follow(delta)
 
 	var speed: float = 0.0
 	var body: RigidBody2D = _target as RigidBody2D
@@ -103,6 +129,84 @@ func _physics_process(delta: float) -> void:
 		# re-enter, just a frame the lock sits out: let go of the arrow and
 		# it goes back to pulling.
 		hold_planet_down(delta)
+
+
+## Closes on the ship, with the weight a camera should have and without
+## the lag a first-order filter gives it for free.
+##
+## Reported from the cockpit: accelerating in space slid the ship off
+## the middle of the frame towards where it was going, it never came
+## back, and at the closest framing it left the screen. That is not a
+## tuning problem, it is what the filter does. A follower that moves a
+## fraction of the remaining distance each tick, run against a target
+## going at a constant speed, settles at a **fixed** distance behind it:
+## speed over rate. At 10 per second that is a tenth of a second of
+## travel, so 200 px of world at 2000 px/s -- and magnified by the
+## closest framing, more than half the height of a 640x360 frame.
+##
+## So the lag is cancelled rather than tuned down. Aiming at where the
+## ship will be a tenth of a second from now puts the steady state
+## exactly on the ship: at a constant speed, however fast, the ship sits
+## in the middle. What is left to smooth is what the smoothing was for
+## in the first place -- the shove of a collision, a bounce on landing,
+## the kick of a drive lighting -- because those are changes in velocity
+## and the feed-forward does not cancel those.
+##
+## Public so a test can step it without a rendered frame, which the
+## engine's own smoothing never allowed.
+func follow(delta: float) -> void:
+	if _target == null:
+		return
+	var ship: Vector2 = _target.global_position
+	var body: RigidBody2D = _target as RigidBody2D
+	var travel: Vector2 = Vector2.ZERO if body == null else body.linear_velocity
+	# The continuous answer is "a tenth of a second of travel", and this
+	# is its exact discrete twin: with it the steady state is the ship
+	# itself rather than a few pixels short of it, which is the
+	# difference between a test that can demand the middle of the frame
+	# and one that has to settle for near it.
+	var close: float = clampf(1.0 - exp(-FOLLOW_RATE * delta), 0.0001, 1.0)
+	var aim: Vector2 = ship + travel * delta * (1.0 - close) / close
+	global_position = global_position.lerp(aim, close)
+	# And a hard stop, because a cancelled steady state is not a promise
+	# about the transients: a hard enough shove, or a crossing, can still
+	# put the ship where the pilot cannot see it.
+	global_position = ship + (global_position - ship).limit_length(allowance())
+
+
+## How far the camera may stand from the ship, in world units at the
+## framing currently showing.
+##
+## Measured against the **design** frame rather than the live viewport,
+## for two reasons that both turned up the first time this was run.
+## `get_viewport_rect()` is an error and a zero rectangle outside the
+## tree, and a zero frame makes the stop zero -- which does not loosen
+## the camera, it welds it to the hull and takes away every bit of the
+## weight this class exists to give it. And the game is drawn at one
+## size and magnified by whole numbers, so the shorter design axis is
+## the honest half-frame at every window size there is; a wider window
+## shows more world, which can only help.
+func allowance() -> float:
+	var frame: Vector2 = design_frame()
+	return MOST_OFF_CENTRE * minf(frame.x, frame.y) * 0.5 / maxf(zoom.x, 0.0001)
+
+
+## The resolution the game is laid out at, from the project rather than
+## from a fourth copy of 640x360 written down in a script.
+static func design_frame() -> Vector2:
+	return Vector2(
+		float(ProjectSettings.get_setting("display/window/size/viewport_width", 640)),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height", 360)),
+	)
+
+
+## Puts the camera on the ship with no easing at all. For a crossing,
+## where the smoothing has nothing to say about a ship that is now in
+## another system.
+func snap() -> void:
+	if _target != null:
+		global_position = _target.global_position
+		reset_physics_interpolation()
 
 
 func _unhandled_input(event: InputEvent) -> void:

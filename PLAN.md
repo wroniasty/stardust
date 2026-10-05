@@ -346,6 +346,26 @@ Poza kolejnością milestone'ów, wszystko zgłoszone z lotu.
   sekundy, a przewaga ciągu to iloraz. Bramka zgodności 0,98, dryf poniżej
   8 px/s idzie starym hamulcem. Szczegóły i dwa przypadki brzegowe w IDEAS.md,
   „Hamowanie poza grawitacją planety".
+- [x] **Prędkość względem powietrza, nie względem układu.** Zgłoszone z
+  kokpitu: smugi pędu na ekranie przy statku stojącym na nogach. Zaparkowany
+  statek melduje 21 px/s, bo `_hold_landed_pose()` przestawia go co tik wzdłuż
+  obracającego się gruntu, a zamrożona bryła kinematyczna melduje to jako
+  prędkość. Nie kłamie — błąd polegał na tym, że czterech czytelników
+  (zasłona pędu, smugi, nagrzewanie, kierunek rozmycia) pytało „jak szybko",
+  a każdy miał na myśli „jak szybko względem powietrza". `Ship.airspeed()`
+  rozciąga na nich regułę, którą V/S miał od początku. Oba stany spoczynku
+  zmierzone i przypięte testem. Szczegóły w IDEAS.md, „Prędkość względem
+  powietrza to nie prędkość".
+- [x] **Kamera nie zostaje w tyle.** Zgłoszone z kokpitu: przy przyspieszaniu w
+  przestrzeni statek zsuwał się ze środka kadru i nie wracał, a przy
+  najbliższym kadrowaniu wychodził poza ekran. To stały błąd filtru pierwszego
+  rzędu (prędkość przez współczynnik — 200 px świata przy 2000 px/s, a na
+  ekranie razy przybliżenie), więc jest **kasowany**, nie strojony: 0,0 px
+  odchyłki przy 2090 px/s na każdym kadrowaniu. Plus twardy zderzak liczony w
+  pikselach ekranu, który przy okazji robi za skok po przeskoku. Wygładzanie
+  przeniosło się z silnika do `ShipCamera.follow()`, bo wbudowane dzieje się
+  przy rysowaniu i nie dało się go przetestować. Szczegóły w IDEAS.md,
+  „Kamera nie ma zostawać w tyle".
 - [x] **Marker nawigacyjny.** Prawy klik na mapie układu wbija szpilkę, prawy
   klik na szpilce ją wyjmuje, prawy klik gdzie indziej ją przenosi — jeden
   przycisk, bo to jeden gest. Skaner trzyma ją zawsze: na pierścieniu z

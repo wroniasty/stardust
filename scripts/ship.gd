@@ -1510,6 +1510,37 @@ func fully_serviced() -> bool:
 	return true
 
 
+## How fast the hull is going **through the air**, which is not how fast
+## it is going.
+##
+## The air turns with the planet, so a ship parked on the equator of a
+## world that spins is doing a few tens of pixels a second through the
+## system and nothing at all through the air around it. Reported from
+## the cockpit as rush streaks on a ship standing on its legs, and the
+## reason is worth keeping: `_hold_landed_pose` walks a landed ship
+## along the turning ground every tick, the body is frozen kinematic, and
+## a frozen kinematic body reports the walk as a velocity. Measured at
+## 21 px/s on the test planet -- enough to light the streaks, warm the
+## hull and stream condensation trails off a ship that is parked.
+##
+## `linear_velocity` was never wrong. Four readers asked "how fast" when
+## every one of them meant this, which is why this exists as one function
+## rather than as a subtraction written out four times.
+##
+## Relative to `nearest_planet()`, deliberately the same body
+## `air_density` is taken from: a speed measured against one planet and a
+## density taken from another is a number about nowhere.
+func air_velocity() -> Vector2:
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return linear_velocity
+	return linear_velocity - planet.surface_velocity_at(global_position)
+
+
+func airspeed() -> float:
+	return air_velocity().length()
+
+
 ## Hull heating, from braking against the air and from standing too close
 ## to the star, and the damage a hull that stays hot takes.
 func _update_heat(step: float) -> void:
@@ -1517,7 +1548,7 @@ func _update_heat(step: float) -> void:
 	air_density = planet.air_density_at(global_position) if planet != null else 0.0
 
 	if air_density > 0.0:
-		var speed_ratio: float = linear_velocity.length() / HEAT_REFERENCE_SPEED
+		var speed_ratio: float = airspeed() / HEAT_REFERENCE_SPEED
 		hull_heat += air_density * speed_ratio * speed_ratio * HEAT_RATE * step
 	# One bar, two sources. The air heats what it brakes; the star heats
 	# whatever is in front of it, moving or not, which is what makes

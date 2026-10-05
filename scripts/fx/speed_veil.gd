@@ -69,7 +69,10 @@ func _ready() -> void:
 func wanted() -> float:
 	if _ship == null or not is_instance_valid(_ship):
 		return 0.0
-	var flow: float = _ship.air_density * _ship.linear_velocity.length()
+	# Through the air, not through the system. A ship parked on a turning
+	# planet is carried along with the air it is sitting in, and a screen
+	# that streaked while the legs were down was reading the carriage.
+	var flow: float = _ship.air_density * _ship.airspeed()
 	return clampf(flow / REFERENCE_FLOW, 0.0, 1.0) * STRONGEST
 
 
@@ -88,7 +91,7 @@ func strength() -> float:
 func drift(to_screen: Transform2D) -> Vector2:
 	if _ship == null or not is_instance_valid(_ship):
 		return Vector2.UP
-	var going: Vector2 = to_screen.basis_xform(_ship.linear_velocity)
+	var going: Vector2 = to_screen.basis_xform(_ship.air_velocity())
 	if going.length_squared() < 0.0001:
 		return Vector2.UP
 	# Screen space has y downwards and the shader works in UV, which
