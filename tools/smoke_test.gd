@@ -2124,6 +2124,8 @@ func _check_editor() -> void:
 		"a mount the module does not fit is still clickable, and says so",
 	)
 
+	_check_refused_fit(ship, editor)
+
 	# Last, because it wrecks every mount on the ship.
 	#
 	# A refit frees them all and builds new ones, and this screen was
@@ -8149,12 +8151,12 @@ func _check_stat_cards() -> void:
 	better.spread_degrees = gun.spread_degrees * 0.5
 	var compared: String = "
 ".join(editor._card(better, gun))
-	_expect(compared.contains("lepiej"), "a straight upgrade reads as better")
+	_expect(compared.contains("better"), "a straight upgrade reads as better")
 	var worse: WeaponData = gun.duplicate() as WeaponData
 	worse.spread_degrees = gun.spread_degrees * 2.0
 	_expect(
 		"
-".join(editor._card(worse, gun)).contains("gorzej"),
+".join(editor._card(worse, gun)).contains("worse"),
 		"and more spread reads as worse, though the number went up",
 	)
 	_expect(
@@ -8177,7 +8179,7 @@ func _check_stat_cards() -> void:
 			"the quick swap lists %s, like the editor does" % row["label"],
 		)
 	_expect(
-		shown.contains("lepiej") or shown.contains("gorzej") or shown.contains("="),
+		shown.contains("better") or shown.contains("worse") or shown.contains("="),
 		"and carries the comparison, which is the part worth reading in flight",
 	)
 	quick.queue_free()
@@ -8719,6 +8721,78 @@ func _check_ui_frame() -> void:
 		and UiFrame.corner(UiFrame.Slot.INSTRUMENTS) == UiDraw.Corner.BOTTOM_RIGHT,
 		"a panel brackets the corner it is anchored to",
 	)
+
+
+## Odmowa montażu musi być odmową, a nie cichą przeprowadzką.
+##
+## Reported from the cockpit: an epic retro thruster that would not go
+## into the reverse mount. It would not, and that part was right -- the
+## `oversized` affix multiplies bulk by 1.20 at the very least, a retro
+## thruster is 2.2 of it, and the stock hull's reverse socket is 2.5, so
+## **every** oversized retro in the game is too big for the socket it is
+## named after.
+##
+## The fault was what happened next. `Ship.fit_engine` says "I will not
+## take this" by handing the item straight back, which puts the refusal
+## in the same return slot as "here is what came out". The editor, which
+## cannot tell those apart, filed the item in cargo and printed "fitted
+## in NoseReverseThruster". The pilot was told it worked, the item moved
+## out of the hold on its own, and nothing had happened.
+func _check_refused_fit(ship: Ship, editor: ShipEditor) -> void:
+	var mount: EngineMount = ship.get_node("NoseReverseThruster") as EngineMount
+	_expect(mount != null, "the stock hull has a reverse mount to refuse with")
+	if mount == null:
+		return
+
+	# Exactly the item from the report: a retro thruster one `oversized`
+	# roll over the socket. Built rather than rolled, so the test says
+	# what it means instead of hoping for a seed.
+	var fat: EngineData = (
+		load("res://resources/engines/retro_thruster.tres") as EngineData
+	).duplicate() as EngineData
+	fat.bulk = mount.size + 0.36
+	fat.display_name = "tuned oversized retro"
+
+	ship.release()
+	ship.cargo.clear()
+	_expect(ship.take(fat, 3), "the oversized thruster is in the hold")
+
+	var was: EngineData = mount.installed
+	editor._pick = 0
+
+	# Clicked the way a pilot clicks it, because the fault lived in the
+	# click rather than in the fitting. A socket that will not have the
+	# item is **not** among `_targets()`, so it can never be aimed at --
+	# and the branch that handled that cleared the notice and left the
+	# aim wherever it already was.
+	var place: Callable = editor._plan_placement(editor._panels()["plan"])
+	_expect(
+		editor.click_at(place.call((mount as Node2D).position)),
+		"and the reverse mount answers a click",
+	)
+	# The number matters more than the word: "no" does not tell a pilot
+	# whether another socket would do, and the two figures do.
+	_expect(
+		editor._notice.contains("bulky") and editor._notice.contains("%.2f" % fat.bulk),
+		"which says which rule said no, with the figures (%s)" % editor._notice,
+	)
+	_expect(
+		mount.installed == was and ship.carried == fat,
+		"and nothing has moved on the strength of a refusal",
+	)
+
+	# And the guard behind it: even reached some other way, fitting an
+	# item a slot will not take must leave the item alone. `fit_engine`
+	# refuses by handing the item straight back, which arrives in the
+	# same return slot as "here is what came out" -- so the editor used
+	# to file it in cargo and report a successful fit.
+	_expect(
+		not editor._refusal(mount, fat).is_empty(),
+		"the fitting itself refuses the same way the click does",
+	)
+
+	ship.release()
+	ship.cargo.clear()
 
 
 ## Plateaus have to be real ground a stock ship can stand on, not just a number

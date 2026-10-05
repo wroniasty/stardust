@@ -211,7 +211,7 @@ func _stat_line(row: Dictionary, was: Dictionary) -> String:
 	# less spread and less bulk are both wins with a minus in front.
 	var good: bool = change * float(row["better"]) > 0.0
 	return "%s  %s%.*f %s" % [
-		text, "+" if change > 0.0 else "", digits, change, "lepiej" if good else "gorzej",
+		text, "+" if change > 0.0 else "", digits, change, "better" if good else "worse",
 	]
 
 

@@ -669,6 +669,18 @@ robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zab
   układ z samą „gwiazdą śmierci", pilot mówi „This is no moon...", startują dwa
   myśliwce. To nie łamie reguły seeda — powód w punkcie 5 analizy.
 - [ ] Eventy w deep space: wraki, zasadzki, anomalie. Ta sama maszyneria, mniejszy kaliber.
+- [ ] **Otwarte: czy `oversized` ma w ogóle wypadać na retro i na duże napędy.**
+  Zgłoszone z kokpitu i zmierzone: afiks mnoży gabaryt przez co najmniej 1,20,
+  retro thruster ma 2,2, a gniazdo wsteczne seryjnego kadłuba 2,5 — więc
+  **każdy** oversized retro jest za duży na gniazdo, od którego się nazywa. To
+  samo dotyczy głównego napędu (3,0 razy 1,20 to 3,6 przy gnieździe 3,5).
+  Dziś taki przedmiot staje się de facto silnikiem głównym, co jest zgodne z
+  „typy zostają otwarte, ceną za dziwne dopasowanie jest fizyka, nie tabelka".
+  Alternatywa: wykluczyć tę parę w generatorze, który już umie wykluczać pary
+  baza-afiks (dziś po tym, że afiks nic nie zmienia; to byłby drugi powód — że
+  koszt wyrzuca przedmiot ze wszystkich gniazd, do których był robiony). Sam
+  montaż już odmawia z podaniem liczb, więc to jest decyzja o tym, co ma
+  wypadać, a nie o tym, co ma działać.
 - [ ] **Główne wyzwanie w środku galaktyki** — co to jest, jest otwarte. Wiadomo
   tylko, że stoi na końcu drogi, którą reszta tego milestone'u buduje.
 

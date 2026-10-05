@@ -317,6 +317,46 @@ func _all_mounts() -> Array[Node]:
 	return out
 
 
+## Why this slot will not take this item, or an empty string when it
+## will.
+##
+## Named rather than counted: "no" is not an answer anybody can fly on,
+## and the two reasons a socket refuses an engine are not close
+## together. The wrong kind is a mistake; too bulky is a decision about
+## the hull, and the number is what tells the pilot whether a different
+## socket would do.
+## Whatever the pilot is holding or has picked out of cargo, or null.
+func _held_item() -> Resource:
+	var picked: Dictionary = _selected()
+	return null if picked.is_empty() else picked["item"] as Resource
+
+
+func _refusal(slot: Node, item: Resource) -> String:
+	if item == null:
+		return ""
+	if slot is EngineMount and item is EngineData:
+		var mount: EngineMount = slot as EngineMount
+		var engine: EngineData = item as EngineData
+		if mount.fits(engine):
+			return ""
+		if not mount.accepts(engine.type):
+			return "%s does not take that kind" % mount.name
+		return "too bulky for %s: %.2f against %.2f" % [
+			mount.name, engine.bulk, mount.size
+		]
+	if slot is ModuleBay and item is ModuleData:
+		var bay: ModuleBay = slot as ModuleBay
+		var module: ModuleData = item as ModuleData
+		if bay.fits(module):
+			return ""
+		if not bay.accepts(module):
+			return "%s does not take that kind" % bay.name
+		return "too bulky for %s: %.2f against %.2f" % [
+			bay.name, module.bulk, bay.size
+		]
+	return ""
+
+
 func _fit() -> void:
 	var targets: Array[Node] = _targets()
 	var picked: Dictionary = _selected()
@@ -330,6 +370,18 @@ func _fit() -> void:
 
 	var slot: Node = targets[posmod(_slot, targets.size())]
 	var item: Resource = picked["item"]
+
+	# Asked **before** the item leaves the hold, which is the whole of
+	# this fix. `Ship.fit_engine` says "I will not take this" by handing
+	# the item straight back, so the refusal arrives in the same return
+	# slot as "here is what came out" -- and the code below, which
+	# cannot tell those two apart, filed the item in cargo and reported
+	# a successful fit. The pilot was told it worked.
+	var refusal: String = _refusal(slot, item)
+	if not refusal.is_empty():
+		_notice = refusal
+		return
+
 	var before: ConfigurationReport = _ship.configuration()
 
 	# Out of wherever it was, so the ship is never holding two copies of it.
@@ -522,13 +574,23 @@ func click_at(at: Vector2) -> bool:
 		var index: int = targets.find(mount)
 		if index >= 0:
 			_slot = index
-		elif _fitted_in(mount) != null:
-			# Nothing carried goes here, but there is something in it worth
-			# reading. Clicking a module should show that module.
+			return true
+
+		# Not a target. Clicking a socket is a statement of intent, so a
+		# socket that will not have it has to say so -- this used to
+		# **clear** the notice and leave the aim on whatever was aimed at
+		# before, which is how a pilot clicked the reverse mount, was
+		# told nothing, pressed fit, and put an oversized thruster
+		# through their main drive at a 72% loss of forward authority.
+		var refusal: String = _refusal(mount, _held_item())
+		if _fitted_in(mount) != null:
+			# There is something in it worth reading either way: clicking
+			# a module should show that module.
 			_inspecting = _fitted_in(mount)
-			_notice = ""
-		else:
-			_notice = "%s is empty" % mount.name
+		_notice = (
+			refusal if not refusal.is_empty()
+			else ("" if _fitted_in(mount) != null else "%s is empty" % mount.name)
+		)
 		return true
 	return false
 
