@@ -1190,6 +1190,7 @@ func _evaluate_phase() -> void:
 			_check_jump_sequence()
 			_check_stores()
 			_check_editor_buttons()
+			_check_editor_scrap()
 			_check_scrap_and_mend()
 			_check_charges()
 			_check_transit_veil()
@@ -11384,6 +11385,94 @@ func _fewest_jumps(map: GalaxyMap, from: int, to: int) -> int:
 				queue.append(other)
 	return -1
 
+
+
+## Rozbiórka z poziomu ekranu: dźwignia obok liczby.
+##
+## The figure is the whole of the decision, so the button that acts on
+## it sits beside the figure rather than anywhere else. And it is not
+## gated on standing somewhere: the place is already the price, and a
+## rule that both priced the work and forbade it would charge twice for
+## one decision.
+func _check_editor_scrap() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.cargo.clear()
+	ship.stores.clear()
+	ship.flight_mode = Ship.FlightMode.LANDED
+	var editor: ShipEditor = ShipEditor.new()
+	root.add_child(editor)
+	editor.bind(ship)
+	editor.toggle()
+
+	var junk: EngineData = (
+		load("res://resources/engines/retro_thruster.tres") as EngineData
+	).duplicate() as EngineData
+	junk.rarity = 0
+	_expect(ship.take(junk) and ship.stow(), "there is junk in the bay to break down")
+	editor._pick = 0
+
+	var offered: Dictionary = {}
+	for button: Dictionary in editor.buttons():
+		offered[String(button["id"])] = button
+	_expect(
+		offered.has("scrap") and bool(offered["scrap"]["on"]),
+		"a picked module offers to come apart",
+	)
+	var worth: int = Refinery.parts_from(junk, Refinery.place_of(ship))
+	editor.press("scrap")
+	_expect(
+		ship.cargo.is_empty() and ship.carrying(Stores.Kind.SPARE_PARTS) == worth,
+		"and pressing it leaves parts and no module (%d parts)" % [
+			ship.carrying(Stores.Kind.SPARE_PARTS),
+		],
+	)
+
+	# In flight too. The dark is a worse yard, not a closed one.
+	ship.stores.clear()
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	var second: EngineData = junk.duplicate() as EngineData
+	ship.take(second)
+	ship.stow()
+	editor._pick = 0
+	var adrift: int = Refinery.parts_from(second, Refinery.Place.SPACE)
+	editor.press("scrap")
+	_expect(
+		ship.cargo.is_empty() and ship.carrying(Stores.Kind.SPARE_PARTS) == adrift
+		and adrift < worth and adrift > 0,
+		"breaking one down in flight works and pays less (%d against %d)" % [
+			adrift, worth,
+		],
+	)
+
+	# And the loss nobody would otherwise be told about: the hold is the
+	# bin's capacity too, so parts that will not fit are thrown away.
+	ship.stores.clear()
+	ship.cargo.clear()
+	ship.flight_mode = Ship.FlightMode.DOCKED
+	var prize: EngineData = junk.duplicate() as EngineData
+	prize.rarity = 4
+	ship.take(prize)
+	ship.stow()
+	ship.load_units(
+		Stores.Kind.STARDUST, Stores.fits_in(Stores.Kind.STARDUST, ship.cargo_free())
+	)
+	editor._pick = 0
+	var full: int = Refinery.parts_from(prize, Refinery.Place.DOCKED)
+	editor.press("scrap")
+	_expect(
+		ship.carrying(Stores.Kind.SPARE_PARTS) < full,
+		"a hold with no room loses what will not fit (%d of %d)" % [
+			ship.carrying(Stores.Kind.SPARE_PARTS), full,
+		],
+	)
+	_expect(
+		editor._notice.contains("lost"),
+		"and says so rather than quietly dropping it (%s)" % editor._notice,
+	)
+
+	editor.close()
+	editor.queue_free()
+	ship.queue_free()
 
 
 ## Przyciski edytora: co jest oferowane i co robią.

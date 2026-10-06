@@ -745,10 +745,10 @@ func _panels() -> Dictionary:
 	var left: float = snappedf(view.x * 0.26, 1.0)
 	var strip: float = SLOT + PAD * 2.0
 	var top: float = snappedf(view.y * 0.62, 1.0)
-	# Two rows of readings and a line about what they cost: enough that
-	# the panel says something, little enough that the hold keeps the
-	# column it needs for icons.
-	var stores: float = ROW * 3.0 + PAD * 2.0
+	# Two rows of readings and a button under them: enough that the
+	# panel says something and can be acted on, little enough that the
+	# hold keeps the column it needs for icons.
+	var stores: float = ROW * 2.0 + BUTTON_HEIGHT + PAD * 3.0
 
 	var hold: Rect2 = Rect2(edge, edge, left, top - edge - stores - edge * 0.5)
 	var plan_x: float = hold.end.x + edge
@@ -938,17 +938,26 @@ func _draw_stores(font: Font, rect: Rect2) -> void:
 			_ink.label,
 		)
 		y += ROW
-	# What breaking the selected thing down would give, where the pilot
-	# is looking when they are deciding whether it is worth keeping.
+	# What breaking the picked thing down would give, beside the button
+	# that does it -- the figure and the lever in one place, because the
+	# figure is the whole of the decision. The button itself is drawn
+	# with the others; this is the number it is about.
+	#
+	# The place is shown whether or not anything is picked, because it
+	# is the price: the same module is worth more at a yard than it is
+	# in the dark, and a pilot about to pull the lever should know which
+	# one they are standing in.
 	var picked: Dictionary = _selected()
 	var place: Refinery.Place = Refinery.place_of(_ship)
+	var beside: float = rect.position.x + PAD + scrap_button_width() + BUTTON_GAP
+	var line: float = rect.end.y - PAD - BUTTON_HEIGHT + float(FONT_SIZE) - 1.0
 	if picked.is_empty():
-		_text(font, Vector2(rect.position.x + PAD, y), "%s" % Refinery.place_name(place), _ink.inert)
+		_text(font, Vector2(beside, line), Refinery.place_name(place), _ink.inert)
 		return
 	_text(
 		font,
-		Vector2(rect.position.x + PAD, y),
-		"scrap: %d parts, %s" % [
+		Vector2(beside, line),
+		"%d parts, %s" % [
 			Refinery.parts_from(picked["item"] as Resource, place),
 			Refinery.place_name(place),
 		],
@@ -1087,6 +1096,28 @@ func buttons() -> Array[Dictionary]:
 	var picked: Dictionary = _selected()
 	var slot: Node = _highlighted()
 
+	# Breaking something down is **not** gated on standing somewhere.
+	# The place is already the price -- a module in the dark is worth
+	# a little over half what it is worth at a yard -- and a rule that
+	# both priced it and forbade it would be charging twice for the
+	# same decision.
+	var worth: int = (
+		0 if picked.is_empty()
+		else Refinery.parts_from(picked["item"] as Resource, Refinery.place_of(_ship))
+	)
+	out.append({
+		"id": "scrap",
+		"rect": Rect2(
+			Vector2(
+				(panels["stores"] as Rect2).position.x + PAD,
+				(panels["stores"] as Rect2).end.y - PAD - BUTTON_HEIGHT,
+			),
+			Vector2(scrap_button_width(), BUTTON_HEIGHT),
+		),
+		"label": "scrap",
+		"on": worth > 0,
+	})
+
 	out.append({
 		"id": "swap",
 		"rect": panels["swap"] as Rect2,
@@ -1129,12 +1160,55 @@ func _text_width(text: String) -> float:
 	return _width(ModuleData.card_font(), text)
 
 
+## How wide the scrap button is. Its own function because the figure
+## beside it has to start where the button ends, and two places working
+## that out separately is how a label comes to sit on a button.
+func scrap_button_width() -> float:
+	return _text_width("scrap") + PAD * 2.0
+
+
+## Breaks the picked module down into spare parts.
+##
+## The notice is the only place the pilot learns that parts can be
+## **lost**: the hold is the bin's capacity as well as the module's, so
+## scrapping something when there is no room for what comes out throws
+## the difference away. That is the documented behaviour -- a scrap job
+## that silently half-finished would leave a module in two states at
+## once -- and a cost nobody is told about is a bug however carefully
+## it is written down.
+func _scrap_picked() -> void:
+	var picked: Dictionary = _selected()
+	if picked.is_empty():
+		_notice = "nothing picked to break down"
+		return
+	var item: Resource = picked["item"]
+	var name: String = _label(item)
+	var worth: int = Refinery.parts_from(item, Refinery.place_of(_ship))
+	var kept: int = 0
+	if bool(picked["held"]):
+		kept = _ship.scrap_carried()
+	else:
+		kept = _ship.scrap_cargo(_pick - (1 if _ship.carried != null else 0))
+	# The list just got shorter under the cursor. `_selected()` wraps it,
+	# so this is about where the eye lands rather than about safety:
+	# after taking something out of the middle of a grid, the next thing
+	# along is what the pilot was going to look at.
+	_pick = maxi(_pick - 1, 0)
+	_inspecting = null
+	if kept < worth:
+		_notice = "%s: %d parts, %d lost for want of room" % [name, kept, worth - kept]
+	else:
+		_notice = "%s: %d parts" % [name, kept]
+
+
 ## What a press does. Public so the behaviour can be driven without a
 ## mouse, like every other action on this screen.
 func press(id: String) -> bool:
 	match id:
 		"swap":
 			_fit()
+		"scrap":
+			_scrap_picked()
 		"group0", "group1":
 			_set_trigger(int(id.right(1)))
 		"hold":

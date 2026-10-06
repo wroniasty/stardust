@@ -506,10 +506,21 @@ konfiguracji na `ConfigurationReport.compare()`.
   nieosiągalne dokładnie dla tych gniazd, gdzie to miało znaczenie. Kliknięte
   gniazdo wygrywa teraz z kursorem strzałek, a podgląd montażu celuje w to samo
   gniazdo, co przycisk — inaczej ekran obiecywałby jedno, a robił drugie.
-- [ ] **4.8 Widżety spare parts i stardust** — **po M5.2**.
-- [ ] **4.9 Rozbiórka na spare parts**, uzysk z typu, gabarytu i rzadkości —
-  **po M5.2**, i właściwie *jest* pozycją M5.2.
-- [ ] **4.10 Pasek ładunków hyperdrive** — **po M5.2**.
+- [x] **4.8 Widżety spare parts i stardust.** Dwa odczyty, nie dwa paski:
+  te zasoby nie mają własnej pojemności — ładownia jest ich pojemnością i jest
+  narysowana nad nimi. Pasek bez końca to pasek, który kłamie o tym, gdzie
+  jest koniec.
+- [x] **4.9 Rozbiórka na spare parts.** Dźwignia **obok liczby**, bo liczba
+  jest całą decyzją. Miejsce pokazane zawsze, bo to jest cena. **Nie jest
+  bramkowana staćem na ziemi**, inaczej niż montaż: miejsce już **jest** ceną
+  (w próżni dostaje się niewiele ponad połowę), a reguła, która i wycenia, i
+  zabrania, kazałaby płacić dwa razy za jedną decyzję. Komunikat mówi też o
+  **stracie**: ładownia jest pojemnością również dla części, więc rozbiórka
+  bez miejsca na to, co z niej wyjdzie, wyrzuca różnicę — zmierzone 18 z 28
+  przy pełnej ładowni. Koszt, o którym nikt nie mówi, jest błędem, choćby był
+  najstaranniej zapisany.
+- [x] **4.10 Pasek ładunków hyperdrive** — wszedł z 4.5 jako trzeci pasek w
+  faktach o statku, razem z kadłubem i paliwem.
 
 Gotowe, gdy: refit czyta się kształtem, nie zdaniami, a decyzja „to czy tamto"
 ma obie strony na ekranie naraz.
