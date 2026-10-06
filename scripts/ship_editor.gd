@@ -65,6 +65,20 @@ const GLYPH: float = 3.2
 const ICON: float = 14.0
 const ICON_STEP: float = ICON + 3.0
 
+## A button: how tall one is, and how far apart two sit.
+##
+## Eleven, which is a slot box: everything on this screen that can be
+## pressed is the same size as everything else that can be pressed, so
+## "clickable" is a shape rather than something you find by trying.
+const BUTTON_HEIGHT: float = 11.0
+const BUTTON_GAP: float = 3.0
+
+## The grab box at the end of a hardpoint's rest direction.
+const HANDLE: float = 4.0
+
+## Width of the label column in this panel's bars.
+const LABEL_COLUMN: float = 26.0
+
 ## The shapes this screen draws things as.
 ##
 ## One vocabulary, reached from two directions: a socket asks what kind
@@ -80,6 +94,14 @@ var _canvas: Control = null
 
 ## Index into _items(): the hold first, then the cargo bay.
 var _pick: int = 0
+
+## Whether the pointer is swinging a hardpoint round by its handle.
+##
+## The keys stay -- five degrees a press is a decision and a test can
+## take it -- and this is the other half of the same control. Snapped
+## to the same step while dragging, because a continuous angle off a
+## mouse is a hand tremor written into the ship.
+var _turning: Hardpoint = null
 
 ## Index into _targets(): which of the mounts the selected module fits is
 ## highlighted. Wrapped on every redraw, so a slot disappearing under it
@@ -201,8 +223,10 @@ func _input(event: InputEvent) -> void:
 		_slot = 0
 	elif event.is_action_pressed(&"ui_right"):
 		_slot += 1
+		_named = null
 	elif event.is_action_pressed(&"ui_left"):
 		_slot -= 1
+		_named = null
 	elif event.is_action_pressed(&"loadout_fit"):
 		_fit()
 	elif event.is_action_pressed(&"loadout_drop"):
@@ -414,7 +438,11 @@ func _fit() -> void:
 		_notice = "fitting only on the ground - land, or use Tab in flight"
 		return
 
-	var slot: Node = targets[posmod(_slot, targets.size())]
+	# The slot being looked at, which since every socket became
+	# selectable is not always one the arrows would have landed on. The
+	# refusal below explains the ones that will not take it; silently
+	# fitting somewhere else would be worse than either.
+	var slot: Node = _highlighted()
 	var item: Resource = picked["item"]
 
 	# Asked **before** the item leaves the hold, which is the whole of
@@ -482,7 +510,14 @@ func _fit() -> void:
 func _refresh_preview() -> void:
 	var picked: Dictionary = _selected()
 	var targets: Array[Node] = _targets()
-	var key: String = "%d/%d/%d" % [_pick, _slot, targets.size()]
+	# Keyed on the slot that would actually take it, which since every
+	# socket became selectable is not always the one the arrows are on.
+	# A preview of one slot beside a button that fits into another is
+	# two instruments disagreeing about the same press.
+	var aimed: Node = _highlighted()
+	var key: String = "%d/%d/%d/%s" % [
+		_pick, _slot, targets.size(), "" if aimed == null else aimed.name
+	]
 	if key == _preview_key:
 		return
 	_preview_key = key
@@ -490,7 +525,7 @@ func _refresh_preview() -> void:
 	if picked.is_empty() or targets.is_empty():
 		return
 
-	var mount: EngineMount = targets[posmod(_slot, targets.size())] as EngineMount
+	var mount: EngineMount = aimed as EngineMount
 	var candidate: EngineData = picked["item"] as EngineData
 	if mount == null or candidate == null:
 		return
@@ -553,7 +588,24 @@ func _swap_trigger() -> void:
 
 ## The mount the slot cursor is on, whatever kind it is. Falls back to the
 ## whole schematic so a mount can still be adjusted with an empty hold.
+## The slot being acted on: the one that was clicked, or the one the
+## arrows are on.
+##
+## **A click wins, whatever is in the pilot's hands.** The sketch asks
+## for every slot to be selectable and that turned out to be more than
+## a drawing note: selection used to be driven by what the carried
+## module fits, so a socket the item would not go into could not be
+## chosen at all -- and therefore could not be turned, retriggered or
+## unbolted. Everything a socket can do that has nothing to do with the
+## item in the hold was unreachable for exactly the sockets where it
+## mattered.
+##
+## The arrows keep the old behaviour, because stepping through the
+## places a module *would* go is the other question this screen
+## answers, and it is the one a keyboard is good at.
 func _highlighted() -> Node:
+	if _named != null and is_instance_valid(_named) and _all_mounts().has(_named):
+		return _named
 	var targets: Array[Node] = _targets()
 	if not targets.is_empty():
 		return targets[posmod(_slot, targets.size())]
@@ -590,10 +642,22 @@ func _jettison() -> void:
 ## slot cursor indexes the list of those and pointing it at anything else
 ## would mean two ways of saying "nowhere".
 func _on_click(event: InputEvent) -> void:
-	var press: InputEventMouseButton = event as InputEventMouseButton
-	if press == null or not press.pressed or press.button_index != MOUSE_BUTTON_LEFT:
+	var moved: InputEventMouseMotion = event as InputEventMouseMotion
+	if moved != null:
+		if _turning != null:
+			turn_towards(moved.position)
+			_canvas.accept_event()
 		return
-	if click_at(press.position):
+	var pressed: InputEventMouseButton = event as InputEventMouseButton
+	if pressed == null or pressed.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if not pressed.pressed:
+		# Let go of the handle wherever the hand ended up. The angle was
+		# set on the way, snapped at every step, so there is nothing to
+		# commit here.
+		_turning = null
+		return
+	if click_at(pressed.position):
 		_canvas.accept_event()
 
 
@@ -603,6 +667,21 @@ func click_at(at: Vector2) -> bool:
 	if _ship == null:
 		return false
 	var panels: Dictionary = _panels()
+
+	# Buttons before anything else: they sit over the panels they act
+	# on, and a press that fell through to "you clicked the schematic"
+	# would be a button that works everywhere except on itself.
+	for button: Dictionary in buttons():
+		if not (button["rect"] as Rect2).has_point(at):
+			continue
+		if bool(button["on"]):
+			press(String(button["id"]))
+		return true
+
+	var grab: Rect2 = aim_handle()
+	if grab.size.x > 0.0 and grab.has_point(at):
+		_turning = _highlighted() as Hardpoint
+		return true
 
 	for i: int in range(_items().size()):
 		if _icon_rect(i, panels["hold"]).has_point(at):
@@ -677,9 +756,12 @@ func _panels() -> Dictionary:
 	var bottom: Rect2 = Rect2(
 		edge, top + edge, view.x - edge * 2.0, view.y - top - edge * 2.0
 	)
-	# A third each. The longest card in the game is a legendary missile at
-	# seventeen rows, which is why the bottom row is not thinner.
-	var card_w: float = (bottom.size.x - left - edge * 2.0) * 0.5
+	# A third each, minus the gap the swap button stands in. Its own gap
+	# rather than laid over the cards: drawn on top it covered the last
+	# word of a comparison line, and the end of "+0.095 better" is
+	# exactly the part somebody is reading when they reach for it.
+	var swap_w: float = BUTTON_HEIGHT + edge
+	var card_w: float = (bottom.size.x - left - edge * 3.0 - swap_w) * 0.5
 	return {
 		"view": view,
 		"hold": hold,
@@ -687,11 +769,24 @@ func _panels() -> Dictionary:
 		"plan": Rect2(plan_x, edge, plan_w, top - edge),
 		"bays": Rect2(plan_x + plan_w + edge, edge, strip, top - edge),
 		"facts": Rect2(bottom.position, Vector2(left, bottom.size.y)),
+		# Between the cards, where the sketch puts it: a swap is the
+		# thing that happens *between* two readings, so the button that
+		# does it belongs in the gap rather than under either side.
+		# Twice the height of the others, which is the one place on this
+		# screen where a button is allowed to be bigger than a slot box:
+		# it is the only thing here that changes the ship, and it has to
+		# be findable in the gap between two walls of text.
+		"swap": Rect2(
+			bottom.position.x + left + edge * 2.0 + card_w,
+			bottom.get_center().y - BUTTON_HEIGHT,
+			swap_w,
+			BUTTON_HEIGHT * 2.0,
+		),
 		"carried": Rect2(
 			bottom.position.x + left + edge, bottom.position.y, card_w, bottom.size.y
 		),
 		"fitted": Rect2(
-			bottom.position.x + left + edge * 2.0 + card_w,
+			bottom.position.x + left + edge * 3.0 + card_w + swap_w,
 			bottom.position.y,
 			card_w,
 			bottom.size.y,
@@ -743,6 +838,7 @@ func _draw_editor() -> void:
 	_draw_bays(font, panels["bays"])
 	_draw_facts(font, panels["facts"])
 	_draw_cards(font, panels["carried"], panels["fitted"])
+	_draw_buttons(font)
 
 
 func _panel(rect: Rect2) -> void:
@@ -892,11 +988,26 @@ func _draw_facts(font: Font, rect: Rect2) -> void:
 	var y: float = rect.position.y + PAD + float(FONT_SIZE)
 	_text(font, Vector2(x, y), "SHIP", _ink.label)
 	y += ROW * 1.4
+
+	# Thrust against mass, which is the number a pilot flies on and the
+	# one no card can give: where an engine goes decides what it does,
+	# so the only honest place to read acceleration is the whole ship.
+	var report: ConfigurationReport = _ship.configuration()
+	var push: float = float(report.authority.get(ShipControl.Command.FORWARD, 0.0))
+	var back: float = float(report.authority.get(ShipControl.Command.BACK, 0.0))
+	var cell: GeneratorData = _ship.generator()
+	var drive: JumpDriveData = _ship.jump_drive()
 	var rows: Array[Array] = [
-		["mass", "%.1f" % _ship.mass, ""],
-		["hull", "%.0f" % (_ship.hull_integrity * 100.0), "%"],
-		["fuel", "%.0f" % _ship.fuel, ""],
-		["jumps", "%d / %d" % [_ship.charges, _ship.charge_capacity()], ""],
+		["mass", "%.1f" % report.mass, ""],
+		["thrust", "%.0f" % push, ""],
+		["accel", "%.1f" % (push / maxf(report.mass, 0.001)), ""],
+		["brake", "%.1f" % (back / maxf(report.mass, 0.001)), ""],
+		[
+			"energy",
+			"%.0f" % _ship.energy_capacity(),
+			"" if cell == null else "+%.0f" % cell.recharge_rate,
+		],
+		["jump", "--" if drive == null else "%.1f" % drive.reach, " ly"],
 	]
 	for row: Array in rows:
 		UiDraw.row(
@@ -905,9 +1016,251 @@ func _draw_facts(font: Font, rect: Rect2) -> void:
 			_ink.value, _ink.label, String(row[2]),
 		)
 		y += ROW
+
+	# Three bars, because these three are the only readings here with an
+	# end to them. A number says how much; a bar says how much is left,
+	# which is the question asked of a tank and never of a mass.
+	y += 1.0
+	_draw_bar(font, Vector2(x, y), width, "hull", _ship.hull_integrity, _hull_ink())
+	y += ROW
+	_draw_bar(
+		font, Vector2(x, y), width, "fuel",
+		_ship.fuel / maxf(_ship.fuel_capacity(), 0.001), _ink.accent,
+	)
+	y += ROW
+	_draw_bar(
+		font, Vector2(x, y), width, "jumps",
+		float(_ship.charges) / maxf(float(_ship.charge_capacity()), 1.0), _ink.nav,
+	)
+
 	# Why fitting is or is not available, which belongs with the ship
 	# rather than with the item: it is a fact about where it is standing.
 	_text(font, Vector2(x, rect.end.y - PAD), _where_it_stands(), _ink.label)
+
+
+## A labelled bar. Empty in `grid` rather than in nothing, so an empty
+## tank still shows where full would have been -- a bar that vanishes
+## when it runs out is a bar that stops answering at the moment the
+## question gets interesting.
+func _draw_bar(
+	font: Font, at: Vector2, width: float, label: String, share: float, ink: Color
+) -> void:
+	_text(font, at, label, _ink.label)
+	var left: float = at.x + LABEL_COLUMN
+	var box: Rect2 = Rect2(
+		Vector2(left, at.y - float(FONT_SIZE) + 1.0),
+		Vector2(maxf(width - LABEL_COLUMN, 1.0), float(FONT_SIZE) - 1.0),
+	)
+	_canvas.draw_rect(box, Color(_ink.grid, 0.35), true)
+	var full: Rect2 = Rect2(
+		box.position, Vector2(box.size.x * clampf(share, 0.0, 1.0), box.size.y)
+	)
+	if full.size.x >= 1.0:
+		_canvas.draw_rect(full, ink, true)
+	_canvas.draw_rect(box, _ink.grid, false, 1.0)
+
+
+## The hull bar's colour, which is the one reading on this panel that is
+## allowed to shout. The same thresholds the flight HUD uses, because a
+## hull that is amber in the cockpit and white here is two instruments
+## disagreeing about the same hull.
+func _hull_ink() -> Color:
+	if _ship.hull_integrity <= UiWarning.HULL_ALARM:
+		return _ink.alarm
+	return _ink.caution if _ship.hull_integrity <= UiWarning.HULL_CAUTION else _ink.ok
+
+
+## Everything on this screen that can be pressed, as data.
+##
+## One list, read by both the drawing and the click, for the reason
+## every geometry function here is public: a button drawn in one place
+## and hit in another is a button that works until the layout moves.
+##
+## Context rather than a fixed toolbar. A row of six greyed-out buttons
+## teaches the eye to skip that strip; what is offered is what the
+## selection can actually do, and nothing else is drawn at all.
+func buttons() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _ship == null:
+		return out
+	var panels: Dictionary = _panels()
+	var picked: Dictionary = _selected()
+	var slot: Node = _highlighted()
+
+	out.append({
+		"id": "swap",
+		"rect": panels["swap"] as Rect2,
+		"label": "<>",
+		"on": not picked.is_empty() and not _targets().is_empty() and can_refit(),
+	})
+
+	# Along the bottom of the schematic, which is where the thing they
+	# act on is.
+	var plan: Rect2 = panels["plan"]
+	var at: Vector2 = Vector2(
+		plan.position.x + PAD, plan.end.y - PAD - BUTTON_HEIGHT
+	)
+	var gun: Hardpoint = slot as Hardpoint
+	if gun != null:
+		for group: int in [0, 1]:
+			out.append({
+				"id": "group%d" % group,
+				"rect": Rect2(at, Vector2(BUTTON_HEIGHT, BUTTON_HEIGHT)),
+				"label": "%d" % (group + 1),
+				"on": gun.trigger != group,
+				"lit": gun.trigger == group,
+			})
+			at.x += BUTTON_HEIGHT + BUTTON_GAP
+		at.x += BUTTON_GAP
+	if slot != null and _fitted_in(slot) != null:
+		for action: Array in [["hold", "to hold"], ["drop", "overboard"]]:
+			var width: float = _text_width(String(action[1])) + PAD * 2.0
+			out.append({
+				"id": String(action[0]),
+				"rect": Rect2(at, Vector2(width, BUTTON_HEIGHT)),
+				"label": String(action[1]),
+				"on": can_refit() or String(action[0]) == "drop",
+			})
+			at.x += width + BUTTON_GAP
+	return out
+
+
+func _text_width(text: String) -> float:
+	return _width(ModuleData.card_font(), text)
+
+
+## What a press does. Public so the behaviour can be driven without a
+## mouse, like every other action on this screen.
+func press(id: String) -> bool:
+	match id:
+		"swap":
+			_fit()
+		"group0", "group1":
+			_set_trigger(int(id.right(1)))
+		"hold":
+			_take_off_ship(_highlighted(), false)
+		"drop":
+			_take_off_ship(_highlighted(), true)
+		_:
+			return false
+	return true
+
+
+func _draw_buttons(font: Font) -> void:
+	for button: Dictionary in buttons():
+		var box: Rect2 = button["rect"]
+		var on: bool = bool(button["on"])
+		var lit: bool = bool(button.get("lit", false))
+		# An available action is drawn in the accent, which on this
+		# screen is otherwise reserved for the thing in the pilot's
+		# hands. That is the right channel for it: both answer "this is
+		# yours to move".
+		var edge_ink: Color = _ink.inert
+		if lit:
+			edge_ink = _ink.accent
+		elif on:
+			edge_ink = _ink.accent if String(button["id"]) == "swap" else _ink.grid
+		_canvas.draw_rect(box, Color(_ink.accent if lit else _ink.panel, 0.5), true)
+		_canvas.draw_rect(box, edge_ink, false, 1.0)
+		var label: String = String(button["label"])
+		_text(
+			font,
+			Vector2(
+				box.get_center().x - _text_width(label) * 0.5,
+				box.get_center().y + float(FONT_SIZE) * 0.4,
+			),
+			label,
+			_ink.value if on or lit else _ink.inert,
+		)
+
+
+## Puts the module in a socket back in the hold, or over the side.
+##
+## The other half of fitting, and it had none: everything could be
+## bolted on and nothing could be taken off except by bolting something
+## else in its place. Never nowhere, the same rule a swap follows -- if
+## there is no room for it, it stays where it is and says so.
+func _take_off_ship(slot: Node, overboard: bool) -> void:
+	if slot == null:
+		_notice = "nothing selected"
+		return
+	var item: Resource = _fitted_in(slot)
+	if item == null:
+		_notice = "%s is empty" % slot.name
+		return
+	if not overboard and not can_refit():
+		_notice = "unbolting only on the ground - land first"
+		return
+	if not overboard and Ship.module_bulk(item) > _ship.cargo_free():
+		_notice = "no room in the hold for %s" % _label(item)
+		return
+
+	# Assigned rather than fitted. `fit(null)` is the mount saying "I
+	# will not take that" -- the same hand-it-back signal that let an
+	# oversized thruster report a successful install -- so asking a
+	# socket to fit nothing leaves what is in it exactly where it was.
+	if slot is EngineMount:
+		(slot as EngineMount).installed = null
+	elif slot is Hardpoint:
+		(slot as Hardpoint).weapon = null
+	elif slot is ModuleBay:
+		(slot as ModuleBay).installed = null
+	elif slot is LandingGear:
+		(slot as LandingGear).installed = null
+	_ship.collect_parts()
+	_ship.rebuild_control_groups(false)
+
+	if overboard:
+		_ship.jettisoned.emit(item, 0)
+		_notice = "%s is overboard" % _label(item)
+	else:
+		_ship.cargo.append({"item": item, "rarity": 0})
+		_ship.cargo_changed.emit()
+		_notice = "%s is in the hold" % _label(item)
+
+
+## Puts the chosen hardpoint on a trigger, by number rather than by
+## toggle: two buttons say which one it is on now, and a toggle only
+## says that it changed.
+func _set_trigger(group: int) -> void:
+	var gun: Hardpoint = _highlighted() as Hardpoint
+	if gun == null:
+		_notice = "triggers belong to weapon sockets"
+		return
+	gun.trigger = group
+	_ship.rebuild_control_groups(false)
+	_notice = "%s fires on trigger %d" % [gun.name, group + 1]
+
+
+## Where the handle for swinging a hardpoint sits, or nothing when no
+## hardpoint is chosen.
+func aim_handle() -> Rect2:
+	var gun: Hardpoint = _highlighted() as Hardpoint
+	if gun == null:
+		return Rect2()
+	var panels: Dictionary = _panels()
+	var at: Vector2 = slot_positions(panels).get(gun, Vector2.ZERO)
+	var along: Vector2 = Vector2.UP.rotated(gun.rotation)
+	return Rect2(
+		at + along * (ARC_LENGTH + HANDLE) - Vector2(HANDLE, HANDLE),
+		Vector2(HANDLE, HANDLE) * 2.0,
+	)
+
+
+## Swings the chosen hardpoint to point at a screen position, snapped to
+## the same step the keys use.
+func turn_towards(at: Vector2) -> void:
+	var gun: Hardpoint = _turning
+	if gun == null:
+		return
+	var home: Vector2 = slot_positions(_panels()).get(gun, Vector2.ZERO)
+	var out: Vector2 = at - home
+	if out.length() < 2.0:
+		return
+	gun.rotation = snappedf(
+		wrapf(out.angle() - Vector2.UP.angle(), -PI, PI), AIM_STEP
+	)
+	_notice = "%s aims %.0f deg off the nose" % [gun.name, rad_to_deg(gun.rotation)]
 
 
 ## The schematic, built from the hull polygon and the mount positions so it
@@ -955,6 +1308,13 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	# the keyboard would be stepping blind.
 	for mount: Node in _captions(chosen, mounts):
 		_draw_slot_caption(font, where[mount], mount, origin, rect)
+
+	# The grab box at the end of the rest direction. Only for the chosen
+	# socket: eight handles on one schematic is eight things to miss.
+	var handle: Rect2 = aim_handle()
+	if handle.size.x > 0.0:
+		_canvas.draw_rect(handle, Color(_ink.caution, 0.35), true)
+		_canvas.draw_rect(handle, _ink.caution, false, 1.0)
 
 
 ## Which slots get their name drawn: the one the arrows are on, and the one
@@ -1366,7 +1726,7 @@ func _draw_cards(font: Font, carried: Rect2, fitted: Rect2) -> void:
 
 
 func _keys() -> String:
-	return "arrows: pick   F: fit   S: stow   , .: turn   G: trigger   Bksp: overboard"
+	return "arrows: pick   F: fit   S: stow   , .: turn   drag the handle to aim"
 
 
 func _label(item: Resource) -> String:

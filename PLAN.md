@@ -476,17 +476,36 @@ konfiguracji na `ConfigurationReport.compare()`.
   przykręcone do kadłuba rysują się tam, gdzie są, a objętości w środku dostają
   kolumnę. `_free_near()` zostaje dla tych pierwszych i nie ma już czego
   rozpychać.
-- [ ] **4.4 Dwie karty i przycisk zamiany.** Lewa: wybrane z ładowni. Prawa:
-  wybrane z kadłuba. Między nimi różnica z `compare()` — dziś jest liczona i
-  pokazywana jako werdykt jednym wierszem, a makieta daje jej miejsce.
-- [ ] **4.5 Fakty o statku** z `ConfigurationReport` plus paski paliwa i
-  energii.
-- [ ] **4.6 Uchwyt do obracania hardpointu myszką** (z zatrzaskiem co
-  `AIM_STEP`, bo pięć stopni to decyzja, a ciągły kąt to drżenie ręki) i dwa
-  przyciski grupy zamiast przełącznika na `G`.
-- [ ] **4.7 Każdy komponent klikalny: do ładowni albo za burtę.** `_stow()` i
-  `_jettison()` już to robią dla wybranego; makieta chce tego z poziomu
-  każdego gniazda.
+- [x] **4.4 Dwie karty i przycisk zamiany.** Przycisk dostaje **własną przerwę**
+  między kartami, nie leży na nich: narysowany na wierzchu zasłaniał ostatnie
+  słowo wiersza porównania, a koniec „+0,095 better" to dokładnie to, co ktoś
+  czyta, sięgając po niego.
+- [x] **4.5 Fakty o statku**: masa, ciąg, przyspieszenie, hamowanie, generator
+  i zasięg skoku z `ConfigurationReport`, plus **trzy paski** — kadłub, paliwo,
+  skoki. Paski dostają tylko te trzy odczyty, bo tylko one mają koniec: liczba
+  mówi ile, pasek mówi ile **zostało**, a tego nie pyta się o masę. Kadłub
+  bierze progi z `UiWarning`, bo kadłub bursztynowy w kokpicie i biały tutaj to
+  dwa przyrządy kłócące się o ten sam kadłub.
+- [x] **4.6 Uchwyt do obracania hardpointu myszką**, z zatrzaskiem co
+  `AIM_STEP` — klawisze zostają i obie kontrolki muszą lądować na tych samych
+  kątach, bo dwie kontrolki niezgodne co do tego, czym jest poprawny kąt, to
+  dwie kontrolki. Dwa przyciski grupy zamiast przełącznika: zapalony mówi, na
+  którym spuście gniazdo jest **teraz**, a przełącznik mówił tylko, że coś się
+  zmieniło.
+- [x] **4.7 Każdy komponent klikalny: do ładowni albo za burtę.** Brakowało
+  połowy: wszystko dawało się przykręcić i nic zdjąć inaczej niż wkręcając coś
+  w to miejsce. **Nigdy donikąd** — gdy w ładowni nie ma miejsca, moduł zostaje
+  i mówi dlaczego. Za burtę wolno wszędzie, wyrzucanie balastu pod presją to
+  dokładnie ta decyzja, którą warto mieć.
+
+  Przy okazji wyszło, że makietowe **„ALL SLOTS SELECTABLE" to nie uwaga o
+  rysunku, tylko o sterowaniu.** Wybór gniazda szła dotąd za tym, co pasuje do
+  trzymanego modułu, więc gniazda, które modułu nie przyjmą, **nie dało się
+  wybrać w ogóle** — a tym samym obrócić, przepiąć ani rozkręcić. Wszystko, co
+  gniazdo potrafi, a co nie ma nic wspólnego z zawartością ładowni, było
+  nieosiągalne dokładnie dla tych gniazd, gdzie to miało znaczenie. Kliknięte
+  gniazdo wygrywa teraz z kursorem strzałek, a podgląd montażu celuje w to samo
+  gniazdo, co przycisk — inaczej ekran obiecywałby jedno, a robił drugie.
 - [ ] **4.8 Widżety spare parts i stardust** — **po M5.2**.
 - [ ] **4.9 Rozbiórka na spare parts**, uzysk z typu, gabarytu i rzadkości —
   **po M5.2**, i właściwie *jest* pozycją M5.2.

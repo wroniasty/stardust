@@ -1189,6 +1189,7 @@ func _evaluate_phase() -> void:
 			_check_jump_hud()
 			_check_jump_sequence()
 			_check_stores()
+			_check_editor_buttons()
 			_check_scrap_and_mend()
 			_check_charges()
 			_check_transit_veil()
@@ -2160,6 +2161,12 @@ func _check_editor() -> void:
 			editor.named_slot() == slot,
 			"a click where %s is drawn names %s" % [slot.name, slot.name],
 		)
+
+	# Aim at the mount this test is about. The loop above clicked every
+	# slot on the ship, and since every socket became selectable the
+	# last click is where a fit would go -- which is the rule working,
+	# not a test being fussy: the pilot acts on the socket they chose.
+	editor.click_at(where[mount])
 
 	# Looking is free, changing is not: the landing pad is what gates a refit.
 	_expect(not editor.can_refit(), "a ship in flight may not be refitted here")
@@ -11377,6 +11384,155 @@ func _fewest_jumps(map: GalaxyMap, from: int, to: int) -> int:
 				queue.append(other)
 	return -1
 
+
+
+## Przyciski edytora: co jest oferowane i co robią.
+##
+## Context rather than a fixed toolbar, which is the claim worth
+## pinning: a row of greyed-out buttons teaches the eye to skip that
+## strip, so what is drawn is what the selection can actually do. The
+## list is also the hit test, because a button drawn in one place and
+## hit in another is a button that works until the layout moves.
+func _check_editor_buttons() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.flight_mode = Ship.FlightMode.LANDED
+	var editor: ShipEditor = ShipEditor.new()
+	root.add_child(editor)
+	editor.bind(ship)
+	editor.toggle()
+
+	# Nothing chosen but the first item: the swap button is always
+	# there, and nothing else is.
+	var ids: PackedStringArray = _button_ids(editor)
+	_expect(
+		ids.has("swap"),
+		"the swap button is always offered (%s)" % [ids],
+	)
+	_expect(
+		not ids.has("group0") and not ids.has("group1"),
+		"and trigger buttons are not, until a weapon socket is chosen (%s)" % [ids],
+	)
+
+	# A hardpoint chosen: two trigger buttons, the one it is on lit, and
+	# the handle to swing it by.
+	var gun: Hardpoint = null
+	for mount: Node in editor._hull_mounts():
+		if mount is Hardpoint:
+			gun = mount as Hardpoint
+			break
+	_expect(gun != null, "the stock hull has a weapon socket")
+	if gun == null:
+		return
+	editor.click_at(editor.slot_positions(editor._panels())[gun])
+	ids = _button_ids(editor)
+	_expect(
+		ids.has("group0") and ids.has("group1"),
+		"a chosen weapon socket offers both triggers (%s)" % [ids],
+	)
+	gun.trigger = 0
+	editor.press("group1")
+	_expect(gun.trigger == 1, "and pressing one moves the socket to it (%d)" % gun.trigger)
+	var lit: int = 0
+	for button: Dictionary in editor.buttons():
+		if bool(button.get("lit", false)):
+			lit += 1
+	_expect(lit == 1, "exactly one of them is lit, which is the one it is on (%d)" % lit)
+
+	_check_editor_handle(editor, gun)
+	_check_editor_unbolting(editor, ship, gun)
+
+	editor.close()
+	editor.queue_free()
+	ship.queue_free()
+
+
+func _button_ids(editor: ShipEditor) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	for button: Dictionary in editor.buttons():
+		out.append(String(button["id"]))
+	return out
+
+
+## Uchwyt obraca działo, ale skokowo.
+##
+## The keys stayed and this is the other half of the same control, so
+## it has to land on the same angles: a continuous angle off a mouse is
+## a hand tremor written into the ship, and two controls that disagree
+## about what a valid angle is are two controls.
+func _check_editor_handle(editor: ShipEditor, gun: Hardpoint) -> void:
+	var home: Vector2 = editor.slot_positions(editor._panels())[gun]
+	var grab: Rect2 = editor.aim_handle()
+	_expect(
+		grab.size.x > 0.0 and grab.get_center().distance_to(home) > 4.0,
+		"a chosen weapon socket has a handle, out along where it points",
+	)
+
+	# Grab it and swing. Driven through the click, because the handle
+	# has to be reachable the way a hand reaches it.
+	_expect(editor.click_at(grab.get_center()), "the handle takes the press")
+	editor.turn_towards(home + Vector2(37.0, 11.0))
+	var turned: float = gun.rotation
+	_expect(
+		absf(wrapf(turned, -ShipEditor.AIM_STEP, 0.0)) < 0.0001
+		or absf(wrapf(turned, 0.0, ShipEditor.AIM_STEP)) < 0.0001,
+		"and dragging lands on the same step the keys use (%.1f deg)" % rad_to_deg(turned),
+	)
+	var wanted: float = (Vector2(37.0, 11.0)).angle() - Vector2.UP.angle()
+	_expect(
+		absf(angle_difference(turned, wanted)) <= ShipEditor.AIM_STEP,
+		"within half a step of where the hand was (%.1f against %.1f deg)" % [
+			rad_to_deg(turned), rad_to_deg(wanted),
+		],
+	)
+
+
+## Wszystko da się zdjąć ze statku.
+##
+## The half that was missing: everything could be bolted on and nothing
+## could be taken off except by bolting something else in its place.
+func _check_editor_unbolting(editor: ShipEditor, ship: Ship, gun: Hardpoint) -> void:
+	ship.cargo.clear()
+	ship.stores.clear()
+	if gun.weapon == null:
+		gun.weapon = load("res://resources/weapons/autocannon.tres") as WeaponData
+	var fitted: WeaponData = gun.weapon
+	editor.click_at(editor.slot_positions(editor._panels())[gun])
+	_expect(
+		_button_ids(editor).has("hold") and _button_ids(editor).has("drop"),
+		"a socket with something in it offers both ways out",
+	)
+
+	editor.press("hold")
+	_expect(
+		gun.weapon == null and ship.cargo.size() == 1
+		and ship.cargo[0]["item"] == fitted,
+		"taking it off puts it in the hold, never nowhere",
+	)
+	_expect(
+		not _button_ids(editor).has("hold"),
+		"and an empty socket stops offering it",
+	)
+
+	# Off the ground it is refused with a reason, which is the rule the
+	# whole screen runs on: looking is free, changing is not.
+	gun.weapon = fitted
+	ship.cargo.clear()
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	editor.press("hold")
+	_expect(
+		gun.weapon == fitted and ship.cargo.is_empty(),
+		"in flight it stays bolted on",
+	)
+	# Overboard is the exception, deliberately: dumping ballast under
+	# pressure is exactly the decision worth having.
+	var thrown: Array[Resource] = []
+	ship.jettisoned.connect(func(item: Resource, _grade: int) -> void: thrown.append(item))
+	editor.press("drop")
+	_expect(
+		gun.weapon == null and thrown.size() == 1 and thrown[0] == fitted,
+		"but throwing it away is allowed anywhere",
+	)
+	ship.flight_mode = Ship.FlightMode.LANDED
 
 
 ## Ładownia liczy sztuki tak samo jak przedmioty.
