@@ -1188,6 +1188,8 @@ func _evaluate_phase() -> void:
 			_check_jump_kit()
 			_check_jump_hud()
 			_check_jump_sequence()
+			_check_stores()
+			_check_charges()
 			_check_transit_veil()
 			_check_misjump()
 			_check_save()
@@ -5046,13 +5048,17 @@ func _check_jump_sequence() -> void:
 			map.positions[onward[0]] - map.positions[pilot.here()]
 		).normalized()
 		ship.global_rotation = ahead.angle() - Vector2.UP.angle()
+	# Both empty, which is what a refusal now takes: a charge would fire
+	# the drive with a dry tank, and a tank would fire it with an empty
+	# magazine. Only having neither is nothing to jump with.
 	ship.fuel = 0.0
+	ship.charges = 0
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	_expect(
 		pilot.phase == JumpController.Phase.IDLE
-		and excuses[excuses.size() - 1] == "no fuel",
-		"an empty tank refuses before it starts (%s)" % excuses[excuses.size() - 1],
+		and excuses[excuses.size() - 1] == "no charge, no fuel",
+		"with neither charge nor fuel it refuses before it starts (%s)" % excuses[excuses.size() - 1],
 	)
 
 	pilot.free()
@@ -11352,6 +11358,251 @@ func _fewest_jumps(map: GalaxyMap, from: int, to: int) -> int:
 				queue.append(other)
 	return -1
 
+
+
+## Ładownia liczy sztuki tak samo jak przedmioty.
+##
+## The one claim worth testing twice: stuff by the unit and modules by
+## the item share a volume. A hold that counted them separately would
+## make "what do I carry home" a question with two answers and no
+## trade, which is the decision M5.2 exists to create.
+func _check_stores() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.cargo.clear()
+	ship.stores.clear()
+	ship.rebuild_control_groups(false)
+	var room: float = ship.cargo_free()
+	var light: float = ship.mass
+	_expect(room > 0.0, "the stock hull has somewhere to put things (%.1f bulk)" % room)
+
+	var put: int = ship.load_units(Stores.Kind.SPARE_PARTS, 20)
+	_expect(
+		put == 20 and ship.carrying(Stores.Kind.SPARE_PARTS) == 20,
+		"twenty spare parts go aboard (%d)" % put,
+	)
+	_expect(
+		absf(ship.cargo_free() - (room - Stores.bulk_of(Stores.Kind.SPARE_PARTS, 20))) < 0.001,
+		"and take up room the hold then does not have (%.2f of %.2f bulk left)" % [
+			ship.cargo_free(), room,
+		],
+	)
+	_expect(
+		ship.mass > light,
+		"and weigh something (%.2f against %.2f)" % [ship.mass, light],
+	)
+
+	# Partial rather than refused: scooping into a hold with room for
+	# half of it should take half and say so.
+	var asked: int = Stores.fits_in(Stores.Kind.STARDUST, ship.cargo_free()) + 50
+	var fitted: int = ship.load_units(Stores.Kind.STARDUST, asked)
+	_expect(
+		fitted > 0 and fitted < asked and ship.cargo_free() < 0.05,
+		"stardust fills what is left and leaves the rest behind (%d of %d asked)" % [
+			fitted, asked,
+		],
+	)
+	_expect(
+		ship.load_units(Stores.Kind.SPARE_PARTS, 1) == 0,
+		"and a full hold takes nothing more",
+	)
+
+	# The trade the whole thing is for: units and modules are the same
+	# volume, so a hold of ore has no room for the drive you just found.
+	var drive: ModuleData = load("res://resources/drives/short_hop.tres") as ModuleData
+	_expect(
+		not ship.take(drive.duplicate() as ModuleData) or not ship.stow(),
+		"a hold full of stuff has no room for a module",
+	)
+	ship.release()
+	ship.spend_units(Stores.Kind.STARDUST, 100000)
+	_expect(
+		ship.carrying(Stores.Kind.STARDUST) == 0 and ship.cargo_free() > 0.0,
+		"dumping it gives the room straight back",
+	)
+	_expect(
+		ship.spend_units(Stores.Kind.SPARE_PARTS, 30) == 20,
+		"and spending more than there is gives what there was",
+	)
+
+	# Through a save, with no version bump, like every other field that
+	# arrived after the format did.
+	ship.load_units(Stores.Kind.SPARE_PARTS, 11)
+	ship.load_units(Stores.Kind.STARDUST, 7)
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+	var kept: Dictionary = SaveGame.capture(sky, ship)
+	ship.stores.clear()
+	SaveGame.restore_ship(kept, ship)
+	_expect(
+		ship.carrying(Stores.Kind.SPARE_PARTS) == 11
+		and ship.carrying(Stores.Kind.STARDUST) == 7,
+		"a save brings the bins back (%d parts, %d stardust)" % [
+			ship.carrying(Stores.Kind.SPARE_PARTS),
+			ship.carrying(Stores.Kind.STARDUST),
+		],
+	)
+	sky.queue_free()
+	ship.queue_free()
+
+
+## Ładunek to pozwolenie na skok, paliwo to sposób desperacki.
+##
+## The split M5.2 asks for, and the shape of it is the part worth
+## pinning. A charge is one jump whatever the distance, so "four jumps
+## left" is a number a pilot plans a route with; distance keeps costing
+## what it always cost, which is risk at the edge of the reach. And an
+## empty magazine is **not** a wall: the drive still fires on engine
+## fuel at the old shortfall risk, because IDEAS.md section 10 is
+## explicit that a shortfall is a decision rather than a stop.
+func _check_charges() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(TEST_SEED)
+	var here: int = map.start_index()
+	var system: StarSystem = StarSystem.generate(TEST_SEED)
+	var galaxy: Node = GALAXY_SCRIPT.new()
+	root.add_child(galaxy)
+	galaxy.reset(TEST_SEED)
+
+	var ship: Ship = _spawn_ship()
+	var pilot: JumpController = JumpController.new()
+	pilot.use_player_input = false
+	root.add_child(pilot)
+	pilot.bind(ship, system, map, here, galaxy)
+
+	var drive: JumpDriveData = ship.jump_drive()
+	_expect(
+		drive != null and ship.charge_capacity() == drive.charge_capacity
+		and ship.charge_capacity() > 0,
+		"the fitted drive says how many charges it holds (%d)" % ship.charge_capacity(),
+	)
+	ship.charges = 0
+	_expect(
+		ship.add_charges(99) == ship.charge_capacity()
+		and ship.charges == ship.charge_capacity(),
+		"the magazine fills to what it holds and no further",
+	)
+
+	var neighbour: int = map.neighbours(here, GalaxyMap.BASE_REACH)[0]
+	var away: float = map.positions[here].distance_to(map.positions[neighbour])
+	_expect(
+		away < drive.reach * JumpController.STRAIN_FROM,
+		"there is a neighbour inside the easy part of the range to aim at (%.1f ly)" % away,
+	)
+
+	# Out past the lock first: every question below is about the drive,
+	# and inside the lock the honest answer to all of them is the star.
+	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+
+	# An empty tank and a full magazine: no shortfall, because that is
+	# what a charge buys.
+	ship.fuel = 0.0
+	_expect(
+		pilot.misjump_risk(neighbour) <= 0.001,
+		"with a charge aboard a dry tank costs nothing (%.2f)" % pilot.misjump_risk(neighbour),
+	)
+	ship.charges = 0
+	_expect(
+		pilot.misjump_risk(neighbour) > 0.9,
+		"with neither, the old shortfall rule is back (%.2f)" % pilot.misjump_risk(neighbour),
+	)
+	_expect(
+		pilot.blocked_by(neighbour) != "",
+		"and with neither there is nothing to fire the drive with at all",
+	)
+	ship.fuel = ship.fuel_capacity()
+	_expect(
+		pilot.blocked_by(neighbour) == "",
+		"fuel alone is enough to try, which is the half of the rule that matters",
+	)
+	_expect(
+		pilot.misjump_risk(neighbour) <= 0.001,
+		"and a full tank pays the old fare cleanly (%.2f)" % pilot.misjump_risk(neighbour),
+	)
+
+	# And the spending. Driven through the real state machine, because
+	# which currency a jump runs on is decided when the spool starts and
+	# a test that called the accessor would be testing the accessor.
+	var out: Vector2 = (map.positions[neighbour] - map.positions[here]).normalized()
+	ship.global_rotation = out.angle() - Vector2.UP.angle()
+	ship.charges = 2
+	ship.fuel = ship.fuel_capacity()
+	var tank: float = ship.fuel
+	pilot.holding = true
+	pilot.advance(1.0 / 60.0)
+	pilot.advance(1.0 / 60.0)
+	_expect(
+		pilot.phase == JumpController.Phase.CHARGING,
+		"the drive spools up when it is pointed somewhere it can go",
+	)
+	_expect(
+		ship.charges == 1 and absf(ship.fuel - tank) < 0.001,
+		"a jump on a charge spends the charge and not a drop of fuel (%d left, %.1f fuel)" % [
+			ship.charges, ship.fuel,
+		],
+	)
+
+	# The same jump with an empty magazine burns the tank, as it always
+	# did. Not a wall, which is the whole point of keeping this path.
+	pilot.holding = false
+	pilot.advance(1.0 / 60.0)
+	ship.charges = 0
+	ship.fuel = ship.fuel_capacity()
+	tank = ship.fuel
+	pilot.holding = true
+	pilot.advance(1.0 / 60.0)
+	pilot.advance(1.0 / 60.0)
+	_expect(
+		pilot.phase == JumpController.Phase.CHARGING and ship.fuel < tank,
+		"with an empty magazine the drive improvises on engine fuel (%.1f burned)" % [
+			tank - ship.fuel,
+		],
+	)
+
+	_check_refinery(ship)
+
+	pilot.holding = false
+	pilot.queue_free()
+	ship.queue_free()
+	galaxy.queue_free()
+
+
+## Jedna liczba na trzy miejsca.
+##
+## PLAN.md M5.2 asks for a reason to put the ship down somewhere, not
+## for a market. A yard is the reference and everywhere else is a known
+## discount -- known, because a card that said one thing and a hold that
+## did another would be the market this deliberately is not.
+func _check_refinery(ship: Ship) -> void:
+	var docked: int = Refinery.stardust_for_charge(Refinery.Place.DOCKED)
+	var landed: int = Refinery.stardust_for_charge(Refinery.Place.LANDED)
+	var adrift: int = Refinery.stardust_for_charge(Refinery.Place.SPACE)
+	_expect(
+		docked < landed and landed < adrift,
+		"a charge costs least at a yard and most in the dark (%d, %d, %d)" % [
+			docked, landed, adrift,
+		],
+	)
+	_expect(
+		docked == Refinery.STARDUST_PER_CHARGE,
+		"and the yard is the figure on the card (%d)" % docked,
+	)
+	_expect(
+		Refinery.charges_from(docked * 3 + docked - 1, Refinery.Place.DOCKED) == 3,
+		"stardust that does not cover a whole charge does not make one",
+	)
+
+	# Off the flight mode, so nothing new has to be tracked and the two
+	# cannot disagree about whether the legs are down.
+	ship.flight_mode = Ship.FlightMode.LANDED
+	_expect(
+		Refinery.place_of(ship) == Refinery.Place.LANDED,
+		"where the ship is, is where the work is done",
+	)
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	_expect(
+		Refinery.place_of(ship) == Refinery.Place.SPACE,
+		"and flying is the dearest place to do it",
+	)
 
 
 ## Co stoi w systemie, i co z tego wraca.

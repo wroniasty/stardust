@@ -768,11 +768,30 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
 Nie symulacja rynku. Trzy rzeczy, które się zużywają, i jedna, z której się je
 robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zabrać.
 
-- [ ] **Spare parts** — naprawa kadłuba i modułów.
-- [ ] **Paliwo w dwóch postaciach**: stałe (silniki) i **hyperdrive charges**
-  (skok). Rozcina to, co dziś jest jedną liczbą — szczegóły w punkcie 6
-  analizy. Powód jest taki, że inaczej każdy skok to decyzja „czy starczy mi
-  na powrót silnikami", która jest ta sama decyzja co zawsze.
+- [x] **Zasoby jako sztuki w ładowni.** `Stores` — osobna klasa, bo `ship.gd` ma
+  2759 linii, a rudy dorzucą kilka rodzajów. Liczą się w **sztukach**, nie w
+  ułamkach, i **dzielą objętość z modułami**: ładownia pełna rudy to ładownia
+  bez miejsca na napęd, który się właśnie znalazło. Gabaryt wyprowadzony z
+  tego, ile mieści pełna ładownia (sto części albo dwieście pięćdziesiąt
+  stardustu), bo to jest liczba, którą pilot trzyma w głowie. Ważą tyle, co
+  każdy ładunek.
+- [x] **Przetwarzanie: jedna liczba na trzy miejsca.** `Refinery` — zadokowany
+  1,0, wylądowany 0,85, w przestrzeni 0,55, czytane z `FlightMode`, więc nie ma
+  drugiego stanu, który mógłby się rozjechać z tym, czy nogi są na ziemi. Stocznia
+  jest odniesieniem, czyli liczbą z karty; reszta to znana zniżka, nie zagadka.
+  Pierwszy przepis: stardust na ładunek hyperdrive (30 w stoczni, 55 w locie).
+- [ ] **Spare parts** — naprawa kadłuba i modułów. Zasób już jest i jest
+  zapisywany; zostało to, co go wydaje.
+- [x] **Paliwo w dwóch postaciach**: stałe (silniki) i **hyperdrive charges**
+  (skok). Kształt rozcięcia okazał się ważniejszy od samego rozcięcia:
+  **ładunek to pozwolenie na skok, nie miara odległości** — jeden skok bierze
+  jeden, jakkolwiek daleko, a za odległość płaci się ryzykiem jak dotąd. Dzięki
+  temu „zostały cztery skoki" to liczba, którą planuje się trasę, a nie taka,
+  którą się dzieli. Pusty magazynek **nie jest ścianą**: napęd odpala na
+  paliwie silnikowym przy starej regule niedoboru, więc „niedobór nie jest
+  odmową" zostaje w mocy, a ładunek kupuje **czysty** skok. Wydawany przy
+  rozkręcaniu, nie przy przylocie — jest niepodzielny, więc przerwanie kosztuje
+  cały, i to jest ta lekcja, którą ta reguła ma dawać.
 - [ ] **Stardust** — surowiec, z którego robi się jedno i drugie.
 - [ ] **Raw ore**, kilka rodzajów. Złoża leżą na powierzchni i pod nią, losowane
   z seeda planety — więc odtwarzalne, a wykopane znikają przez `deltas`, tak jak

@@ -82,12 +82,17 @@ static func _capture_ship(ship: Ship) -> Dictionary:
 	return {
 		"at": ship.global_position,
 		"facing": ship.global_rotation,
+		# Whole numbers in a plain dictionary, read back with a default:
+		# a save written before the hold could hold stuff by the unit is
+		# a save with an empty bin, not a save this build refuses.
+		"stores": ship.stores.to_record(),
 		"velocity": ship.linear_velocity,
 		"spin": ship.angular_velocity,
 		"hull": ship.hull_integrity,
 		"heat": ship.hull_heat,
 		"energy": ship.energy,
 		"fuel": ship.fuel,
+		"charges": ship.charges,
 		"fitted": fitted,
 		"mods": mods,
 		"cargo": stowed,
@@ -189,6 +194,7 @@ static func _restore_ship(hull: Dictionary, ship: Ship) -> void:
 		if legs != null:
 			legs.installed = module as GearData
 
+	ship.stores = Stores.from_record(hull.get("stores", {}) as Dictionary)
 	ship.cargo.clear()
 	for entry: Variant in hull.get("cargo", []):
 		var stowed: Dictionary = entry as Dictionary
@@ -211,6 +217,9 @@ static func _restore_ship(hull: Dictionary, ship: Ship) -> void:
 	# must not hand back more than the tank now fitted can hold.
 	ship.energy = clampf(float(hull["energy"]), 0.0, ship.energy_capacity())
 	ship.fuel = clampf(float(hull["fuel"]), 0.0, ship.fuel_capacity())
+	# Clamped like the pools above, and defaulted like them too: a save
+	# written before the magazine existed comes back with an empty one.
+	ship.charges = clampi(int(hull.get("charges", 0)), 0, ship.charge_capacity())
 
 
 ## Whether this is a save this build can read.

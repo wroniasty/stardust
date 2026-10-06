@@ -516,6 +516,14 @@ var carried_rarity: int:
 ## stowed. Rarity rides alongside because no module Resource carries it.
 var cargo: Array[Dictionary] = []
 
+## And what it carries by the unit: spare parts, stardust, and the ore
+## kinds that arrive with mining.
+##
+## The same volume as the modules, deliberately. A hold full of ore is a
+## hold with no room for the drive you just found, and that trade is
+## what the premise is made of -- see `Stores`.
+var stores: Stores = Stores.new()
+
 ## Total bulk the cargo bay can hold, before anything a module adds. A
 ## property of the hull, set in the scene, because how much a ship can carry
 ## is the first thing that distinguishes a hauler from a fighter.
@@ -595,6 +603,10 @@ var tank_bay: TankBay = null
 ## it is the thing that decides how far from a dock a pilot is willing to
 ## be.
 var fuel: float = 0.0
+
+## Hyperdrive charges in the drive's magazine. Whole things: one jump
+## takes one, and a pilot plans a route by counting them.
+var charges: int = 0
 
 ## Contact points along the outline, without the gear's. Built once.
 var _outline_contacts: Array[Vector2] = []
@@ -759,10 +771,38 @@ static func module_bulk(item: Resource) -> float:
 
 
 func cargo_used() -> float:
-	var total: float = 0.0
+	var total: float = stores.bulk()
 	for entry: Dictionary in cargo:
 		total += module_bulk(entry["item"] as Resource)
 	return total
+
+
+## Puts units aboard, as many as the hold has room for. Returns how many
+## went in, so the caller can say what was left on the ground.
+##
+## Rebuilds the control groups for the same reason stowing a module
+## does: what is in the hold is mass, and mass is handling. Two hundred
+## spare parts are not free to carry.
+func load_units(kind: Stores.Kind, units: int) -> int:
+	var taken: int = stores.add(kind, units, cargo_free())
+	if taken > 0:
+		rebuild_control_groups(false)
+		cargo_changed.emit()
+	return taken
+
+
+## Takes units out of the hold -- to spend, to refine, or to throw away.
+## Returns how many there were.
+func spend_units(kind: Stores.Kind, units: int) -> int:
+	var given: int = stores.spend(kind, units)
+	if given > 0:
+		rebuild_control_groups(false)
+		cargo_changed.emit()
+	return given
+
+
+func carrying(kind: Stores.Kind) -> int:
+	return stores.count(kind)
 
 
 func cargo_free() -> float:
@@ -1194,6 +1234,33 @@ func tank() -> TankData:
 func fuel_capacity() -> float:
 	var fitted: TankData = tank()
 	return stat(&"fuel_capacity", fitted.fuel_capacity if fitted != null else 0.0)
+
+
+## How many charges the fitted drive can hold. Zero without one, like
+## the tank: a ship with no drive is not a ship with a small magazine.
+func charge_capacity() -> int:
+	var drive: JumpDriveData = jump_drive()
+	return 0 if drive == null else maxi(drive.charge_capacity, 0)
+
+
+## Spends one charge. Returns whether there was one.
+##
+## The only thing that makes a jump a clean jump; without it the drive
+## will still fire, on engine fuel and at the old shortfall risk, which
+## is what keeps a dry magazine from being a wall.
+func draw_charge() -> bool:
+	if charges <= 0:
+		return false
+	charges -= 1
+	return true
+
+
+## Puts charges in, up to what the magazine holds. Returns how many fit.
+func add_charges(count: int) -> int:
+	var room: int = maxi(charge_capacity() - charges, 0)
+	var put: int = clampi(count, 0, room)
+	charges += put
+	return put
 
 
 ## Takes fuel out of the tank. Returns how much it actually got, which is

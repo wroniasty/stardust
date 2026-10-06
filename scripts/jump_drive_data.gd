@@ -29,8 +29,24 @@ const REFERENCE_MASS: float = 16.0
 ## released key cancels it.
 @export var charge_time: float = 3.0
 
-## Fuel per light year, at `REFERENCE_MASS`.
+## Fuel per light year, at `REFERENCE_MASS`. What a jump costs when
+## there is no charge in the magazine to do it properly.
 @export var fuel_per_ly: float = 2.0
+
+## How many hyperdrive charges the drive holds.
+##
+## A charge is permission to jump, not a measure of how far: one jump
+## takes one, whatever the distance, and distance is paid for in risk
+## through `JumpController.STRAIN_FROM` as it always was. That is the
+## whole reason for splitting the old single pool in two -- "four jumps
+## left" is a number a pilot plans a route with, and "three hundred and
+## forty fuel" is a number they divide.
+##
+## Four on the stock drive: the road from the rim to the middle is
+## fourteen to eighteen jumps, so a full magazine is about a quarter of
+## the way and running dry is a thing that happens on the way rather
+## than a thing that ends the run.
+@export var charge_capacity: int = 4
 
 
 ## What a jump of this length would cost a hull of this mass.
@@ -52,6 +68,7 @@ func can_cross(distance: float) -> bool:
 func stat_rows() -> Array[Dictionary]:
 	return [
 		row("range", reach, 1, 1, " ly"),
+		row("charges", float(charge_capacity), 0, 1),
 		row("charge", charge_time, 1, -1, " s"),
 		row("burn", fuel_per_ly, 2, -1, "/ly"),
 		row("full jump", fuel_for(reach, REFERENCE_MASS), 0, -1),
