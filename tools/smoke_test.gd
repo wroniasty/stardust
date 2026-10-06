@@ -178,6 +178,9 @@ var _brake_heading: Vector2 = Vector2.ZERO
 ## nothing; this is the figure the two brakes are compared on, and the
 ## comparison is the whole argument for turning the ship round.
 var _brake_stopped_at: float = -1.0
+
+## Which way the nose was pointing when the ship came to rest.
+var _nose_at_stop: Vector2 = Vector2.ZERO
 var _flat_angle: float = 0.0
 var _steep_angle: float = 0.0
 ## Where the resting hull sat in the planet's own frame once it had settled,
@@ -943,9 +946,9 @@ func _evaluate_phase() -> void:
 			# ship swings the nose round first, whichever way it was
 			# sliding, and finishes pointing back down its own track.
 			_expect(
-				_nose_now().dot(-_brake_heading) > 0.95,
+				_nose_at_stop.dot(-_brake_heading) > 0.95,
 				"a %s run is turned into a retro burn like any other (%.3f)" % [
-					label, _nose_now().dot(-_brake_heading),
+					label, _nose_at_stop.dot(-_brake_heading),
 				],
 			)
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
@@ -1010,9 +1013,9 @@ func _evaluate_phase() -> void:
 				],
 			)
 			_expect(
-				_nose_now().dot(-_brake_heading) > 0.95,
+				_nose_at_stop.dot(-_brake_heading) > 0.95,
 				"and it is pointing back down its own track when it stops (%.3f)" % [
-					_nose_now().dot(-_brake_heading),
+					_nose_at_stop.dot(-_brake_heading),
 				],
 			)
 			# The order, which is the part a pilot asked for: the drive
@@ -9531,6 +9534,7 @@ func _begin_brake() -> void:
 	_worst_burn_alignment = 1.0
 	_boosted_during_brake = false
 	_brake_stopped_at = -1.0
+	_nose_at_stop = Vector2.ZERO
 	_brake_heading = _ship.linear_velocity.normalized()
 
 
@@ -9545,6 +9549,20 @@ func _watch_brake() -> void:
 	if _ship.boost_active:
 		_boosted_during_brake = true
 	var speed: float = _ship.linear_velocity.length()
+	# Where the nose ended up at the last moment there was still a
+	# course to be pointed down.
+	#
+	# `HEADING_MIN_SPEED` rather than a number of this test's own,
+	# because that is the speed at which **the ship** stops treating
+	# its velocity as a heading: below it the direction of travel is
+	# the residue of two axes cancelling at slightly different rates,
+	# and a nose chasing that is chasing noise. Read at the end of the
+	# budget instead, this asked a hull that had been standing still
+	# for seconds which way it used to be going -- which only started
+	# giving a wrong answer when the hull got light enough to finish
+	# the burn early.
+	if speed < Ship.HEADING_MIN_SPEED and _nose_at_stop == Vector2.ZERO:
+		_nose_at_stop = _nose_now()
 	if speed < 1.0 and _brake_stopped_at < 0.0:
 		_brake_stopped_at = _elapsed
 	if speed < Ship.BRAKE_EPS:

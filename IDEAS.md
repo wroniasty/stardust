@@ -65,9 +65,18 @@ Skoro typ nie ogranicza montażu, potrzebna jest cena, inaczej „wszystko pasuj
 wszędzie" jest darmowym buffem, a nie decyzją. Tą ceną jest jedna liczba,
 `EngineData.bulk`, robiąca dwie rzeczy naraz:
 
-1. **Jest masą**, jaką silnik dokłada do statku. Nie `size` mountu: slot to
-   dziura, waży to, co w niej siedzi. Cięższy silnik przesuwa środek masy i
-   zmienia bezwładność, więc czuć go nawet wtedy, kiedy nie pracuje.
+1. **Jest masą**, jaką silnik dokłada do statku — **połową gabarytu**,
+   `EngineMount.MASS_PER_BULK`. Nie `size` mountu: slot to dziura, waży to, co
+   w niej siedzi. Cięższy silnik przesuwa środek masy i zmienia bezwładność,
+   więc czuć go nawet wtedy, kiedy nie pracuje.
+
+   Połowa, a nie mniejszy gabaryt, i to jest cała treść tej stałej. Te dwa
+   zadania `bulk` są niezależne, więc odchudzenie silników przez ścięcie
+   gabarytu ścięłoby razem z masą **cenę dopasowania** — a ta ekonomia jest
+   zmierzona, nie przypadkowa: największe gniazdo bierze 98% losowań,
+   najmniejsze 47%, 1,25% nie mieści się nigdzie. Dlatego rozdziela się je
+   dokładnie tam, gdzie jest masa, a reguła gniazda dalej czyta liczbę
+   nietkniętą.
 2. **Musi się zmieścić**: `bulk <= size`, inaczej nie wchodzi.
 
 Whitelista typów dałaby ten sam efekt binarnie i odebrałaby generatorowi
@@ -88,14 +97,58 @@ na krzyżu dysz obrotowych.** Warunek redukuje się do jednego równania, bo dys
 obrotowe i para strafe leżą symetrycznie względem `y = 1.75` i wypadają z
 sumy:
 
-    8.25 * bulk_main - 13.75 * bulk_retro = -5.5
+    8.25 * bulk_main - 13.75 * bulk_retro = -11.0
 
-Stąd przy `bulk_main = 3.0` wychodzi `bulk_retro = 2.2`, mounty zostają na
-okrągłych pozycjach, a `com` wypada na 1.75 co do cyfry. Pierwsze podejście —
+Stąd `bulk_main = 2.5` i `bulk_retro = 2.3`, mounty zostają na okrągłych
+pozycjach, a `com` wypada na 1.75 co do cyfry.
+
+**Prawa strona to −11,0, nie −5,5, odkąd silnik waży połowę gabarytu.** Moment
+silników skaluje się ze stawką, moment kadłuba i komor nie, więc równowaga
+między nimi się przesuwa — i to jest dokładnie ten sposób, w jaki ta sekcja
+może się zepsuć po cichu. Pierwsze podejście zostawiło stare gabaryty: masa
+spadła z 20,00 na 15,70, `com` wylądował na 1,925 — **0,175 od krzyża** — i
+test wypisał siedem porażek, w tym 6,7 N siły bocznej na obrocie i 0,42 px/s
+dryfu z nienaruszonej pary. Dokładnie to, co ten akapit obiecuje.
+
+Przy połowie stawki samo retro problemu nie rozwiązuje: potrzebowałoby 2,600
+gabarytu przy gnieździe 2,50, czyli nie wchodzi. Drążek jest po stronie
+głównego napędu i para 2,5 / 2,3 rozwiązuje równanie dokładnie, zostawiając
+główny napęd największym silnikiem na kadłubie.
+
+Po zmianie: masa 20,00 → **15,50**, bezwładność 1368 → **792**, przyspieszenie
+wprzód 45,0 → **58,1**, `com` dalej 1,75. Pierwsze podejście —
 gabaryty „na oko" i przesunięcie mountów za środkiem masy — natychmiast
 złamało parę obrotową (wagi 1,00 i 0,82, 0,046 N siły bocznej na obrót) i
 zostało złapane przez istniejący test. Loot **będzie** tę równowagę psuł i o to
 chodzi; statek fabryczny ma z niej startować.
+
+### Działa i mody nie ważą nic, i to jest decyzja
+
+Przez długi czas było to przeoczenie: `_recompute_mass_properties()` sumuje
+kadłub, silniki, ładunek, komory i podwozie, a **hardpointów nie ma na tej
+liście w ogóle**. Makieta edytora zanotowała przy okazji „MODS DO NOT IMPACT
+MASS AT ALL" — co było już prawdą, ale z szerszego powodu, niż notatka mówiła:
+nie ważył ani mod, ani sama broń.
+
+Zostaje tak, świadomie. Cena zmiany została zmierzona i jest wysoka w jednym
+konkretnym miejscu: autocannon na `NoseHardpoint` (0; −14,0) ma gabaryt 1,00,
+więc ważony 1:1 przesunąłby `com` o **0,75** z krzyża dysz obrotowych. Powrotu
+nie da się kupić retro — potrzebowałoby 2,60 przy gnieździe 2,50 — ani głównym
+napędem, który musiałby mieć 4,91 przy gnieździe 3,5. Czyli każde ważenie dział
+wymaga **przesunięcia mountu albo trzeciej dźwigni**, a nie przeliczenia jednej
+liczby.
+
+Co to kosztuje: `bulk` na broni znaczy mniej niż na silniku — miejsce w
+ładowni i dopasowanie do gniazda, ale nie prowadzenie. Karta broni mówi
+„gabaryt" i jest to półprawda. Warto to wiedzieć, zwłaszcza że panel faktów w
+edytorze wyciągnął masę i przyspieszenie na wierzch.
+
+Rozważane i odrzucone: stawka jak dla ładunku (0,35 — przesunięcie 0,27, dalej
+poza krzyżem) i liczenie masy działa **w punkcie środka masy**, czyli tak, jak
+robi to ładunek (`CARGO_BAY` = (0; 1,75) stoi w punkcie równowagi właśnie po to,
+żeby ładowanie nie ruszało `com`). To drugie jest tanie i ma precedens w tym
+samym pliku; leży na półce na wypadek, gdyby masa broni kiedyś zaczęła być
+potrzebna.
 
 ### Grupy sterowania liczone z geometrii
 

@@ -434,13 +434,12 @@ powinien pokazywać kształtem.
 
 ### Dwie rzeczy, które makieta przy okazji wyłapała
 
-**„MODS DO NOT IMPACT MASS AT ALL" już jest prawdą — ale z szerszego powodu,
-niż notatka mówi.** `_recompute_mass_properties()` sumuje kadłub, silniki,
-ładunek, komory modułowe i podwozie. **Hardpointów nie ma na tej liście w
-ogóle**, więc nie waży ani mod, ani sama broń: legendarny siege slug waży
-tyle, co nic. Mod bez masy jest zamierzony; działo bez masy wygląda na
-przeoczenie, a nie na decyzję. **Pytanie do Ciebie**, bo zmiana ruszyłaby
-wyważenie każdego statku w grze, a nie tylko liczbę w panelu.
+**„MODS DO NOT IMPACT MASS AT ALL" już było prawdą — i okazało się, że z
+szerszego powodu, niż notatka mówiła.** Hardpointów nie ma w sumie masy w
+ogóle, więc nie waży ani mod, ani sama broń. **Rozstrzygnięte: zostaje tak**,
+tyle że teraz jako decyzja. Pomiar i odrzucone warianty w IDEAS.md, „Działa i
+mody nie ważą nic, i to jest decyzja". Przy okazji silniki schudły o połowę —
+patrz sekcja 3 tegoż.
 
 **Kolumna gniazd modułowych rozwiązuje problem, który kod sam o sobie
 zapisał.** Komentarz przy `_free_near()` tłumaczy, że gniazda wewnętrzne —

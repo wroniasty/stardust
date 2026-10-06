@@ -51,10 +51,23 @@ func force_direction() -> Vector2:
 	return direction.normalized()
 
 
-## Mass this mount contributes: the fitted engine's own bulk, or nothing when
-## the slot is empty.
+## How much of an engine's bulk is mass.
+##
+## Half, and the halving is the whole of this constant. `bulk` does two
+## jobs (IDEAS.md section 3): it is what has to fit a socket, and it is
+## what the engine weighs. Making engines lighter by halving their bulk
+## would have halved the fitting price along with it -- and that economy
+## is measured rather than incidental: the largest socket takes 98% of
+## what the generator rolls, the smallest 47%, and 1.25% fits nowhere on
+## this hull. So the two jobs come apart here, where only the mass is,
+## and the socket rule goes on reading the untouched number.
+const MASS_PER_BULK: float = 0.5
+
+
+## Mass this mount contributes: what the fitted engine weighs, or nothing
+## when the slot is empty.
 func module_mass() -> float:
-	return installed.bulk if installed != null else 0.0
+	return installed.bulk * MASS_PER_BULK if installed != null else 0.0
 
 
 ## What a nozzle at full flow throws, measured against REFERENCE_THRUST.
