@@ -1189,6 +1189,7 @@ func _evaluate_phase() -> void:
 			_check_jump_hud()
 			_check_jump_sequence()
 			_check_stores()
+			_check_scrap_and_mend()
 			_check_charges()
 			_check_transit_veil()
 			_check_misjump()
@@ -11444,6 +11445,154 @@ func _check_stores() -> void:
 	)
 	sky.queue_free()
 	ship.queue_free()
+
+
+## Rozbiórka i naprawa: co się opłaca przełamać, a czego nie.
+##
+## The yield has three terms and the interesting one is rarity, because
+## it is the one that could ruin the loot. If a legendary came apart
+## into a pile of parts, the best thing to do with the best item in the
+## game would be to melt it -- so the rarity term is deliberately small
+## and this is where that stays true. Bulk is the headline: scrap is
+## material, and bulk is how much material there is.
+func _check_scrap_and_mend() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.cargo.clear()
+	ship.stores.clear()
+	ship.flight_mode = Ship.FlightMode.DOCKED
+	var yard: Refinery.Place = Refinery.place_of(ship)
+
+	var common: EngineData = _graded_engine(0)
+	var legendary: EngineData = _graded_engine(4)
+	var plain: int = Refinery.parts_from(common, yard)
+	var best: int = Refinery.parts_from(legendary, yard)
+	_expect(
+		plain > 0 and best > plain,
+		"a better item is worth more as scrap (%d parts against %d)" % [best, plain],
+	)
+	_expect(
+		best < plain * 2,
+		"but never enough to make melting the good stuff a plan (%d against %d)" % [
+			best, plain,
+		],
+	)
+
+	# Bulk is the headline, and the families rank the way the materials
+	# do: plating comes out of a wreck, a flight computer does not.
+	var fat: EngineData = _graded_engine(0)
+	fat.bulk = common.bulk * 2.0
+	_expect(
+		Refinery.parts_from(fat, yard) >= plain * 2 - 1,
+		"twice the bulk is twice the scrap (%d against %d)" % [
+			Refinery.parts_from(fat, yard), plain,
+		],
+	)
+	# A flight computer has no base resource -- the generator builds them
+	# from nothing -- so one is rolled rather than loaded, which is also
+	# the only honest way to ask what the game will really hand a pilot.
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	var computer: ModuleData = loot.computer(99, 0) as ModuleData
+	var same: EngineData = _graded_engine(0)
+	same.bulk = computer.bulk
+	_expect(
+		Refinery.parts_from(computer, yard) < Refinery.parts_from(same, yard),
+		"and precision work is poorer scrap than structure (%d against %d)" % [
+			Refinery.parts_from(computer, yard), Refinery.parts_from(same, yard),
+		],
+	)
+
+	loot.queue_free()
+
+	# The ratio the whole mechanic rests on: a hold of commons nobody
+	# wants is worth carrying home.
+	_expect(
+		plain * 3 >= Refinery.HULL_PARTS,
+		"three pieces of junk are a hull repair (%d parts against %d)" % [
+			plain * 3, Refinery.HULL_PARTS,
+		],
+	)
+
+	# And the transaction.
+	_expect(ship.take(common), "the junk is in the hold slot")
+	var made: int = ship.scrap_carried()
+	_expect(
+		made == plain and ship.carried == null
+		and ship.carrying(Stores.Kind.SPARE_PARTS) == made,
+		"breaking it down leaves parts and no item (%d parts)" % made,
+	)
+
+	_check_mending(ship, yard)
+	ship.queue_free()
+
+
+## A common engine of the stock kind, graded. Built rather than rolled,
+## so the test says what it means instead of hoping for a seed.
+func _graded_engine(rarity: int) -> EngineData:
+	var engine: EngineData = (
+		load("res://resources/engines/retro_thruster.tres") as EngineData
+	).duplicate() as EngineData
+	engine.rarity = rarity
+	return engine
+
+
+## Naprawa: częściowa, bo tak jest wszędzie indziej w tej grze.
+##
+## Ten parts against a bill of twenty-five buy two fifths of the
+## repair, not nothing. The same rule as a tank that will not quite
+## cover a jump, and for the same reason: a shortfall is a decision.
+func _check_mending(ship: Ship, yard: Refinery.Place) -> void:
+	ship.stores.clear()
+	ship.hull_integrity = 0.0
+	var bill: int = Refinery.parts_for_hull(1.0, yard)
+	_expect(
+		bill == Refinery.HULL_PARTS,
+		"a whole hull costs the card's figure at a yard (%d)" % bill,
+	)
+	_expect(
+		Refinery.parts_for_hull(1.0, Refinery.Place.SPACE) > bill,
+		"and more out in the dark (%d)" % Refinery.parts_for_hull(1.0, Refinery.Place.SPACE),
+	)
+	_expect(ship.mend_hull() == 0, "with nothing in the bin, nothing is mended")
+
+	ship.load_units(Stores.Kind.SPARE_PARTS, bill / 2)
+	var paid: int = ship.mend_hull()
+	_expect(
+		paid == bill / 2 and ship.hull_integrity > 0.3 and ship.hull_integrity < 0.7,
+		"half the parts buy half the hull (%d parts, %.2f integrity)" % [
+			paid, ship.hull_integrity,
+		],
+	)
+	ship.load_units(Stores.Kind.SPARE_PARTS, 100)
+	ship.mend_hull()
+	_expect(
+		ship.hull_integrity > 0.999,
+		"and the rest finishes it (%.3f)" % ship.hull_integrity,
+	)
+	_expect(
+		ship.mend_hull() == 0,
+		"a whole hull costs nothing to mend further",
+	)
+
+	# An engine costs by its bulk, which is the half of this rule that
+	# makes a big drive expensive to look after.
+	if ship.engines.is_empty():
+		return
+	var engine: EngineInstance = ship.engines[0]
+	engine.health = 0.0
+	var before: int = ship.carrying(Stores.Kind.SPARE_PARTS)
+	var spent: int = ship.mend_engine(engine)
+	_expect(
+		spent > 0 and engine.health > 0.999
+		and ship.carrying(Stores.Kind.SPARE_PARTS) == before - spent,
+		"a dead engine comes back for parts (%d of them, health %.2f)" % [
+			spent, engine.health,
+		],
+	)
+	_expect(
+		ship.mend_engine(engine) == 0,
+		"and a whole one asks for none",
+	)
 
 
 ## Ładunek to pozwolenie na skok, paliwo to sposób desperacki.

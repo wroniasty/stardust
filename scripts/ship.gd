@@ -837,6 +837,86 @@ func retrieve(index: int) -> bool:
 	return true
 
 
+## Breaks what is in the hold slot down into spare parts. Returns how
+## many came out, zero when there was nothing to break.
+##
+## The arithmetic is `Refinery`'s and the transaction is here, which is
+## the same split the rest of this file uses: a rate is a fact about
+## the galaxy and a swap is a thing that happens to this ship.
+##
+## Parts that will not fit are lost rather than refused. A hold with no
+## room is the pilot's problem before they pull the lever, and a scrap
+## job that silently half-finished would leave a module in two states
+## at once.
+func scrap_carried() -> int:
+	if carried == null:
+		return 0
+	var made: int = Refinery.parts_from(carried, Refinery.place_of(self))
+	carried = null
+	carried_rarity = 0
+	var kept: int = stores.add(Stores.Kind.SPARE_PARTS, made, cargo_free())
+	rebuild_control_groups(false)
+	hold_changed.emit(null)
+	cargo_changed.emit()
+	return kept
+
+
+## The same for something already in the bay.
+func scrap_cargo(index: int) -> int:
+	if index < 0 or index >= cargo.size():
+		return 0
+	var entry: Dictionary = cargo[index]
+	var made: int = Refinery.parts_from(
+		entry["item"] as Resource, Refinery.place_of(self)
+	)
+	cargo.remove_at(index)
+	var kept: int = stores.add(Stores.Kind.SPARE_PARTS, made, cargo_free())
+	rebuild_control_groups(false)
+	cargo_changed.emit()
+	return kept
+
+
+## Puts the hull back together with spare parts. Returns how many were
+## spent.
+##
+## Partial, like every other shortfall in this game: ten parts against
+## a bill of twenty-five buy two fifths of the repair rather than
+## nothing. `repair_hull()` stays what it is -- the free, total version
+## the sandbox and a dock use -- because a developer key and a cost are
+## two different things.
+func mend_hull() -> int:
+	var missing: float = 1.0 - hull_integrity
+	if missing <= 0.0001:
+		return 0
+	var place: Refinery.Place = Refinery.place_of(self)
+	var bill: int = Refinery.parts_for_hull(missing, place)
+	var paid: int = spend_units(Stores.Kind.SPARE_PARTS, bill)
+	if paid <= 0:
+		return 0
+	hull_integrity = clampf(
+		hull_integrity + missing * float(paid) / float(bill), 0.0, 1.0
+	)
+	hull_changed.emit(hull_integrity)
+	return paid
+
+
+## And one engine, which costs by its bulk: what goes into a drive is
+## not the plating that comes out of a wreck.
+func mend_engine(engine: EngineInstance) -> int:
+	if engine == null or engine.data == null or engine.health >= 0.9999:
+		return 0
+	var missing: float = 1.0 - engine.health
+	var place: Refinery.Place = Refinery.place_of(self)
+	var bill: int = Refinery.parts_for_engine(engine.data.bulk, missing, place)
+	var paid: int = spend_units(Stores.Kind.SPARE_PARTS, bill)
+	if paid <= 0:
+		return 0
+	engine.health = clampf(
+		engine.health + missing * float(paid) / float(bill), 0.0, 1.0
+	)
+	return paid
+
+
 ## Throws what is in the hold overboard. Announced rather than destroyed: who
 ## turns it back into a crate in the world is the world's business, and a
 ## jettison that annihilates the cargo is not a tactical decision, it is

@@ -780,8 +780,18 @@ robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zab
   drugiego stanu, który mógłby się rozjechać z tym, czy nogi są na ziemi. Stocznia
   jest odniesieniem, czyli liczbą z karty; reszta to znana zniżka, nie zagadka.
   Pierwszy przepis: stardust na ładunek hyperdrive (30 w stoczni, 55 w locie).
-- [ ] **Spare parts** — naprawa kadłuba i modułów. Zasób już jest i jest
-  zapisywany; zostało to, co go wydaje.
+- [x] **Spare parts** — naprawa kadłuba i modułów, i **rozbiórka**, która je
+  daje. Uzysk z gabarytu (nagłówek — złom to materiał), rzadkości i rodziny
+  materiału. Człon rzadkości jest **celowo mały**: gdyby legendarny rozpadał
+  się na górę części, najlepszą rzeczą do zrobienia z najlepszym przedmiotem w
+  grze byłoby przetopienie go. Zmierzone: pospolity retro daje 17 części,
+  legendarny 28, a trzy śmieci to jedna naprawa kadłuba (25) — czyli ładownia
+  pospolitych, których nikt nie chce, jest warta zabrania do domu. Trzy
+  rodziny materiału zamiast wiersza na typ, jak trzy sylwetki broni na
+  schemacie. Naprawa **częściowa**, jak każdy niedobór w tej grze: dziesięć
+  części przy rachunku na dwadzieścia pięć kupuje dwie piąte kadłuba, a nie nic.
+  Silnik kosztuje według gabarytu, bo to, co wchodzi w napęd, to nie blacha,
+  która wychodzi z wraku.
 - [x] **Paliwo w dwóch postaciach**: stałe (silniki) i **hyperdrive charges**
   (skok). Kształt rozcięcia okazał się ważniejszy od samego rozcięcia:
   **ładunek to pozwolenie na skok, nie miara odległości** — jeden skok bierze
