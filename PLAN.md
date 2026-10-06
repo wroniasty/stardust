@@ -414,6 +414,85 @@ Poza kolejnością milestone'ów, wszystko zgłoszone z lotu.
 
 ---
 
+## MAUX4: Edytor statku, druga wersja
+
+Z makiety. Pięć obszarów zamiast trzech, i — co ważniejsze — **porzucenie
+listy tekstowej na rzecz ikon**: dzisiejszy edytor opowiada słowami to, co
+powinien pokazywać kształtem.
+
+### Układ, którego żąda makieta
+
+| gdzie | co | dziś |
+|---|---|---|
+| lewa góra | **Ładownia jako ikony** z ramką w kolorze rzadkości | lista tekstowa |
+| lewy środek | **dwa widżety**: spare parts i stardust na pokładzie | nie istnieją |
+| lewy dół | **rozbiórka przedmiotu na spare parts**, uzysk z typu, gabarytu i rzadkości | nie istnieje |
+| środek | schemat statku, **wszystkie gniazda klikalne**, uchwyt do obracania hardpointu, dwa przyciski grupy | schemat jest, obracanie na `,` / `.`, grupa na `G` |
+| prawa krawędź | **kolumna gniazd modułowych** | gniazda wewnętrzne leżą na schemacie |
+| dół lewy | **fakty o statku**: ciąg, masa, przyspieszenie, hamowanie, generator, napęd skokowy, paski paliwa i ładunków hyperdrive | częściowo w `ConfigurationReport` |
+| dół środek i prawo | **dwie karty obok siebie** — kliknięty przedmiot z ładowni i kliknięty zamontowany — z przyciskiem zamiany między nimi | jedna karta naraz |
+
+### Dwie rzeczy, które makieta przy okazji wyłapała
+
+**„MODS DO NOT IMPACT MASS AT ALL" już jest prawdą — ale z szerszego powodu,
+niż notatka mówi.** `_recompute_mass_properties()` sumuje kadłub, silniki,
+ładunek, komory modułowe i podwozie. **Hardpointów nie ma na tej liście w
+ogóle**, więc nie waży ani mod, ani sama broń: legendarny siege slug waży
+tyle, co nic. Mod bez masy jest zamierzony; działo bez masy wygląda na
+przeoczenie, a nie na decyzję. **Pytanie do Ciebie**, bo zmiana ruszyłaby
+wyważenie każdego statku w grze, a nie tylko liczbę w panelu.
+
+**Kolumna gniazd modułowych rozwiązuje problem, który kod sam o sobie
+zapisał.** Komentarz przy `_free_near()` tłumaczy, że gniazda wewnętrzne —
+generator, komputer, podwozie — stoją w rzeczywistości kilka pikseli od siebie
+i trzeba je na schemacie rozpychać sztucznie. Wyciągnięcie ich do kolumny
+kasuje całą tę maszynerię: schemat zostaje dla tego, co **ma** miejsce na
+kadłubie (silniki, działa), a reszta dostaje listę, której geometria niczego
+nie udaje.
+
+### Czego nie da się zrobić przed M5.2
+
+Trzy pozycje z makiety to **nie jest UI, tylko prośba o zasoby, których nie
+ma**: spare parts, stardust i hyperdrive charges są pozycjami M5.2. Rozbiórka
+przedmiotu na części jest przy okazji tym, czego M5.2 i tak potrzebuje —
+odpływem na śmieciowy loot — więc jest po stronie zasobów, nie ekranu.
+
+Reszta makiety stoi na tym, co już jest: sylwetki gniazd (`_draw_slot_glyph`,
+`_draw_weapon_glyph`) są gotowym słownikiem ikon dla ładowni, kolory rzadkości
+siedzą na `ModuleData`, treść kart na `card_lines()`, a porównanie dwóch
+konfiguracji na `ConfigurationReport.compare()`.
+
+### Kolejność
+
+- [ ] **4.1 Rama na pięć obszarów.** Sam układ, rysowany z tego, co dziś jest
+  rysowane. Osobno, bo przestawianie paneli i zmiana ich zawartości naraz to
+  dwie zmiany, które nie dadzą się obejrzeć oddzielnie.
+- [ ] **4.2 Ładownia jako ikony.** Sylwetka według rodzaju, ramka w kolorze
+  rzadkości, bez ani jednego słowa. Nazwa schodzi na kartę pod spodem — ona i
+  tak jest tam, gdzie pilot patrzy po kliknięciu.
+- [ ] **4.3 Kolumna gniazd modułowych**, i skasowanie rozpychania z
+  `_free_near()`.
+- [ ] **4.4 Dwie karty i przycisk zamiany.** Lewa: wybrane z ładowni. Prawa:
+  wybrane z kadłuba. Między nimi różnica z `compare()` — dziś jest liczona i
+  pokazywana jako werdykt jednym wierszem, a makieta daje jej miejsce.
+- [ ] **4.5 Fakty o statku** z `ConfigurationReport` plus paski paliwa i
+  energii.
+- [ ] **4.6 Uchwyt do obracania hardpointu myszką** (z zatrzaskiem co
+  `AIM_STEP`, bo pięć stopni to decyzja, a ciągły kąt to drżenie ręki) i dwa
+  przyciski grupy zamiast przełącznika na `G`.
+- [ ] **4.7 Każdy komponent klikalny: do ładowni albo za burtę.** `_stow()` i
+  `_jettison()` już to robią dla wybranego; makieta chce tego z poziomu
+  każdego gniazda.
+- [ ] **4.8 Widżety spare parts i stardust** — **po M5.2**.
+- [ ] **4.9 Rozbiórka na spare parts**, uzysk z typu, gabarytu i rzadkości —
+  **po M5.2**, i właściwie *jest* pozycją M5.2.
+- [ ] **4.10 Pasek ładunków hyperdrive** — **po M5.2**.
+
+Gotowe, gdy: refit czyta się kształtem, nie zdaniami, a decyzja „to czy tamto"
+ma obie strony na ekranie naraz.
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.
