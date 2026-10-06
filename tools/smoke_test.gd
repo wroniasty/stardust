@@ -11404,6 +11404,7 @@ func _check_garrison() -> void:
 	)
 
 	_check_garrison_ladder(map)
+	_check_garrison_shapes(map)
 	_check_garrison_memory(home_seed, map.tier_of(home))
 
 
@@ -11453,15 +11454,37 @@ func _check_garrison_ladder(map: GalaxyMap) -> void:
 	)
 	var weak: float = strength[rim] / maxf(count[rim] - majors[rim], 1.0)
 	var hard: float = strength[core] / maxf(count[core] - majors[core], 1.0)
+	# The bar came down from three-fold with the strength curve, which is
+	# the point rather than a concession: the individual is **meant** to
+	# climb gently now. It is an average over fighters and guns both, so
+	# it reads a little above the fighter curve on its own -- a turret is
+	# half again as hard as the thing standing next to it.
 	_expect(
-		hard > weak * 3.0,
-		"and they are worse when you get there (%.2f against %.2f)" % [hard, weak],
+		hard > weak * 2.5,
+		"and the average thing you shoot is worse when you get there (%.2f against %.2f)" % [
+			hard, weak,
+		],
+	)
+	# Strength in numbers, stated as the ratio it is. The first pass had
+	# this backwards -- two to six enemies in a system and each one four
+	# times tougher at the core, which is a boss rush with a commute
+	# between bosses. What has to be true is that the crowd grows faster
+	# than the thing in it.
+	_expect(
+		(thick / maxf(thin, 0.001)) > (hard / maxf(weak, 0.001)),
+		"the crowd grows faster than the enemy in it (x%.1f against x%.1f)" % [
+			thick / maxf(thin, 0.001), hard / maxf(weak, 0.001),
+		],
+	)
+	_expect(
+		thin >= 5.0,
+		"and even the rim is a crowd rather than a pair (%.1f enemies)" % thin,
 	)
 	_expect(
 		majors[core] / maxf(systems[core], 1.0) > majors[rim] / maxf(systems[rim], 1.0) * 5.0,
-		"elites are a core thing without being only a core thing (%.0f%% against %.0f%%)" % [
-			100.0 * majors[core] / maxf(systems[core], 1.0),
-			100.0 * majors[rim] / maxf(systems[rim], 1.0),
+		"majors are a core thing without being only a core thing (%.2f a system against %.2f)" % [
+			majors[core] / maxf(systems[core], 1.0),
+			majors[rim] / maxf(systems[rim], 1.0),
 		],
 	)
 	# Not zero at the rim, deliberately: a pilot who meets their first
@@ -11472,16 +11495,116 @@ func _check_garrison_ladder(map: GalaxyMap) -> void:
 	)
 
 
+## Działka, lotniskowce i to, czego nie wolno im mieć nawzajem.
+##
+## Three things that are not a fighter, and the one rule that keeps the
+## carrier from breaking the rule about minors coming back: nothing
+## arrives from nowhere. The stream has a source standing in the system,
+## the source can be shot, and shooting it stops the stream -- so the
+## brood belongs to the carrier and to nothing else.
+func _check_garrison_shapes(map: GalaxyMap) -> void:
+	var turrets: int = 0
+	var carriers: int = 0
+	var orbiting: int = 0
+	var grounded: int = 0
+	var stray_brood: int = 0
+	var mobile_turret: int = 0
+	var thin_brood: int = 0
+	var rim_turrets: int = 0
+	var rim_systems: int = 0
+
+	for index: int in range(map.count()):
+		var tier: int = map.tier_of(index)
+		var roster: Array[Dictionary] = Garrison.of(
+			StarSystem.derive(TEST_SEED, index), tier
+		)
+		if tier == 1:
+			rim_systems += 1
+		for entry: Dictionary in roster:
+			var kind: int = int(entry["archetype"])
+			var has_brood: bool = entry.has("brood")
+			if kind == Garrison.Archetype.CARRIER:
+				carriers += 1
+				if not has_brood:
+					thin_brood += 1
+				elif (
+					int(entry["brood"]) < Garrison.BROOD_AT_RIM
+					or float(entry["cadence"]) <= 0.0
+					or float(entry["brood_strength"]) >= float(entry["strength"])
+				):
+					thin_brood += 1
+			elif has_brood:
+				stray_brood += 1
+			if kind == Garrison.Archetype.TURRET:
+				turrets += 1
+				if tier == 1:
+					rim_turrets += 1
+				if int(entry["post"]) == Garrison.Post.ORBIT:
+					orbiting += 1
+				elif int(entry["post"]) == Garrison.Post.SURFACE:
+					grounded += 1
+			elif int(entry["post"]) == Garrison.Post.ORBIT:
+				# An orbit is a place to be bolted to, not a place to
+				# wait: a fighter that sat on one would be a turret with
+				# an engine it never uses.
+				mobile_turret += 1
+
+	_expect(
+		turrets > 0 and carriers > 0,
+		"the galaxy has guns bolted down and ships that put out more (%d and %d)" % [
+			turrets, carriers,
+		],
+	)
+	_expect(
+		orbiting > 0 and grounded > 0 and orbiting + grounded < turrets,
+		"guns stand on ground, on orbits and loose in space (%d, %d, %d)" % [
+			grounded, orbiting, turrets - grounded - orbiting,
+		],
+	)
+	_expect(
+		mobile_turret == 0,
+		"and nothing that can fly is parked on an orbit (%d of them)" % mobile_turret,
+	)
+	_expect(
+		stray_brood == 0 and thin_brood == 0,
+		"only a carrier carries a brood, and every carrier carries a usable one (%d loose, %d broken)" % [
+			stray_brood, thin_brood,
+		],
+	)
+	_expect(
+		rim_turrets > 0,
+		"the rim has guns too, so the first one is not learned over a core world (%d across %d systems)" % [
+			rim_turrets, rim_systems,
+		],
+	)
+
+	# What the frame is being asked to carry, which is the number worth
+	# watching when these counts are tuned: a roster is things to stream
+	# and a brood is things on top of it.
+	var heaviest: int = 0
+	for index: int in range(map.count()):
+		heaviest = maxi(heaviest, Garrison.press(Garrison.of(
+			StarSystem.derive(TEST_SEED, index), map.tier_of(index)
+		)))
+	_expect(
+		heaviest > 20 and heaviest < 60,
+		"the heaviest system is a crowd and not a crash (%d in the air)" % heaviest,
+	)
+
+
 ## The two rules of coming back, which are opposites.
 func _check_garrison_memory(system_seed: int, tier: int) -> void:
 	var deltas: Dictionary = {}
 	var roster: Array[Dictionary] = Garrison.of(system_seed, tier, deltas)
 	var minor: Dictionary = {}
 	for entry: Dictionary in roster:
-		if int(entry["rank"]) == Garrison.Rank.MINOR:
+		if (
+			int(entry["rank"]) == Garrison.Rank.MINOR
+			and int(entry["archetype"]) < Garrison.Archetype.TURRET
+		):
 			minor = entry
 			break
-	_expect(not minor.is_empty(), "there is a minor to shoot")
+	_expect(not minor.is_empty(), "there is a minor fighter to shoot")
 	_expect(
 		not Garrison.beat(deltas, minor) and deltas.is_empty(),
 		"shooting a minor writes nothing down",
