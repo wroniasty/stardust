@@ -57,6 +57,24 @@ const SLOT_RING: float = 15.0
 ## How much of the box the glyph inside it takes.
 const GLYPH: float = 3.2
 
+## A cell of the hold grid, and the pitch between two of them.
+##
+## Bigger than a slot box, because a slot is read in place on a
+## schematic and these are read as a row: the eye needs the frame to
+## carry a colour as well as the shape it holds.
+const ICON: float = 14.0
+const ICON_STEP: float = ICON + 3.0
+
+## The shapes this screen draws things as.
+##
+## One vocabulary, reached from two directions: a socket asks what kind
+## of thing goes in it, an icon asks what kind of thing this is, and
+## both get the same silhouette. Written out as an enum rather than
+## left as two parallel if-ladders, because the day they disagree is
+## the day a tank in the hold and a tank in its bay stop looking like
+## the same object.
+enum Glyph { NONE, ENGINE, GUN, CELL, DISH, RING, DRUM, CHIP, STRUT, MOD }
+
 var _ship: Ship = null
 var _canvas: Control = null
 
@@ -298,6 +316,34 @@ func _targets() -> Array[Node]:
 		for bay: ModuleBay in _ship.bays:
 			if bay.fits(item as ModuleData):
 				out.append(bay)
+	return out
+
+
+## The ones with a real place on the hull, which are the ones the
+## schematic can honestly draw where they are.
+func _hull_mounts() -> Array[Node]:
+	var out: Array[Node] = []
+	if _ship == null:
+		return out
+	for mount: EngineMount in _ship.engine_mounts():
+		out.append(mount)
+	for mount: Hardpoint in _ship.hardpoints:
+		out.append(mount)
+	return out
+
+
+## And the ones that are volumes inside it. A generator, a computer and
+## the gear sit within a few pixels of each other on the hull, because
+## that is where they are; drawn there, their boxes overlap into an
+## unclickable heap. They get the column down the edge instead.
+func _internal_mounts() -> Array[Node]:
+	var out: Array[Node] = []
+	if _ship == null:
+		return out
+	for bay: ModuleBay in _ship.bays:
+		out.append(bay)
+	if _ship.gear != null:
+		out.append(_ship.gear)
 	return out
 
 
@@ -559,12 +605,12 @@ func click_at(at: Vector2) -> bool:
 	var panels: Dictionary = _panels()
 
 	for i: int in range(_items().size()):
-		if _row_rect(i, panels["list"]).has_point(at):
+		if _icon_rect(i, panels["hold"]).has_point(at):
 			_pick = i
 			_slot = 0
 			return true
 
-	var where: Dictionary = slot_positions(panels["plan"])
+	var where: Dictionary = slot_positions(panels)
 	var targets: Array[Node] = _targets()
 	for mount: Node in _all_mounts():
 		if not slot_rect(where[mount], SLOT_RING).has_point(at):
@@ -595,34 +641,62 @@ func click_at(at: Vector2) -> bool:
 	return false
 
 
-## Where the three panels go. A function of the viewport and nothing else,
-## so a click can be resolved without waiting for a frame to have been drawn
-## -- the earlier version read back what the last _draw left behind, which
+## Where the panels go. A function of the viewport and nothing else, so a
+## click can be resolved without waiting for a frame to have been drawn --
+## the earlier version read back what the last _draw left behind, which
 ## made mouse input untestable and wrong before the first frame.
+##
+## Six regions in two rows, from the MAUX4 sketch. The shape of it is the
+## argument: a refit is one question asked in two halves -- *what have I
+## got* down the left, *where does it go* in the middle -- and then one
+## comparison across the bottom, both cards side by side, because a swap
+## you have to look at in two goes is two readings taken a moment apart.
+##
+## | | |
+## |---|---|
+## | `hold` | what is aboard, as icons |
+## | `stores` | spare parts and stardust, under it |
+## | `plan` | the schematic, and everything bolted to the hull |
+## | `bays` | the internal sockets, in a column down the edge |
+## | `facts` | what the ship can do |
+## | `carried` / `fitted` | the two cards of the comparison |
 func _panels() -> Dictionary:
 	var view: Vector2 = _canvas.size
-	# Under half to the list and the schematic, the rest to the cards. The
-	# longest card in the game is a legendary missile at seventeen rows, and
-	# at 0.72 the last of them ran off the bottom into the key hints -- the
-	# numbers a swap is decided on were the ones that did not fit.
-	var list: Rect2 = Rect2(6.0, 6.0, view.x * 0.34, view.y * 0.44)
+	var edge: float = 6.0
+	var left: float = snappedf(view.x * 0.26, 1.0)
+	var strip: float = SLOT + PAD * 2.0
+	var top: float = snappedf(view.y * 0.62, 1.0)
+	# Two rows of readings and a line about what they cost: enough that
+	# the panel says something, little enough that the hold keeps the
+	# column it needs for icons.
+	var stores: float = ROW * 3.0 + PAD * 2.0
+
+	var hold: Rect2 = Rect2(edge, edge, left, top - edge - stores - edge * 0.5)
+	var plan_x: float = hold.end.x + edge
+	var plan_w: float = view.x - plan_x - strip - edge * 2.0
+	var bottom: Rect2 = Rect2(
+		edge, top + edge, view.x - edge * 2.0, view.y - top - edge * 2.0
+	)
+	# A third each. The longest card in the game is a legendary missile at
+	# seventeen rows, which is why the bottom row is not thinner.
+	var card_w: float = (bottom.size.x - left - edge * 2.0) * 0.5
 	return {
 		"view": view,
-		"list": list,
-		"plan": Rect2(list.end.x + 6.0, 6.0, view.x - list.end.x - 12.0, view.y * 0.44),
-		"info": Rect2(6.0, list.end.y + 6.0, view.x - 12.0, view.y - list.end.y - 12.0),
+		"hold": hold,
+		"stores": Rect2(edge, hold.end.y + edge * 0.5, left, stores),
+		"plan": Rect2(plan_x, edge, plan_w, top - edge),
+		"bays": Rect2(plan_x + plan_w + edge, edge, strip, top - edge),
+		"facts": Rect2(bottom.position, Vector2(left, bottom.size.y)),
+		"carried": Rect2(
+			bottom.position.x + left + edge, bottom.position.y, card_w, bottom.size.y
+		),
+		"fitted": Rect2(
+			bottom.position.x + left + edge * 2.0 + card_w,
+			bottom.position.y,
+			card_w,
+			bottom.size.y,
+		),
 	}
-
-
-## The clickable box of one row of the list.
-func _row_rect(index: int, list: Rect2) -> Rect2:
-	var top: float = list.position.y + PAD + float(FONT_SIZE) + ROW * (1.5 + float(index))
-	return Rect2(
-		list.position.x + PAD - 2.0,
-		top - float(FONT_SIZE),
-		list.size.x - PAD * 2.0 + 2.0,
-		ROW,
-	)
 
 
 ## Maps a point in the ship's own frame onto the schematic, fitting the hull
@@ -661,11 +735,14 @@ func _draw_editor() -> void:
 	var panels: Dictionary = _panels()
 
 	_canvas.draw_rect(Rect2(Vector2.ZERO, panels["view"] as Vector2), _ink.over(_ink.scrim, 0.72))
-	for key: String in ["list", "plan", "info"]:
+	for key: String in ["hold", "stores", "plan", "bays", "facts", "carried", "fitted"]:
 		_panel(panels[key])
-	_draw_list(font, panels["list"])
+	_draw_hold(font, panels["hold"])
+	_draw_stores(font, panels["stores"])
 	_draw_plan(font, panels["plan"])
-	_draw_info(font, panels["info"])
+	_draw_bays(font, panels["bays"])
+	_draw_facts(font, panels["facts"])
+	_draw_cards(font, panels["carried"], panels["fitted"])
 
 
 func _panel(rect: Rect2) -> void:
@@ -681,32 +758,156 @@ func _text(font: Font, at: Vector2, text: String, colour: Color) -> void:
 	_canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, colour)
 
 
-func _draw_list(font: Font, rect: Rect2) -> void:
-	var y: float = rect.position.y + PAD + float(FONT_SIZE)
+## The hold, as a grid of icons rather than as a list of sentences.
+##
+## The sketch asks for this and the reason is the one the schematic
+## already proved: a slot box says kind and occupancy without being
+## read, and a line of text says the same thing after it has been read.
+## Twelve items are twelve lines of grey or twelve shapes, and only one
+## of those can be taken in at a glance.
+##
+## The frame is the rarity and the silhouette is the kind, which is two
+## facts in no words at all. The name is on the card below, where the
+## pilot is already looking once they have clicked.
+func _draw_hold(font: Font, rect: Rect2) -> void:
 	var x: float = rect.position.x + PAD
-	_text(font, Vector2(x, y), "HOLD / CARGO   %.1f / %.1f" % [
-		_ship.cargo_used(), _ship.cargo_capacity(),
-	], _ink.label)
-	y += ROW * 1.5
+	var y: float = rect.position.y + PAD + float(FONT_SIZE)
+	var used: float = _ship.cargo_used()
+	var room: float = _ship.cargo_capacity()
+	_text(font, Vector2(x, y), "HOLD", _ink.label)
+	_text(
+		font,
+		Vector2(rect.end.x - PAD - _width(font, "%.1f / %.1f" % [used, room]), y),
+		"%.1f / %.1f" % [used, room],
+		_ink.alarm if used > room else _ink.value,
+	)
 
 	var items: Array[Dictionary] = _items()
 	if items.is_empty():
-		_text(font, Vector2(x, y), "empty", _ink.label)
+		_text(font, Vector2(x, y + ROW * 1.5), "empty", _ink.inert)
 		return
-
 	for i: int in range(items.size()):
-		var entry: Dictionary = items[i]
-		var item: Resource = entry["item"]
-		var module: ModuleData = item as ModuleData
-		var colour: Color = (
-			ModuleData.RARITY_COLORS[0] if module == null else module.rarity_color()
+		_draw_hold_icon(items[i], _icon_rect(i, rect), i == _pick)
+
+
+## One cell of the grid, and where it is. Public for the same reason the
+## slot boxes are: the click and the picture have to be the same picture.
+func _icon_rect(index: int, rect: Rect2) -> Rect2:
+	var columns: int = maxi(int((rect.size.x - PAD * 2.0) / ICON_STEP), 1)
+	var home: Vector2 = rect.position + Vector2(PAD, PAD + ROW * 1.6)
+	return Rect2(
+		home + Vector2(
+			float(index % columns) * ICON_STEP, float(index / columns) * ICON_STEP
+		),
+		Vector2(ICON, ICON),
+	)
+
+
+func _draw_hold_icon(entry: Dictionary, box: Rect2, picked: bool) -> void:
+	var item: Resource = entry["item"]
+	var module: ModuleData = item as ModuleData
+	var grade: Color = (
+		ModuleData.RARITY_COLORS[0] if module == null else module.rarity_color()
+	)
+	# The frame carries the rarity, so the glyph inside can carry the
+	# kind without the two fighting for the same channel.
+	_canvas.draw_rect(box, Color(grade, 0.14), true)
+	_canvas.draw_rect(box, grade, false, 1.0)
+	if bool(entry["held"]):
+		# What is in the hands rather than in the bay. A bracket, which
+		# is what this interface uses everywhere for "the one in play".
+		UiDraw.bracket(_canvas, box.grow(2.0), _ink.accent, 3.0)
+	if picked:
+		_canvas.draw_rect(box.grow(1.0), _ink.caution, false, 1.0)
+	_draw_item_glyph(box.get_center(), item, _ink.value if picked else grade)
+
+
+## What is aboard by the unit, and what it is for.
+##
+## Two readings rather than a bar each: these have no capacity of their
+## own -- the hold is their capacity, and it is already drawn above
+## them. A bar with no end is a bar that lies about where the end is.
+func _draw_stores(font: Font, rect: Rect2) -> void:
+	var width: float = rect.size.x - PAD * 2.0
+	var y: float = rect.position.y + PAD + float(FONT_SIZE)
+	for kind: int in [Stores.Kind.SPARE_PARTS, Stores.Kind.STARDUST]:
+		UiDraw.row(
+			_canvas,
+			font,
+			Vector2(rect.position.x + PAD, y),
+			width,
+			Stores.kind_name(kind),
+			"%d" % _ship.carrying(kind as Stores.Kind),
+			_ink.value if _ship.carrying(kind as Stores.Kind) > 0 else _ink.inert,
+			_ink.label,
 		)
-		if i == _pick:
-			_canvas.draw_rect(_row_rect(i, rect), Color(_ink.caution, 0.18))
-		_text(font, Vector2(x, y), "%s %-22s %4.1f" % [
-			">" if bool(entry["held"]) else " ", _label(item).left(22), Ship.module_bulk(item),
-		], colour if i != _pick else _ink.caution)
 		y += ROW
+	# What breaking the selected thing down would give, where the pilot
+	# is looking when they are deciding whether it is worth keeping.
+	var picked: Dictionary = _selected()
+	var place: Refinery.Place = Refinery.place_of(_ship)
+	if picked.is_empty():
+		_text(font, Vector2(rect.position.x + PAD, y), "%s" % Refinery.place_name(place), _ink.inert)
+		return
+	_text(
+		font,
+		Vector2(rect.position.x + PAD, y),
+		"scrap: %d parts, %s" % [
+			Refinery.parts_from(picked["item"] as Resource, place),
+			Refinery.place_name(place),
+		],
+		_ink.label,
+	)
+
+
+## The internal sockets, in a column down the edge.
+##
+## They are volumes inside the hull rather than points on it, so drawing
+## them where they really are put five boxes within a few pixels of each
+## other and needed a whole fanning-out routine to make them clickable.
+## The sketch's answer is better than that routine: give them a list,
+## and leave the schematic to the things that genuinely have a place on
+## the ship.
+func _draw_bays(font: Font, rect: Rect2) -> void:
+	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "M", _ink.label)
+	var targets: Array[Node] = _targets()
+	var where: Dictionary = slot_positions(_panels())
+	for mount: Node in _internal_mounts():
+		var fits: bool = targets.has(mount)
+		var chosen: bool = mount == _highlighted()
+		_draw_slot(
+			where[mount],
+			mount,
+			_ink.caution if chosen else (_ink.ok if fits else _ink.inert),
+			chosen,
+		)
+
+
+## What the ship can do, which is the question the schematic cannot
+## answer: where a module goes decides what it does, and the sum of all
+## of them is a different reading from any one card.
+func _draw_facts(font: Font, rect: Rect2) -> void:
+	var width: float = rect.size.x - PAD * 2.0
+	var x: float = rect.position.x + PAD
+	var y: float = rect.position.y + PAD + float(FONT_SIZE)
+	_text(font, Vector2(x, y), "SHIP", _ink.label)
+	y += ROW * 1.4
+	var rows: Array[Array] = [
+		["mass", "%.1f" % _ship.mass, ""],
+		["hull", "%.0f" % (_ship.hull_integrity * 100.0), "%"],
+		["fuel", "%.0f" % _ship.fuel, ""],
+		["jumps", "%d / %d" % [_ship.charges, _ship.charge_capacity()], ""],
+	]
+	for row: Array in rows:
+		UiDraw.row(
+			_canvas, font, Vector2(x, y), width,
+			String(row[0]), String(row[1]),
+			_ink.value, _ink.label, String(row[2]),
+		)
+		y += ROW
+	# Why fitting is or is not available, which belongs with the ship
+	# rather than with the item: it is a fact about where it is standing.
+	_text(font, Vector2(x, rect.end.y - PAD), _where_it_stands(), _ink.label)
 
 
 ## The schematic, built from the hull polygon and the mount positions so it
@@ -720,7 +921,7 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 		return
 
 	var place: Callable = _plan_placement(rect)
-	var where: Dictionary = slot_positions(rect)
+	var where: Dictionary = slot_positions(_panels())
 	var origin: Vector2 = rect.position + Vector2(rect.size.x * 0.5, rect.size.y * 0.55)
 
 	var outline: PackedVector2Array = PackedVector2Array()
@@ -736,7 +937,7 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 		_slot = posmod(_slot, targets.size())
 		chosen = targets[_slot]
 
-	for mount: Node in mounts:
+	for mount: Node in _hull_mounts():
 		var at: Vector2 = where[mount]
 		var fits: bool = targets.has(mount)
 		var colour: Color = _ink.caution if mount == chosen else (_ink.ok if fits else _ink.inert)
@@ -828,30 +1029,103 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 		# accessor, because the convention for folding in the node's rotation
 		# should live in one place and this is not it.
 		var along: Vector2 = engine.force_direction()
-		if along.is_zero_approx():
-			along = Vector2.DOWN
-		var across: Vector2 = along.orthogonal() * GLYPH * 0.8
-		_canvas.draw_colored_polygon(PackedVector2Array([
-			at + along * GLYPH, at - along * GLYPH + across, at - along * GLYPH - across,
-		]), colour)
+		_draw_kind_glyph(
+			at, Glyph.ENGINE, colour, Vector2.DOWN if along.is_zero_approx() else along
+		)
 		return
 	var gun: Hardpoint = mount as Hardpoint
 	if gun != null:
 		_draw_weapon_glyph(at, gun.weapon, colour)
 		return
+	_draw_kind_glyph(at, _glyph_for_mount(mount), colour)
+
+
+## Which shape a socket wears. The bays, which are the ones a mount and
+## an item agree about.
+func _glyph_for_mount(mount: Node) -> Glyph:
 	if mount is GeneratorBay:
+		return Glyph.CELL
+	if mount is ScannerBay:
+		return Glyph.DISH
+	if mount is JumpDriveBay:
+		return Glyph.RING
+	if mount is TankBay:
+		return Glyph.DRUM
+	if mount is ComputerBay:
+		return Glyph.CHIP
+	if mount is LandingGear:
+		return Glyph.STRUT
+	return Glyph.NONE
+
+
+## And which shape a loose module wears, which has to be the same one.
+func _glyph_for_item(item: Resource) -> Glyph:
+	if item is EngineData:
+		return Glyph.ENGINE
+	if item is WeaponData:
+		return Glyph.GUN
+	if item is GeneratorData:
+		return Glyph.CELL
+	if item is ScannerData:
+		return Glyph.DISH
+	if item is JumpDriveData:
+		return Glyph.RING
+	if item is TankData:
+		return Glyph.DRUM
+	if item is FlightComputerData:
+		return Glyph.CHIP
+	if item is GearData:
+		return Glyph.STRUT
+	if item is ShotModData:
+		return Glyph.MOD
+	return Glyph.NONE
+
+
+## A module in the hold, drawn as the thing it is.
+func _draw_item_glyph(at: Vector2, item: Resource, colour: Color) -> void:
+	var kind: Glyph = _glyph_for_item(item)
+	if kind == Glyph.GUN:
+		_draw_weapon_glyph(at, item as WeaponData, colour)
+		return
+	_draw_kind_glyph(at, kind, colour)
+
+
+## The shapes themselves, and the only place any of them is drawn.
+func _draw_kind_glyph(
+	at: Vector2, kind: Glyph, colour: Color, along: Vector2 = Vector2.DOWN
+) -> void:
+	if kind == Glyph.ENGINE:
+		var across: Vector2 = along.orthogonal() * GLYPH * 0.8
+		_canvas.draw_colored_polygon(PackedVector2Array([
+			at + along * GLYPH, at - along * GLYPH + across, at - along * GLYPH - across,
+		]), colour)
+		return
+	if kind == Glyph.MOD:
+		# A plug: a small square with two pins, which is what a mod is --
+		# a thing that goes into something else.
+		var body: Vector2 = Vector2(GLYPH, GLYPH) * 0.7
+		_canvas.draw_rect(Rect2(at - body, body * 2.0), colour, false, 1.0)
+		for side: float in [-0.4, 0.4]:
+			_canvas.draw_line(
+				Vector2(at.x + side * GLYPH * 2.0, at.y + body.y),
+				Vector2(at.x + side * GLYPH * 2.0, at.y + GLYPH * 1.4),
+				colour,
+				1.0,
+			)
+		return
+	if kind == Glyph.CELL:
 		# Cell plates, long and short, the way a battery is drawn.
 		for row: Array in [[-1.0, 1.0], [0.0, 0.5], [1.0, 1.0]]:
 			var half: float = GLYPH * float(row[1])
 			var y: float = at.y + float(row[0]) * GLYPH * 0.7
 			_canvas.draw_line(Vector2(at.x - half, y), Vector2(at.x + half, y), colour, 1.0)
 		return
-	if mount is ScannerBay:
+	if kind == Glyph.DISH:
 		# A dish: an arc looking forward off a stem.
 		_canvas.draw_arc(at, GLYPH, PI * 1.15, PI * 1.85, 10, colour, 1.0)
 		_canvas.draw_line(at, at + Vector2(0.0, GLYPH), colour, 1.0)
 		return
-	if mount is JumpDriveBay:
+	if kind == Glyph.RING:
 		# A ring with a line through it: the thing you go through, drawn
 		# as the thing it does rather than as the box it lives in.
 		_canvas.draw_arc(at, GLYPH * 0.8, 0.0, TAU, 12, colour, 1.0)
@@ -859,7 +1133,7 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 			at - Vector2(GLYPH * 1.3, 0.0), at + Vector2(GLYPH * 1.3, 0.0), colour, 1.0
 		)
 		return
-	if mount is TankBay:
+	if kind == Glyph.DRUM:
 		# A drum: a box with a band across it.
 		var body: Vector2 = Vector2(GLYPH * 0.8, GLYPH)
 		_canvas.draw_rect(Rect2(at - body, body * 2.0), colour, false, 1.0)
@@ -867,7 +1141,7 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 			Vector2(at.x - body.x, at.y), Vector2(at.x + body.x, at.y), colour, 1.0
 		)
 		return
-	if mount is ComputerBay:
+	if kind == Glyph.CHIP:
 		# A chip: a die with legs down both sides.
 		_canvas.draw_rect(Rect2(at - Vector2(GLYPH, GLYPH) * 0.7, Vector2(GLYPH, GLYPH) * 1.4),
 			colour, false, 1.0)
@@ -881,7 +1155,7 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 					1.0,
 				)
 		return
-	if mount is LandingGear:
+	if kind == Glyph.STRUT:
 		# A strut on a pad, the same shape the legs are drawn on the hull.
 		_canvas.draw_line(at - Vector2(0.0, GLYPH), at + Vector2(0.0, GLYPH), colour, 1.0)
 		_canvas.draw_line(
@@ -945,20 +1219,28 @@ func plan_rect() -> Rect2:
 ## Where every slot is drawn, keyed by the mount. Public for the same reason
 ## as slot_rect: the click and the picture have to be the same picture.
 ##
-## The internal bays -- generator, computer, gear -- sit within a few pixels
-## of each other on the hull, because they are volumes inside it rather than
-## points on it. Drawn at their true positions their boxes overlap into an
-## unreadable and unclickable heap, so they are fanned downward here. On the
-## schematic only: the nodes themselves carry mass, and moving one to tidy a
-## drawing would move the centre of mass.
-func slot_positions(plan: Rect2) -> Dictionary:
+## Two answers, because there are two kinds of question. Things bolted to
+## the hull are drawn where they are, spread apart only as far as they
+## have to be to stay clickable. Things inside it get the column down the
+## edge -- they are volumes rather than points, and pretending otherwise
+## is what made five boxes land on one spot and needed a whole
+## fanning-out routine to undo.
+##
+## On the drawing only, either way. The nodes themselves carry mass, and
+## moving one to tidy a picture would move the centre of mass.
+func slot_positions(panels: Dictionary) -> Dictionary:
+	var plan: Rect2 = panels["plan"]
 	var place: Callable = _plan_placement(plan)
 	var out: Dictionary = {}
 	var taken: Array[Vector2] = []
-	for mount: Node in _all_mounts():
-		var home: Vector2 = place.call((mount as Node2D).position)
+	for mount: Node in _hull_mounts():
 		out[mount] = _free_near(place.call((mount as Node2D).position), taken, plan)
 		taken.append(out[mount])
+	var strip: Rect2 = panels["bays"]
+	var at: Vector2 = strip.position + Vector2(strip.size.x * 0.5, PAD + ROW * 2.0)
+	for mount: Node in _internal_mounts():
+		out[mount] = at
+		at += Vector2(0.0, SLOT + 4.0)
 	return out
 
 
@@ -1031,76 +1313,56 @@ func _draw_arc_for(gun: Hardpoint, at: Vector2) -> void:
 		)
 
 
-func _draw_info(font: Font, rect: Rect2) -> void:
-	var x: float = rect.position.x + PAD
-	var y: float = rect.position.y + PAD + float(FONT_SIZE)
+## The comparison, as the two panels the sketch asks for.
+##
+## Side by side and always both, which is the whole of why it is two
+## panels now: a swap is a question about the difference between two
+## things, and one you have to look at in two goes is two readings
+## taken a moment apart. The left is what you are holding, the right is
+## what is in the socket you are aiming at.
+func _draw_cards(font: Font, carried: Rect2, fitted: Rect2) -> void:
+	var x: float = carried.position.x + PAD
+	var y: float = carried.position.y + PAD + float(FONT_SIZE)
 	var picked: Dictionary = _selected()
-
-	if picked.is_empty():
-		if _inspecting != null:
-			for line: String in _card(_inspecting, null):
-				_text(font, Vector2(x, y), line, _ink.value)
-				y += ROW
-		else:
-			_text(font, Vector2(x, y), "nothing selected - click a socket or an item", _ink.label)
-		_text(font, Vector2(x, rect.end.y - PAD), _keys(), _ink.label)
-		return
-	_inspecting = null
-
-	var item: Resource = picked["item"]
+	var floor_y: float = carried.end.y - PAD - ROW
 	var replacing: Resource = _fitted_in(_highlighted())
-	# Stopped short of the key hints rather than drawn over them. A card
-	# longer than the panel is a card whose last rows are unreadable either
-	# way; at least this way the hints stay legible.
-	var floor_y: float = rect.end.y - PAD - ROW
-	var dropped: int = 0
-	for line: String in _card(item, replacing):
-		if y > floor_y:
-			dropped += 1
-			continue
-		_text(font, Vector2(x, y), line, _ink.value)
-		y += ROW
 
-	# What it would replace, beside it rather than under it: a swap is a
-	# comparison, and one you have to scroll between is two readings taken a
-	# moment apart.
-	if replacing != null:
-		var beside: float = rect.position.x + rect.size.x * 0.48
-		var at: float = rect.position.y + PAD + float(FONT_SIZE)
-		_text(font, Vector2(beside, at), "-- fitted now --", _ink.label)
-		for line: String in _card(replacing, null):
-			at += ROW
-			if at > floor_y:
+	_text(font, Vector2(x, y), "CARRYING", _ink.label)
+	y += ROW * 1.4
+	if picked.is_empty():
+		_text(font, Vector2(x, y), "nothing picked", _ink.inert)
+	else:
+		_inspecting = null
+		for line: String in _card(picked["item"] as Resource, replacing):
+			if y > floor_y:
 				break
-			_text(font, Vector2(beside, at), line, _ink.inert)
+			_text(font, Vector2(x, y), line, _ink.value)
+			y += ROW
+	if not _notice.is_empty():
+		_text(font, Vector2(x, carried.end.y - PAD), _notice, _ink.caution)
 
-	# What the swap would do to the ship as a whole, which the card cannot
-	# say: where an engine goes decides what it does.
-	y += ROW * 0.4
+	# The right-hand side is what happens if you do it: what is in the
+	# socket now, and what the ship would become.
+	var rx: float = fitted.position.x + PAD
+	var ry: float = fitted.position.y + PAD + float(FONT_SIZE)
+	var shown: Resource = replacing if replacing != null else _inspecting
+	_text(font, Vector2(rx, ry), "FITTED", _ink.label)
+	ry += ROW * 1.4
+	if shown == null:
+		_text(font, Vector2(rx, ry), "socket is empty", _ink.inert)
+	else:
+		for line: String in _card(shown, null):
+			if ry > fitted.end.y - PAD - ROW:
+				break
+			_text(font, Vector2(rx, ry), line, _ink.inert)
+			ry += ROW
+	ry += ROW * 0.4
 	for line: String in _verdict():
-		if y > floor_y:
-			dropped += 1
-			continue
-		_text(font, Vector2(x, y), line.left(96), _ink.ok)
-		y += ROW
-
-	if not _notice.is_empty() and y <= floor_y:
-		_text(font, Vector2(x, y), _notice.left(96), _ink.caution)
-
-	var state: String = _where_it_stands()
-	_text(
-		font,
-		Vector2(rect.end.x - PAD - _width(font, state), rect.position.y + PAD + float(FONT_SIZE)),
-		state,
-		_ink.ok if can_refit() else _ink.caution,
-	)
-	# A row that will not fit is dropped, but never quietly: a card missing
-	# its last line looks exactly like a card that ends there, and the pilot
-	# would be deciding a swap on numbers they were not told about.
-	var hints: String = _keys()
-	if dropped > 0:
-		hints += "   (+%d rows off the panel)" % dropped
-	_text(font, Vector2(x, rect.end.y - PAD), hints, _ink.label)
+		if ry > fitted.end.y - PAD - ROW:
+			break
+		_text(font, Vector2(rx, ry), line, _ink.ok)
+		ry += ROW
+	_text(font, Vector2(rx, fitted.end.y - PAD), _keys(), _ink.label)
 
 
 func _keys() -> String:

@@ -2122,19 +2122,37 @@ func _check_editor() -> void:
 		float(ProjectSettings.get_setting("display/window/size/viewport_width")),
 		float(ProjectSettings.get_setting("display/window/size/viewport_height")),
 	)
-	var plan: Rect2 = editor.plan_rect()
-	var where: Dictionary = editor.slot_positions(plan)
+	# Each slot inside the region it belongs to, which since MAUX4.1 is
+	# two regions rather than one: things bolted to the hull are drawn
+	# where they are, and the volumes inside it -- generator, computer,
+	# gear -- get the column down the edge. The old version of this
+	# checked everything against the schematic, which was right while
+	# everything was on it.
+	var panels: Dictionary = editor._panels()
+	var where: Dictionary = editor.slot_positions(panels)
 	var boxes: Array[Rect2] = []
 	var separated: bool = true
-	var inside: bool = true
+	var strays: int = 0
 	for slot: Node in where:
 		var box: Rect2 = editor.slot_rect(where[slot])
 		for other: Rect2 in boxes:
 			separated = separated and not box.intersects(other)
 		boxes.append(box)
-		inside = inside and plan.encloses(box)
+		var home: Rect2 = (
+			panels["plan"] if editor._hull_mounts().has(slot) else panels["bays"]
+		)
+		if not home.grow(1.0).encloses(box):
+			strays += 1
 	_expect(separated, "no two slots are drawn on top of each other (%d slots)" % boxes.size())
-	_expect(inside, "and none of them is drawn outside the schematic")
+	_expect(
+		strays == 0,
+		"and every one is inside the panel it belongs to (%d strays)" % strays,
+	)
+	_expect(
+		not editor._internal_mounts().is_empty()
+		and panels["bays"].encloses(editor.slot_rect(where[editor._internal_mounts()[0]])),
+		"the bays are in the column, which is what stopped them piling up",
+	)
 
 	for slot: Node in where:
 		editor.click_at(where[slot])
@@ -2183,7 +2201,7 @@ func _check_editor() -> void:
 	_expect(editor._items().size() >= 2, "there is a list to click on")
 	editor._pick = 0
 	_expect(
-		editor.click_at(editor._row_rect(1, editor._panels()["list"]).get_center()),
+		editor.click_at(editor._icon_rect(1, editor._panels()["hold"]).get_center()),
 		"a click on the second row hits it",
 	)
 	_expect(editor._pick == 1, "and selects it")

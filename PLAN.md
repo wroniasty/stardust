@@ -464,14 +464,18 @@ konfiguracji na `ConfigurationReport.compare()`.
 
 ### Kolejność
 
-- [ ] **4.1 Rama na pięć obszarów.** Sam układ, rysowany z tego, co dziś jest
+- [x] **4.1 Rama na sześć obszarów.** Sam układ, rysowany z tego, co dziś jest
   rysowane. Osobno, bo przestawianie paneli i zmiana ich zawartości naraz to
   dwie zmiany, które nie dadzą się obejrzeć oddzielnie.
-- [ ] **4.2 Ładownia jako ikony.** Sylwetka według rodzaju, ramka w kolorze
+- [x] **4.2 Ładownia jako ikony.** Sylwetka według rodzaju, ramka w kolorze
   rzadkości, bez ani jednego słowa. Nazwa schodzi na kartę pod spodem — ona i
   tak jest tam, gdzie pilot patrzy po kliknięciu.
-- [ ] **4.3 Kolumna gniazd modułowych**, i skasowanie rozpychania z
-  `_free_near()`.
+- [x] **4.3 Kolumna gniazd modułowych.** Weszła razem z ramą, bo rama z
+  obszarem, którego nikt nie używa, to dokładnie to puste pudełko, przed którym
+  ostrzega UI_STYLE. `slot_positions()` dzieli teraz gniazda na dwa rodzaje:
+  przykręcone do kadłuba rysują się tam, gdzie są, a objętości w środku dostają
+  kolumnę. `_free_near()` zostaje dla tych pierwszych i nie ma już czego
+  rozpychać.
 - [ ] **4.4 Dwie karty i przycisk zamiany.** Lewa: wybrane z ładowni. Prawa:
   wybrane z kadłuba. Między nimi różnica z `compare()` — dziś jest liczona i
   pokazywana jako werdykt jednym wierszem, a makieta daje jej miejsce.
