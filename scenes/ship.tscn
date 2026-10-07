@@ -1,7 +1,7 @@
 [gd_scene load_steps=21 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
-[ext_resource type="PackedScene" path="res://scenes/engine_mount.tscn" id="2_mount"]
+[ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="2_hull"]
 [ext_resource type="Script" path="res://scripts/generator_bay.gd" id="13_generator_bay"]
 [ext_resource type="Script" path="res://scripts/computer_bay.gd" id="15_computer_bay"]
 [ext_resource type="Script" path="res://scripts/scanner_bay.gd" id="20_scanner_bay"]
@@ -11,17 +11,11 @@
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="24_tank"]
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="25_survey"]
 [ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="14_cell"]
-[ext_resource type="Script" path="res://scripts/hardpoint.gd" id="3_hardpoint"]
-[ext_resource type="Resource" path="res://resources/weapons/autocannon.tres" id="12_autocannon"]
 [ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
 [ext_resource type="Script" path="res://scripts/engine_debug_draw.gd" id="6_engine_draw"]
 [ext_resource type="Script" path="res://scripts/landing_gear.gd" id="11_gear"]
 [ext_resource type="Script" path="res://scripts/fx/ship_skin.gd" id="16_skin"]
 [ext_resource type="Script" path="res://scripts/fx/bow_shock.gd" id="26_shock"]
-[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="7_main"]
-[ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="8_torque"]
-[ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="9_thruster"]
-[ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="10_retro"]
 
 [sub_resource type="Gradient" id="Gradient_contrail"]
 offsets = PackedFloat32Array(0, 1)
@@ -34,6 +28,8 @@ points = PackedVector2Array(0, -12, -8, 10, 8, 10)
 gravity_scale = 0.0
 can_sleep = false
 script = ExtResource("1_ship")
+hull = ExtResource("2_hull")
+fitout_name = "dart (stock)"
 
 [node name="Hull" type="Polygon2D" parent="."]
 color = Color(0.82, 0.86, 0.92, 1)
@@ -41,61 +37,6 @@ polygon = PackedVector2Array(0, -12, -8, 10, 8, 10)
 
 [node name="HullShape" type="CollisionShape2D" parent="."]
 shape = SubResource("ConvexPolygonShape2D_hull")
-
-[node name="MainDrive" parent="." instance=ExtResource("2_mount")]
-size = 3.5
-position = Vector2(0, 10)
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("7_main")
-
-[node name="NoseLeftTorque" parent="." instance=ExtResource("2_mount")]
-size = 0.8
-position = Vector2(-8, -10)
-rotation = 1.5707964
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("8_torque")
-
-[node name="TailRightTorque" parent="." instance=ExtResource("2_mount")]
-size = 0.8
-position = Vector2(8, 13.5)
-rotation = -1.5707964
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("8_torque")
-
-[node name="NoseRightTorque" parent="." instance=ExtResource("2_mount")]
-size = 0.8
-position = Vector2(8, -10)
-rotation = -1.5707964
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("8_torque")
-
-[node name="TailLeftTorque" parent="." instance=ExtResource("2_mount")]
-size = 0.8
-position = Vector2(-8, 13.5)
-rotation = 1.5707964
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("8_torque")
-
-[node name="StrafeLeftThruster" parent="." instance=ExtResource("2_mount")]
-size = 1.0
-position = Vector2(9, 1.75)
-rotation = -1.5707964
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("9_thruster")
-
-[node name="StrafeRightThruster" parent="." instance=ExtResource("2_mount")]
-size = 1.0
-position = Vector2(-9, 1.75)
-rotation = 1.5707964
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("9_thruster")
-
-[node name="NoseReverseThruster" parent="." instance=ExtResource("2_mount")]
-size = 2.5
-position = Vector2(0, -12)
-rotation = 3.1415927
-thrust_direction = Vector2(0, -1)
-installed = ExtResource("10_retro")
 
 [node name="ComputerBay" type="Node2D" parent="."]
 position = Vector2(0, -2)
@@ -125,11 +66,6 @@ position = Vector2(0, 1.75)
 script = ExtResource("22_tank_bay")
 size = 2.4
 installed = ExtResource("24_tank")
-
-[node name="NoseHardpoint" type="Node2D" parent="."]
-position = Vector2(0, -14)
-script = ExtResource("3_hardpoint")
-weapon = ExtResource("12_autocannon")
 
 [node name="LeftContrail" type="Line2D" parent="."]
 top_level = true

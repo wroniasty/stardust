@@ -184,6 +184,14 @@ static func _scaled(mounts: Array[Dictionary], factor: float) -> Array[Dictionar
 	return out
 
 
+## The preset with this name, or an empty dictionary.
+static func preset(preset_name: String) -> Dictionary:
+	for entry: Dictionary in all():
+		if entry["name"] == preset_name:
+			return entry
+	return {}
+
+
 ## Rebuilds a ship as one of these, in place.
 ##
 ## In place rather than by swapping in another scene, because everything
@@ -217,7 +225,8 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	# The hull is named, not described. It used to be an outline, a hold
 	# and a pair of feet written out in every preset -- three of which flew
 	# the same dart and had to agree about it by hand.
-	var hull: HullData = HullData.of(preset["hull"])
+	var named: Variant = preset["hull"]
+	var hull: HullData = named as HullData if named is HullData else HullData.of(named)
 	if hull == null:
 		push_error("preset %s names no hull" % preset["name"])
 		return

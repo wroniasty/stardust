@@ -30,11 +30,15 @@ const FORWARD: Vector2 = Vector2.UP
 ## solver. That is why there are guidelines for drawing one -- see the
 ## configuration report -- rather than a solver clever enough for any shape
 ## (IDEAS.md section 6).
-## The hull resource this ship is built on: where its places are, its legs
-## and its hold. Found from the outline for the stock ship and set by
-## ShipFitout.apply for a preset; a shape nobody named gets one made from the
-## outline alone.
-var hull: HullData = null
+## The hull resource this ship is built on: its outline, its legs, its hold
+## and where its places are. With a `fitout_name` as well, `_ready` builds the
+## engines and guns from the two resources instead of from nodes in the scene.
+@export var hull: HullData = null
+
+## Which entry of ShipFitout.all() to build when `hull` is set. Empty builds
+## only the hull's empty places, and a ship without a hull keeps whatever its
+## scene holds.
+@export var fitout_name: String = ""
 
 @export var hull_outline: PackedVector2Array = PackedVector2Array([
 	Vector2(0, -12),
@@ -704,8 +708,8 @@ func collect_parts() -> void:
 
 
 func _ready() -> void:
-	_add_hull_slots()
 	collect_parts()
+	_build_from_resources()
 	# Set once here rather than at every landing: it never changes, and writing
 	# it from _integrate_forces would be another state change the server
 	# refuses mid-flush.
@@ -723,17 +727,30 @@ func _ready() -> void:
 	_since_spend = energy_recharge_delay()
 
 
-## Gives the stock ship the places every hull offers, which only a preset
-## being applied did before. A named hull supplies them; a shape nobody named
-## gets them worked out from its outline all the same.
-func _add_hull_slots() -> void:
-	if hull_outline.size() < 3:
-		return
-	hull = HullData.matching(hull_outline)
-	if hull == null:
-		hull = HullData.new()
-		hull.outline = hull_outline
-	ShipFitout.add_hull_slots(self, hull)
+## Builds the engines, guns and empty places from the hull and the fitout
+## this ship names, which is how every ship is meant to come about.
+##
+## A ship with no hull of its own -- a test's bare scene, the creative tool's
+## invented shape -- keeps what it has, with the places any hull offers worked
+## out from its outline.
+func _build_from_resources() -> void:
+	if hull != null and not fitout_name.is_empty():
+		var preset: Dictionary = ShipFitout.preset(fitout_name)
+		if preset.is_empty():
+			push_error("ship names no fitout called %s" % fitout_name)
+		else:
+			preset = preset.duplicate()
+			preset["hull"] = hull
+			ShipFitout.apply(self, preset)
+			return
+	if hull == null and hull_outline.size() >= 3:
+		hull = HullData.matching(hull_outline)
+		if hull == null:
+			hull = HullData.new()
+			hull.outline = hull_outline
+	if hull != null:
+		ShipFitout.add_hull_slots(self, hull)
+		collect_parts()
 
 
 ## Every engine mount on the hull, fitted or empty.
