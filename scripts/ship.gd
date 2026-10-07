@@ -1706,8 +1706,25 @@ func air_velocity() -> Vector2:
 	return linear_velocity - planet.surface_velocity_at(global_position)
 
 
+## Below this there is no wind, there is a solver.
+##
+## A hull sitting on rock is a live body held by contacts, and it
+## breathes against them for ever: measured at 4.3 px/s when the ship
+## weighed 20, and at 10.3 once the engines went to half their bulk and
+## took it down to 15.5 -- the same impulses buy more velocity out of
+## less mass. Above the rush veil's own threshold, so a parked ship
+## started drawing faint speed streaks.
+##
+## A floor rather than a louder threshold on each reader, because all
+## three of them mean the same thing by it: at ten pixels a second
+## nothing streaks, nothing heats and nothing trails, and a number that
+## says otherwise is describing the contact solver rather than the air.
+const STILL_AIRSPEED: float = 12.0
+
+
 func airspeed() -> float:
-	return air_velocity().length()
+	var through: float = air_velocity().length()
+	return 0.0 if through < STILL_AIRSPEED else through
 
 
 ## Hull heating, from braking against the air and from standing too close

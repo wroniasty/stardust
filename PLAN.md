@@ -775,16 +775,53 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
 
 - [ ] AI wrogów: steering behaviours, maszyna stanów, kilka archetypów (patrol, agresor, uciekinier).
 - [x] **Minor i major, i dwie różne zasady powrotu.** `Garrison` — czysta dana,
-  jak `StarSystem`: roster systemu wyprowadzony z seeda i tiera, zanim cokolwiek
-  powstanie. Pierwsza połowa reguły nie kosztuje nic, bo roster z seeda **jest**
-  regułą „minor wraca, kiedy ty wracasz, nigdy w trakcie pobytu". Druga — major
-  pokonany nie wraca — to jedyna rzecz, której seed nie odtworzy, więc jedyna
-  zapisana. Niepokonany nie zapisuje się wcale i wraca cały. **Model gotowy i
-  przypięty szesnastoma asercjami; spawner i AI to osobne pozycje poniżej.**
-  Zmierzona tabela rozstawienia w IDEAS.md sekcja 12.
-- [ ] Wrogowie na planetach i w przestrzeni, spawnery czytające tier. Roster
-  już mówi **ilu, jacy, jak silni i gdzie** (`Post.SPACE` / `Post.SURFACE`);
-  zostało postawić to w świecie i związać `SURFACE` z konkretną planetą.
+  jak `StarSystem`. Pierwsza połowa reguły nie kosztuje nic, bo roster z seeda
+  **jest** regułą „minor wraca, kiedy ty wracasz, nigdy w trakcie pobytu". Druga
+  — major pokonany nie wraca — to jedyna rzecz, której seed nie odtworzy, więc
+  jedyna zapisana. Niepokonany nie zapisuje się wcale i wraca cały.
+- [x] **Garnizon wisi na ciele, nie na systemie.** Losowanie w dwóch krokach:
+  najpierw **czy to ciało jest bronione**, i dopiero wtedy **kto je trzyma**.
+  Większość światów jest niczyja (18% na obrzeżu, 62% w rdzeniu) — świat zawsze
+  pilnowany to sceneria. Rozdzielenie kroków jest po to, żeby dało się zapytać
+  „czy tam jest niebezpiecznie" bez rozwijania walki, której nikt nie toczy;
+  test pilnuje, że oba kroki się zgadzają na wszystkich 3980 ciałach galaktyki.
+  Wrogowie stoją przy planetach i stacjach, w ciemności między nimi bardzo
+  rzadko (8% systemów).
+- [x] **Terytorium zamiast pościgu.** Garnizon trzyma powłokę wokół swojego
+  ciała, mierzoną względem **studni** — bo studnię rysuje mapa, a granica
+  niewidoczna na żadnym przyrządzie to ściana odkrywana przez uderzenie w nią.
+  Podłoga 2500 px z pomiaru: dok bez grawitacji dawał piętnastu obrońców w
+  pierścieniu 443 px, czyli kupę zamiast pikiety.
+- [x] **Agresywni i pasywni, i co budzi tych drugich.** Zestaw prowokacji
+  losowany **z ciałem**: strzał zawsze, plus co najmniej jedno ze zbliżenia,
+  lądowania i kopania. `Garrison.provoked_by()` jest jednym predykatem, żeby
+  spawner i AI nie doszły do różnych wniosków o tym samym świecie. Wykrywanie
+  samych prowokacji należy do spawnera i AI — pozycje poniżej; `MINED` czeka na
+  kopanie z M5.2 i jest już losowane, bo później kosztowałoby myślenie o
+  formacie zapisu.
+
+  **Model gotowy i przypięty dwudziestoma sześcioma asercjami.** Zmierzone
+  tabele w IDEAS.md sekcja 12. Najcięższy garnizon to 24 w powietrzu — i to
+  jest budżet na **garnizon**, nie na system, bo terytorium jest jednostką,
+  którą się walczy.
+- [ ] **Spawner: postawić garnizon w świecie.** Roster mówi już ilu, jacy, jak
+  silni, przy którym ciele, na jakim namiarze i jak daleko sięga terytorium —
+  zostało zrobić z tego węzły. Wróg, który **istnieje, da się w niego trafić i
+  ginie**, bez żadnego zachowania, bo to zamyka pętlę `beat()` → `deltas` →
+  zapis od końca do końca. Streaming po bliskości terytorium, jak
+  `StreamingManager` robi to dla ciał: najcięższy system trzyma kilka
+  garnizonów, a na ekranie ma być jeden.
+- [ ] **Wykrywanie prowokacji.** Zbliżenie — wejście w terytorium. Lądowanie —
+  stan `LANDED` na trzymanym ciele. Strzał — trafienie w członka garnizonu.
+  Kopanie — czeka na M5.2. Reguła już jest w `provoked_by()`; to jest o tym,
+  **kto ją pyta i kiedy**.
+- [ ] **AI: trzymać teren, nie gonić.** Steering i maszyna stanów, trzy
+  archetypy, i jedna rzecz, której żaden z nich nie robi — pogoń poza
+  terytorium. Obudzony pasywny garnizon musi też mieć sposób, żeby znowu
+  zasnąć, albo „pasywny" znaczy „agresywny po pierwszym błędzie".
+- [ ] **Lotniskowiec wypuszcza swoich.** Kadencja i limit żywych są w rosterze;
+  brakuje czegoś, co je wypuszcza — i reguły, że zestrzelony lotniskowiec
+  kończy strumień, bo na tym stoi klauzula „nic nie bierze się znikąd".
 - [ ] Zasady śmierci: co gracz traci, co zostaje. **Pokonany major zostaje
   pokonany** — śmierć tego nie cofa, bo to jedyny nieodwracalny postęp, jaki
   gracz ma poza sprzętem.

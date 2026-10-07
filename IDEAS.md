@@ -3829,43 +3829,80 @@ tożsamości, którą następna rzecz wisząca na systemie musiałaby wymyślić
 raz. Kolizja seeda z ciałem niebieskim jest sprawdzana testem na całej
 galaktyce — wspólny klucz znaczyłby, że wykopany krater wskrzesza elitę.
 
-**Co ta arytmetyka naprawdę rozstawia.** Zmierzone na seedzie 20260922, 620
-systemów:
+### Garnizon wisi na ciele, nie na systemie
 
-| tier | systemów | wrogów na system | z majorem | siła minora | na powierzchni |
+Pierwsza wersja rozsypywała wrogów po systemie jako jedną płaską listę, każdy
+z abstrakcyjnym postem — powierzchnia, orbita albo luźno w przestrzeni. To jest
+tłum, nie obrona: odpowiada na „ilu” i nigdy na „czego”.
+
+Wrogowie stoją **przy planetach i stacjach**, bo to są miejsca warte stania, i
+tylko bardzo rzadko w ciemności między nimi. Stąd losowanie w dwóch krokach, a
+kolejność jest projektem:
+
+1. **Czy to ciało jest w ogóle bronione?** Większość nie jest, i system cichych
+   światów z jednym trzymanym księżycem czyta się jako miejsce, w którym coś
+   jest. Świat zawsze pilnowany to sceneria.
+2. **Dopiero wtedy: kto go trzyma i jak daleko.** O obrońcach nieobronionego
+   świata nie losuje się nic — co znaczy też, że da się zapytać „czy tam jest
+   niebezpiecznie” bez rozwijania walki, której nikt nie toczy. Skaner
+   przelatujący system zadaje pierwsze pytanie o każde ciało i drugie prawie o
+   żadne, więc muszą być rozłączne — i muszą się zgadzać, czego pilnuje test na
+   wszystkich 3980 ciałach galaktyki.
+
+**Trzymają teren, nie polują.** Garnizon ma **terytorium**: powłokę wokół swojego
+ciała, której pilnuje. Pogoń przez pół systemu to walka, z której nie da się
+wyjść, a gra, w której każdy kontakt jest zobowiązaniem, jest grą w unikanie
+kontaktów. Trzymanie terenu robi z tego samego wroga decyzję: oblecieć czy
+wejść. Terytorium mierzy się względem **studni**, a nie powierzchni, bo studnię
+rysuje mapa i zakrzywia się w niej trajektoria — granica, która nie pokrywałaby
+się z niczym widocznym, byłaby ścianą odkrywaną przez uderzenie w nią.
+
+Podłoga 2500 px wzięła się z pomiaru: dok nie ma grawitacji i ma sto kilkadziesiąt
+pikseli promienia, więc jego zasięg wychodził na kilkaset — **piętnastu obrońców
+w pierścieniu o promieniu 443 px to kupa, nie pikieta.**
+
+**Agresywni i pasywni, i co budzi tych drugich.** Agresywny garnizon otwiera
+ogień do wszystkiego w swoim terytorium. Pasywny musi zostać **sprowokowany**, a
+które prowokacje liczą, losuje się razem z ciałem: są światy, którym nie
+przeszkadza, że się na nie patrzy, i przeszkadza, że się na nich ląduje. Pilot
+dowiaduje się, który to — ze skanera albo przez pomyłkę.
+
+Strzał liczy się **zawsze** i nie jest losowany. Obrońca, który daje się
+rozebrać na części z grzeczności, nie jest obrońcą. Pozostałe trzy — zbliżenie,
+lądowanie, kopanie — są ciekawe, bo każda mówi coś innego o tym, po co to miejsce
+jest: świat, któremu przeszkadza zbliżenie, coś ukrywa; taki, któremu przeszkadza
+dopiero kopanie, na czymś siedzi. `MINED` jest już losowane i czeka na kopanie z
+M5.2 — wcześniej kosztuje tyle, co nic, a później kosztowałoby myślenie o
+formacie zapisu.
+
+**Co to rozstawia.** Seed 20260922, 620 systemów, 3980 ciał innych niż gwiazdy:
+
+| tier | ciał | bronionych | obrońców na trzymane | strzela pierwszy | terytorium |
 |---|---|---|---|---|---|
-| 1 | 204 | 2,1 | 4% | 1,00 | 18% |
-| 2 | 68 | 2,6 | 22% | 1,34 | 21% |
-| 3 | 72 | 3,3 | 29% | 1,66 | 23% |
-| 4 | 63 | 3,7 | 33% | 2,00 | 22% |
-| 5 | 57 | 4,4 | 39% | 2,37 | 29% |
-| 6 | 58 | 4,8 | 41% | 2,68 | 37% |
-| 7 | 39 | 5,2 | 38% | 3,03 | 35% |
-| 8 | 35 | 6,2 | 77% | 3,32 | 43% |
-| 9 | 17 | 6,5 | 53% | 3,66 | 41% |
-| 10 | 7 | 6,3 | 86% | 4,00 | 45% |
+| 1 | 1270 | 18% | 4,4 | 24% | 6366 px |
+| 3 | 483 | 28% | 7,1 | 32% | 6675 px |
+| 5 | 362 | 40% | 9,2 | 50% | 6671 px |
+| 7 | 249 | 47% | 11,3 | 69% | 5804 px |
+| 10 | 42 | 62% | 15,3 | 65% | 6637 px |
 
-Szarpnięcia w kolumnie majorów między tierem 7 a 9 to wielkość próbki (39, 35
-i 17 systemów), nie krzywa. Test nie sprawdza zresztą stałych przeciwko samym
-sobie, tylko średnie po prawdziwej galaktyce: pytanie nie brzmi, czy `lerp`
-lerpuje, tylko czy pilot lecący do środka spotyka więcej i gorszych.
+11132 obrońców w galaktyce, 49 luźnych grup na 620 systemów (8%), najcięższy
+garnizon **24 w powietrzu**. Ta ostatnia liczba jest budżetem na **garnizon**, a
+nie na system: terytorium jest jednostką, którą się walczy, a system rdzenia
+trzyma ich kilka i bije się je po kolei.
 
-**Tier 1 to 204 systemy, czyli jedna trzecia galaktyki** — i to jest cena
-przycinania wysp do pierwszego szczebla. Dopóki wyspy są nieosiągalne, nie
-przeszkadza; w chwili, gdy lepszy napęd je otworzy, gracz znajdzie tam tier 1.
-To jest ta sama otwarta sprawa, którą zapisałem przy skali tierów, tyle że ma
-teraz liczbę.
+**Rdzeń też ma ciche światy** — 62%, nie 100%. Pierwsze podejście dało 76% i to
+było za dużo: gdyby trzymane było wszystko, „bronione” przestaje być czymś, co
+mapa może zaznaczyć.
 
-**Elity nie są wyłącznie rzeczą rdzenia** (8% szansy na obrzeżu, nie zero).
-Pilot, który spotyka pierwszą elitę w połowie drogi, nie ma jej do czego
-przyrównać. I odwrotnie: rdzeń nie ma ich wszędzie, bo wtedy finał byłby
-formalnością, zanim się do niego dotrze.
+Reguła „tłum rośnie szybciej niż wróg w nim” przeniosła się na trzymane ciało i
+**znowu została złamana przy pierwszym podejściu**: 2,7 przeciwko 3,2. Policzone
+na ciele, a nie na systemie, liczby musiały pójść w górę — teraz 3,5 przeciwko
+3,2.
 
-Major jest **agresorem z definicji, nie z rzutu**: elita, która przelatuje obok
-i wraca na patrol, to elita, której gracz nigdy nie spotkał, a jedyny wróg, z
-którego pamięta się system, powinien przylecieć po ciebie. Jest wart 2,5 minora
-swojego tiera — „przyprowadź kogoś albo miej plan", a nie „wróć później" — i
-ma podłogę rzadkości łupu, bo to jest powód, żeby go nie ominąć.
+**Major jest agresorem z definicji, nie z rzutu**: elita, która przelatuje obok
+i wraca na patrol, to elita, której gracz nigdy nie spotkał. Jest warta 2,5
+minora swojego tiera — „przyprowadź kogoś albo miej plan”, a nie „wróć
+później” — i ma podłogę rzadkości łupu, bo to jest powód, żeby go nie ominąć.
 
 ### Reszta, jeszcze nieruszona
 

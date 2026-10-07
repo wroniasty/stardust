@@ -1359,10 +1359,20 @@ func _evaluate_phase() -> void:
 					_ground_airspeed, quiet,
 				],
 			)
+			# Against the gear's own tolerance rather than the veil's.
+			# A resting hull breathes a few pixels a second against the
+			# contact solver and always will; what must not happen is
+			# that the panel reads it as a descent worth colouring, and
+			# the thing that decides what is worth colouring is the
+			# landing gear.
+			var bearable: float = (
+				0.0 if _ship.gear == null
+				else _ship.gear.vertical_limit() * FlightHud.CAUTION_FRACTION
+			)
 			_expect(
-				_ground_descent < quiet,
-				"nor reads as falling while it rests (%.1f px/s of %.1f)" % [
-					_ground_descent, quiet,
+				_ground_descent < bearable,
+				"nor reads as a descent worth a colour (%.1f px/s of %.1f)" % [
+					_ground_descent, bearable,
 				],
 			)
 			# What the ground did underneath it while it was watched. Sliding
@@ -12035,279 +12045,308 @@ func _check_refinery(ship: Ship) -> void:
 	)
 
 
-## Co stoi w systemie, i co z tego wraca.
+## Kto broni czego, i czego nie broni nikt.
 ##
-## The first thing in the game that reads `tier_of()`. Until this, the
-## tier was a number describing itself -- the galaxy had a shape, a
-## ladder and a chart, and tier 9 held exactly what tier 1 held.
-##
-## Two rules of coming back, and they are checked separately because
-## they are opposites and the cheap mistake is to implement one twice. A
-## minor comes back because nothing was ever written down; a major stays
-## dead because something was. A roster that recorded minors would pass
-## every test about majors and quietly turn the galaxy into a place that
-## stays cleared.
+## The roll is two steps and the order is the design: whether a body is
+## held at all, and **only then** by whom. A scanner sweeping a system
+## asks the first question about every world and the second about
+## almost none, so they have to be separable -- and they have to agree,
+## which is what the first check here is for.
 func _check_garrison() -> void:
 	var map: GalaxyMap = GalaxyMap.generate(TEST_SEED)
 	var home: int = map.start_index()
-	var home_seed: int = StarSystem.derive(TEST_SEED, home)
+	var tier: int = map.tier_of(home)
+	var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, home))
 
-	var roster: Array[Dictionary] = Garrison.of(home_seed, map.tier_of(home))
-	var again: Array[Dictionary] = Garrison.of(home_seed, map.tier_of(home))
-	_expect(roster == again, "the same system holds the same enemies, every time")
+	var held: Array[Dictionary] = Garrison.in_system(system, tier)
+	var again: Array[Dictionary] = Garrison.in_system(system, tier)
+	_expect(held == again, "the same system is defended the same way, every time")
+
+	# The two steps, against each other. A cheap question that disagreed
+	# with the expensive one would be worse than not having it.
+	var disagreed: int = 0
+	var bodies: int = 0
+	var guarded: int = 0
+	for index: int in range(map.count()):
+		var where: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in where.bodies:
+			if body.kind == SystemBody.Kind.STAR:
+				continue
+			bodies += 1
+			var cheap: bool = Garrison.is_defended(body, map.tier_of(index))
+			var dear: bool = not Garrison.at(body, map.tier_of(index)).is_empty()
+			if cheap != dear:
+				disagreed += 1
+			if cheap:
+				guarded += 1
 	_expect(
-		not roster.is_empty(),
-		"and the system a new game starts in holds some (%d)" % roster.size(),
+		disagreed == 0,
+		'"is anyone here" and "who" never disagree (%d of %d bodies)' % [disagreed, bodies],
+	)
+	# Most worlds are nobody's, which is what makes a held one worth
+	# noticing. A galaxy where everything is guarded has nothing to say
+	# about any of it.
+	_expect(
+		float(guarded) / float(bodies) < 0.45,
+		"and most of the galaxy is nobody's (%d of %d held)" % [guarded, bodies],
+	)
+	_expect(
+		not Garrison.is_defended(system.star, 10),
+		"nobody garrisons a star",
 	)
 
-	# Identity, which everything else here hangs off. A member sharing a
-	# seed with a body would share a `deltas` key with it, and the first
-	# thing to break would be a dug crater bringing an elite back.
+	_check_garrison_ground(map)
+	_check_garrison_ladder(map)
+	_check_garrison_waking(map)
+	_check_garrison_memory(system, tier)
+
+
+## Wrogowie stoją przy czymś.
+##
+## The thing the flat roster could not say. A defender belongs to a
+## body, holds a shell round it, and the empty parts of a system are
+## empty -- rarely enough that the one time they are not reads as
+## something that happened.
+func _check_garrison_ground(map: GalaxyMap) -> void:
+	var systems: int = 0
+	var adrift: int = 0
+	var tight: int = 0
 	var seen: Dictionary = {}
 	var repeats: int = 0
 	var clashes: int = 0
-	for index: int in range(map.count()):
-		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
-		var bodies: Dictionary = {}
-		for body: SystemBody in system.bodies:
-			bodies[body.seed] = true
-		for entry: Dictionary in Garrison.of(system.seed, map.tier_of(index)):
-			var key: int = int(entry["seed"])
-			if seen.has(key):
-				repeats += 1
-			seen[key] = true
-			if bodies.has(key):
-				clashes += 1
-	_expect(repeats == 0, "every enemy in the galaxy has a seed of its own (%d repeats)" % repeats)
-	_expect(
-		clashes == 0,
-		"and none of them shares one with a planet, moon or dock (%d clashes)" % clashes,
-	)
-
-	_check_garrison_ladder(map)
-	_check_garrison_shapes(map)
-	_check_garrison_memory(home_seed, map.tier_of(home))
-
-
-## The ladder, read off the galaxy rather than off the constants.
-##
-## Averages over the real layout, because the question is not whether
-## the arithmetic lerps -- of course it does -- but whether a pilot
-## flying inwards meets more and meets worse. A constant checked against
-## itself proves nothing.
-func _check_garrison_ladder(map: GalaxyMap) -> void:
-	var count: Array[float] = []
-	var strength: Array[float] = []
-	var majors: Array[float] = []
-	var systems: Array[float] = []
-	for tier: int in range(GalaxyMap.TIERS + 1):
-		count.append(0.0)
-		strength.append(0.0)
-		majors.append(0.0)
-		systems.append(0.0)
+	var biggest: int = 0
 
 	for index: int in range(map.count()):
 		var tier: int = map.tier_of(index)
-		var roster: Array[Dictionary] = Garrison.of(
-			StarSystem.derive(TEST_SEED, index), tier
-		)
-		systems[tier] += 1.0
-		count[tier] += float(roster.size())
-		for entry: Dictionary in roster:
-			if int(entry["rank"]) == Garrison.Rank.MAJOR:
-				majors[tier] += 1.0
-			else:
-				strength[tier] += float(entry["strength"])
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		systems += 1
+		var owned: Dictionary = {}
+		for body: SystemBody in system.bodies:
+			owned[body.seed] = true
+		for held: Dictionary in Garrison.in_system(system, tier):
+			biggest = maxi(biggest, Garrison.press(held))
+			if held["body"] == null:
+				adrift += 1
+			elif float(held["territory"]) < Garrison.MIN_TERRITORY - 0.001:
+				tight += 1
+			for entry: Variant in held["members"]:
+				var key: int = int((entry as Dictionary)["seed"])
+				if seen.has(key):
+					repeats += 1
+				seen[key] = true
+				if owned.has(key):
+					clashes += 1
+
+	_expect(
+		adrift > 0 and float(adrift) / float(systems) < 0.15,
+		"the dark between worlds is nearly always empty (%d groups in %d systems)" % [
+			adrift, systems,
+		],
+	)
+	_expect(
+		tight == 0,
+		"no garrison is packed tighter than a perimeter (%d too tight)" % tight,
+	)
+	_expect(repeats == 0, "every defender has a seed of its own (%d repeats)" % repeats)
+	_expect(
+		clashes == 0,
+		"and none shares one with the body it is standing on (%d clashes)" % clashes,
+	)
+	# Per garrison rather than per system, because a territory is the
+	# unit a pilot fights: a core system holds several, one at a time.
+	_expect(
+		biggest > 8 and biggest < 40,
+		"the heaviest garrison is a fight and not a crash (%d in the air)" % biggest,
+	)
+
+
+## Drabina, odczytana z galaktyki, nie ze stałych.
+##
+## Averages over the real layout, because the question is not whether
+## the arithmetic lerps but whether a pilot flying inwards meets more,
+## meets worse, and meets it more often.
+func _check_garrison_ladder(map: GalaxyMap) -> void:
+	var bodies: Array[float] = []
+	var guarded: Array[float] = []
+	var members: Array[float] = []
+	var strength: Array[float] = []
+	var fighters: Array[float] = []
+	var shooting: Array[float] = []
+	for tier: int in range(GalaxyMap.TIERS + 1):
+		bodies.append(0.0)
+		guarded.append(0.0)
+		members.append(0.0)
+		strength.append(0.0)
+		fighters.append(0.0)
+		shooting.append(0.0)
+
+	for index: int in range(map.count()):
+		var tier: int = map.tier_of(index)
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			if body.kind != SystemBody.Kind.STAR:
+				bodies[tier] += 1.0
+		for held: Dictionary in Garrison.in_system(system, tier):
+			if held["body"] == null:
+				continue
+			guarded[tier] += 1.0
+			if int(held["posture"]) == Garrison.Posture.AGGRESSIVE:
+				shooting[tier] += 1.0
+			for entry: Variant in held["members"]:
+				var member: Dictionary = entry
+				members[tier] += 1.0
+				if int(member["rank"]) == Garrison.Rank.MINOR:
+					fighters[tier] += 1.0
+					strength[tier] += float(member["strength"])
 
 	var rim: int = 1
 	var core: int = GalaxyMap.TIERS
-	_expect(
-		systems[rim] > 0.0 and systems[core] > 0.0,
-		"both ends of the ladder have systems on them to measure",
-	)
-	var thin: float = count[rim] / maxf(systems[rim], 1.0)
-	var thick: float = count[core] / maxf(systems[core], 1.0)
+	var thin: float = guarded[rim] / maxf(bodies[rim], 1.0)
+	var thick: float = guarded[core] / maxf(bodies[core], 1.0)
 	_expect(
 		thick > thin * 2.0,
-		"the middle of the galaxy is crowded against the rim (%.1f enemies against %.1f)" % [
-			thick, thin,
+		"worlds are held more often further in (%.0f%% against %.0f%%)" % [
+			thick * 100.0, thin * 100.0,
 		],
 	)
-	var weak: float = strength[rim] / maxf(count[rim] - majors[rim], 1.0)
-	var hard: float = strength[core] / maxf(count[core] - majors[core], 1.0)
-	# The bar came down from three-fold with the strength curve, which is
-	# the point rather than a concession: the individual is **meant** to
-	# climb gently now. It is an average over fighters and guns both, so
-	# it reads a little above the fighter curve on its own -- a turret is
-	# half again as hard as the thing standing next to it.
+	# And not all of them, at either end: a quiet world has to exist in
+	# the core or "defended" stops being a thing the chart can mark.
+	_expect(
+		thick < 0.85,
+		"but the core still has worlds nobody wants (%.0f%% held)" % [thick * 100.0],
+	)
+
+	var few: float = members[rim] / maxf(guarded[rim], 1.0)
+	var many: float = members[core] / maxf(guarded[core], 1.0)
+	var weak: float = strength[rim] / maxf(fighters[rim], 1.0)
+	var hard: float = strength[core] / maxf(fighters[core], 1.0)
+	_expect(
+		many > few * 2.0,
+		"a held world near the middle holds more (%.1f against %.1f)" % [many, few],
+	)
 	_expect(
 		hard > weak * 2.5,
-		"and the average thing you shoot is worse when you get there (%.2f against %.2f)" % [
-			hard, weak,
-		],
+		"and the average one is worse (%.2f against %.2f)" % [hard, weak],
 	)
-	# Strength in numbers, stated as the ratio it is. The first pass had
-	# this backwards -- two to six enemies in a system and each one four
-	# times tougher at the core, which is a boss rush with a commute
-	# between bosses. What has to be true is that the crowd grows faster
-	# than the thing in it.
 	_expect(
-		(thick / maxf(thin, 0.001)) > (hard / maxf(weak, 0.001)),
+		(many / maxf(few, 0.001)) > (hard / maxf(weak, 0.001)),
 		"the crowd grows faster than the enemy in it (x%.1f against x%.1f)" % [
-			thick / maxf(thin, 0.001), hard / maxf(weak, 0.001),
+			many / maxf(few, 0.001), hard / maxf(weak, 0.001),
 		],
 	)
 	_expect(
-		thin >= 5.0,
-		"and even the rim is a crowd rather than a pair (%.1f enemies)" % thin,
-	)
-	_expect(
-		majors[core] / maxf(systems[core], 1.0) > majors[rim] / maxf(systems[rim], 1.0) * 5.0,
-		"majors are a core thing without being only a core thing (%.2f a system against %.2f)" % [
-			majors[core] / maxf(systems[core], 1.0),
-			majors[rim] / maxf(systems[rim], 1.0),
+		shooting[core] / maxf(guarded[core], 1.0)
+		> shooting[rim] / maxf(guarded[rim], 1.0) * 1.5,
+		"and more of them shoot first (%.0f%% against %.0f%%)" % [
+			100.0 * shooting[core] / maxf(guarded[core], 1.0),
+			100.0 * shooting[rim] / maxf(guarded[rim], 1.0),
 		],
 	)
-	# Not zero at the rim, deliberately: a pilot who meets their first
-	# elite halfway in has nothing to read it against.
-	_expect(
-		majors[rim] > 0.0,
-		"and the rim has a few, so the first one is not a surprise with no name",
-	)
 
 
-## Działka, lotniskowce i to, czego nie wolno im mieć nawzajem.
+## Co budzi tych, którzy śpią.
 ##
-## Three things that are not a fighter, and the one rule that keeps the
-## carrier from breaking the rule about minors coming back: nothing
-## arrives from nowhere. The stream has a source standing in the system,
-## the source can be shot, and shooting it stops the stream -- so the
-## brood belongs to the carrier and to nothing else.
-func _check_garrison_shapes(map: GalaxyMap) -> void:
-	var turrets: int = 0
-	var carriers: int = 0
-	var orbiting: int = 0
-	var grounded: int = 0
-	var stray_brood: int = 0
-	var mobile_turret: int = 0
-	var thin_brood: int = 0
-	var rim_turrets: int = 0
-	var rim_systems: int = 0
+## Passive is the interesting half. An aggressive garrison needs no
+## rule -- it answers yes to everything -- so what has to hold is that
+## a passive one is wakeable at all, that shooting always does it, and
+## that what else does is a property of the place rather than a
+## constant.
+func _check_garrison_waking(map: GalaxyMap) -> void:
+	var passive: int = 0
+	var deaf: int = 0
+	var unshootable: int = 0
+	var one_track: Dictionary = {}
+	var aggressive: Dictionary = {}
 
 	for index: int in range(map.count()):
 		var tier: int = map.tier_of(index)
-		var roster: Array[Dictionary] = Garrison.of(
-			StarSystem.derive(TEST_SEED, index), tier
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for held: Dictionary in Garrison.in_system(system, tier):
+			if int(held["posture"]) == Garrison.Posture.AGGRESSIVE:
+				aggressive[held["seed"]] = held
+				continue
+			passive += 1
+			if not Garrison.provoked_by(held, Garrison.Provocation.SHOT_AT):
+				unshootable += 1
+			var wakes: int = int(held["provokes"])
+			if wakes == Garrison.Provocation.SHOT_AT:
+				deaf += 1
+			one_track[wakes] = true
+
+	_expect(passive > 0, "there are places that would rather be left alone (%d)" % passive)
+	_expect(
+		unshootable == 0,
+		"shooting at one always wakes it, whatever else does not (%d deaf)" % unshootable,
+	)
+	_expect(
+		deaf == 0,
+		"and none of them is woken only by being shot (%d would be scenery)" % deaf,
+	)
+	_expect(
+		one_track.size() >= 4,
+		"what else wakes them is a property of the place (%d different sets)" % [
+			one_track.size(),
+		],
+	)
+	# The other half, in one line: an aggressive garrison needs no
+	# provoking and says so by answering yes to anything.
+	for key: Variant in aggressive:
+		_expect(
+			Garrison.provoked_by(aggressive[key], Garrison.Provocation.MINED),
+			"an aggressive garrison does not wait to be asked",
 		)
-		if tier == 1:
-			rim_systems += 1
-		for entry: Dictionary in roster:
-			var kind: int = int(entry["archetype"])
-			var has_brood: bool = entry.has("brood")
-			if kind == Garrison.Archetype.CARRIER:
-				carriers += 1
-				if not has_brood:
-					thin_brood += 1
-				elif (
-					int(entry["brood"]) < Garrison.BROOD_AT_RIM
-					or float(entry["cadence"]) <= 0.0
-					or float(entry["brood_strength"]) >= float(entry["strength"])
-				):
-					thin_brood += 1
-			elif has_brood:
-				stray_brood += 1
-			if kind == Garrison.Archetype.TURRET:
-				turrets += 1
-				if tier == 1:
-					rim_turrets += 1
-				if int(entry["post"]) == Garrison.Post.ORBIT:
-					orbiting += 1
-				elif int(entry["post"]) == Garrison.Post.SURFACE:
-					grounded += 1
-			elif int(entry["post"]) == Garrison.Post.ORBIT:
-				# An orbit is a place to be bolted to, not a place to
-				# wait: a fighter that sat on one would be a turret with
-				# an engine it never uses.
-				mobile_turret += 1
-
-	_expect(
-		turrets > 0 and carriers > 0,
-		"the galaxy has guns bolted down and ships that put out more (%d and %d)" % [
-			turrets, carriers,
-		],
-	)
-	_expect(
-		orbiting > 0 and grounded > 0 and orbiting + grounded < turrets,
-		"guns stand on ground, on orbits and loose in space (%d, %d, %d)" % [
-			grounded, orbiting, turrets - grounded - orbiting,
-		],
-	)
-	_expect(
-		mobile_turret == 0,
-		"and nothing that can fly is parked on an orbit (%d of them)" % mobile_turret,
-	)
-	_expect(
-		stray_brood == 0 and thin_brood == 0,
-		"only a carrier carries a brood, and every carrier carries a usable one (%d loose, %d broken)" % [
-			stray_brood, thin_brood,
-		],
-	)
-	_expect(
-		rim_turrets > 0,
-		"the rim has guns too, so the first one is not learned over a core world (%d across %d systems)" % [
-			rim_turrets, rim_systems,
-		],
-	)
-
-	# What the frame is being asked to carry, which is the number worth
-	# watching when these counts are tuned: a roster is things to stream
-	# and a brood is things on top of it.
-	var heaviest: int = 0
-	for index: int in range(map.count()):
-		heaviest = maxi(heaviest, Garrison.press(Garrison.of(
-			StarSystem.derive(TEST_SEED, index), map.tier_of(index)
-		)))
-	_expect(
-		heaviest > 20 and heaviest < 60,
-		"the heaviest system is a crowd and not a crash (%d in the air)" % heaviest,
-	)
+		break
 
 
-## The two rules of coming back, which are opposites.
-func _check_garrison_memory(system_seed: int, tier: int) -> void:
+## Dwie zasady powrotu, które są przeciwieństwami.
+##
+## A minor comes back because nothing was ever written down; a major
+## stays dead because something was. A roster that recorded minors
+## would pass every test about majors and quietly turn the galaxy into
+## a place that stays cleared.
+func _check_garrison_memory(system: StarSystem, tier: int) -> void:
 	var deltas: Dictionary = {}
-	var roster: Array[Dictionary] = Garrison.of(system_seed, tier, deltas)
+	var held: Dictionary = {}
+	for found: Dictionary in Garrison.in_system(system, tier, deltas):
+		if found["body"] != null:
+			held = found
+			break
+	_expect(not held.is_empty(), "the starting system has somewhere defended")
+	if held.is_empty():
+		return
+
+	var body: SystemBody = held["body"]
+	var before: int = (held["members"] as Array).size()
 	var minor: Dictionary = {}
-	for entry: Dictionary in roster:
-		if (
-			int(entry["rank"]) == Garrison.Rank.MINOR
-			and int(entry["archetype"]) < Garrison.Archetype.TURRET
-		):
+	for entry: Variant in held["members"]:
+		if int((entry as Dictionary)["rank"]) == Garrison.Rank.MINOR:
 			minor = entry
 			break
-	_expect(not minor.is_empty(), "there is a minor fighter to shoot")
+	_expect(not minor.is_empty(), "there is a minor to shoot")
 	_expect(
 		not Garrison.beat(deltas, minor) and deltas.is_empty(),
 		"shooting a minor writes nothing down",
 	)
 	_expect(
-		Garrison.of(system_seed, tier, deltas).size() == roster.size(),
+		(Garrison.at(body, tier, deltas)["members"] as Array).size() == before,
 		"so it is standing there again the next time you come in",
 	)
 
-	# And the opposite. Searched for rather than assumed, because whether
-	# a given system has an elite is a roll and a test that needed one
-	# would be a test about the seed.
+	# And the opposite. Searched for rather than assumed, because
+	# whether a given world has an elite is a roll.
 	var elite: Dictionary = {}
-	var elite_seed: int = 0
-	var where: int = 0
-	for index: int in range(GalaxyMap.TIERS * 40):
-		var tried: int = StarSystem.derive(system_seed, index)
-		for entry: Dictionary in Garrison.of(tried, GalaxyMap.TIERS):
-			if int(entry["rank"]) == Garrison.Rank.MAJOR:
-				elite = entry
-				elite_seed = int(entry["seed"])
-				where = tried
+	var where: SystemBody = null
+	for index: int in range(240):
+		var tried: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for found: Dictionary in Garrison.in_system(tried, GalaxyMap.TIERS):
+			if found["body"] == null:
+				continue
+			for entry: Variant in found["members"]:
+				if int((entry as Dictionary)["rank"]) == Garrison.Rank.MAJOR:
+					elite = entry
+					where = found["body"]
+					break
+			if not elite.is_empty():
 				break
 		if not elite.is_empty():
 			break
@@ -12315,15 +12354,15 @@ func _check_garrison_memory(system_seed: int, tier: int) -> void:
 	if elite.is_empty():
 		return
 
-	var before: int = Garrison.of(where, GalaxyMap.TIERS, deltas).size()
+	var standing: int = (Garrison.at(where, GalaxyMap.TIERS, deltas)["members"] as Array).size()
 	_expect(Garrison.beat(deltas, elite), "beating an elite is written down")
-	var after: Array[Dictionary] = Garrison.of(where, GalaxyMap.TIERS, deltas)
+	var after: Array = Garrison.at(where, GalaxyMap.TIERS, deltas)["members"]
 	var still_there: bool = false
-	for entry: Dictionary in after:
-		if int(entry["seed"]) == elite_seed:
+	for entry: Variant in after:
+		if int((entry as Dictionary)["seed"]) == int(elite["seed"]):
 			still_there = true
 	_expect(
-		not still_there and after.size() == before - 1,
+		not still_there and after.size() == standing - 1,
 		"and it is gone, with the rest of the garrison exactly where it was",
 	)
 
@@ -12334,13 +12373,13 @@ func _check_garrison_memory(system_seed: int, tier: int) -> void:
 	var sky: Node = GALAXY_SCRIPT.new()
 	root.add_child(sky)
 	sky.reset(TEST_SEED)
-	sky.deltas[elite_seed] = {"beaten": true}
+	sky.deltas[int(elite["seed"])] = {"beaten": true}
 	var carried: Dictionary = SaveGame.capture(sky, null)
 	var other: Node = GALAXY_SCRIPT.new()
 	root.add_child(other)
 	SaveGame.restore(carried, other, null)
 	_expect(
-		Garrison.beaten(other.deltas, elite_seed),
+		Garrison.beaten(other.deltas, int(elite["seed"])),
 		"a save brings back which elites are already dead",
 	)
 	sky.queue_free()
