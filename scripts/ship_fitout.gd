@@ -69,7 +69,8 @@ static func all() -> Array[Dictionary]:
 			# of the middle and the pair stops being a pair.
 			"hull": &"rhombus",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 13), "engine": "gimbal"},
+				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 13), "engine": "gimbal",
+						"centered": true},
 				# Nose nozzle, pointing the other way: it is the retro and
 				# the other half of the couple at the same time.
 				{"name": "NoseDrive", "size": 3.5, "at": Vector2(0, -13), "turn": AFT,
@@ -82,7 +83,8 @@ static func all() -> Array[Dictionary]:
 			"blurb": "rotation out of the gimballed main drive, and nothing else turns it",
 			"hull": &"broad_dart",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 12), "engine": "gimbal"},
+				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 12), "engine": "gimbal",
+						"centered": true},
 				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(9, 1.75),
 					"turn": LEFT, "engine": "thruster"},
 				{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-9, 1.75),
@@ -205,7 +207,17 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 			child.queue_free()
 
 	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
+	# The hull first: where its places are decides where the main drives go.
+	var named: Variant = preset["hull"]
+	var hull: HullData = named as HullData if named is HullData else HullData.of(named)
+	if hull == null:
+		push_error("preset %s names no hull" % preset["name"])
+		return
+
 	for entry: Dictionary in preset["mounts"]:
+		if entry["name"] == "MainDrive":
+			_add_main_drives(ship, scene, hull, entry)
+			continue
 		var mount: EngineMount = scene.instantiate() as EngineMount
 		mount.name = String(entry["name"])
 		mount.size = float(entry["size"])
@@ -215,21 +227,30 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 		mount.installed = _engine(String(entry["engine"]), float(entry.get("scale", 1.0)))
 		ship.add_child(mount)
 
+	# Guns go in the hull's hardpoints and nowhere else. The preset says which
+	# weapons it carries, in order; the hull says where the places are, and the
+	# weapons fill them front first, then the sides, then astern. A preset's own
+	# position for a gun is not read.
+	var weapons: Array[WeaponData] = []
 	for entry: Dictionary in preset["guns"]:
-		var gun: Hardpoint = Hardpoint.new()
-		gun.name = String(entry["name"])
-		gun.position = entry["at"]
-		gun.weapon = load(WEAPONS[entry["weapon"]]) as WeaponData
+		weapons.append(load(WEAPONS[entry["weapon"]]) as WeaponData)
+	var next_weapon: int = 0
+	for slot: Dictionary in hull.slots():
+		if slot["kind"] == HullData.SLOT_DRIVE:
+			continue
+		var gun: Hardpoint = _hardpoint(slot)
+		if next_weapon < weapons.size():
+			gun.weapon = weapons[next_weapon]
+			next_weapon += 1
 		ship.add_child(gun)
+	if next_weapon < weapons.size():
+		push_warning("preset %s has %d more guns than the hull has hardpoints" % [
+			preset["name"], weapons.size() - next_weapon,
+		])
 
 	# The hull is named, not described. It used to be an outline, a hold
 	# and a pair of feet written out in every preset -- three of which flew
 	# the same dart and had to agree about it by hand.
-	var named: Variant = preset["hull"]
-	var hull: HullData = named as HullData if named is HullData else HullData.of(named)
-	if hull == null:
-		push_error("preset %s names no hull" % preset["name"])
-		return
 	ship.hull = hull
 	ship.hull_outline = hull.outline
 	ship.hull_cargo_capacity = hull.cargo_capacity
@@ -247,32 +268,57 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	ship.rebuild_control_groups(false)
 
 
+## The preset's main drive, put into the hull's side drive slots -- or into the
+## centre one, whole, when the entry says `centered`: a nozzle that steers by
+## swinging on the centre line is a different ship from a pair.
+##
+## Engines go in slots and nowhere else, so the position in the preset's table
+## is ignored: the hull says where the places are. The centre slot stays empty
+## and the drive is split across the pair either side of it, each taking half
+## the thrust and half the bulk, so the total is what the preset declared and
+## the pair pushes straight along the ship.
+static func _add_main_drives(ship: Ship, scene: PackedScene, hull: HullData, entry: Dictionary) -> void:
+	var centered: bool = bool(entry.get("centered", false))
+	var sides: Array[Dictionary] = []
+	for slot: Dictionary in hull.slots_of(HullData.SLOT_DRIVE):
+		if is_zero_approx((slot["at"] as Vector2).x) == centered:
+			sides.append(slot)
+	if sides.is_empty():
+		return
+	var share: float = 1.0 / float(sides.size())
+	for slot: Dictionary in sides:
+		var mount: EngineMount = scene.instantiate() as EngineMount
+		mount.name = String(slot["name"])
+		mount.size = float(entry["size"])
+		mount.position = slot["at"]
+		mount.rotation = float(slot["turn"])
+		mount.thrust_direction = Vector2.UP
+		mount.installed = _engine_share(
+			String(entry["engine"]), float(entry.get("scale", 1.0)), share
+		)
+		ship.add_child(mount)
+
+
+## One part of an engine, for a drive that is split over several mounts.
+static func _engine_share(key: String, scale: float, share: float) -> EngineData:
+	var whole: EngineData = _engine(key, scale)
+	var part: EngineData = whole.duplicate() as EngineData
+	part.max_thrust *= share
+	part.bulk *= share
+	return part
+
+
 ## Gives the ship every place the hull offers that it does not already have:
 ## empty drive mounts and empty hardpoints, named by the hull.
 ##
-## Counted from what is on the ship rather than from a preset, so the same
-## call serves a preset that was just built and the stock ship out of
-## `ship.tscn`. A mount named MainDrive* stands in the first drive slot, and
-## the hardpoints already there stand in the first front slots, so nothing is
-## ever given a second copy of what it has -- only the room to fit more.
+## A place is filled when a node of its name exists, so the same call serves a
+## preset that was just built and a ship that came with only some of them.
 static func add_hull_slots(ship: Ship, hull: HullData) -> void:
-	var drives_built: int = 0
-	var guns_built: int = 0
-	for child: Node in ship.get_children():
-		if child is EngineMount and String(child.name).begins_with("MainDrive"):
-			drives_built += 1
-		elif child is Hardpoint:
-			guns_built += 1
-
 	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
-	var drive_index: int = 0
-	var front_index: int = 0
 	for slot: Dictionary in hull.slots():
-		var kind: StringName = slot["kind"]
-		if kind == HullData.SLOT_DRIVE:
-			drive_index += 1
-			if drive_index <= drives_built:
-				continue
+		if ship.has_node(NodePath(String(slot["name"]))):
+			continue
+		if slot["kind"] == HullData.SLOT_DRIVE:
 			var mount: EngineMount = scene.instantiate() as EngineMount
 			mount.name = String(slot["name"])
 			mount.size = 3.5
@@ -280,18 +326,17 @@ static func add_hull_slots(ship: Ship, hull: HullData) -> void:
 			mount.rotation = float(slot["turn"])
 			mount.thrust_direction = Vector2.UP
 			ship.add_child(mount)
-			continue
-		if kind == HullData.SLOT_FRONT:
-			front_index += 1
-			if front_index <= guns_built:
-				continue
-		elif kind != HullData.SLOT_FRONT and ship.has_node(NodePath(String(slot["name"]))):
-			continue
-		var gun: Hardpoint = Hardpoint.new()
-		gun.name = String(slot["name"])
-		gun.position = slot["at"]
-		gun.rotation = float(slot["turn"])
-		ship.add_child(gun)
+		else:
+			ship.add_child(_hardpoint(slot))
+
+
+## An empty hardpoint at one of the hull's places.
+static func _hardpoint(slot: Dictionary) -> Hardpoint:
+	var gun: Hardpoint = Hardpoint.new()
+	gun.name = String(slot["name"])
+	gun.position = slot["at"]
+	gun.rotation = float(slot["turn"])
+	return gun
 
 
 ## An engine from the table, scaled if the preset asked for a bigger one.

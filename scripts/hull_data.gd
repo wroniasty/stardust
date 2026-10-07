@@ -57,7 +57,7 @@ extends Resource
 ## How many places every hull offers, by kind. The same on every hull, which
 ## is the point: what differs is where they land on the outline, not how many
 ## there are, so loot and presets can count on them.
-const DRIVE_SLOTS: int = 2
+const DRIVE_SLOTS: int = 3
 const FRONT_HARDPOINTS: int = 2
 const SIDE_HARDPOINTS: int = 3
 const REAR_HARDPOINTS: int = 1
@@ -75,8 +75,12 @@ const _AFT: float = PI
 
 ## Where the main drives sit: this far up from the stern, and this share of the
 ## local half-width off the centre line.
-const DRIVE_INSET: float = 2.0
+const DRIVE_INSET: float = 0.0
 const DRIVE_SPREAD: float = 0.35
+
+## A pointed stern has no width to take a share of, and a drive pair needs
+## some: this is the least either side of the centre line.
+const DRIVE_MIN_X: float = 2.5
 
 ## Front guns this far back from the nose, as a share of the hull's length.
 const FRONT_SETBACK: float = 0.18
@@ -187,7 +191,7 @@ func half_width_at(y: float) -> float:
 
 
 ## Where each kind of place lands by default, worked out from the outline:
-## two drives aft, two guns forward, three along the sides and one astern.
+## three drives aft, two guns forward, three along the sides and one astern.
 ##
 ## Three side guns cannot be symmetric, so the third sits on the right, aft of
 ## the pair.
@@ -203,8 +207,11 @@ func default_positions() -> Dictionary:
 	var length: float = stern - nose
 
 	var drive_y: float = stern - DRIVE_INSET
-	var drive_x: float = half_width_at(drive_y) * DRIVE_SPREAD
-	out[SLOT_DRIVE] = [Vector2(-drive_x, drive_y), Vector2(drive_x, drive_y)]
+	var drive_x: float = maxf(half_width_at(drive_y) * DRIVE_SPREAD, DRIVE_MIN_X)
+	# Centre first, then the pair either side of it.
+	out[SLOT_DRIVE] = [
+		Vector2(0.0, drive_y), Vector2(-drive_x, drive_y), Vector2(drive_x, drive_y),
+	]
 
 	var front_y: float = nose + length * FRONT_SETBACK
 	var front_x: float = maxf(half_width_at(front_y) * FRONT_SPREAD, FRONT_MIN_X)
@@ -243,10 +250,11 @@ func slots() -> Array[Dictionary]:
 		for i: int in range(places.size()):
 			var at: Vector2 = places[i]
 			var slot_name: String = String(names[kind])
-			# The first drive is "MainDrive" and the second "MainDrive2";
-			# the others count from one, and a lone rear gun has no number.
+			# Drives are named by where they sit, which is what a fitout and
+			# a pilot both ask about; the guns count from one, and a lone
+			# rear gun has no number.
 			if kind == SLOT_DRIVE:
-				slot_name += "" if i == 0 else str(i + 1)
+				slot_name += "Center" if is_zero_approx(at.x) else ("Left" if at.x < 0.0 else "Right")
 			elif kind != SLOT_REAR or places.size() > 1:
 				slot_name += str(i + 1)
 			out.append(_slot(StringName(slot_name), kind, at, _turn_for(kind, at)))

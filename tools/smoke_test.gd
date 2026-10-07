@@ -1552,16 +1552,19 @@ func _check_control_groups() -> void:
 		)
 
 
+## What every engine whose mount name starts with `mount_name` adds up to: a
+## drive split over the hull's side slots is still one drive.
 func _mount_thrust(mount_name: String) -> float:
+	var total: float = 0.0
 	for engine: EngineInstance in _ship.engines:
-		if engine.mount.name == mount_name:
-			return engine.data.max_thrust
-	return 0.0
+		if String(engine.mount.name).begins_with(mount_name):
+			total += engine.data.max_thrust
+	return total
 
 
 func _mount_spool(mount_name: String) -> float:
 	for engine: EngineInstance in _ship.engines:
-		if engine.mount.name == mount_name:
+		if String(engine.mount.name).begins_with(mount_name):
 			return engine.data.spool_time
 	return 0.0
 
@@ -2096,9 +2099,15 @@ func _check_editor() -> void:
 	root.add_child(editor)
 	editor.bind(ship)
 
-	var mount: EngineMount = ship.get_node("MainDrive") as EngineMount
-	var stronger: EngineData = mount.installed.duplicate() as EngineData
-	stronger.max_thrust = mount.installed.max_thrust * 2.0
+	# The empty centre slot: a drive fitted there adds to the pair either side
+	# of it, where a stronger half on one side would only unbalance them.
+	var half: EngineMount = ship.get_node("MainDriveLeft") as EngineMount
+	var mount: EngineMount = ship.get_node("MainDriveCenter") as EngineMount
+	# Something in it already, so fitting has an engine to put back in the hold.
+	mount.installed = half.installed.duplicate() as EngineData
+	ship.rebuild_control_groups(false)
+	var stronger: EngineData = half.installed.duplicate() as EngineData
+	stronger.max_thrust = half.installed.max_thrust * 8.0
 	ship.take(stronger, 2)
 
 	var mass: float = ship.mass
@@ -2262,7 +2271,7 @@ func _check_editor() -> void:
 	# behind. The first version of this check did that and passed for the
 	# wrong reason: the last slot it clicked was a bay, and a refit does
 	# not free the bays.
-	var doomed: EngineMount = ship.get_node("MainDrive") as EngineMount
+	var doomed: EngineMount = ship.get_node("MainDriveLeft") as EngineMount
 	editor._named = doomed
 	_expect(editor.named_slot() == doomed, "the editor is holding a mount by name")
 	ShipFitout.apply(ship, _preset_named("freighter"))
@@ -3452,7 +3461,9 @@ func _check_allocator() -> void:
 		clean[solve] = residual.length()
 		ship.queue_free()
 	_expect(
-		clean[true] <= clean[false] + 0.5,
+		# A little slack: the pair of main drives can lend a hand in a turn, which
+		# the lone centre-line drive never could.
+		clean[true] <= clean[false] + 5.0,
 		"and leaves a sound ship no worse than it found it (%.2f against %.2f N)" % [
 			clean[true], clean[false],
 		],
@@ -3465,10 +3476,10 @@ func _check_allocator() -> void:
 ## the same turn, and getting that backwards would make the gimbal cancel
 ## the very rotation it is meant to help.
 func _check_gimbal() -> void:
-	var ship: Ship = _spawn_ship()
+	var ship: Ship = _centreline_ship()
 	var main: EngineInstance = null
 	for engine: EngineInstance in ship.engines:
-		if engine.mount.name == "MainDrive":
+		if engine.mount.name == "MainDriveCenter":
 			main = engine
 	_expect(main != null, "the test hull has a main drive")
 
@@ -3683,9 +3694,9 @@ func _check_ship_fitouts() -> void:
 
 	# The minimal ship: main drive only, everything else unbolted. A hull
 	# that can go forward and nothing else.
-	var minimal: Ship = _spawn_ship()
+	var minimal: Ship = _centreline_ship()
 	for mount: EngineMount in minimal.engine_mounts():
-		if mount.name != "MainDrive":
+		if not String(mount.name).begins_with("MainDrive"):
 			mount.installed = null
 	minimal.rebuild_control_groups(false)
 	var minimal_report: ConfigurationReport = minimal.configuration()
@@ -7544,8 +7555,13 @@ func _check_fitout_presets() -> void:
 		for gun: Hardpoint in ship.hardpoints:
 			if gun.weapon != null:
 				armed += 1
+		# The preset's main drive is one entry and two engines: it is split over
+		# the hull's side drive slots.
+		var declared: int = 0
+		for entry: Dictionary in preset["mounts"]:
+			declared += 2 if entry["name"] == "MainDrive" and not entry.get("centered", false) else 1
 		_expect(
-			fitted_mounts == (preset["mounts"] as Array).size()
+			fitted_mounts == declared
 			and armed == (preset["guns"] as Array).size(),
 			"%s is built with what it declares (%d engines, %d guns)" % [
 				preset["name"], fitted_mounts, armed,
@@ -7702,16 +7718,15 @@ func _check_fitout_presets() -> void:
 	var was_thrust: float = plain.max_thrust
 	var was_bulk: float = plain.bulk
 	ShipFitout.apply(ship, _preset_named("stronger"))
-	var beefy: EngineData = null
+	var beefy_thrust: float = 0.0
+	var beefy_bulk: float = 0.0
 	for engine: EngineInstance in ship.engines:
-		if engine.mount.name == "MainDrive":
-			beefy = engine.data
+		if String(engine.mount.name).begins_with("MainDrive"):
+			beefy_thrust += engine.data.max_thrust
+			beefy_bulk += engine.data.bulk
 	_expect(
-		beefy != null and beefy.max_thrust > was_thrust and beefy.bulk > was_bulk,
-		"a scaled engine is stronger and heavier (%.0f N, %.2f bulk)" % [
-			0.0 if beefy == null else beefy.max_thrust,
-			0.0 if beefy == null else beefy.bulk,
-		],
+		beefy_thrust > was_thrust and beefy_bulk > was_bulk,
+		"a scaled engine is stronger and heavier (%.0f N, %.2f bulk)" % [beefy_thrust, beefy_bulk],
 	)
 	_expect(
 		is_equal_approx(plain.max_thrust, was_thrust) and is_equal_approx(plain.bulk, was_bulk),
@@ -8682,7 +8697,7 @@ func _findings_of(report: ConfigurationReport) -> String:
 func _check_bulk() -> void:
 	var ship: Ship = _spawn_ship()
 
-	var mount: EngineMount = ship.get_node("MainDrive") as EngineMount
+	var mount: EngineMount = ship.get_node("MainDriveLeft") as EngineMount
 	var base: EngineData = mount.installed
 
 	# A slot is a hole in the hull. What is bolted into it is the mass, so a
@@ -8771,10 +8786,15 @@ func _check_hold() -> void:
 
 	# Fitting an engine has to change what the ship can do, or engines are not
 	# loot -- they are decoration.
-	var mount: EngineMount = ship.engine_mounts()[0]
+	# Both halves of the split main drive, or the weaker side limits the pair.
+	var mount: EngineMount = ship.get_node("MainDriveLeft") as EngineMount
+	var other: EngineMount = ship.get_node("MainDriveRight") as EngineMount
 	var before: float = ship.control.authority_of(ShipControl.Command.FORWARD)
 	var stronger: EngineData = (mount.installed.duplicate() as EngineData)
 	stronger.max_thrust = mount.installed.max_thrust * 2.0
+	var also: EngineData = (other.installed.duplicate() as EngineData)
+	also.max_thrust = other.installed.max_thrust * 2.0
+	ship.fit_engine(other, also)
 	var removed: EngineData = ship.fit_engine(mount, stronger)
 	var after: float = ship.control.authority_of(ShipControl.Command.FORWARD)
 	_expect(removed != null, "fitting an engine hands the old one back")
@@ -9565,6 +9585,23 @@ func _check_gear(ship: Ship) -> void:
 
 # --- Plumbing ---
 
+## The stock ship with its main drive whole on the centre line instead of split
+## either side of it: the one geometry where a drive has no torque of its own,
+## which is what the gimbal and minimal-hull checks are about.
+func _centreline_ship() -> Ship:
+	var ship: Ship = _spawn_ship()
+	var whole: EngineData = null
+	for mount: EngineMount in ship.engine_mounts():
+		if String(mount.name).begins_with("MainDrive") and mount.installed != null:
+			whole = ShipFitout._engine("main", 1.0)
+			mount.installed = null
+	for mount: EngineMount in ship.engine_mounts():
+		if mount.name == "MainDriveCenter":
+			mount.installed = whole
+	ship.rebuild_control_groups(false)
+	return ship
+
+
 func _spawn_ship() -> Ship:
 	var scene: PackedScene = load(SHIP_SCENE) as PackedScene
 	var ship: Ship = scene.instantiate() as Ship
@@ -10108,7 +10145,7 @@ func _check_sound_seams() -> void:
 
 	var drive: EngineInstance = null
 	for engine: EngineInstance in ship.engines:
-		if engine.mount.name == "MainDrive":
+		if engine.mount.name == "MainDriveLeft":
 			drive = engine
 	_expect(drive != null, "the test ship has a drive to light")
 	if drive == null:
@@ -11670,16 +11707,18 @@ func _check_editor_unbolting(editor: ShipEditor, ship: Ship, gun: Hardpoint) -> 
 		"and an empty socket stops offering it",
 	)
 
-	# Off the ground it is refused with a reason, which is the rule the
-	# whole screen runs on: looking is free, changing is not.
+	# Taking a module off is open at any time: it goes into the hold, which
+	# costs nothing the pilot cannot put back on the ground.
 	gun.weapon = fitted
 	ship.cargo.clear()
 	ship.flight_mode = Ship.FlightMode.PHYSICAL
 	editor.press("hold")
 	_expect(
-		gun.weapon == fitted and ship.cargo.is_empty(),
-		"in flight it stays bolted on",
+		gun.weapon == null and ship.cargo.size() == 1 and ship.cargo[0]["item"] == fitted,
+		"in flight it can still be taken off into the hold",
 	)
+	gun.weapon = fitted
+	ship.cargo.clear()
 	# Overboard is the exception, deliberately: dumping ballast under
 	# pressure is exactly the decision worth having.
 	var thrown: Array[Resource] = []
@@ -13524,7 +13563,7 @@ func _check_skin() -> void:
 	# A plume starts at the nozzle's exit plane, not at the mount. Measured
 	# rather than trusted: the mount is inside the hull and a flame drawn
 	# there comes out of the middle of the ship.
-	var drive: EngineMount = ship.get_node_or_null("MainDrive") as EngineMount
+	var drive: EngineMount = ship.get_node_or_null("MainDriveLeft") as EngineMount
 	var exhaust: Vector2 = -drive.force_direction()
 	var nozzle: SpriteStrip = (
 		load("res://resources/fx/looks/engine_nozzle.tres") as LookTable

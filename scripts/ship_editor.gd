@@ -1155,7 +1155,11 @@ func buttons() -> Array[Dictionary]:
 				"id": String(action[0]),
 				"rect": Rect2(at, Vector2(width, BUTTON_HEIGHT)),
 				"label": String(action[1]),
-				"on": can_refit() or String(action[0]) == "drop",
+				# Both ways out of a socket are open at any time. Only
+				# bolting something *in* waits for the ground: taking a
+				# module off puts it in the hold and costs nothing the pilot
+				# cannot undo there.
+				"on": true,
 			})
 			at.x += width + BUTTON_GAP
 	return out
@@ -1266,9 +1270,6 @@ func _take_off_ship(slot: Node, overboard: bool) -> void:
 	var item: Resource = _fitted_in(slot)
 	if item == null:
 		_notice = "%s is empty" % slot.name
-		return
-	if not overboard and not can_refit():
-		_notice = "unbolting only on the ground - land first"
 		return
 	if not overboard and Ship.module_bulk(item) > _ship.cargo_free():
 		_notice = "no room in the hold for %s" % _label(item)
