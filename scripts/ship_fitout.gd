@@ -221,6 +221,7 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	if hull == null:
 		push_error("preset %s names no hull" % preset["name"])
 		return
+	ship.hull = hull
 	ship.hull_outline = hull.outline
 	ship.hull_cargo_capacity = hull.cargo_capacity
 	if ship.gear != null and not hull.legs.is_empty():

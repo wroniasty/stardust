@@ -41,6 +41,19 @@ extends Resource
 ## and the interceptor four because it is not.
 @export var cargo_capacity: float = 0.0
 
+## Where the places on this hull are, in the ship's own frame. Four lists
+## because the kinds are different jobs: engines aft, guns forward, guns along
+## the sides, a gun astern. Counts are DRIVE_SLOTS and friends.
+##
+## Left empty, a list falls back to `default_positions()`, which works them
+## out from the outline -- so a hull someone just drew has places before
+## anyone has placed them. `tools/bake_hull_slots.gd` writes those defaults
+## into every .tres, after which they are plain data to move by hand.
+@export var drive_slots: Array[Vector2] = []
+@export var front_slots: Array[Vector2] = []
+@export var side_slots: Array[Vector2] = []
+@export var rear_slots: Array[Vector2] = []
+
 ## How many places every hull offers, by kind. The same on every hull, which
 ## is the point: what differs is where they land on the outline, not how many
 ## there are, so loot and presets can count on them.
@@ -69,6 +82,9 @@ const DRIVE_SPREAD: float = 0.35
 const FRONT_SETBACK: float = 0.18
 const FRONT_SPREAD: float = 0.6
 const FRONT_MIN_X: float = 2.5
+
+## How far past the stern the rear gun hangs, clear of the main drive.
+const REAR_OFFSET: float = 2.0
 
 ## Where the side guns sit along the hull, 0 at the nose and 1 at the stern.
 const SIDE_MID: float = 0.5
@@ -170,17 +186,15 @@ func half_width_at(y: float) -> float:
 	return reach
 
 
-## Every place this hull offers, worked out from the outline: two drives aft,
-## two guns forward, three along the sides and one astern.
-##
-## Computed rather than listed in each .tres so a new hull has them the moment
-## it has an outline. Each entry is `{name, kind, at, turn}`, in the ship's own
-## frame, with `turn` the node rotation the mount should have.
+## Where each kind of place lands by default, worked out from the outline:
+## two drives aft, two guns forward, three along the sides and one astern.
 ##
 ## Three side guns cannot be symmetric, so the third sits on the right, aft of
-## the pair: one change here moves it.
-func slots() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
+## the pair.
+func default_positions() -> Dictionary:
+	var out: Dictionary = {
+		SLOT_DRIVE: [], SLOT_FRONT: [], SLOT_SIDE: [], SLOT_REAR: [],
+	}
 	if outline.is_empty():
 		return out
 	var box: Rect2 = bounds()
@@ -190,22 +204,63 @@ func slots() -> Array[Dictionary]:
 
 	var drive_y: float = stern - DRIVE_INSET
 	var drive_x: float = half_width_at(drive_y) * DRIVE_SPREAD
-	out.append(_slot(&"MainDrive", SLOT_DRIVE, Vector2(-drive_x, drive_y), 0.0))
-	out.append(_slot(&"MainDrive2", SLOT_DRIVE, Vector2(drive_x, drive_y), 0.0))
+	out[SLOT_DRIVE] = [Vector2(-drive_x, drive_y), Vector2(drive_x, drive_y)]
 
 	var front_y: float = nose + length * FRONT_SETBACK
 	var front_x: float = maxf(half_width_at(front_y) * FRONT_SPREAD, FRONT_MIN_X)
-	out.append(_slot(&"FrontHardpoint1", SLOT_FRONT, Vector2(-front_x, front_y), 0.0))
-	out.append(_slot(&"FrontHardpoint2", SLOT_FRONT, Vector2(front_x, front_y), 0.0))
+	out[SLOT_FRONT] = [Vector2(-front_x, front_y), Vector2(front_x, front_y)]
 
 	var mid_y: float = nose + length * SIDE_MID
 	var aft_y: float = nose + length * SIDE_AFT
-	out.append(_slot(&"SideHardpoint1", SLOT_SIDE, Vector2(-half_width_at(mid_y), mid_y), _LEFT))
-	out.append(_slot(&"SideHardpoint2", SLOT_SIDE, Vector2(half_width_at(mid_y), mid_y), _RIGHT))
-	out.append(_slot(&"SideHardpoint3", SLOT_SIDE, Vector2(half_width_at(aft_y), aft_y), _RIGHT))
-
-	out.append(_slot(&"RearHardpoint", SLOT_REAR, Vector2(0.0, stern), _AFT))
+	out[SLOT_SIDE] = [
+		Vector2(-half_width_at(mid_y), mid_y),
+		Vector2(half_width_at(mid_y), mid_y),
+		Vector2(half_width_at(aft_y), aft_y),
+	]
+	# A pylon past the stern: the hull's own end is where the main drive sits.
+	out[SLOT_REAR] = [Vector2(0.0, stern + REAR_OFFSET)]
 	return out
+
+
+## Every place this hull offers: what the resource says, or the default for a
+## kind it says nothing about. Each entry is `{name, kind, at, turn}`, in the
+## ship's own frame, with `turn` the node rotation the mount should have.
+func slots() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if outline.is_empty():
+		return out
+	var defaults: Dictionary = default_positions()
+	var written: Dictionary = {
+		SLOT_DRIVE: drive_slots, SLOT_FRONT: front_slots,
+		SLOT_SIDE: side_slots, SLOT_REAR: rear_slots,
+	}
+	var names: Dictionary = {
+		SLOT_DRIVE: "MainDrive", SLOT_FRONT: "FrontHardpoint",
+		SLOT_SIDE: "SideHardpoint", SLOT_REAR: "RearHardpoint",
+	}
+	for kind: StringName in [SLOT_DRIVE, SLOT_FRONT, SLOT_SIDE, SLOT_REAR]:
+		var places: Array = written[kind] if not (written[kind] as Array).is_empty() else defaults[kind]
+		for i: int in range(places.size()):
+			var at: Vector2 = places[i]
+			var slot_name: String = String(names[kind])
+			# The first drive is "MainDrive" and the second "MainDrive2";
+			# the others count from one, and a lone rear gun has no number.
+			if kind == SLOT_DRIVE:
+				slot_name += "" if i == 0 else str(i + 1)
+			elif kind != SLOT_REAR or places.size() > 1:
+				slot_name += str(i + 1)
+			out.append(_slot(StringName(slot_name), kind, at, _turn_for(kind, at)))
+	return out
+
+
+## Which way a place faces: forward and aft drives point the ship's way, side
+## guns point out of the side they are on, the rear gun points astern.
+static func _turn_for(kind: StringName, at: Vector2) -> float:
+	if kind == SLOT_SIDE:
+		return _LEFT if at.x < 0.0 else _RIGHT
+	if kind == SLOT_REAR:
+		return _AFT
+	return 0.0
 
 
 ## The slots of one kind, in order.

@@ -30,6 +30,12 @@ const FORWARD: Vector2 = Vector2.UP
 ## solver. That is why there are guidelines for drawing one -- see the
 ## configuration report -- rather than a solver clever enough for any shape
 ## (IDEAS.md section 6).
+## The hull resource this ship is built on: where its places are, its legs
+## and its hold. Found from the outline for the stock ship and set by
+## ShipFitout.apply for a preset; a shape nobody named gets one made from the
+## outline alone.
+var hull: HullData = null
+
 @export var hull_outline: PackedVector2Array = PackedVector2Array([
 	Vector2(0, -12),
 	Vector2(-8, 10),
@@ -723,7 +729,7 @@ func _ready() -> void:
 func _add_hull_slots() -> void:
 	if hull_outline.size() < 3:
 		return
-	var hull: HullData = HullData.matching(hull_outline)
+	hull = HullData.matching(hull_outline)
 	if hull == null:
 		hull = HullData.new()
 		hull.outline = hull_outline

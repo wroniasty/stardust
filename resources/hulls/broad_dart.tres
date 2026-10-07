@@ -9,3 +9,7 @@ display_name = "gimbal pojedynczy (dryfuje)"
 outline = PackedVector2Array(0, -14, -9, 12, 9, 12)
 legs = Array[Vector2]([Vector2(-10, 15), Vector2(10, 15)])
 cargo_capacity = 11.0
+drive_slots = Array[Vector2]([Vector2(-3, 10), Vector2(3, 10)])
+front_slots = Array[Vector2]([Vector2(-2.5, -9.25), Vector2(2.5, -9.25)])
+side_slots = Array[Vector2]([Vector2(-4.5, -1), Vector2(4.5, -1), Vector2(6.75, 5.5)])
+rear_slots = Array[Vector2]([Vector2(0, 14)])

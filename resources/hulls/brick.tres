@@ -7,3 +7,7 @@ script = ExtResource("1_3tqk0")
 id = &"brick"
 display_name = "brick"
 outline = PackedVector2Array(-14, -18, 14, -18, 14, 18, -14, 18)
+drive_slots = Array[Vector2]([Vector2(-5, 16), Vector2(5, 16)])
+front_slots = Array[Vector2]([Vector2(-8.5, -11.5), Vector2(8.5, -11.5)])
+side_slots = Array[Vector2]([Vector2(-14, 0), Vector2(14, 0), Vector2(14, 9)])
+rear_slots = Array[Vector2]([Vector2(0, 20)])

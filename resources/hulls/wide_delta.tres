@@ -7,3 +7,7 @@ script = ExtResource("1_lxc8t")
 id = &"wide_delta"
 display_name = "wide delta"
 outline = PackedVector2Array(0, -10, -18, 9, 18, 9)
+drive_slots = Array[Vector2]([Vector2(-5.75, 7), Vector2(5.75, 7)])
+front_slots = Array[Vector2]([Vector2(-2.5, -6.5), Vector2(2.5, -6.5)])
+side_slots = Array[Vector2]([Vector2(-9, -0.5), Vector2(9, -0.5), Vector2(13.5, 4.25)])
+rear_slots = Array[Vector2]([Vector2(0, 11)])
