@@ -183,12 +183,13 @@ func _first_solid_along(start: Vector2, step: Vector2) -> Vector2:
 
 
 func _on_body_entered(body: Node2D) -> void:
-	var ship: Ship = body as Ship
-	if ship == null:
+	# Asked of what it can do rather than of what it is. See `Damage`:
+	# a foe and a hull share nothing but being shootable, and the round
+	# has no business knowing which of them it just hit.
+	if body == shooter and not _armed:
 		return
-	if ship == shooter and not _armed:
+	if not Damage.deal(body, damage, "projectile"):
 		return
-	ship.take_damage(damage, "projectile")
 	_impact(global_position)
 
 
@@ -223,13 +224,13 @@ func _blast(point: Vector2) -> void:
 	query.collide_with_bodies = true
 
 	for hit: Dictionary in space.intersect_shape(query, 16):
-		var ship: Ship = hit.get("collider") as Ship
-		if ship == null:
+		var struck: Node2D = hit.get("collider") as Node2D
+		if struck == null or not Damage.can_be_hurt(struck):
 			continue
 		var reach: float = clampf(
-			ship.global_position.distance_to(point) / maxf(blast_radius, 0.0001), 0.0, 1.0
+			struck.global_position.distance_to(point) / maxf(blast_radius, 0.0001), 0.0, 1.0
 		)
-		ship.take_damage(damage * lerpf(1.0, BLAST_EDGE_SHARE, reach), "blast")
+		Damage.deal(struck, damage * lerpf(1.0, BLAST_EDGE_SHARE, reach), "blast")
 
 
 ## Arms the round once it is clear of the hull that fired it, or once the

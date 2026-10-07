@@ -342,7 +342,7 @@ func _fire_beam(
 	var hit_at: Vector2 = global_position + direction * reach
 	var planet: Planet = Planet.nearest(get_tree(), global_position)
 
-	var struck: Ship = null
+	var struck: Node2D = null
 	var space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 	var query: PhysicsRayQueryParameters2D = PhysicsRayQueryParameters2D.create(
 		global_position, hit_at
@@ -353,7 +353,9 @@ func _fire_beam(
 	var body_hit: Dictionary = space.intersect_ray(query)
 	if not body_hit.is_empty():
 		hit_at = body_hit["position"]
-		struck = body_hit.get("collider") as Ship
+		struck = body_hit.get("collider") as Node2D
+		if not Damage.can_be_hurt(struck):
+			struck = null
 
 	if planet != null:
 		var travelled: float = 0.0
@@ -367,7 +369,7 @@ func _fire_beam(
 				break
 
 	if struck != null:
-		struck.take_damage(firing.damage, "beam")
+		Damage.deal(struck, firing.damage, "beam")
 	elif planet != null and firing.crater_radius > 0.0:
 		planet.carve(hit_at, firing.crater_radius)
 

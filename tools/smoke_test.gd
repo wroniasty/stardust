@@ -1214,6 +1214,7 @@ func _evaluate_phase() -> void:
 			_check_nav_marker()
 			_check_galaxy_chart()
 			_check_garrison()
+			_check_spawner()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -12225,6 +12226,230 @@ func _check_tiered_loot() -> void:
 		"and the rung runs 0 to 1 across the ladder",
 	)
 	loot.queue_free()
+
+
+## Garnizon staje w świecie, i znika razem ze swoim ciałem.
+##
+## The spawner needs no streaming of its own, which is the best
+## argument that moving garrisons onto bodies was right: a defender's
+## life is exactly its body's, so `body_awake` builds it and
+## `body_asleep` takes it down. Driven here by calling those two
+## directly, because a test that needed a planet built and a pilot
+## flown to it would be a test of the streaming manager.
+func _check_spawner() -> void:
+	var map: GalaxyMap = GalaxyMap.generate(TEST_SEED)
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	# Stands in for the streaming manager, which is an autoload and does
+	# not exist here. The spawner only ever asks it for two signals and
+	# for the loot generator, so this is the whole of that contract.
+	var manager: Node = Node.new()
+	manager.set_script(load("res://scripts/autoload/streaming_manager.gd"))
+	manager.loot = loot
+	root.add_child(manager)
+
+	var field: Node2D = Node2D.new()
+	root.add_child(field)
+	var spawner: GarrisonSpawner = GarrisonSpawner.new()
+	root.add_child(spawner)
+	spawner.bind(GalaxyMap.TIERS, sky, manager, field)
+
+	# A defended body and an undefended one, found rather than assumed.
+	var held_body: SystemBody = null
+	var quiet_body: SystemBody = null
+	var system: StarSystem = null
+	for index: int in range(map.count()):
+		system = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			if body.kind == SystemBody.Kind.STAR:
+				continue
+			if held_body == null and Garrison.is_defended(body, GalaxyMap.TIERS):
+				held_body = body
+			elif quiet_body == null and not Garrison.is_defended(body, GalaxyMap.TIERS):
+				quiet_body = body
+		if held_body != null and quiet_body != null:
+			break
+	_expect(
+		held_body != null and quiet_body != null,
+		"there is a held world and a quiet one to try",
+	)
+	if held_body == null or quiet_body == null:
+		return
+
+	var roster: Array = Garrison.at(held_body, GalaxyMap.TIERS, sky.deltas)["members"]
+	_expect(
+		spawner.stand_up(held_body, null) == roster.size()
+		and spawner.standing().size() == roster.size(),
+		"waking a held world stands its garrison up (%d of %d)" % [
+			spawner.standing().size(), roster.size(),
+		],
+	)
+	_expect(
+		spawner.stand_up(quiet_body, null) == 0,
+		"and a quiet one puts nobody out",
+	)
+
+	_check_spawner_placement(spawner, held_body, sky)
+	_check_spawner_deaths(spawner, held_body, sky, map)
+
+	spawner.queue_free()
+	field.queue_free()
+	manager.queue_free()
+	loot.queue_free()
+	sky.queue_free()
+
+
+## Gdzie stoją: w terytorium, powtarzalnie, i nie w jednym pierścieniu.
+func _check_spawner_placement(
+	spawner: GarrisonSpawner, body: SystemBody, sky: Node
+) -> void:
+	var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+	var territory: float = float(held["territory"])
+	var outside: int = 0
+	var radii: Dictionary = {}
+	for entry: Variant in held["members"]:
+		var member: Dictionary = entry
+		var at: Vector2 = GarrisonSpawner.station_for(
+			held, member, Vector2.ZERO, body.radius
+		)
+		var out: float = at.length()
+		if out > territory + 0.001 or out < body.radius - 0.001:
+			outside += 1
+		if int(member["post"]) == Garrison.Post.SHELL:
+			radii[roundi(out)] = true
+	_expect(
+		outside == 0,
+		"every defender stands inside the territory it holds (%d outside)" % outside,
+	)
+	_expect(
+		radii.size() > 1 or radii.is_empty(),
+		"and the loose ones are a cloud rather than a ring (%d radii)" % radii.size(),
+	)
+	# The same defender in the same place on the second visit, which is
+	# what makes a garrison somewhere you can learn rather than somewhere
+	# that is different every time you look.
+	var first: Vector2 = GarrisonSpawner.station_for(
+		held, held["members"][0], Vector2(1000.0, -500.0), body.radius
+	)
+	var again: Vector2 = GarrisonSpawner.station_for(
+		held, held["members"][0], Vector2(1000.0, -500.0), body.radius
+	)
+	_expect(first.is_equal_approx(again), "and stands in the same spot every visit")
+
+
+## Co zostaje po śmierci: nic po minorze, wpis po majorze.
+func _check_spawner_deaths(
+	spawner: GarrisonSpawner, body: SystemBody, sky: Node, map: GalaxyMap
+) -> void:
+	# Nothing else standing, so "the field" and "this body's garrison"
+	# are the same number. They were not, which is how this test came to
+	# compare a per-body count against a galaxy-wide one.
+	for other: Foe in spawner.standing():
+		spawner.stand_down(other.held["body"])
+	var before: int = spawner.stand_up(body, null)
+	var minor: Foe = null
+	for foe: Foe in spawner.standing():
+		if not foe.is_major():
+			minor = foe
+			break
+	_expect(minor != null, "there is a minor standing to shoot at")
+	if minor == null:
+		return
+
+	# Through the damage path a round would use, not by calling the
+	# signal: what has to work is that a foe is shootable at all.
+	var dropped: Array[Resource] = []
+	spawner.dropped.connect(func(item: Resource, _grade: int, _at: Vector2) -> void:
+		dropped.append(item)
+	)
+	var bystander: Node2D = Node2D.new()
+	_expect(
+		Damage.can_be_hurt(minor) and not Damage.can_be_hurt(bystander),
+		"a foe can be hurt and a bare node cannot",
+	)
+	bystander.free()
+	var hits: int = 0
+	while minor.hull > 0.0 and hits < 200:
+		Damage.deal(minor, 0.08, "projectile")
+		hits += 1
+	_expect(
+		hits > 1 and hits < 30,
+		"a rim-to-core defender dies in a pass, not in an afternoon (%d rounds)" % hits,
+	)
+	# Not "deltas is empty": `reset()` writes the starting system's
+	# visit, so it never is. What must be true is that **this** death
+	# wrote nothing -- a minor the model has already promised to put
+	# back.
+	_expect(
+		spawner.standing().size() == before - 1
+		and not Garrison.beaten(sky.deltas, int(minor.member["seed"])),
+		"a dead minor leaves the field and nothing written down",
+	)
+	_expect(
+		not dropped.is_empty(), "and leaves something behind (%d dropped)" % dropped.size()
+	)
+	_expect(
+		spawner.stand_up(body, null) == before,
+		"so the next visit finds the garrison whole again (%d)" % spawner.standing().size(),
+	)
+
+	# And the opposite. Searched for, because whether a given world has
+	# an elite is a roll.
+	var major: Foe = null
+	var where: SystemBody = body
+	for index: int in range(240):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for tried: SystemBody in system.bodies:
+			if tried.kind == SystemBody.Kind.STAR:
+				continue
+			spawner.stand_up(tried, null)
+			for foe: Foe in spawner.standing():
+				if foe.is_major() and foe.held["body"] == tried:
+					major = foe
+					where = tried
+					break
+			if major != null:
+				break
+			# Down again, or the field fills up with every world looked
+			# at on the way to the one with an elite on it.
+			spawner.stand_down(tried)
+		if major != null:
+			break
+	_expect(major != null, "there is an elite standing somewhere")
+	if major == null:
+		return
+
+	var key: int = int(major.member["seed"])
+	var standing: int = (Garrison.at(where, GalaxyMap.TIERS, sky.deltas)["members"] as Array).size()
+	Damage.deal(major, 99.0, "projectile")
+	_expect(
+		Garrison.beaten(sky.deltas, key),
+		"a dead elite is written down the moment it dies",
+	)
+	_expect(
+		spawner.stand_up(where, null) == standing - 1,
+		"and the next visit is one defender lighter (%d of %d)" % [
+			spawner.standing().size(), standing,
+		],
+	)
+	# Scoped to the world in question, which is what both of these
+	# claims are about. The field holds other garrisons from the search
+	# that found this one, and counting them in was how an earlier
+	# version of this test came to compare a body against a galaxy.
+	var still: bool = false
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == where and int(foe.member["seed"]) == key:
+			still = true
+	_expect(not still, "with that one, and only that one, missing")
+	spawner.stand_down(where)
+	var left: int = 0
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == where:
+			left += 1
+	_expect(left == 0, "and sleeping takes the rest away (%d left standing)" % left)
 
 
 ## Kto broni czego, i czego nie broni nikt.

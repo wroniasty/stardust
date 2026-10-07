@@ -66,6 +66,7 @@ var _rush: SpeedVeil = null
 var _editor: ShipEditor = null
 var _map: SystemMap = null
 var _chart: GalaxyChart = null
+var _garrisons: GarrisonSpawner = null
 var _help: HelpScreen = null
 var _flight: FlightHud = null
 var _energy: EnergyHud = null
@@ -99,6 +100,7 @@ func _ready() -> void:
 	_build_editor()
 	_build_map()
 	_build_chart()
+	_build_garrisons()
 	_build_help()
 	_build_flight_hud()
 	_build_creative()
@@ -148,6 +150,38 @@ func _build_map() -> void:
 		Galaxy.system(Galaxy.here), (player as Player).ship, StreamingManager
 	)
 	_map.teleport_requested.connect(_on_map_teleport)
+
+
+## The defenders, which need no streaming of their own: a garrison
+## belongs to a body and the manager already says which bodies exist.
+##
+## Their own container rather than `systems`, because that one is
+## cleared and rebuilt under them -- a foe parented to a body would be
+## freed by machinery that knows nothing about it, and one parented to
+## the system node would vanish on a jump without anybody deciding so.
+func _build_garrisons() -> void:
+	var field: Node2D = Node2D.new()
+	field.name = "Garrisons"
+	add_child(field)
+	_garrisons = GarrisonSpawner.new()
+	add_child(_garrisons)
+	_garrisons.dropped.connect(_on_garrison_dropped)
+	_garrisons.bind(_tier_here(), Galaxy, StreamingManager, field)
+
+
+## Which band of the galaxy the ship is in. From the position rather
+## than from a system index, for the reason the loot generator wants
+## the same answer: a misjump has no index and the dark between two
+## core systems is still the core.
+func _tier_here() -> int:
+	return 1 if Galaxy.map == null else Galaxy.map.tier_at(Galaxy.at)
+
+
+## What a dead defender leaves. The spawner rolls it -- the floor is a
+## fact about the roster -- and the world turns it into a thing you can
+## fly into, because crates are the world's business.
+func _on_garrison_dropped(item: Resource, rarity: int, at: Vector2) -> void:
+	_leave_crate(item, rarity, at, Vector2.ZERO, 0.0)
 
 
 ## The galaxy chart, one layer out from the system map. Handed the
@@ -288,6 +322,7 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	_map.bind(landing, ship, StreamingManager)
 	_chart.bind(Galaxy.map, ship, Galaxy, to_index, Galaxy.at)
 	_tier_the_loot()
+	_garrisons.bind(_tier_here(), Galaxy, StreamingManager, _garrisons_field())
 	_dress_sky(landing)
 	print("jumped to %s (%s), out at %.0f px" % [
 		landing.display_name,
@@ -312,6 +347,10 @@ func _on_misjumped(toward: int, adrift_at: Vector2) -> void:
 ## From the **position** rather than from the system index, because a
 ## misjump has no index and the dark between two core systems is still
 ## the core. One line, in the two places the ship can arrive.
+func _garrisons_field() -> Node2D:
+	return get_node_or_null("Garrisons") as Node2D
+
+
 func _tier_the_loot() -> void:
 	if Galaxy.map != null:
 		LootGenerator.tier = Galaxy.map.tier_at(Galaxy.at)
@@ -389,17 +428,32 @@ func _on_jettisoned(item: Resource, rarity: int) -> void:
 	var ship: Ship = (player as Player).ship
 	if ship == null:
 		return
+	_leave_crate(
+		item, rarity, ship.eject_point(), ship.eject_velocity(), JETTISON_GRACE
+	)
+
+
+## One crate, wherever something came loose: thrown overboard, or left
+## by something that died. One function because the two differ in a
+## point and a velocity and in nothing else, and two copies of this is
+## one of them forgetting to connect `touched`.
+func _leave_crate(
+	item: Resource, rarity: int, at: Vector2, thrown: Vector2, grace: float
+) -> void:
+	if item == null:
+		return
 	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
 	crate.hold(item, rarity)
-	crate.grace = JETTISON_GRACE
+	crate.grace = grace
 	crate.touched.connect(_on_crate_touched)
+	# Parented to the planet when there is one, so it rides the turning
+	# ground rather than hanging in a sky that moves out from under it.
+	# First, because eject() speaks world coordinates and a node outside
+	# the tree has none.
 	var host: Node = planet if planet != null else self
 	host.add_child(crate)
-	# Out of the bay and aft, carrying the ship's own velocity. Parented
-	# first, because eject() speaks world coordinates and a node outside the
-	# tree has none.
-	crate.eject(ship.eject_point(), ship.eject_velocity())
-	print("jettisoned: %s" % crate.label())
+	crate.eject(at, thrown)
+	print("dropped: %s" % crate.label())
 
 
 func _on_crate_touched(crate: LootCrate, body: Node) -> void:

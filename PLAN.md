@@ -811,13 +811,27 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   najczęstszą rzeczą ze świata rdzenia jest **rzadki, nie pospolity**. Żaden
   stopień nie znika: podłoga pod rzutem skasowałaby poziom odniesienia, względem
   którego czyta się skrajności. Tabela w IDEAS.md sekcja 4.
-- [ ] **Spawner: postawić garnizon w świecie.** Roster mówi już ilu, jacy, jak
-  silni, przy którym ciele, na jakim namiarze i jak daleko sięga terytorium —
-  zostało zrobić z tego węzły. Wróg, który **istnieje, da się w niego trafić i
-  ginie**, bez żadnego zachowania, bo to zamyka pętlę `beat()` → `deltas` →
-  zapis od końca do końca. Streaming po bliskości terytorium, jak
-  `StreamingManager` robi to dla ciał: najcięższy system trzyma kilka
-  garnizonów, a na ekranie ma być jeden.
+- [x] **Spawner: garnizon stoi w świecie.** `Foe` — **nie `Ship`**, i to jest ta
+  decyzja: kadłub gracza to 2759 linii montażu, paliwa, ciepła i solwera ciągu,
+  a rdzeń trzyma dwa tuziny obrońców. Wróg to liczba wytrzymałości, kształt do
+  trafienia i miejsce do stania. Precedens projekt zapisał sam: `LootCrate` ma
+  własną całkę zamiast `RigidBody2D`.
+
+  **Streaming nie był potrzebny** — i to jest najlepszy dowód, że przeniesienie
+  garnizonu na ciała było słuszne. Życie obrońcy to dokładnie życie jego ciała,
+  więc spawner to dwa sygnały (`body_awake`, `body_asleep`), a nie druga
+  maszyneria bliskości. Zdjęcie garnizonu **wyjmuje węzły z drzewa od razu**, nie
+  tylko `queue_free()`: odroczone zwolnienie zostawiało je przez resztę klatki w
+  świecie fizyki, czyli dało się ostrzeliwać garnizon, który przestał istnieć.
+
+  Trzy ścieżki obrażeń (pocisk, podmuch, wiązka) pytały `collider as Ship`, a
+  znaczyły „czy to da się zranić". Jedno `Damage.deal()`, kaczo-typowane: `Foe` i
+  `Ship` nie mają ze sobą nic wspólnego poza tym, że da się do nich strzelać.
+
+  Pętla zamknięta od końca do końca: minor ginie i wraca przy następnej wizycie,
+  major ginie, trafia do `deltas` i **nie wraca**. Łup leci z `rarity_floor`
+  rostera przez istniejące skrzynki. Zmierzone: obrońca pada w 7 strzałach
+  seryjnego działka.
 - [ ] **Wykrywanie prowokacji.** Zbliżenie — wejście w terytorium. Lądowanie —
   stan `LANDED` na trzymanym ciele. Strzał — trafienie w członka garnizonu.
   Kopanie — czeka na M5.2. Reguła już jest w `provoked_by()`; to jest o tym,
