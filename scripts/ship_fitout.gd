@@ -229,7 +229,7 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	if drawn != null:
 		drawn.polygon = ship.hull_outline
 
-	_add_empty_slots(ship, hull, preset)
+	add_hull_slots(ship, hull)
 
 	ship.collect_parts()
 	ship._build_contact_points()
@@ -237,19 +237,22 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	ship.rebuild_control_groups(false)
 
 
-## Gives the ship every place the hull offers that the preset did not already
-## fill: empty drive mounts and empty hardpoints, named by the hull.
+## Gives the ship every place the hull offers that it does not already have:
+## empty drive mounts and empty hardpoints, named by the hull.
 ##
-## What the preset built counts first. A preset's main drive stands in the
-## first drive slot and its guns in the first front slots, so a preset is
-## never given a second copy of something it already has -- only the room
-## to fit more.
-static func _add_empty_slots(ship: Ship, hull: HullData, preset: Dictionary) -> void:
+## Counted from what is on the ship rather than from a preset, so the same
+## call serves a preset that was just built and the stock ship out of
+## `ship.tscn`. A mount named MainDrive* stands in the first drive slot, and
+## the hardpoints already there stand in the first front slots, so nothing is
+## ever given a second copy of what it has -- only the room to fit more.
+static func add_hull_slots(ship: Ship, hull: HullData) -> void:
 	var drives_built: int = 0
-	for entry: Dictionary in preset["mounts"]:
-		if String(entry["name"]).begins_with("MainDrive"):
+	var guns_built: int = 0
+	for child: Node in ship.get_children():
+		if child is EngineMount and String(child.name).begins_with("MainDrive"):
 			drives_built += 1
-	var guns_built: int = (preset["guns"] as Array).size()
+		elif child is Hardpoint:
+			guns_built += 1
 
 	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
 	var drive_index: int = 0
@@ -272,6 +275,8 @@ static func _add_empty_slots(ship: Ship, hull: HullData, preset: Dictionary) -> 
 			front_index += 1
 			if front_index <= guns_built:
 				continue
+		elif kind != HullData.SLOT_FRONT and ship.has_node(NodePath(String(slot["name"]))):
+			continue
 		var gun: Hardpoint = Hardpoint.new()
 		gun.name = String(slot["name"])
 		gun.position = slot["at"]

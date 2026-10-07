@@ -2231,20 +2231,19 @@ func _check_editor() -> void:
 	# And on the schematic: a mount the module fits becomes the target, one
 	# it does not is refused by name rather than silently ignored.
 	editor._pick = 0
-	var place: Callable = editor._plan_placement(editor._panels()["plan"])
 	var targets: Array[Node] = editor._targets()
 	_expect(not targets.is_empty(), "the held module fits somewhere")
 	if not targets.is_empty():
 		var fitting: Node = targets[targets.size() - 1]
 		_expect(
-			editor.click_at(place.call((fitting as Node2D).position)),
+			editor.click_at(editor.slot_positions(editor._panels())[fitting]),
 			"a click on a mount hits it",
 		)
 		_expect(editor._targets()[editor._slot] == fitting, "and aims the swap at that mount")
 
 	var torque: EngineMount = ship.get_node("NoseLeftTorque") as EngineMount
 	_expect(
-		editor.click_at(place.call(torque.position)) and not editor._targets().has(torque),
+		editor.click_at(editor.slot_positions(editor._panels())[torque]) and not editor._targets().has(torque),
 		"a mount the module does not fit is still clickable, and says so",
 	)
 
@@ -7515,6 +7514,21 @@ func _check_flight_hud(planet: Planet) -> void:
 ## from the gimbal -- was a ship that could not steer.
 func _check_fitout_presets() -> void:
 	var ship: Ship = _spawn_ship()
+	# The stock ship, before any preset touches it: it has the hull's places
+	# too, not only the ships a preset built.
+	var stock_drives: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		if String(mount.name).begins_with("MainDrive"):
+			stock_drives += 1
+	_expect(
+		stock_drives == HullData.DRIVE_SLOTS
+		and ship.hardpoints.size() == (
+			HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS + HullData.REAR_HARDPOINTS
+		),
+		"the stock ship has the hull's slots (%d drive, %d hardpoints)" % [
+			stock_drives, ship.hardpoints.size(),
+		],
+	)
 	var seen: Array[String] = []
 	for preset: Dictionary in ShipFitout.all():
 		ShipFitout.apply(ship, preset)

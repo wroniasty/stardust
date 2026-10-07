@@ -1374,7 +1374,9 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 			# Lit yellow, or green when the module in the hold goes in here.
 			colour = _ink.ok if fits else _ink.caution
 		var gun: Hardpoint = mount as Hardpoint
-		if gun != null:
+		# An empty hardpoint has no gun to swing, so no arc: sixteen of them
+		# drawn at once was most of the clutter on a small hull.
+		if gun != null and (gun.weapon != null or mount == focus):
 			_draw_arc_for(gun, at)
 		_draw_slot(at, mount, colour, mount == focus)
 

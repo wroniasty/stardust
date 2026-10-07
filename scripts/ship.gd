@@ -698,6 +698,7 @@ func collect_parts() -> void:
 
 
 func _ready() -> void:
+	_add_hull_slots()
 	collect_parts()
 	# Set once here rather than at every landing: it never changes, and writing
 	# it from _integrate_forces would be another state change the server
@@ -714,6 +715,19 @@ func _ready() -> void:
 	energy = energy_capacity()
 	fuel = fuel_capacity()
 	_since_spend = energy_recharge_delay()
+
+
+## Gives the stock ship the places every hull offers, which only a preset
+## being applied did before. A named hull supplies them; a shape nobody named
+## gets them worked out from its outline all the same.
+func _add_hull_slots() -> void:
+	if hull_outline.size() < 3:
+		return
+	var hull: HullData = HullData.matching(hull_outline)
+	if hull == null:
+		hull = HullData.new()
+		hull.outline = hull_outline
+	ShipFitout.add_hull_slots(self, hull)
 
 
 ## Every engine mount on the hull, fitted or empty.
@@ -1420,7 +1434,7 @@ func _trigger_held(trigger: int) -> bool:
 func aim_state(trigger: int) -> Hardpoint.Aim:
 	var best: Hardpoint.Aim = Hardpoint.Aim.BLOCKED
 	for hardpoint: Hardpoint in hardpoints:
-		if hardpoint.trigger != trigger:
+		if hardpoint.weapon == null or hardpoint.trigger != trigger:
 			continue
 		best = maxi(best, hardpoint.aim_state(aim_point)) as Hardpoint.Aim
 	return best
@@ -1430,7 +1444,8 @@ func aim_state(trigger: int) -> Hardpoint.Aim:
 ## out a half nothing is wired to.
 func has_trigger(trigger: int) -> bool:
 	for hardpoint: Hardpoint in hardpoints:
-		if hardpoint.trigger == trigger:
+		# An empty mount is a place, not a gun: it answers to nothing.
+		if hardpoint.weapon != null and hardpoint.trigger == trigger:
 			return true
 	return false
 
