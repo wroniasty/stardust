@@ -631,6 +631,42 @@ Dwie bronie startowe są celowo przeciwstawne, żeby loot miał czym się różn
 14). Większe obrażenia na strzał **nie** dają większego dps — kupuje się za nie
 przebicie i zasięg.
 
+### Loot czyta tier: pochylenie tabeli, nie podłoga pod rzutem
+
+Premisa w jednym pomiarze: **to samo ryzyko kupuje więcej, im głębiej się je
+podejmie.** Tier wchodzi jako stan generatora, nie jako argument każdego
+wejścia — jest ich dziewięć i każde rosłoby o parametr, który każdy wywołujący
+musi pamiętać, a ten, który zapomni, po cichu rzuciłby rimowy loot w rdzeniu.
+Świat ustawia go przy przylocie z **pozycji**, nie z indeksu systemu
+(`tier_at()`, nie `tier_of()`), żeby misjump w ciemność między dwoma systemami
+rdzenia dalej był rdzeniem.
+
+**Pochylenie, nie podłoga.** Podłoga skasowałaby pospolite z rdzenia, a reguła z
+sekcji 4 mówi, że rzadkość nie znaczy „ściśle lepszy" — rzadki przedmiot jest
+bardziej *skrajny*, nie jednostajnie wyższy. Zabranie pospolitych zabrałoby
+poziom odniesienia, względem którego czyta się skrajności. Wagi mnożą się więc
+przez `TIER_LIFT^rung` raz na stopień rzadkości, co zostawia każdy stopień
+możliwym i zmienia tylko to, jak często wypada.
+
+Zmierzone, 40000 rzutów na tier:
+
+| tier | pospolity | niepospolity | rzadki | epicki | legendarny |
+|---|---|---|---|---|---|
+| 1 | 54,8% | 26,9% | 13,1% | 4,2% | 1,0% |
+| 3 | 47,9% | 28,1% | 16,1% | 6,1% | 1,8% |
+| 5 | 40,7% | 28,3% | 19,2% | 8,8% | 3,0% |
+| 7 | 33,3% | 27,3% | 22,5% | 11,7% | 5,2% |
+| 10 | 22,6% | 24,3% | 25,7% | 17,5% | 9,8% |
+
+Na obrzeżu tabela jest **nietknięta** — rim jest odniesieniem, czyli tym, co
+jest wypisane w stałej. W rdzeniu legendarny wypada dziesięciokrotnie częściej,
+a najczęstszą rzeczą, jaką zrzuca świat, jest **rzadki, nie pospolity**. Ta
+inwersja jest cechą: stary test „rzadkość przerzedza się w górę" dotyczy teraz
+jawnie obrzeża i tylko jego.
+
+W przeliczeniu na skrzynkę (trzy przedmioty): 159 skrzynek na 1000 trzyma coś
+epickiego lub lepszego na obrzeżu, **598 na 1000 w rdzeniu**.
+
 ### Realizacja (M2: LootGenerator)
 
 Bazowy szablon plus 0..4 afiksy, wszystko z jawnego seeda — ta sama skrzynka

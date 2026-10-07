@@ -317,6 +317,18 @@ func tier_span() -> float:
 	return maxf(journey_radius(), float(TIERS) * BASE_REACH)
 
 
+## How far up the ladder a tier is: 0 on the bottom rung, 1 at the top.
+##
+## Here because this class owns `TIERS`, and because everything that
+## scales with difficulty needs the same fraction -- the garrison, the
+## loot table, and whatever reads the tier next. Three copies of one
+## division is three places to get the endpoints wrong.
+static func rung_of(tier: int) -> float:
+	return clampf(
+		float(clampi(tier, 1, TIERS) - 1) / float(maxi(TIERS - 1, 1)), 0.0, 1.0
+	)
+
+
 ## Which band a place sits in: 1 where the game starts, `TIERS` at the
 ## centre.
 ##

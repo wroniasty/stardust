@@ -40,7 +40,7 @@ const DEFAULT_LEVEL: int = 1
 ## the two in series -- deliberately slower than a press of H, because this
 ## turn was not asked for and a view that snaps on its own is a view that
 ## startles.
-const LOCK_ALTITUDE: float = 300.0
+const LOCK_ALTITUDE: float = 500.0
 const LOCK_RATE: float = 2.5
 
 ## Speed at which the camera has pulled all the way back, in pixels per second.

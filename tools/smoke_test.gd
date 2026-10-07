@@ -2603,10 +2603,17 @@ func _check_camera(planet: Planet) -> void:
 
 	# Continuous, not a switch: the weight has to grow on the way down, or
 	# the view would snap the moment the threshold was crossed.
+	# Sampled as fractions of the band rather than at four written-down
+	# heights. The old figures were chosen when the lock began at 300
+	# and silently stopped meaning "just inside the top" the moment it
+	# began at 500 -- the claim is about the shape of the lean, so it
+	# has to be measured against the band it leans over.
 	var weights: Array[float] = []
-	for height: float in [290.0, 200.0, 100.0, 10.0]:
+	for share: float in [0.97, 0.66, 0.33, 0.03]:
 		ship.global_position = planet.global_position + Vector2(
-			planet.surface_radius_at(ship.global_position) + height, 0.0
+			planet.surface_radius_at(ship.global_position)
+			+ ShipCamera.LOCK_ALTITUDE * share,
+			0.0,
 		)
 		weights.append(camera.lock_weight())
 	var climbing: bool = true
@@ -8814,6 +8821,8 @@ func _check_loot() -> void:
 			ordered = false
 	_expect(ordered, "rarity thins out as it climbs (%s)" % [counts])
 
+	_check_tiered_loot()
+
 	# The design claim, guarded at the table rather than at one sample: an
 	# affix that has a cost must actually cost something. Rarity that is only
 	# ever better is a number going up, not a choice.
@@ -12043,6 +12052,109 @@ func _check_refinery(ship: Ship) -> void:
 		Refinery.place_of(ship) == Refinery.Place.SPACE,
 		"and flying is the dearest place to do it",
 	)
+
+
+## Loot czyta tier, i to jest pochylenie tabeli, nie podłoga pod rzutem.
+##
+## The premise in one measurement: the same risk buys more the further
+## in you take it. Which means the table has to lean without any grade
+## going away -- IDEAS section 4 says rarity is not "strictly better",
+## so deleting commons from the core would delete the baseline the
+## extremes are read against.
+##
+## The ordering check above belongs to the **rim** and only to it. At
+## the middle the most common thing a world drops is a rare, and that
+## inversion is the feature rather than a regression.
+func _check_tiered_loot() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+
+	_expect(
+		loot.tier == 1,
+		"a generator nobody has told anything to rolls rim loot (%d)" % loot.tier,
+	)
+	var rim: Array[float] = loot.tier_weights()
+	var same: bool = true
+	for i: int in range(rim.size()):
+		same = same and absf(rim[i] - LOOT_SCRIPT.RARITY_WEIGHTS[i]) < 0.0001
+	_expect(same, "and the rim is the table as written, untouched (%s)" % [rim])
+
+	# Every grade stays possible at the top, which is the whole of
+	# "lean, not floor".
+	loot.tier = GalaxyMap.TIERS
+	var core: Array[float] = loot.tier_weights()
+	var vanished: int = 0
+	for weight: float in core:
+		if weight <= 0.0:
+			vanished += 1
+	_expect(vanished == 0, "nothing is deleted from the core table (%d gone)" % vanished)
+
+	# And it leans the right way, measured rather than read off the
+	# constant: rolled, because what matters is what a pilot opens.
+	var tiers: Array[int] = [1, GalaxyMap.TIERS]
+	var rolled: Array[Array] = []
+	for tier: int in tiers:
+		loot.tier = tier
+		var counts: Array[int] = [0, 0, 0, 0, 0]
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = 20260922
+		for roll: int in range(8000):
+			counts[loot.roll_rarity(rng)] += 1
+		rolled.append(counts)
+	_expect(
+		rolled[1][LootGenerator.Rarity.LEGENDARY]
+		> rolled[0][LootGenerator.Rarity.LEGENDARY] * 5,
+		"the middle drops legendaries far more often (%d against %d in 8000)" % [
+			rolled[1][LootGenerator.Rarity.LEGENDARY],
+			rolled[0][LootGenerator.Rarity.LEGENDARY],
+		],
+	)
+	_expect(
+		rolled[1][LootGenerator.Rarity.COMMON] > 0
+		and rolled[1][LootGenerator.Rarity.COMMON]
+			< rolled[0][LootGenerator.Rarity.COMMON],
+		"commons thin out there without disappearing (%d against %d)" % [
+			rolled[1][LootGenerator.Rarity.COMMON],
+			rolled[0][LootGenerator.Rarity.COMMON],
+		],
+	)
+
+	# Monotone up the ladder. A table that leaned in jumps would make
+	# one rung worth skipping and another worth farming.
+	var richer: bool = true
+	var last: float = -1.0
+	for tier: int in range(1, GalaxyMap.TIERS + 1):
+		loot.tier = tier
+		var weights: Array[float] = loot.tier_weights()
+		var total: float = 0.0
+		var good: float = 0.0
+		for i: int in range(weights.size()):
+			total += weights[i]
+			if i >= LootGenerator.Rarity.EPIC:
+				good += weights[i]
+		var share: float = good / total
+		richer = richer and share > last
+		last = share
+	_expect(richer, "every rung is worth more than the one behind it")
+
+	# Clamped at both ends, because `tier_at()` answers 0 for a place
+	# off the map and nothing should have to remember that.
+	loot.tier = 0
+	var under: Array[float] = loot.tier_weights()
+	loot.tier = 99
+	var over: Array[float] = loot.tier_weights()
+	loot.tier = GalaxyMap.TIERS
+	var top: Array[float] = loot.tier_weights()
+	_expect(
+		absf(under[4] - rim[4]) < 0.0001 and absf(over[4] - top[4]) < 0.0001,
+		"a tier off the end of the ladder is the end of the ladder",
+	)
+	_expect(
+		absf(GalaxyMap.rung_of(1)) < 0.0001
+		and absf(GalaxyMap.rung_of(GalaxyMap.TIERS) - 1.0) < 0.0001,
+		"and the rung runs 0 to 1 across the ladder",
+	)
+	loot.queue_free()
 
 
 ## Kto broni czego, i czego nie broni nikt.

@@ -16,8 +16,39 @@ enum Rarity { COMMON, UNCOMMON, RARE, EPIC, LEGENDARY }
 ## Passed as the rarity when the seed should choose one.
 const ROLLED: int = -1
 
-## Relative chance of each rarity, indexed by the enum.
+## Which band of the galaxy this is rolling in, 1 at the rim and
+## `GalaxyMap.TIERS` in the middle.
+##
+## State rather than an argument on every entry point, the same way
+## `StreamingManager.deltas` is state: there are nine ways into this
+## file and each would have grown a parameter that every caller has to
+## remember, and the one that forgot would quietly roll rim loot in the
+## core. The world sets it on arrival, from where the ship **is** --
+## `tier_at()` on the position rather than `tier_of()` on an index --
+## so a misjump into the dark between two core systems is still the
+## core.
+var tier: int = 1
+
+## Relative chance of each rarity, indexed by the enum. At the rim;
+## see `tier` and `TIER_LIFT` for what the galaxy does to them.
 const RARITY_WEIGHTS: Array[float] = [55.0, 27.0, 13.0, 4.0, 1.0]
+
+## How much better the loot gets at the top of the ladder, as a factor
+## applied once per rarity step.
+##
+## **A lean on the table rather than a floor under the roll.** A floor
+## would delete commons from the core, and the rule this file opens
+## with is that rarity is not "strictly better" -- a rare item is more
+## *extreme*, not uniformly above -- so taking the plain ones away
+## would take away the baseline the extremes are read against. Leaning
+## keeps every grade possible and only changes how often each turns up.
+##
+## 2.2, measured: at the rim the table is untouched and a legendary is
+## one roll in a hundred; at the middle it is about one in ten, and the
+## most common thing a core world drops is a rare rather than a common.
+## Which is the premise in one sentence -- the same risk buys more the
+## further in you take it.
+const TIER_LIFT: float = 2.2
 
 ## How many affixes each rarity rolls.
 const RARITY_AFFIXES: Array[int] = [0, 1, 2, 3, 4]
@@ -454,17 +485,32 @@ func shot_mod(index: int) -> ShotModData:
 	return mod
 
 
-## Picks a rarity from the weights.
+## Picks a rarity from the weights, leaned by where in the galaxy this
+## is being rolled.
 func roll_rarity(rng: RandomNumberGenerator) -> int:
+	var leaned: Array[float] = tier_weights()
 	var total: float = 0.0
-	for weight: float in RARITY_WEIGHTS:
+	for weight: float in leaned:
 		total += weight
 	var pick: float = rng.randf() * total
-	for i: int in range(RARITY_WEIGHTS.size()):
-		pick -= RARITY_WEIGHTS[i]
+	for i: int in range(leaned.size()):
+		pick -= leaned[i]
 		if pick <= 0.0:
 			return i
 	return Rarity.COMMON
+
+
+## The table as it stands at the current tier. Public because it is the
+## whole of what the tier does to loot, and a claim that can be read is
+## a claim that can be checked.
+func tier_weights() -> Array[float]:
+	var lean: float = pow(TIER_LIFT, GalaxyMap.rung_of(tier))
+	var out: Array[float] = []
+	var step: float = 1.0
+	for weight: float in RARITY_WEIGHTS:
+		out.append(weight * step)
+		step *= lean
+	return out
 
 
 func _rng_for(item_seed: int) -> RandomNumberGenerator:

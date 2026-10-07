@@ -804,6 +804,13 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   tabele w IDEAS.md sekcja 12. Najcięższy garnizon to 24 w powietrzu — i to
   jest budżet na **garnizon**, nie na system, bo terytorium jest jednostką,
   którą się walczy.
+- [x] **Loot czyta tier.** Pochylenie tabeli rzadkości przez `TIER_LIFT^rung`,
+  stan na generatorze ustawiany przez świat z **pozycji** statku, nie z indeksu
+  systemu — misjump w ciemność między dwoma systemami rdzenia dalej jest
+  rdzeniem. Zmierzone: legendarny 1,0% na obrzeżu i 9,8% w rdzeniu, a
+  najczęstszą rzeczą ze świata rdzenia jest **rzadki, nie pospolity**. Żaden
+  stopień nie znika: podłoga pod rzutem skasowałaby poziom odniesienia, względem
+  którego czyta się skrajności. Tabela w IDEAS.md sekcja 4.
 - [ ] **Spawner: postawić garnizon w świecie.** Roster mówi już ilu, jacy, jak
   silni, przy którym ciele, na jakim namiarze i jak daleko sięga terytorium —
   zostało zrobić z tego węzły. Wróg, który **istnieje, da się w niego trafić i

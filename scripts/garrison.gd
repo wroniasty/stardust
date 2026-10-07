@@ -530,13 +530,10 @@ static func system_press(garrisons: Array[Dictionary]) -> int:
 	return most
 
 
-## How far up the ladder a tier is, 0 at the bottom rung and 1 at the top.
+## How far up the ladder a tier is, 0 at the bottom rung and 1 at the
+## top. The galaxy owns the answer; this is the name it goes by here.
 static func _rung(tier: int) -> float:
-	return clampf(
-		float(clampi(tier, 1, GalaxyMap.TIERS) - 1) / float(GalaxyMap.TIERS - 1),
-		0.0,
-		1.0,
-	)
+	return GalaxyMap.rung_of(tier)
 
 
 static func rank_name(rank: int) -> String:

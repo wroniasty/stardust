@@ -271,6 +271,7 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)
 	_map.bind(landing, ship, StreamingManager)
 	_chart.bind(Galaxy.map, ship, Galaxy, to_index, Galaxy.at)
+	_tier_the_loot()
 	_dress_sky(landing)
 	print("jumped to %s (%s), out at %.0f px" % [
 		landing.display_name,
@@ -287,6 +288,17 @@ func _on_misjumped(toward: int, adrift_at: Vector2) -> void:
 	print("misjump: fell short of %s, adrift at %.1f, %.1f ly" % [
 		Galaxy.system(toward).display_name, adrift_at.x, adrift_at.y,
 	])
+
+
+## Tells the loot generator where it is, which is what makes a flight
+## inwards worth taking.
+##
+## From the **position** rather than from the system index, because a
+## misjump has no index and the dark between two core systems is still
+## the core. One line, in the two places the ship can arrive.
+func _tier_the_loot() -> void:
+	if Galaxy.map != null:
+		LootGenerator.tier = Galaxy.map.tier_at(Galaxy.at)
 
 
 ## Rolls this system's sky. From the system's own seed, so two systems
@@ -542,6 +554,7 @@ func _open_system() -> void:
 			Galaxy.deltas[key] = (sky["deltas"][key] as Dictionary).duplicate(true)
 	var here: StarSystem = Galaxy.current()
 	StreamingManager.loot = LootGenerator
+	_tier_the_loot()
 	# The one delta store, where the design puts it and where a save file
 	# will look for it.
 	StreamingManager.deltas = Galaxy.deltas
