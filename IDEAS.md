@@ -2223,6 +2223,11 @@ Wygaszenie na granicy: pełna odwrotność kwadratu do 0.9 promienia wpływu, po
 granicy. Pod powierzchnią g jest przytrzymane na wartości powierzchniowej,
 inaczej odwrotność kwadratu eksploduje w stronę środka.
 
+Opór liniowy liczy sam statek (`Ship._apply_air_drag`), ciągnąc prędkość ku
+prędkości powietrza (`surface_velocity_at`), nie ku zeru: atmosfera obraca się
+z planetą, a `linear_damp` Area2D tłumi zawsze do zera w układzie świata.
+Powłoki zostają jako źródło gęstości i oporu kątowego (liniowy override wyłączony).
+
 Atmosfera to trzy koncentryczne Area2D z `linear_damp_space_override =
 COMBINE_REPLACE` i rosnącym `priority` do środka. Wyższy priorytet jest
 liczony pierwszy, a COMBINE_REPLACE każe zignorować wszystkie rzadsze powłoki

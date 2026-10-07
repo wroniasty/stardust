@@ -1179,10 +1179,6 @@ func _physics_process(delta: float) -> void:
 
 	if gear != null:
 		gear.advance(delta)
-		# Deployed legs only bite in air. Scaling by density rather than
-		# switching on a boolean keeps the speed brake worthless in vacuum,
-		# where a drag penalty would be nonsense.
-		linear_damp = gear.drag() * gear.extension * air_density
 
 	if flight_mode == FlightMode.LANDED:
 		if _wants_translation(commands) or brake_command:
@@ -1490,8 +1486,34 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 		_applied_force += force
 		_applied_torque += (engine.mount.position - center_of_mass).rotated(body_rotation).cross(force)
 
+	_apply_air_drag(state)
 	_resolve_terrain(state)
 	_update_heat(state.step)
+
+
+## Drags the ship towards the air's own velocity, not towards a standstill.
+##
+## The atmosphere turns with its planet, so the drag has to pull the velocity
+## towards `surface_velocity_at()`. Area2D `linear_damp` cannot do that: it
+## always damps towards zero in world space, which on a spinning planet
+## braked a hovering ship to a stop relative to the system and then left it
+## sliding backwards over the ground. The shells keep supplying the density
+## (and the angular drag); the linear part is done here.
+func _apply_air_drag(state: PhysicsDirectBodyState2D) -> void:
+	var planet: Planet = nearest_planet()
+	if planet == null:
+		return
+	var origin: Vector2 = state.transform.origin
+	var air: float = planet.air_density_at(origin)
+	if air <= 0.0:
+		return
+	var damp: float = Planet.MAX_ATMOSPHERE_DAMP * air
+	if gear != null:
+		damp += gear.drag() * gear.extension * air
+	var wind: Vector2 = planet.surface_velocity_at(origin)
+	var through: Vector2 = state.linear_velocity - wind
+	# Exponential rather than `damp * step`, so a heavy shell cannot overshoot.
+	state.linear_velocity = wind + through * exp(-damp * state.step)
 
 
 ## Decides whether the engines run on emergency power this tick, and takes

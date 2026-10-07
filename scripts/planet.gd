@@ -826,8 +826,12 @@ func _make_shell(index: int) -> Area2D:
 	var shell: Area2D = Area2D.new()
 	shell.name = "Shell%d" % index
 	shell.gravity_space_override = Area2D.SPACE_OVERRIDE_DISABLED
-	shell.linear_damp_space_override = Area2D.SPACE_OVERRIDE_COMBINE_REPLACE
-	shell.linear_damp = MAX_ATMOSPHERE_DAMP * atmosphere_density * profile.y
+	# Linear drag is applied by the bodies themselves (Ship._apply_air_drag),
+	# towards the air's velocity. An Area2D can only damp towards zero in world
+	# space, which ignores that the atmosphere turns with the planet. The value
+	# stays as the shell's nominal drag.
+	shell.linear_damp_space_override = Area2D.SPACE_OVERRIDE_DISABLED
+	shell.linear_damp =MAX_ATMOSPHERE_DAMP * atmosphere_density * profile.y
 	# Both overrides are set explicitly. Area2D.angular_damp defaults to 1.0,
 	# so leaving the override alone parks a very strong value on every shell
 	# waiting to be switched on by accident.
