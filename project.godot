@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="stardust"
-run/main_scene="res://scenes/world.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -24,6 +24,7 @@ buses/default_bus_layout="res://resources/audio/bus_layout.tres"
 Galaxy="*res://scripts/autoload/galaxy.gd"
 StreamingManager="*res://scripts/autoload/streaming_manager.gd"
 LootGenerator="*res://scripts/autoload/loot_generator.gd"
+GameSettings="*res://scripts/autoload/game_settings.gd"
 
 [display]
 

@@ -84,6 +84,7 @@ var _resuming: Dictionary = {}
 
 
 func _ready() -> void:
+	_apply_menu_choices()
 	if OS.get_cmdline_user_args().has("resume"):
 		var saved: Dictionary = SaveGame.read()
 		if SaveGame.is_valid(saved):
@@ -106,6 +107,21 @@ func _ready() -> void:
 	_build_scanner()
 	_build_jump_hud()
 	_finish_resume()
+
+
+## What the main menu decided: the galaxy seed, and the ship to start in.
+##
+## Only when the menu has run. A world opened any other way -- from the editor,
+## by a test, resumed from a save -- keeps the seed and the ship it was made
+## with.
+func _apply_menu_choices() -> void:
+	if not GameSettings.chosen:
+		return
+	world_seed = GameSettings.galaxy_seed
+	var ship: Ship = (player as Player).ship
+	var preset: Dictionary = ShipFitout.preset(GameSettings.fitout_name)
+	if ship != null and not preset.is_empty():
+		ShipFitout.apply(ship, preset)
 
 
 ## The planet configurator edits the planet; putting the ship somewhere that
