@@ -41,6 +41,39 @@ extends Resource
 ## and the interceptor four because it is not.
 @export var cargo_capacity: float = 0.0
 
+## How many places every hull offers, by kind. The same on every hull, which
+## is the point: what differs is where they land on the outline, not how many
+## there are, so loot and presets can count on them.
+const DRIVE_SLOTS: int = 2
+const FRONT_HARDPOINTS: int = 2
+const SIDE_HARDPOINTS: int = 3
+const REAR_HARDPOINTS: int = 1
+
+## Kinds in `slots()`.
+const SLOT_DRIVE: StringName = &"drive"
+const SLOT_FRONT: StringName = &"front"
+const SLOT_SIDE: StringName = &"side"
+const SLOT_REAR: StringName = &"rear"
+
+## Right angles, matching ShipFitout: a mount's `turn` is its node rotation.
+const _LEFT: float = -PI * 0.5
+const _RIGHT: float = PI * 0.5
+const _AFT: float = PI
+
+## Where the main drives sit: this far up from the stern, and this share of the
+## local half-width off the centre line.
+const DRIVE_INSET: float = 2.0
+const DRIVE_SPREAD: float = 0.35
+
+## Front guns this far back from the nose, as a share of the hull's length.
+const FRONT_SETBACK: float = 0.18
+const FRONT_SPREAD: float = 0.6
+const FRONT_MIN_X: float = 2.5
+
+## Where the side guns sit along the hull, 0 at the nose and 1 at the stern.
+const SIDE_MID: float = 0.5
+const SIDE_AFT: float = 0.75
+
 ## Every hull, newest catalogue first. A directory listing rather than a
 ## const list, because a const list of paths is the fourth copy.
 const DIRECTORY: String = "res://resources/hulls"
@@ -121,6 +154,71 @@ func extent() -> float:
 	for point: Vector2 in outline:
 		widest = maxf(widest, point.length())
 	return widest
+
+
+## Half the width of the outline at height `y`, or 0 where it does not reach.
+func half_width_at(y: float) -> float:
+	var reach: float = 0.0
+	var count: int = outline.size()
+	for i: int in range(count):
+		var a: Vector2 = outline[i]
+		var b: Vector2 = outline[(i + 1) % count]
+		if (a.y - y) * (b.y - y) > 0.0 or is_equal_approx(a.y, b.y):
+			continue
+		var along: float = (y - a.y) / (b.y - a.y)
+		reach = maxf(reach, absf(lerpf(a.x, b.x, along)))
+	return reach
+
+
+## Every place this hull offers, worked out from the outline: two drives aft,
+## two guns forward, three along the sides and one astern.
+##
+## Computed rather than listed in each .tres so a new hull has them the moment
+## it has an outline. Each entry is `{name, kind, at, turn}`, in the ship's own
+## frame, with `turn` the node rotation the mount should have.
+##
+## Three side guns cannot be symmetric, so the third sits on the right, aft of
+## the pair: one change here moves it.
+func slots() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if outline.is_empty():
+		return out
+	var box: Rect2 = bounds()
+	var stern: float = box.end.y
+	var nose: float = box.position.y
+	var length: float = stern - nose
+
+	var drive_y: float = stern - DRIVE_INSET
+	var drive_x: float = half_width_at(drive_y) * DRIVE_SPREAD
+	out.append(_slot(&"MainDrive", SLOT_DRIVE, Vector2(-drive_x, drive_y), 0.0))
+	out.append(_slot(&"MainDrive2", SLOT_DRIVE, Vector2(drive_x, drive_y), 0.0))
+
+	var front_y: float = nose + length * FRONT_SETBACK
+	var front_x: float = maxf(half_width_at(front_y) * FRONT_SPREAD, FRONT_MIN_X)
+	out.append(_slot(&"FrontHardpoint1", SLOT_FRONT, Vector2(-front_x, front_y), 0.0))
+	out.append(_slot(&"FrontHardpoint2", SLOT_FRONT, Vector2(front_x, front_y), 0.0))
+
+	var mid_y: float = nose + length * SIDE_MID
+	var aft_y: float = nose + length * SIDE_AFT
+	out.append(_slot(&"SideHardpoint1", SLOT_SIDE, Vector2(-half_width_at(mid_y), mid_y), _LEFT))
+	out.append(_slot(&"SideHardpoint2", SLOT_SIDE, Vector2(half_width_at(mid_y), mid_y), _RIGHT))
+	out.append(_slot(&"SideHardpoint3", SLOT_SIDE, Vector2(half_width_at(aft_y), aft_y), _RIGHT))
+
+	out.append(_slot(&"RearHardpoint", SLOT_REAR, Vector2(0.0, stern), _AFT))
+	return out
+
+
+## The slots of one kind, in order.
+func slots_of(kind: StringName) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for slot: Dictionary in slots():
+		if slot["kind"] == kind:
+			out.append(slot)
+	return out
+
+
+static func _slot(slot_name: StringName, kind: StringName, at: Vector2, turn: float) -> Dictionary:
+	return {"name": slot_name, "kind": kind, "at": at, "turn": turn}
 
 
 ## The box the outline sits in, which is what a sprite canvas is cut from.

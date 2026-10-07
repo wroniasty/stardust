@@ -2271,10 +2271,6 @@ func _check_editor() -> void:
 		editor.named_slot() == null,
 		"and a refit makes it let go, because that mount no longer exists",
 	)
-	_expect(
-		editor._captions(null, editor._all_mounts()).is_empty(),
-		"so nothing stale can reach the captions",
-	)
 
 	# A rebuild that keeps the mounts must keep the caption: fitting a
 	# module rebuilds too, and blanking the name the pilot just clicked
@@ -7523,11 +7519,32 @@ func _check_fitout_presets() -> void:
 	for preset: Dictionary in ShipFitout.all():
 		ShipFitout.apply(ship, preset)
 		seen.append(String(preset["name"]))
+		var fitted_mounts: int = 0
+		var drive_slots: int = 0
+		for mount: EngineMount in ship.engine_mounts():
+			if mount.installed != null:
+				fitted_mounts += 1
+			if String(mount.name).begins_with("MainDrive"):
+				drive_slots += 1
+		var armed: int = 0
+		for gun: Hardpoint in ship.hardpoints:
+			if gun.weapon != null:
+				armed += 1
 		_expect(
-			ship.engine_mounts().size() == (preset["mounts"] as Array).size()
-			and ship.hardpoints.size() == (preset["guns"] as Array).size(),
-			"%s is built with what it declares (%d mounts, %d guns)" % [
-				preset["name"], ship.engine_mounts().size(), ship.hardpoints.size(),
+			fitted_mounts == (preset["mounts"] as Array).size()
+			and armed == (preset["guns"] as Array).size(),
+			"%s is built with what it declares (%d engines, %d guns)" % [
+				preset["name"], fitted_mounts, armed,
+			],
+		)
+		# And with every place the hull offers, filled or not.
+		_expect(
+			drive_slots == HullData.DRIVE_SLOTS
+			and ship.hardpoints.size() == (
+				HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS + HullData.REAR_HARDPOINTS
+			),
+			"%s has the hull's slots (%d drive, %d hardpoints)" % [
+				preset["name"], drive_slots, ship.hardpoints.size(),
 			],
 		)
 		_expect(

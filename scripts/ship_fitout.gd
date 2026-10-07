@@ -229,10 +229,54 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	if drawn != null:
 		drawn.polygon = ship.hull_outline
 
+	_add_empty_slots(ship, hull, preset)
+
 	ship.collect_parts()
 	ship._build_contact_points()
 	ship._build_collision_shape()
 	ship.rebuild_control_groups(false)
+
+
+## Gives the ship every place the hull offers that the preset did not already
+## fill: empty drive mounts and empty hardpoints, named by the hull.
+##
+## What the preset built counts first. A preset's main drive stands in the
+## first drive slot and its guns in the first front slots, so a preset is
+## never given a second copy of something it already has -- only the room
+## to fit more.
+static func _add_empty_slots(ship: Ship, hull: HullData, preset: Dictionary) -> void:
+	var drives_built: int = 0
+	for entry: Dictionary in preset["mounts"]:
+		if String(entry["name"]).begins_with("MainDrive"):
+			drives_built += 1
+	var guns_built: int = (preset["guns"] as Array).size()
+
+	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
+	var drive_index: int = 0
+	var front_index: int = 0
+	for slot: Dictionary in hull.slots():
+		var kind: StringName = slot["kind"]
+		if kind == HullData.SLOT_DRIVE:
+			drive_index += 1
+			if drive_index <= drives_built:
+				continue
+			var mount: EngineMount = scene.instantiate() as EngineMount
+			mount.name = String(slot["name"])
+			mount.size = 3.5
+			mount.position = slot["at"]
+			mount.rotation = float(slot["turn"])
+			mount.thrust_direction = Vector2.UP
+			ship.add_child(mount)
+			continue
+		if kind == HullData.SLOT_FRONT:
+			front_index += 1
+			if front_index <= guns_built:
+				continue
+		var gun: Hardpoint = Hardpoint.new()
+		gun.name = String(slot["name"])
+		gun.position = slot["at"]
+		gun.rotation = float(slot["turn"])
+		ship.add_child(gun)
 
 
 ## An engine from the table, scaled if the preset asked for a bigger one.

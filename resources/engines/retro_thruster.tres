@@ -6,6 +6,7 @@
 script = ExtResource("1_engine_data")
 display_name = "retro thruster"
 type = 2
+retro = true
 max_thrust = 500.0
 bulk = 2.3
 spool_time = 0.0

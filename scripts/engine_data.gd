@@ -20,6 +20,11 @@ enum Type {
 
 @export var type: Type = Type.THRUSTER
 
+## A braking engine: a thruster built to push against the way the ship is
+## going. Not a control type -- the throttle behaves as a THRUSTER's does --
+## only a label, so the editor can draw it differently from a strafe jet.
+@export var retro: bool = false
+
 ## Force at full throttle and full health, in the ship's local frame.
 @export var max_thrust: float = 100.0
 

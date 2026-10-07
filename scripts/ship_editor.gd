@@ -51,11 +51,11 @@ const ARC_LENGTH: float = 16.0
 ## A box has an inside, and the inside can say what kind of socket this is
 ## and whether anything is in it -- which is what the pilot came to the
 ## schematic to find out, and what used to take a line of text each.
-const SLOT: float = 11.0
-const SLOT_RING: float = 15.0
+const SLOT: float = 15.0
+const SLOT_RING: float = 19.0
 
 ## How much of the box the glyph inside it takes.
-const GLYPH: float = 3.2
+const GLYPH: float = 4.4
 
 ## A cell of the hold grid, and the pitch between two of them.
 ##
@@ -87,7 +87,10 @@ const LABEL_COLUMN: float = 26.0
 ## left as two parallel if-ladders, because the day they disagree is
 ## the day a tank in the hold and a tank in its bay stop looking like
 ## the same object.
-enum Glyph { NONE, ENGINE, GUN, CELL, DISH, RING, DRUM, CHIP, STRUT, MOD }
+enum Glyph {
+	NONE, ENGINE, GUN, CELL, DISH, RING, DRUM, CHIP, STRUT, MOD,
+	ENGINE_TORQUE, ENGINE_THRUSTER, ENGINE_RETRO,
+}
 
 var _ship: Ship = null
 var _canvas: Control = null
@@ -694,8 +697,10 @@ func click_at(at: Vector2) -> bool:
 	for mount: Node in _all_mounts():
 		if not slot_rect(where[mount], SLOT_RING).has_point(at):
 			continue
-		# Clicking a slot is how its name is asked for now.
+		# Clicking a slot lights it and shows what is in it. No name: the
+		# card is the answer, and the slot's kind is already its glyph.
 		_named = mount
+		_inspecting = null
 		var index: int = targets.find(mount)
 		if index >= 0:
 			_slot = index
@@ -714,7 +719,7 @@ func click_at(at: Vector2) -> bool:
 			_inspecting = _fitted_in(mount)
 		_notice = (
 			refusal if not refusal.is_empty()
-			else ("" if _fitted_in(mount) != null else "%s is empty" % mount.name)
+			else ("" if _fitted_in(mount) != null else "empty")
 		)
 		return true
 	return false
@@ -1343,13 +1348,11 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	_text(font, rect.position + Vector2(PAD, PAD + float(FONT_SIZE)), "SCHEMATIC", _ink.label)
 
 	var hull: PackedVector2Array = _ship.hull_outline
-	var mounts: Array[Node] = _all_mounts()
 	if hull.size() < 3:
 		return
 
 	var place: Callable = _plan_placement(rect)
 	var where: Dictionary = slot_positions(_panels())
-	var origin: Vector2 = rect.position + Vector2(rect.size.x * 0.5, rect.size.y * 0.55)
 
 	var outline: PackedVector2Array = PackedVector2Array()
 	for point: Vector2 in hull:
@@ -1359,29 +1362,21 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	_canvas.draw_polyline(outline, _ink.grid, 1.0)
 
 	var targets: Array[Node] = _targets()
-	var chosen: Node = null
 	if not targets.is_empty():
 		_slot = posmod(_slot, targets.size())
-		chosen = targets[_slot]
+	var focus: Node = _highlighted()
 
 	for mount: Node in _hull_mounts():
 		var at: Vector2 = where[mount]
 		var fits: bool = targets.has(mount)
-		var colour: Color = _ink.caution if mount == chosen else (_ink.ok if fits else _ink.inert)
+		var colour: Color = _ink.ok if fits else _ink.inert
+		if mount == focus:
+			# Lit yellow, or green when the module in the hold goes in here.
+			colour = _ink.ok if fits else _ink.caution
 		var gun: Hardpoint = mount as Hardpoint
 		if gun != null:
 			_draw_arc_for(gun, at)
-		_draw_slot(at, mount, colour, mount == chosen)
-
-	# One name at a time, where a name used to hang off every mount. Eleven
-	# captions on a schematic this size is a wall of text the eye has to
-	# read before it can find anything; the boxes say kind and occupancy
-	# without being read at all, and the name is what a click is for.
-	#
-	# The arrow-chosen slot is named too, or stepping through targets with
-	# the keyboard would be stepping blind.
-	for mount: Node in _captions(chosen, mounts):
-		_draw_slot_caption(font, where[mount], mount, origin, rect)
+		_draw_slot(at, mount, colour, mount == focus)
 
 	# The grab box at the end of the rest direction. Only for the chosen
 	# socket: eight handles on one schematic is eight things to miss.
@@ -1389,48 +1384,6 @@ func _draw_plan(font: Font, rect: Rect2) -> void:
 	if handle.size.x > 0.0:
 		_canvas.draw_rect(handle, Color(_ink.caution, 0.35), true)
 		_canvas.draw_rect(handle, _ink.caution, false, 1.0)
-
-
-## Which slots get their name drawn: the one the arrows are on, and the one
-## that was clicked, in that order and never the same one twice.
-##
-## Built by appending rather than as an array literal, which is not style.
-## `[chosen, _named]` throws while the array is being built if `_named` has
-## been freed -- before the loop body can reach the guard that would have
-## skipped it. That is how this was found: a wall of
-## "previously freed object into a TypedArray" once a frame after a refit,
-## with the check that was supposed to prevent it sitting right there,
-## three lines too late.
-func _captions(chosen: Node, mounts: Array[Node]) -> Array[Node]:
-	var out: Array[Node] = []
-	if chosen != null and mounts.has(chosen):
-		out.append(chosen)
-	# Validity first: a freed node cannot even be compared into a typed
-	# array, so it must not reach one.
-	if _named != null and is_instance_valid(_named) and _named != chosen:
-		if mounts.has(_named):
-			out.append(_named)
-	return out
-
-
-## The full name of one slot, hung outward so it clears the hull.
-##
-## Clamped into the panel rather than given a margin to live in: the ship is
-## drawn as large as the panel allows now, so a caption near the edge has to
-## give way to the edge instead of the ship giving way to the caption.
-func _draw_slot_caption(font: Font, at: Vector2, mount: Node, origin: Vector2, rect: Rect2) -> void:
-	var caption: String = mount.name
-	var gun: Hardpoint = mount as Hardpoint
-	if gun != null:
-		caption = "%s %s" % [mount.name, "L" if gun.trigger == 0 else "P"]
-		if gun.weapon != null and gun.weapon.mod_slots > 0:
-			caption += " %d/%d" % [gun.mods.size(), gun.weapon.mod_slots]
-	var width: float = _width(font, caption)
-	var label: Vector2 = at + Vector2(SLOT_RING * 0.5 + 2.0, float(FONT_SIZE) * 0.4)
-	if at.x < origin.x - 0.5:
-		label.x = at.x - SLOT_RING * 0.5 - 2.0 - width
-	label.x = clampf(label.x, rect.position.x + PAD, rect.end.x - PAD - width)
-	_text(font, label, caption, _ink.caution)
 
 
 ## One slot: a box that says what kind of socket it is and what is in it.
@@ -1447,6 +1400,7 @@ func _draw_slot(at: Vector2, mount: Node, colour: Color, chosen: bool) -> void:
 		# common one are the same shape and a different decision.
 		_canvas.draw_rect(box, Color(fitted.rarity_color(), 0.35), true)
 	if chosen:
+		_canvas.draw_rect(box, Color(colour, 0.35), true)
 		_canvas.draw_rect(slot_rect(at, SLOT_RING), colour, false, 1.0)
 	_canvas.draw_rect(box, colour, false, 1.0)
 	_draw_slot_glyph(at, mount, colour if fitted != null else Color(colour, 0.5))
@@ -1464,7 +1418,8 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 		# should live in one place and this is not it.
 		var along: Vector2 = engine.force_direction()
 		_draw_kind_glyph(
-			at, Glyph.ENGINE, colour, Vector2.DOWN if along.is_zero_approx() else along
+			at, _glyph_for_engine(engine.installed), colour,
+			Vector2.DOWN if along.is_zero_approx() else along
 		)
 		return
 	var gun: Hardpoint = mount as Hardpoint
@@ -1495,7 +1450,7 @@ func _glyph_for_mount(mount: Node) -> Glyph:
 ## And which shape a loose module wears, which has to be the same one.
 func _glyph_for_item(item: Resource) -> Glyph:
 	if item is EngineData:
-		return Glyph.ENGINE
+		return _glyph_for_engine(item as EngineData)
 	if item is WeaponData:
 		return Glyph.GUN
 	if item is GeneratorData:
@@ -1513,6 +1468,22 @@ func _glyph_for_item(item: Resource) -> Glyph:
 	if item is ShotModData:
 		return Glyph.MOD
 	return Glyph.NONE
+
+
+## Which engine silhouette: the main drive keeps the filled wedge, the others
+## are told apart by shape, since colour already says rarity. An empty mount
+## wears the main drive's wedge, as every mount did before.
+func _glyph_for_engine(engine: EngineData) -> Glyph:
+	if engine == null:
+		return Glyph.ENGINE
+	if engine.retro:
+		return Glyph.ENGINE_RETRO
+	match engine.type:
+		EngineData.Type.TORQUE:
+			return Glyph.ENGINE_TORQUE
+		EngineData.Type.THRUSTER:
+			return Glyph.ENGINE_THRUSTER
+	return Glyph.ENGINE
 
 
 ## A module in the hold, drawn as the thing it is.
@@ -1533,6 +1504,34 @@ func _draw_kind_glyph(
 		_canvas.draw_colored_polygon(PackedVector2Array([
 			at + along * GLYPH, at - along * GLYPH + across, at - along * GLYPH - across,
 		]), colour)
+		# A second nozzle bar behind the wedge: the big one.
+		_canvas.draw_line(
+			at - along * GLYPH * 1.5 + across, at - along * GLYPH * 1.5 - across, colour, 1.0
+		)
+		return
+	if kind == Glyph.ENGINE_TORQUE:
+		# An open arc with a head on it: this one turns the ship, not pushes it.
+		var turn: float = along.angle()
+		_canvas.draw_arc(at, GLYPH * 0.9, turn + 0.8, turn + TAU - 0.2, 10, colour, 1.0)
+		var tip: Vector2 = at + Vector2.from_angle(turn + 0.8) * GLYPH * 0.9
+		_canvas.draw_line(tip, tip + Vector2.from_angle(turn + 2.4) * GLYPH * 0.8, colour, 1.0)
+		_canvas.draw_line(tip, tip + Vector2.from_angle(turn - 0.4) * GLYPH * 0.8, colour, 1.0)
+		return
+	if kind == Glyph.ENGINE_THRUSTER:
+		# A dot with a short jet behind it: small and exact.
+		_canvas.draw_circle(at + along * GLYPH * 0.3, GLYPH * 0.55, colour)
+		_canvas.draw_line(at - along * GLYPH * 0.3, at - along * GLYPH * 1.2, colour, 1.0)
+		return
+	if kind == Glyph.ENGINE_RETRO:
+		# The wedge hollowed out and barred across the tip: a brake.
+		var span: Vector2 = along.orthogonal() * GLYPH * 0.8
+		_canvas.draw_polyline(PackedVector2Array([
+			at + along * GLYPH, at - along * GLYPH + span, at - along * GLYPH - span,
+			at + along * GLYPH,
+		]), colour, 1.0)
+		_canvas.draw_line(
+			at + along * GLYPH * 0.2 + span * 0.5, at + along * GLYPH * 0.2 - span * 0.5, colour, 1.0
+		)
 		return
 	if kind == Glyph.MOD:
 		# A plug: a small square with two pins, which is what a mod is --
