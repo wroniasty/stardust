@@ -32,6 +32,25 @@ const WEAPONS: Dictionary = {
 
 const MOUNT_SCENE: String = "res://scenes/engine_mount.tscn"
 
+## How much room a main drive socket has.
+##
+## The generator's own bulk ceiling, so **no engine the game can roll is
+## ever too big for a main socket**. Measured before it was set: over
+## 40000 engine rolls, 2.6% came out bigger than the 3.5 every main
+## socket used to have -- every one of them the pilot's best find of the
+## hour and none of them installable anywhere, because the loot table
+## pays for thrust with bulk (`oversized`, `buffered`) and the sockets
+## were sized for the stock engines rather than for the rolls.
+##
+## The same number on every hull, the interceptor included, because a
+## socket that refuses a plain gimballed drive is not hull character, it
+## is a hull that cannot be upgraded. What a big engine costs is still
+## paid: bulk is mass (`EngineMount.MASS_PER_BULK`), mass is thrust per
+## kilo and a shifted centre of mass, and the small sockets -- torque
+## 0.8, strafe 1.0, nose retro 2.5 -- are untouched, so `compact` still
+## has somewhere to matter.
+const MAIN_DRIVE_SOCKET: float = 8.0
+
 ## A right angle, written once: every side-facing mount is one of these.
 const LEFT: float = -PI * 0.5
 const RIGHT: float = PI * 0.5
@@ -69,12 +88,12 @@ static func all() -> Array[Dictionary]:
 			# of the middle and the pair stops being a pair.
 			"hull": &"rhombus",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 13), "engine": "gimbal",
-						"centered": true},
+				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
+						"at": Vector2(0, 13), "engine": "gimbal", "centered": true},
 				# Nose nozzle, pointing the other way: it is the retro and
 				# the other half of the couple at the same time.
-				{"name": "NoseDrive", "size": 3.5, "at": Vector2(0, -13), "turn": AFT,
-					"engine": "gimbal"},
+				{"name": "NoseDrive", "size": MAIN_DRIVE_SOCKET,
+					"at": Vector2(0, -13), "turn": AFT, "engine": "gimbal"},
 			],
 			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -17), "weapon": "pulse"}],
 		},
@@ -83,8 +102,8 @@ static func all() -> Array[Dictionary]:
 			"blurb": "rotation out of the gimballed main drive, and nothing else turns it",
 			"hull": &"broad_dart",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 12), "engine": "gimbal",
-						"centered": true},
+				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
+						"at": Vector2(0, 12), "engine": "gimbal", "centered": true},
 				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(9, 1.75),
 					"turn": LEFT, "engine": "thruster"},
 				{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-9, 1.75),
@@ -99,8 +118,8 @@ static func all() -> Array[Dictionary]:
 			"blurb": "light and nimble, two cannon, a hold worth nothing",
 			"hull": &"interceptor",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.0, "at": Vector2(0, 9), "engine": "main",
-					"scale": 0.8},
+				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
+					"at": Vector2(0, 9), "engine": "main", "scale": 0.8},
 				{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-6, -11), "turn": RIGHT,
 					"engine": "torque", "scale": 1.4},
 				{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(6, -11), "turn": LEFT,
@@ -126,8 +145,8 @@ static func all() -> Array[Dictionary]:
 			"blurb": "a big hold, a heavy hull, wide legs and little power per kilo",
 			"hull": &"freighter",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 6), "engine": "main",
-					"scale": 1.4},
+				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
+					"at": Vector2(0, 6), "engine": "main", "scale": 1.4},
 				{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-12, -14), "turn": RIGHT,
 					"engine": "torque"},
 				{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(12, -14), "turn": LEFT,
@@ -150,7 +169,8 @@ static func all() -> Array[Dictionary]:
 			"blurb": "the main drive and nothing else -- the configuration report has plenty to say",
 			"hull": &"dart",
 			"mounts": [
-				{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 10), "engine": "main"},
+				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
+					"at": Vector2(0, 10), "engine": "main"},
 			],
 			"guns": [],
 		},
@@ -159,7 +179,8 @@ static func all() -> Array[Dictionary]:
 
 static func _stock_mounts() -> Array[Dictionary]:
 	return [
-		{"name": "MainDrive", "size": 3.5, "at": Vector2(0, 10), "engine": "main"},
+		{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
+			"at": Vector2(0, 10), "engine": "main"},
 		{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-8, -10), "turn": RIGHT,
 			"engine": "torque"},
 		{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(8, -10), "turn": LEFT,
@@ -321,7 +342,7 @@ static func add_hull_slots(ship: Ship, hull: HullData) -> void:
 		if slot["kind"] == HullData.SLOT_DRIVE:
 			var mount: EngineMount = scene.instantiate() as EngineMount
 			mount.name = String(slot["name"])
-			mount.size = 3.5
+			mount.size = MAIN_DRIVE_SOCKET
 			mount.position = slot["at"]
 			mount.rotation = float(slot["turn"])
 			mount.thrust_direction = Vector2.UP

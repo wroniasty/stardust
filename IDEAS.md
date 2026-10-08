@@ -92,6 +92,21 @@ odpowiedzią, na której da się coś zrobić.
 Afiksy `compact` (gabaryt w dół, ciąg w dół) i `oversized` (ciąg w górę,
 gabaryt w górę) czynią z tego handel wymienny, a nie drabinę.
 
+**Gniazdo głównego napędu ma tyle miejsca, ile wynosi sufit gabarytu w
+generatorze** (`ShipFitout.MAIN_DRIVE_SOCKET` = `LIMITS["bulk"]` = 8,0), więc
+żaden wylosowany silnik nie jest za duży na gniazdo główne — na żadnym
+kadłubie. Powyższe 1,25% „nie mieści się nigdzie" było zmierzone przy
+gnieździe 3,5; po obniżeniu masy silników (MAUX4.9) wyszło 2,6% na 40000
+losowań, i to zawsze na najlepszych znaleziskach, bo w tabeli afiksów gabaryt
+jest **walutą** za ciąg (`oversized`, `buffered`). Gniazdo wyliczone pod
+seryjne silniki karę za dobry rzut, więc sufit generatora jest właściwą
+miarą — nie największy seryjny silnik.
+
+Kosztu to nie darowuje: gabaryt to masa (`EngineMount.MASS_PER_BULK`), masa to
+ciąg na kilogram i przesunięty środek masy. Małe gniazda zostają jak były
+— obrotowe 0,8, strafe 1,0, dziobowe wsteczne 2,5 — więc `compact` nadal ma
+gdzie znaczyć, a ekran wymiany nadal ma czego odmawiać.
+
 **Gabaryty statku testowego są dobrane tak, żeby środek masy wypadł dokładnie
 na krzyżu dysz obrotowych.** Warunek redukuje się do jednego równania, bo dysze
 obrotowe i para strafe leżą symetrycznie względem `y = 1.75` i wypadają z

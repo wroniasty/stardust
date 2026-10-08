@@ -7518,6 +7518,50 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.queue_free()
 
 
+## Gniazdo głównego napędu przyjmuje wszystko, co generator umie wylosować.
+##
+## Reported from the cockpit as "the epic engine will not go in anywhere"
+## and then measured: 2.6% of engine rolls were bigger than the 3.5 every
+## main socket had, because the affix table pays for thrust with bulk and
+## the sockets were sized for the stock engines. The rule now is the
+## generator's own ceiling, which is why this asserts the relationship
+## rather than the number -- raising `LIMITS["bulk"]` and leaving the
+## sockets alone would bring the dead loot straight back.
+func _check_main_socket_takes_anything(ship: Ship) -> void:
+	var ceiling: float = float((LOOT_SCRIPT.LIMITS["bulk"] as Vector2).y)
+	for preset: Dictionary in ShipFitout.all():
+		for entry: Dictionary in preset["mounts"]:
+			var slot: String = String(entry["name"])
+			if not (slot == "MainDrive" or slot == "NoseDrive"):
+				continue
+			_expect(
+				float(entry["size"]) >= ceiling,
+				"%s's %s holds anything the generator rolls (%.1f of %.1f)" % [
+					preset["name"], slot, float(entry["size"]), ceiling,
+				],
+			)
+
+	# And on a built ship rather than in the table, with the biggest engine
+	# the generator will ever hand over: a socket that is wide enough on
+	# paper and narrow once a preset has been through `apply()` is the bug
+	# this is looking for.
+	ShipFitout.apply(ship, ShipFitout.preset("interceptor"))
+	var monster: EngineData = (load(
+		"res://resources/engines/gimballed_drive.tres"
+	) as EngineData).duplicate() as EngineData
+	monster.bulk = ceiling
+	var sockets: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		if not String(mount.name).begins_with("MainDrive"):
+			continue
+		sockets += 1
+		_expect(
+			mount.fits(monster),
+			"the lightest hull's %s takes a %.1f bulk drive" % [mount.name, monster.bulk],
+		)
+	_expect(sockets > 0, "there were main drive sockets to try it in")
+
+
 ## Whole ships from the sandbox's preset table.
 ##
 ## The interesting one is the gimbal-only ship, and it is interesting
@@ -7587,6 +7631,8 @@ func _check_fitout_presets() -> void:
 			absf(ship.hull_extent() - HullData.of(preset["hull"]).extent()) < 0.01,
 			"with the hull it names, not the one left over from the last refit",
 		)
+
+	_check_main_socket_takes_anything(ship)
 
 	# A refit is in place, so everything pointing at this ship has to still
 	# be pointing at something: a cached hardpoint list naming nodes the
@@ -9164,10 +9210,15 @@ func _check_ui_frame() -> void:
 ##
 ## Reported from the cockpit: an epic retro thruster that would not go
 ## into the reverse mount. It would not, and that part was right -- the
-## `oversized` affix multiplies bulk by 1.20 at the very least, a retro
-## thruster is 2.2 of it, and the stock hull's reverse socket is 2.5, so
-## **every** oversized retro in the game is too big for the socket it is
-## named after.
+## `oversized` affix multiplies bulk by 1.20 at the very least and the
+## reverse socket is 2.5, so a retro thruster carrying it is over the
+## socket as soon as the base is past 2.08.
+##
+## The reverse socket stays small on purpose. The main sockets were
+## widened to the generator's bulk ceiling once it was measured how much
+## loot they were killing (see `ShipFitout.MAIN_DRIVE_SOCKET`), and the
+## small ones were not: somewhere has to refuse, or `compact` is an
+## affix about nothing and this test has no subject.
 ##
 ## The fault was what happened next. `Ship.fit_engine` says "I will not
 ## take this" by handing the item straight back, which puts the refusal

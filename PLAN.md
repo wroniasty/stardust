@@ -935,13 +935,20 @@ robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zab
   układ z samą „gwiazdą śmierci", pilot mówi „This is no moon...", startują dwa
   myśliwce. To nie łamie reguły seeda — powód w punkcie 5 analizy.
 - [ ] Eventy w deep space: wraki, zasadzki, anomalie. Ta sama maszyneria, mniejszy kaliber.
-- [ ] **Otwarte: czy `oversized` ma w ogóle wypadać na duże napędy.**
+- [x] **Gniazdo głównego napędu bierze wszystko, co generator umie wylosować.**
+  Decyzja: zamiast wykluczać parę baza-afiks, poszerzyć gniazda.
+  `ShipFitout.MAIN_DRIVE_SOCKET` = sufit gabarytu generatora (8,0), ten sam na
+  każdym kadłubie — w tym na interceptorze, który miał 3,0 i odmawiał nawet
+  seryjnego gimballed drive (3,2). Test pilnuje **relacji**, nie liczby:
+  podniesienie `LIMITS["bulk"]` bez poszerzenia gniazd od razu wróciłoby
+  martwym lootem. Pomiar, który do tego doprowadził, poniżej — i to, co z
+  niego **nie** wynika (`buffered` na gimballed drive, małe gniazda) też.
   Zgłoszone z kokpitu, a potem zmierzone dwa razy, bo **obniżenie masy silników
   o połowę (MAUX4.9) przesunęło gabaryty baz** i częściowo rozstrzygnęło sprawę
-  przypadkiem. Afiks mnoży gabaryt przez 1,20–1,55. Stan na dziś, 4000 losowań
-  silnika na seryjnym kadłubie: `oversized` wypada w 8,5% losowań, z czego 51%
-  nie wchodzi w gniazdo nosowe (2,5), a **25% nie wchodzi nigdzie** — bo
-  największe gniazdo kadłuba ma 3,5.
+  przypadkiem. Afiks mnoży gabaryt przez 1,20–1,55. Przed tą zmianą, 4000
+  losowań silnika na seryjnym kadłubie z gniazdem 3,5: `oversized` wypadał w
+  8,5% losowań, z czego 51% nie wchodziło w gniazdo nosowe (2,5), a **25% nie
+  wchodziło nigdzie**.
   - Wszystkie gniazda seryjnego kadłuba przyjmują wszystkie trzy typy
     (`allowed_types = 7`), więc „gniazdo wsteczne" nie jest gniazdem retro —
     jest po prostu najmniejszym gniazdem. Oversized retro nie jest martwy,
@@ -953,15 +960,17 @@ robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zab
   - Martwe egzemplarze to 3,1% wszystkich losowań silnika (123/4000): 83
     gimballed drive, 30 main drive, 10 retro. `oversized` odpowiada za 86 z
     nich, resztę robi `buffered` (też płaci gabarytem).
-  Dziś taki przedmiot jest surowcem — rafineria liczy go po gabarycie
-  (`Refinery.parts_for_engine`), więc od M5.2 „nie wchodzi nigdzie" znaczy
-  „jest złomem", a nie „jest śmieciem". Alternatywa: wykluczyć parę
-  baza-afiks w generatorze, który już to umie (`affix_bites` — dziś po tym,
-  że afiks nic nie zmienia; to byłby drugi powód — że koszt wyrzuca przedmiot
-  ze wszystkich gniazd w grze). Klamrowanie gabarytu w `_clamp_all` jest
-  gorsze: darowałoby koszt, czyli zrobiłoby z `oversized` czysty zysk.
-  Sam montaż już odmawia z podaniem liczb, więc to jest decyzja o tym, co ma
-  wypadać, a nie o tym, co ma działać.
+  Dwie odrzucone alternatywy, dla potomności. **Wykluczyć parę baza-afiks**
+  w generatorze, który już to umie (`affix_bites`, dziś po tym, że afiks nic
+  nie zmienia) — działałoby, ale odbiera grać „znalazłem potężny silnik,
+  muszę przebudować statek": generator przestałby takie rzuty produkować.
+  **Klamrować gabaryt w `_clamp_all`** — gorsze, bo darowałoby koszt, czyli
+  zrobiłoby z `oversized` czysty zysk.
+  Zostało to, co nie trafi w żadne gniazdo z innego powodu (`buffered` na
+  gimballed drive mieści się w suficie, więc tu nie ma czego trafiać; małe
+  gniazda nadal odmawiają). Taki przedmiot jest surowcem — rafineria liczy go
+  po gabarycie (`Refinery.parts_for_engine`), więc od M5.2 „nie wchodzi
+  nigdzie" znaczy „jest złomem", a nie „jest śmieciem".
 - [ ] **Główne wyzwanie w środku galaktyki** — co to jest, jest otwarte. Wiadomo
   tylko, że stoi na końcu drogi, którą reszta tego milestone'u buduje.
 
