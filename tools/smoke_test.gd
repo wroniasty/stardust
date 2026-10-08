@@ -12326,7 +12326,7 @@ func _check_provocation() -> void:
 	spawner.stand_up(shooty, null)
 	var held_shooty: Dictionary = Garrison.at(shooty, GalaxyMap.TIERS, sky.deltas)
 	ship.global_position = Vector2(float(held_shooty["territory"]) * 3.0, 0.0)
-	spawner._process(0.1)
+	spawner._physics_process(0.1)
 	_expect(
 		not spawner.is_roused(shooty),
 		"a garrison does not notice a ship that is nowhere near it",
@@ -12335,7 +12335,7 @@ func _check_provocation() -> void:
 	# Inside the territory, the aggressive one opens up and the passive
 	# one is the interesting case: it depends on what it rolled.
 	ship.global_position = Vector2(float(held_shooty["territory"]) * 0.5, 0.0)
-	spawner._process(0.1)
+	spawner._physics_process(0.1)
 	_expect(
 		spawner.is_roused(shooty),
 		"crossing an aggressive garrison's line wakes it",
@@ -12351,6 +12351,9 @@ func _check_provocation() -> void:
 
 	_check_passive_waking(spawner, passive, sky, ship, field)
 	_check_foe_fire(spawner, shooty, ship, field)
+	_check_holds_ground(spawner, shooty, sky, ship)
+	_check_archetypes_differ(spawner, shooty, sky, ship)
+	_check_calming(spawner, passive, sky, ship)
 
 	spawner.queue_free()
 	field.queue_free()
@@ -12367,7 +12370,7 @@ func _check_passive_waking(
 	spawner.stand_up(body, null)
 	ship.global_position = Vector2(float(held["territory"]) * 0.5, 0.0)
 	ship.flight_mode = Ship.FlightMode.PHYSICAL
-	spawner._process(0.1)
+	spawner._physics_process(0.1)
 	_expect(
 		spawner.is_roused(body)
 		== Garrison.provoked_by(held, Garrison.Provocation.APPROACHED),
@@ -12382,7 +12385,7 @@ func _check_passive_waking(
 	spawner.stand_down(body)
 	spawner.stand_up(body, null)
 	ship.global_position = Vector2(float(held["territory"]) * 9.0, 0.0)
-	spawner._process(0.1)
+	spawner._physics_process(0.1)
 	var target: Foe = null
 	for foe: Foe in spawner.standing():
 		if foe.held["body"] == body:
@@ -12463,6 +12466,236 @@ func _rounds_in(field: Node) -> int:
 		if child is Projectile:
 			count += 1
 	return count
+
+
+## Nikt nie goni. To jest cala regula, i jest mierzona, a nie zalozona.
+##
+## The line is clamped in two places -- on the goal and on the position
+## -- and the second one exists because of momentum: a defender that
+## accelerated at a goal sitting on the line arrives doing 260 px/s and
+## coasts through it. A test that only checked the goal would pass on
+## the version that leaks.
+##
+## So this parks the ship far outside, wakes the garrison, and runs the
+## fight for long enough that anything with a chase in it would be gone
+## -- 1200 ticks at a sixtieth is twenty seconds, and the slowest
+## defender crosses its own territory in about ten.
+func _check_holds_ground(
+	spawner: GarrisonSpawner, body: SystemBody, sky: Node, ship: Ship
+) -> void:
+	spawner.stand_down(body)
+	spawner.stand_up(body, null)
+	var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+	var line: float = float(held["territory"])
+	var raised: Array[Foe] = []
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == body:
+			raised.append(foe)
+	_expect(raised.size() > 1, "there is a garrison to watch (%d)" % raised.size())
+	if raised.is_empty():
+		return
+
+	var anchor: Vector2 = raised[0].anchor
+	var started: Dictionary = {}
+	for foe: Foe in raised:
+		started[foe] = foe.global_position
+
+	# Straight out past the line, and woken anyway: being shot at wakes a
+	# garrison at any distance, so this is a reachable state rather than
+	# a contrived one.
+	ship.global_position = anchor + Vector2(line * 4.0, 0.0)
+	ship.linear_velocity = Vector2.ZERO
+	spawner.rouse(body)
+	var worst: float = 0.0
+	for step: int in range(1200):
+		spawner._physics_process(1.0 / 60.0)
+		for foe: Foe in raised:
+			if is_instance_valid(foe):
+				worst = maxf(worst, foe.global_position.distance_to(foe.anchor))
+	_expect(
+		worst <= line + 1.0,
+		"nobody leaves their own territory, ever (furthest %.0f of %.0f px)" % [worst, line],
+	)
+
+	# And the assertion is not passing on a garrison that simply never
+	# moved: something has to have flown, or the line above is a line
+	# round a row of statues.
+	var moved: int = 0
+	for foe: Foe in raised:
+		if is_instance_valid(foe) and foe.global_position.distance_to(started[foe]) > 1.0:
+			moved += 1
+	_expect(moved > 0, "and somebody actually flew (%d of %d)" % [moved, raised.size()])
+
+	# With the pilot inside the line, the garrison closes. Measured as
+	# the mean rather than the nearest, because one defender happening
+	# to be in the way is not the garrison coming to meet anybody.
+	ship.global_position = anchor + Vector2(line * 0.5, 0.0)
+	var before: float = _mean_range(raised, ship)
+	for step: int in range(600):
+		spawner._physics_process(1.0 / 60.0)
+	var after: float = _mean_range(raised, ship)
+	_expect(
+		after < before,
+		"a woken garrison closes on a ship inside its line (%.0f -> %.0f px)" % [
+			before, after,
+		],
+	)
+
+
+## Trzy archetypy to trzy roznice, a nie trzy nazwy.
+##
+## A turret does not move at all; a runner that has been worked on
+## breaks off. Both are built rather than hoped for out of a seed: the
+## roster decides who is what, and a test that waited for the right
+## roll would be a test that sometimes checks nothing.
+func _check_archetypes_differ(
+	spawner: GarrisonSpawner, body: SystemBody, sky: Node, ship: Ship
+) -> void:
+	spawner.stand_down(body)
+	spawner.stand_up(body, null)
+	var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+	var sample: Foe = null
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == body:
+			sample = foe
+			break
+	if sample == null:
+		_expect(false, "there is a defender to rebuild as each archetype")
+		return
+	var anchor: Vector2 = sample.anchor
+	var line: float = float(held["territory"])
+	ship.global_position = anchor + Vector2(line * 0.3, 0.0)
+	ship.linear_velocity = Vector2.ZERO
+
+	# The turret, which is the archetype that is defined by not moving.
+	var gun: Foe = _as_archetype(sample, Garrison.Archetype.TURRET, held, anchor)
+	var stood: Vector2 = gun.global_position
+	for step: int in range(300):
+		gun.tick(1.0 / 60.0, ship, null)
+	_expect(
+		gun.global_position.is_equal_approx(stood) and gun.holds_still(),
+		"a turret is bolted down and stays bolted down",
+	)
+
+	# The runner, whole and then nearly dead. Whole it holds the far end
+	# of its reach like anything else; hurt it leaves.
+	var bolter: Foe = _as_archetype(sample, Garrison.Archetype.RUNNER, held, anchor)
+	bolter.global_position = ship.global_position + Vector2(300.0, 0.0)
+	_expect(not bolter.runs_away(), "a whole runner is not running yet")
+	var kept: float = bolter.global_position.distance_to(ship.global_position)
+	bolter.hull = bolter.hull_full * (Foe.FLEE_BELOW * 0.5)
+	_expect(bolter.runs_away(), "and one that has been worked on is")
+	for step: int in range(300):
+		bolter.tick(1.0 / 60.0, ship, null)
+	var fled: float = bolter.global_position.distance_to(ship.global_position)
+	_expect(
+		fled > kept,
+		"a runner that breaks off puts distance on the pilot (%.0f -> %.0f px)" % [
+			kept, fled,
+		],
+	)
+	_expect(
+		bolter.global_position.distance_to(anchor) <= line + 1.0,
+		"and still does not leave its own territory doing it",
+	)
+	gun.queue_free()
+	bolter.queue_free()
+
+
+## Pasywny garnizon da sie zostawic w spokoju. Agresywny nie.
+##
+## This overturned the first version of the rule, which said nothing
+## ever calms down. The argument then was that a timer lets a pilot
+## provoke a world and walk back in on a garrison that had forgotten.
+## It does not, because the clock only runs while the pilot is outside
+## the line -- and outside the line nothing can shoot them anyway. What
+## it buys is the meaning of "passive": without it, one mistake makes a
+## quiet world permanently loud.
+func _check_calming(
+	spawner: GarrisonSpawner, passive: SystemBody, sky: Node, ship: Ship
+) -> void:
+	spawner.stand_down(passive)
+	spawner.stand_up(passive, null)
+	var held: Dictionary = Garrison.at(passive, GalaxyMap.TIERS, sky.deltas)
+	var line: float = float(held["territory"])
+	var anchor: Vector2 = Vector2.ZERO
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == passive:
+			anchor = foe.anchor
+			break
+
+	spawner.rouse(passive)
+	_expect(spawner.is_roused(passive), "the quiet world has been provoked")
+
+	# Inside the line, the clock does not run at all: a pilot sitting in
+	# somebody's territory is not leaving them alone.
+	ship.global_position = anchor + Vector2(line * 0.5, 0.0)
+	for step: int in range(int(GarrisonSpawner.CALM_AFTER * 4.0)):
+		spawner._physics_process(0.5)
+	_expect(
+		spawner.is_roused(passive),
+		"and stays provoked while the pilot is still in its territory",
+	)
+
+	# Outside it, and being shot restarts the clock rather than being
+	# ignored by it.
+	ship.global_position = anchor + Vector2(line * 3.0, 0.0)
+	for step: int in range(int(GarrisonSpawner.CALM_AFTER * 0.5)):
+		spawner._physics_process(1.0)
+	var witness: Foe = null
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == passive:
+			witness = foe
+			break
+	if witness != null:
+		Damage.deal(witness, 0.001, "projectile")
+	for step: int in range(int(GarrisonSpawner.CALM_AFTER * 0.75)):
+		spawner._physics_process(1.0)
+	_expect(
+		spawner.is_roused(passive),
+		"a hit restarts the clock, so three quarters of it is not enough",
+	)
+	for step: int in range(int(GarrisonSpawner.CALM_AFTER) + 2):
+		spawner._physics_process(1.0)
+	_expect(
+		not spawner.is_roused(passive),
+		"but left alone outside its line for %.0f s it stands down" % [
+			GarrisonSpawner.CALM_AFTER,
+		],
+	)
+	var lit: int = 0
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == passive and foe.awake:
+			lit += 1
+	_expect(lit == 0, "and nobody in it is still in the fight (%d awake)" % lit)
+
+
+## The same defender, rebuilt as another archetype, standing where it
+## stood. Built rather than rolled, so the test says what it means.
+func _as_archetype(
+	sample: Foe, archetype: Garrison.Archetype, held: Dictionary, anchor: Vector2
+) -> Foe:
+	var entry: Dictionary = sample.member.duplicate()
+	entry["archetype"] = archetype
+	entry["rank"] = Garrison.Rank.MINOR
+	var foe: Foe = Foe.new()
+	root.add_child(foe)
+	foe.arm(entry, held)
+	foe.anchor = anchor
+	foe.station = sample.station
+	foe.global_position = anchor + sample.station
+	foe.awake = true
+	return foe
+
+
+func _mean_range(raised: Array[Foe], ship: Ship) -> float:
+	var total: float = 0.0
+	var count: int = 0
+	for foe: Foe in raised:
+		if is_instance_valid(foe):
+			total += foe.global_position.distance_to(ship.global_position)
+			count += 1
+	return total / maxf(float(count), 1.0)
 
 
 ## Garnizon staje w świecie, i znika razem ze swoim ciałem.

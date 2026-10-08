@@ -21,11 +21,23 @@ extends CharacterBody2D
 ## `body_entered`. It costs nothing while nothing moves it, and the AI
 ## that will move it is a later item.
 ##
-## It stands, it shoots what comes into its territory, and it dies.
-## What it still does **not** do is move: the design says a garrison
-## holds ground rather than hunts, which makes shooting the whole of
-## the first fight -- a turret that shoots is finished, and a fighter
-## at its post is most of the way there.
+## It stands, it shoots what comes into its territory, it flies about
+## inside that territory, and it dies.
+##
+## ## The one thing none of the archetypes does
+##
+## **Nothing leaves its territory.** Not as a preference the steering
+## expresses and the momentum overrules -- as a line the goal is
+## clamped to and the position is clamped to, every tick. A defender
+## that followed the pilot out would turn every contact into a
+## commitment, and a game where contact is commitment is a game of
+## avoiding contact. Holding the line is what makes the same enemy a
+## decision: go round, or go in.
+##
+## The archetypes differ only in **where inside the line they want to
+## be**, which is enough to make them read differently from the cockpit:
+## an aggressor comes to meet you, a patrol keeps its distance, a runner
+## breaks off when it is hurt.
 
 ## Hull a defender gets per point of strength, on the same 0..1 scale
 ## the ship's integrity uses.
@@ -84,6 +96,56 @@ const DAMAGE_PER_STRENGTH: float = 0.04
 const MUZZLE_SPEED: float = 600.0
 const SPREAD: float = 0.0349
 
+## How fast a defender can go, and how quickly it gets there.
+##
+## Slower than the ship on purpose, and the reason is not balance: the
+## pilot's way out is **leaving the territory**, not out-running
+## anybody. The stock dart does about 58 px/s per second of burn and
+## three times that boosting, so it passes any of these inside a few
+## seconds of open throttle -- while they turn tighter than it does,
+## which is what makes them annoying at close range and irrelevant at
+## long.
+const TOP_SPEED_FIGHTER: float = 260.0
+const TOP_SPEED_ELITE: float = 320.0
+const TOP_SPEED_CARRIER: float = 90.0
+const ACCELERATION: float = 180.0
+
+## Where each kind wants to sit, as a share of its own reach.
+##
+## This is the whole difference between the archetypes. An aggressor
+## closes until it is well inside its own gun; a patrol holds the far
+## end of it and makes the pilot come to it; a runner sits on the edge
+## where one wrong turn by the pilot loses it. A carrier keeps back,
+## because what it is for is the stream, not the duel.
+const STAND_OFF_AGGRESSOR: float = 0.45
+const STAND_OFF_PATROL: float = 0.75
+const STAND_OFF_RUNNER: float = 0.95
+const STAND_OFF_CARRIER: float = 0.85
+
+## What is left of a runner when it breaks off.
+##
+## Only the runner, and only when hurt. A whole archetype that flees on
+## sight would be an archetype the pilot never meets; one that flees
+## when it is nearly dead is the one that gets away with the news.
+const FLEE_BELOW: float = 0.35
+
+## Close enough to its post to call it standing there, in pixels.
+const HOME_WITHIN: float = 40.0
+
+## How far out from its goal it starts slowing down, in pixels.
+##
+## Without it a defender oscillates across its post for ever: full speed
+## at one pixel out means it arrives doing 260 px/s and leaves again.
+const ARRIVE_BAND: float = 140.0
+
+## The line, for a group that holds no body.
+##
+## `Garrison.adrift` gives its members no territory, because what they
+## hold is wherever they happen to be. They still hold it: a defender
+## with no line is the chase the design rules out, so the line becomes a
+## shell round where it was put.
+const LOOSE_TERRITORY: float = 2500.0
+
 ## The physics layer defenders stand on.
 ##
 ## Their own, so a garrison does not shoot itself to pieces while
@@ -103,6 +165,14 @@ const ROUND_SCENE: String = "res://scenes/projectile.tscn"
 const INK_MINOR: Color = Color(0.72, 0.36, 0.33)
 const INK_MAJOR: Color = Color(0.96, 0.55, 0.30)
 const INK_TURRET: Color = Color(0.55, 0.47, 0.52)
+
+## What a defender is doing. Three, because the questions are three:
+## is the pilot in my territory, am I at my post, and nothing else.
+##
+## Movement is the only thing the state picks. Firing is decided by
+## reach and cadence whatever the state says, so a defender that is
+## walking home and happens to have something in range shoots at it.
+enum State { HOLD, ENGAGE, RETURN }
 
 signal died(foe: Foe)
 
@@ -127,11 +197,40 @@ var held: Dictionary = {}
 var hull: float = 1.0
 var hull_full: float = 1.0
 
+## Where the thing it is holding is, in world coordinates.
+##
+## Written by the spawner every tick rather than read from `held`,
+## because a planet turns and a station orbits: a territory measured
+## from where the body was when the garrison stood up would drift off
+## the body it is supposed to be a shell round.
+var anchor: Vector2 = Vector2.ZERO
+
+## Its post, as an offset from the anchor. The spawner works out where
+## that is (`station_for`); keeping it relative is what lets the body
+## move without the garrison sliding off it.
+var station: Vector2 = Vector2.ZERO
+
+## How far out the line is. Nought means the garrison gave none, and
+## then `LOOSE_TERRITORY` applies -- see there.
+var territory: float = 0.0
+
+var state: State = State.HOLD
+
 var _size: float = SIZE_FIGHTER
 var _ink: Color = INK_MINOR
 var _shape: CollisionShape2D = null
 var _reach: float = REACH_FIGHTER
 var _damage: float = 0.02
+var _top_speed: float = TOP_SPEED_FIGHTER
+var _stand_off: float = STAND_OFF_PATROL
+
+## Which way round the pilot this one takes station, as an angle.
+##
+## From its own seed, so a dozen defenders converging on one ship form
+## an arc rather than a pile. Cheaper than separation steering and
+## deterministic, which matters here: a crowd that arranges itself
+## differently on the second visit is a crowd that cannot be tested.
+var _slot: float = 0.0
 
 ## Seconds until this one can fire again. Started at a fraction of the
 ## interval drawn from the member's own seed, so a garrison opens up
@@ -178,9 +277,23 @@ func arm(entry: Dictionary, garrison: Dictionary = {}) -> void:
 		else REACH_FIGHTER * (1.2 if major else 1.0)
 	)
 	_damage = float(entry.get("strength", 1.0)) * DAMAGE_PER_STRENGTH
-	_cooldown = _interval() * (
-		float(absi(int(entry.get("seed", 0))) % 1000) / 1000.0
+	var share: float = float(absi(int(entry.get("seed", 0))) % 1000) / 1000.0
+	_cooldown = _interval() * share
+	_slot = share * TAU
+	_top_speed = (
+		TOP_SPEED_CARRIER if archetype == Garrison.Archetype.CARRIER
+		else (TOP_SPEED_ELITE if major else TOP_SPEED_FIGHTER)
 	)
+	match archetype:
+		Garrison.Archetype.AGGRESSOR:
+			_stand_off = STAND_OFF_AGGRESSOR
+		Garrison.Archetype.RUNNER:
+			_stand_off = STAND_OFF_RUNNER
+		Garrison.Archetype.CARRIER:
+			_stand_off = STAND_OFF_CARRIER
+		_:
+			_stand_off = STAND_OFF_PATROL
+	territory = float(garrison.get("territory", 0.0))
 	queue_redraw()
 
 
@@ -233,8 +346,15 @@ func take_damage(amount: float, _cause: String = "") -> void:
 func tick(delta: float, target: Node2D, container: Node) -> void:
 	if not awake or hull <= 0.0 or target == null or not is_instance_valid(target):
 		return
+	if not holds_still():
+		_steer(delta, target)
 	var out: Vector2 = target.global_position - global_position
 	if out.length() > _reach:
+		# Out of reach, so point where it is going instead of at
+		# something it cannot shoot. A defender aimed at a ship two
+		# screens away reads as a defender that is about to fire.
+		if velocity.length() > 1.0:
+			rotation = velocity.angle() + PI * 0.5
 		return
 	rotation = out.angle() + PI * 0.5
 	_cooldown -= delta
@@ -242,6 +362,95 @@ func tick(delta: float, target: Node2D, container: Node) -> void:
 		return
 	_cooldown = _interval()
 	fire_at(lead_on(target), container)
+
+
+## Whether this one is bolted down. A turret is the thing that does not
+## move, which is the whole of why the archetype exists.
+func holds_still() -> bool:
+	return int(member.get("archetype", Garrison.Archetype.PATROL)) == Garrison.Archetype.TURRET
+
+
+## How far out this one's line is.
+func line() -> float:
+	return territory if territory > 0.0 else LOOSE_TERRITORY
+
+
+## One tick of flying. Picks a state, picks a goal, and moves towards it
+## at a bounded acceleration -- the same first-order follower the camera
+## uses, for the same reason: a thing that snaps to its goal does not
+## look like a thing with mass.
+func _steer(delta: float, target: Node2D) -> void:
+	state = _state_for(target)
+	var goal: Vector2 = _inside(_goal_for(target))
+	var out: Vector2 = goal - global_position
+	var want: Vector2 = Vector2.ZERO
+	if out.length() > 1.0:
+		want = out.normalized() * _top_speed * clampf(
+			out.length() / ARRIVE_BAND, 0.0, 1.0
+		)
+	velocity = velocity.move_toward(want, ACCELERATION * delta)
+	move_and_slide()
+
+	# And the line again, on the position this time.
+	#
+	# Clamping the goal is not enough and the difference is momentum: a
+	# defender that accelerated towards a goal on the line arrives doing
+	# 260 px/s and coasts straight through it. So the outward component
+	# of the velocity is taken away at the line and the tangential part
+	# is left, which is a defender turning along its own perimeter
+	# rather than one bouncing off an invisible wall.
+	var away: Vector2 = global_position - anchor
+	var reach: float = line()
+	if away.length() > reach and reach > 0.0:
+		var outward: Vector2 = away.normalized()
+		global_position = anchor + outward * reach
+		velocity = velocity.slide(outward)
+
+
+## What this one is doing, from two distances and nothing else.
+func _state_for(target: Node2D) -> State:
+	if target.global_position.distance_to(anchor) <= line():
+		return State.ENGAGE
+	if global_position.distance_to(anchor + station) <= HOME_WITHIN:
+		return State.HOLD
+	return State.RETURN
+
+
+## Where it wants to be.
+##
+## Engaging, that is a point at its own stand-off range from the pilot,
+## on its own bearing round them -- so the defenders of one body spread
+## into an arc instead of stacking on the line between the pilot and the
+## body. Otherwise it is its post, which is also what a runner that has
+## had enough heads away from.
+func _goal_for(target: Node2D) -> Vector2:
+	if state != State.ENGAGE:
+		return anchor + station
+	if runs_away():
+		var away: Vector2 = global_position - target.global_position
+		if away.length() < 1.0:
+			away = Vector2.RIGHT.rotated(_slot)
+		return global_position + away.normalized() * line()
+	return target.global_position + Vector2.RIGHT.rotated(_slot) * (_stand_off * _reach)
+
+
+## Whether this one has had enough. Public because it is a thing the
+## pilot can see -- a runner peeling off is information -- and a test
+## should be able to ask rather than infer.
+func runs_away() -> bool:
+	return (
+		int(member.get("archetype", Garrison.Archetype.PATROL)) == Garrison.Archetype.RUNNER
+		and hull < hull_full * FLEE_BELOW
+	)
+
+
+## The same point, brought inside the line.
+func _inside(goal: Vector2) -> Vector2:
+	var out: Vector2 = goal - anchor
+	var reach: float = line()
+	if out.length() <= reach or reach <= 0.0:
+		return goal
+	return anchor + out.normalized() * reach
 
 
 ## Where to aim to hit something that is going somewhere.

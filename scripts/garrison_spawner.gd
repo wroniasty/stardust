@@ -53,16 +53,34 @@ var _manager: Node = null
 ## player's ship in the game; whatever a test hands over otherwise.
 var _target: Node2D = null
 
-## Bodies whose garrison is in the fight.
+## How long a **passive** garrison needs the pilot out of its territory
+## before it stands down, in seconds.
 ##
-## **Nothing wakes up and goes back to sleep.** Once roused, a garrison
-## stays roused until the pilot leaves the system -- which costs
-## nothing to implement and nothing to store, because leaving and
-## coming back regenerates the roster from the seed anyway. The
-## alternative is a forgetting timer, and a timer would mean a pilot
-## could provoke a world, back off for twenty seconds and walk in on a
-## garrison that had decided to believe them.
+## The first version of this class said no garrison ever calms down,
+## and gave a reason: a forgetting timer would let a pilot provoke a
+## world, back off for twenty seconds and walk in on a garrison that
+## had decided to believe them. The reason was wrong about this timer,
+## because this one only runs **outside the territory** -- and outside
+## the territory nothing can shoot the pilot anyway, since every
+## defender's reach is well inside its own line. So calming changes
+## nothing about a fight in progress. What it changes is the second
+## approach, and that is exactly what has to change: without it,
+## "passive" means "aggressive from the first mistake onwards", and the
+## whole point of a world that has to be provoked is that it can be
+## left alone again.
+##
+## Aggressive garrisons do not calm down, because there is nothing for
+## them to calm down from: they open up on anything inside the line,
+## roused or not.
+const CALM_AFTER: float = 25.0
+
+## Bodies whose garrison is in the fight.
 var _roused: Dictionary = {}
+
+## And how long the pilot has been outside the territory of each, which
+## is the only thing that runs the clock down. Reset by any hit: a
+## garrison that is being shot at is not being left alone.
+var _calm_for: Dictionary = {}
 
 ## Where the foes go. Not under the body: bodies are taken down and
 ## rebuilt by the manager, and a defender parented to one would be
@@ -88,6 +106,7 @@ func bind(tier: int, galaxy: Node, manager: Node, field: Node2D) -> void:
 	# roused list is cleared, which is also the whole of the rule about
 	# it: leaving is what calms a garrison, and nothing else does.
 	_roused.clear()
+	_calm_for.clear()
 	if _manager == manager:
 		return
 	if _manager != null and is_instance_valid(_manager):
@@ -144,27 +163,46 @@ func standing() -> Array[Foe]:
 	return out
 
 
-func _process(delta: float) -> void:
+## In the physics step, not the idle one, because this is where the
+## defenders move. `move_and_slide` scales by the physics delta
+## whatever delta it is handed, so running the fight anywhere else
+## would make a foe's speed depend on the frame rate.
+func _physics_process(delta: float) -> void:
 	if _target == null or not is_instance_valid(_target):
 		return
 	for body: Variant in _standing:
 		_watch_over(body as SystemBody, delta)
 
 
-## One body's garrison, one tick: see whether anything has woken it,
-## and let whoever is awake shoot.
+## One body's garrison, one tick: where the body is now, whether
+## anything has woken it, whether it has been left alone long enough to
+## stand down again, and then everybody's own tick.
 func _watch_over(body: SystemBody, delta: float) -> void:
 	var raised: Array = _standing[body]
 	if raised.is_empty():
 		return
 	var held: Dictionary = (raised[0] as Foe).held
+	var at: Vector2 = _body_at(body)
+	var away: float = _target.global_position.distance_to(at)
 	if not is_roused(body):
-		var reason: int = _provocation(body, held)
+		var reason: int = _provocation(body, held, away)
 		if reason != 0 and Garrison.provoked_by(held, reason as Garrison.Provocation):
 			rouse(body)
+	elif int(held.get("posture", Garrison.Posture.AGGRESSIVE)) == Garrison.Posture.PASSIVE:
+		if away > float(held.get("territory", 0.0)):
+			_calm_for[body] = float(_calm_for.get(body, 0.0)) + delta
+			if float(_calm_for[body]) >= CALM_AFTER:
+				calm(body)
+		else:
+			_calm_for[body] = 0.0
 	for foe: Variant in raised:
-		if is_instance_valid(foe):
-			(foe as Foe).tick(delta, _target, _field)
+		if not is_instance_valid(foe):
+			continue
+		# The body moves -- a planet turns, a station orbits -- so the
+		# line moves with it rather than staying where it was when the
+		# garrison stood up.
+		(foe as Foe).anchor = at
+		(foe as Foe).tick(delta, _target, _field)
 
 
 ## What the pilot has just done, as the garrison would read it.
@@ -173,9 +211,7 @@ func _watch_over(body: SystemBody, delta: float) -> void:
 ## answer is only ever used to ask `provoked_by()`: a world that minds
 ## being landed on and not being approached has to be able to say so,
 ## and a pilot who lands on it has certainly also approached it.
-func _provocation(body: SystemBody, held: Dictionary) -> int:
-	var at: Vector2 = _body_at(body)
-	var away: float = _target.global_position.distance_to(at)
+func _provocation(body: SystemBody, held: Dictionary, away: float) -> int:
 	var ship: Ship = _target as Ship
 	if (
 		ship != null
@@ -188,6 +224,21 @@ func _provocation(body: SystemBody, held: Dictionary) -> int:
 	return 0
 
 
+## Stands a garrison down again: nobody awake, and the clock cleared.
+##
+## Public for the same reason `rouse` is -- something other than the
+## tick may decide it, and a test should be able to say so directly.
+func calm(body: SystemBody) -> void:
+	if not is_roused(body):
+		return
+	_roused.erase(body)
+	_calm_for.erase(body)
+	for foe: Variant in _standing.get(body, []):
+		if is_instance_valid(foe):
+			(foe as Foe).awake = false
+			(foe as Foe).queue_redraw()
+
+
 ## Wakes a garrison, and says so on every defender in it.
 ##
 ## Public because being shot at is a provocation nobody rolls for and
@@ -196,6 +247,7 @@ func rouse(body: SystemBody) -> void:
 	if not _standing.has(body) or is_roused(body):
 		return
 	_roused[body] = true
+	_calm_for[body] = 0.0
 	for foe: Variant in _standing[body]:
 		if is_instance_valid(foe):
 			(foe as Foe).awake = true
@@ -252,6 +304,10 @@ func stand_up(body: SystemBody, node: Node2D) -> int:
 		_field.add_child(foe)
 		foe.arm(member, held)
 		foe.global_position = station_for(held, member, at, _surface_under(planet, body, member))
+		# Its post and its line, both relative to the body so that the
+		# body can move without the garrison sliding off it.
+		foe.anchor = at
+		foe.station = foe.global_position - at
 		# Pointed out from what it is holding, which is where anything
 		# worth shooting at is going to come from.
 		foe.rotation = (foe.global_position - at).angle() + PI * 0.5
@@ -275,6 +331,7 @@ func stand_down(body: SystemBody) -> void:
 	# garrison that has not met anybody yet, which is the same rule the
 	# minors come back under.
 	_roused.erase(body)
+	_calm_for.erase(body)
 	for foe: Variant in _standing[body]:
 		if not is_instance_valid(foe):
 			continue
@@ -333,6 +390,9 @@ func _surface_under(planet: Planet, body: SystemBody, member: Dictionary) -> flo
 ## thing here worth writing down.
 func _on_foe_hurt(_foe: Foe, body: SystemBody) -> void:
 	rouse(body)
+	# Being shot is the opposite of being left alone, so whatever the
+	# clock had counted up does not count.
+	_calm_for[body] = 0.0
 
 
 func _on_foe_died(foe: Foe, body: SystemBody) -> void:
