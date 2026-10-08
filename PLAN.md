@@ -773,7 +773,7 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
 
 ### 5.1 Wrogowie
 
-- [ ] AI wrogów: steering behaviours, maszyna stanów, kilka archetypów (patrol, agresor, uciekinier).
+- [x] AI wrogów: steering behaviours, maszyna stanów, kilka archetypów (patrol, agresor, uciekinier).
 - [x] **Minor i major, i dwie różne zasady powrotu.** `Garrison` — czysta dana,
   jak `StarSystem`. Pierwsza połowa reguły nie kosztuje nic, bo roster z seeda
   **jest** regułą „minor wraca, kiedy ty wracasz, nigdy w trakcie pobytu". Druga
@@ -844,16 +844,64 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   nie trafiało nigdy; dwa stopnie, tyle co seryjny autocannon. Zmierzone: 400 px
   od jednego obrońcy z obrzeża przez 14 s to 5 pocisków, 4 trafienia, kadłub
   1,000 → 0,918. Szczegóły w IDEAS.md sekcja 12.
-- [ ] **AI: trzymać teren, nie gonić.** Steering i maszyna stanów, trzy
-  archetypy, i jedna rzecz, której żaden z nich nie robi — pogoń poza
-  terytorium. Obudzony pasywny garnizon musi też mieć sposób, żeby znowu
-  zasnąć, albo „pasywny" znaczy „agresywny po pierwszym błędzie".
-- [ ] **Lotniskowiec wypuszcza swoich.** Kadencja i limit żywych są w rosterze;
-  brakuje czegoś, co je wypuszcza — i reguły, że zestrzelony lotniskowiec
-  kończy strumień, bo na tym stoi klauzula „nic nie bierze się znikąd".
-- [ ] Zasady śmierci: co gracz traci, co zostaje. **Pokonany major zostaje
-  pokonany** — śmierć tego nie cofa, bo to jedyny nieodwracalny postęp, jaki
-  gracz ma poza sprzętem.
+- [x] **AI: trzymać teren, nie gonić.** `Foe.State` — trzy stany (HOLD,
+  ENGAGE, RETURN) i dwie odległości, które o nich decydują. Archetypy różnią
+  się **jedną** rzeczą — gdzie wewnątrz terytorium chcą być, jako udziałem
+  swojego własnego zasięgu: agresor 0,45, patrol 0,75, uciekinier 0,95,
+  lotniskowiec 0,85, turret się nie rusza. Każdy bierze własny namiar wokół
+  pilota z własnego seeda, więc dwunastka tworzy łuk, a nie stos — taniej niż
+  separation steering i deterministycznie, co tu jest warunkiem testowalności.
+  - **Linia jest klamrowana dwa razy**: na celu i na pozycji. Druga klamra jest
+    za pęd — obrońca rozpędzony do celu leżącego na linii dolatuje z 260 px/s
+    i przelatuje przez nią. Na linii zabierana jest składowa promieniowa
+    prędkości, styczna zostaje, co czyta się jako skręt po własnym perymetrze,
+    a nie jak uderzenie w szybę. Zmierzone, 20 s ze statkiem zaparkowanym
+    cztery terytoria na zewnątrz: najdalej 4547 z 4807 px, i 8 z 12 rzeczywiście
+    leciało — bez tego drugiego asercja przechodziłaby na szeregu posągów.
+  - Walka przeniosła się do `_physics_process`, bo `move_and_slide` skaluje się
+    deltą fizyki niezależnie od tego, jaką deltę mu się poda.
+  - **Pasywny garnizon da się zostawić w spokoju** (`CALM_AFTER` 25 s).
+    Pierwsza wersja tej klasy twierdziła, że nikt nigdy nie zasypia, i podawała
+    powód: timer pozwoliłby sprowokować świat, odlecieć na chwilę i wejść na
+    garnizon, który zdążył uwierzyć. Dla **tego** timera powód nie działa, bo
+    zegar chodzi tylko **poza terytorium** — a poza terytorium i tak nikt nie
+    dosięga pilota, bo każdy zasięg jest głęboko wewnątrz własnej linii. Trafienie
+    zeruje zegar. Bez tego „pasywny" znaczy „agresywny od pierwszego błędu".
+- [x] **Lotniskowiec wypuszcza swoich.** `Foe.wants_to_launch` liczy to, co ma
+  w powietrzu, a nie to, co wypuścił — więc strumień jest stałą siłą, nie
+  kranem: wyczyść brood i przyjdzie następny, zostaw żywych i nie przyjdzie
+  nikt. Księgowanie siedzi **na lotniskowcu**, i to jest cała reguła „zestrzelony
+  kończy strumień": zestrzelony lotniskowiec zabiera ją ze sobą.
+  - **Wypuszczony nic nie zostawia.** Inaczej lotniskowiec jest drukarnią lootu:
+    stań na skraju jego zasięgu, strzelaj do tego, co wychodzi, i tabela rzadkości
+    tieru płaci bez końca. Wartością strumienia jest własny drop lotniskowca.
+  - Śpiący nie wypuszcza nikogo, a pełny komplet nie bankuje kadencji — inaczej
+    pierwsza luka dostałaby cały zaległy strumień naraz.
+  - Seed brooda idzie przez `BROOD_SEED_INDEX` (7000), daleko od numeracji
+    członków rosteru: wspólny klucz w `deltas` oznaczałby, że śmierć
+    wypuszczonego myśliwca spisuje na straty żywego elite.
+  - Wypuszczanie dzieje się **po** przejściu po liście, nie w trakcie: `raised`
+    *jest* listą stojących tego ciała, a dopisywanie do tablicy, po której się
+    iteruje, to nie jest rzecz do sprawdzenia na produkcji.
+- [x] Zasady śmierci: co gracz traci, co zostaje. `Ship.spill`.
+  - **Zostaje kadłub i wszystko, co w nim przykręcone**, bo odrabianie loadoutu
+    po każdej śmierci to kara, której piaskownica stojąca na „explore fast, die
+    often" nie udwignie: pilot, który traci działa, traci też następną godzinę,
+    a godzina jest grą.
+  - **Zostają zbiorniki, ładunki skoku i energia**, i to z twardszego powodu:
+    śmierć, która opróżnia zbiorniki, może zostawić pilota w systemie bez
+    wyjścia — to nie konsekwencja, to ślepa uliczka.
+  - **Idzie ładownia**, i to wystarcza, bo to jest wszystko, po co był ten lot.
+    Przedmioty rozsypują się na wraku jako skrzynki (`WRECK_GRACE` 2,5 s, bo bez
+    tego nowy statek wstaje we własnym ładunku i zbiera go z powrotem), więc
+    strata jest odwracalna dla kogoś na tyle odważnego, żeby wrócić przez to, co
+    go zabiło. Liczone zapasy przepadają — skrzynka trzyma rzecz, a część
+    zamienna jest ilością; 140 sztuk to 140 skrzynek albo typ skrzynki,
+    którego nie ma. Rafineria jest sposobem na ich odtworzenie.
+  - **Pokonany major zostaje pokonany.** `Galaxy.deltas` nie jest niczym
+    ruszane w ścieżce śmierci — kratery zostają wykopane, systemy widziane,
+    major pokonany. To jedyny nieodwracalny postęp poza sprzętem, i śmierć,
+    która by go oddawała, czyniłaby każdą walkę warunkową.
 - [x] Jedno i drugie to stan, którego seed nie odtworzy, więc mieszka w
   `Galaxy.deltas`. **Schemat kluczy jest**: wpis leży pod seedem tej rzeczy,
   której dotyczy. Trzy rodzaje — ciało niebieskie (`crust`), system (`seen`),

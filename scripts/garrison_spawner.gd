@@ -94,6 +94,10 @@ var _standing: Dictionary = {}
 ## owns crates, so the world decides what a drop looks like.
 signal dropped(item: Resource, rarity: int, at: Vector2)
 
+## A carrier has put one out. For the HUD that will want to say so, and
+## for a test that should not have to count children to find out.
+signal launched(carrier: Foe, foe: Foe)
+
 
 ## Who to read, where to put things, and which band of the galaxy this
 ## is. The manager may be null, which is what a test hands it: then
@@ -195,6 +199,11 @@ func _watch_over(body: SystemBody, delta: float) -> void:
 				calm(body)
 		else:
 			_calm_for[body] = 0.0
+	# Gathered rather than launched on the spot, because `raised` *is*
+	# this body's standing list: launching inside the walk appends to the
+	# array being walked, and whether that is a crash, a double tick or
+	# nothing at all is not a thing to find out in a release.
+	var wanted: Array[Array] = []
 	for foe: Variant in raised:
 		if not is_instance_valid(foe):
 			continue
@@ -203,6 +212,11 @@ func _watch_over(body: SystemBody, delta: float) -> void:
 		# garrison stood up.
 		(foe as Foe).anchor = at
 		(foe as Foe).tick(delta, _target, _field)
+		var entry: Dictionary = (foe as Foe).wants_to_launch(delta)
+		if not entry.is_empty():
+			wanted.append([foe, entry])
+	for pair: Array in wanted:
+		_launch(pair[0] as Foe, pair[1] as Dictionary, body)
 
 
 ## What the pilot has just done, as the garrison would read it.
@@ -322,6 +336,38 @@ func stand_up(body: SystemBody, node: Node2D) -> int:
 	return raised.size()
 
 
+## Puts one of a carrier's brood into the world.
+##
+## Out of the carrier's own mouth, offset by its size, so the thing the
+## pilot is being told -- that this came from that -- is a thing they
+## can see. It joins its body's standing list like anything else, so
+## sleep takes it away and the garrison's own count includes it.
+func _launch(carrier: Foe, entry: Dictionary, body: SystemBody) -> Foe:
+	if _field == null or not is_instance_valid(_field):
+		return null
+	var foe: Foe = Foe.new()
+	_field.add_child(foe)
+	foe.arm(entry, carrier.held)
+	foe.anchor = carrier.anchor
+	# Its post is the carrier's, not a post of its own: what it is
+	# defending is the thing that made it.
+	foe.station = carrier.station
+	foe.global_position = carrier.global_position + Vector2.RIGHT.rotated(
+		float(entry.get("bearing", 0.0))
+	) * (Foe.SIZE_CARRIER * 1.6)
+	foe.rotation = carrier.rotation
+	# Launched into a fight, so it arrives in it. A brood that had to be
+	# provoked separately would be a brood the pilot can fly past.
+	foe.awake = true
+	foe.died.connect(_on_foe_died.bind(body))
+	foe.hurt.connect(_on_foe_hurt.bind(body))
+	carrier.brood.append(foe)
+	if _standing.has(body):
+		(_standing[body] as Array).append(foe)
+	launched.emit(carrier, foe)
+	return foe
+
+
 ## Takes a body's garrison away. The minors are not remembered, which
 ## is the rule rather than an omission: the seed puts them back.
 func stand_down(body: SystemBody) -> void:
@@ -415,6 +461,10 @@ func _on_foe_died(foe: Foe, body: SystemBody) -> void:
 ## killing things in the core worth more than killing things at the
 ## rim without a second table saying so.
 func _drop_for(foe: Foe) -> void:
+	# What came out of a carrier is worth what the carrier is worth. See
+	# `Foe.brood_entry`.
+	if foe.was_launched():
+		return
 	var loot: Node = _loot()
 	if loot == null:
 		return

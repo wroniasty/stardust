@@ -995,6 +995,43 @@ func eject_velocity() -> Vector2:
 	return linear_velocity + transform.basis_xform(Vector2.DOWN).normalized() * EJECT_SPEED
 
 
+## Empties the whole hold and hands back what was in it, for whoever is
+## going to leave it lying about.
+##
+## **This is what dying costs**, and the shape of it is the rule. The
+## hull and everything bolted into it survive, because re-earning a
+## loadout on every death is a punishment a sandbox built on "explore
+## fast, die often" cannot afford -- a pilot who loses their guns loses
+## the next hour as well, and the hour is the game. Fuel, charges and
+## energy survive for a harder reason: a death that empties the tanks
+## can leave a pilot in a system they have no way out of, which is not
+## a consequence but a dead end.
+##
+## What is left to lose is the hold, and losing it is enough: it is
+## everything the trip was for. The items come back as entries for the
+## world to scatter, so the loss is recoverable by somebody brave
+## enough to fly back to the wreck through whatever made it.
+##
+## The counted stores are simply gone, and that is a decision rather
+## than an oversight: a crate holds a thing and a spare part is a
+## quantity, so a hundred and forty of them would be a hundred and
+## forty crates, or a crate type that does not exist yet. The refinery
+## is how they are replaced.
+func spill() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if carried != null:
+		out.append({"item": carried, "rarity": carried_rarity})
+		carried = null
+	for entry: Dictionary in cargo:
+		out.append(entry)
+	cargo.clear()
+	stores.clear()
+	rebuild_control_groups(false)
+	hold_changed.emit(null)
+	cargo_changed.emit()
+	return out
+
+
 ## Empties the hold and returns what was in it.
 func release() -> Resource:
 	var item: Resource = carried

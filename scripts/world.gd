@@ -518,6 +518,17 @@ func _land_on_site(index: int) -> void:
 		ship.gear.extension = 1.0
 
 
+## How far from the wreck the hold ends up, how hard it is thrown, and
+## how long before it can be picked up again.
+##
+## The grace matters more than it looks: without it the new ship spawns
+## into its own spilled cargo and collects the lot, which would make
+## dying free.
+const WRECK_SCATTER: float = 26.0
+const WRECK_THROW: float = 55.0
+const WRECK_GRACE: float = 2.5
+
+
 ## Death is the world's business, not the ship's: the ship reports that it has
 ## run out of hull, and the world decides where the next one starts. Respawn is
 ## immediate and in place, with no menu and no reload (IDEAS.md, explore fast,
@@ -528,6 +539,25 @@ func _on_ship_destroyed(at: Vector2, velocity: Vector2) -> void:
 	var ship: Ship = (player as Player).ship
 	if ship == null or planet == null:
 		return
+
+	# The hold goes overboard where the wreck was, which is the whole of
+	# what a death costs -- `Ship.spill` says why that and nothing else.
+	# Scattered rather than deleted, so the loss is a flight back through
+	# whatever killed you rather than a number going down.
+	#
+	# What is **not** undone: `Galaxy.deltas`. A major beaten before the
+	# death stays beaten, the craters stay dug, and the systems stay
+	# seen. That is the only irreversible progress a pilot has that is
+	# not bolted to the hull, and a death that took it back would make
+	# every fight provisional.
+	for entry: Dictionary in ship.spill():
+		_leave_crate(
+			entry["item"],
+			int(entry.get("rarity", 0)),
+			at + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * WRECK_SCATTER,
+			velocity + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * WRECK_THROW,
+			WRECK_GRACE,
+		)
 
 	# Straight back onto a circular orbit, which is both a safe place to be and
 	# the state the rest of the game is built around.

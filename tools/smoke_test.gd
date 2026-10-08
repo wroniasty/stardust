@@ -1216,6 +1216,8 @@ func _evaluate_phase() -> void:
 			_check_garrison()
 			_check_spawner()
 			_check_provocation()
+			_check_carrier()
+			_check_death_costs()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -12278,6 +12280,301 @@ func _check_tiered_loot() -> void:
 		"and the rung runs 0 to 1 across the ladder",
 	)
 	loot.queue_free()
+
+
+## Co kosztuje smierc, i czego nie cofa.
+##
+## The rule is in `Ship.spill`: the hull and everything bolted into it
+## survive, the tanks survive, and the hold does not. This checks both
+## halves, because either one on its own is a different game -- losing
+## the guns would cost the next hour as well, and losing nothing would
+## make a death a loading screen.
+func _check_death_costs() -> void:
+	var ship: Ship = _spawn_ship()
+	var engines: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		if mount.installed != null:
+			engines += 1
+	var armed: int = 0
+	for gun: Hardpoint in ship.hardpoints:
+		if gun.weapon != null:
+			armed += 1
+	_expect(engines > 0 and armed > 0, "a ship with engines (%d) and guns (%d)" % [
+		engines, armed,
+	])
+
+	# A hold worth losing: something in the hands, something in the bay,
+	# and something counted.
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	ship.release()
+	ship.cargo.clear()
+	_expect(ship.take(loot.engine(11) as Resource, 2), "something in the hands")
+	_expect(ship.stow(), "and in the bay")
+	_expect(ship.take(loot.weapon(12) as Resource, 3), "and something else in the hands")
+	var parts: int = ship.load_units(Stores.Kind.SPARE_PARTS, 40)
+	var dust: int = ship.load_units(Stores.Kind.STARDUST, 12)
+	ship.add_charges(2)
+	var charges: int = ship.charges
+	_expect(
+		parts > 0 and dust > 0 and charges > 0,
+		"and counted stores (%d parts, %d stardust, %d charges)" % [parts, dust, charges],
+	)
+
+	var items: int = ship.cargo.size() + (1 if ship.carried != null else 0)
+	var spilled: Array[Dictionary] = ship.spill()
+	_expect(
+		spilled.size() == items,
+		"everything in the hold comes back out to be scattered (%d of %d)" % [
+			spilled.size(), items,
+		],
+	)
+	for entry: Dictionary in spilled:
+		_expect(entry.get("item") != null, "and each one is a thing a crate can hold")
+	_expect(
+		ship.carried == null and ship.cargo.is_empty(),
+		"the hold is empty afterwards",
+	)
+	_expect(
+		ship.carrying(Stores.Kind.SPARE_PARTS) == 0
+		and ship.carrying(Stores.Kind.STARDUST) == 0,
+		"and so are the stores, which do not come back as crates -- see Ship.spill",
+	)
+
+	# And the half that is about what a death must **not** cost. The
+	# tanks especially: a death that empties them can strand a pilot in
+	# a system with no way out, which is a dead end rather than a
+	# consequence.
+	var left: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		if mount.installed != null:
+			left += 1
+	var still_armed: int = 0
+	for gun: Hardpoint in ship.hardpoints:
+		if gun.weapon != null:
+			still_armed += 1
+	_expect(
+		left == engines and still_armed == armed,
+		"nothing bolted to the hull comes off (%d engines, %d guns)" % [left, still_armed],
+	)
+	_expect(ship.charges == charges, "and the jump charges stay (%d)" % ship.charges)
+
+	ship.take_damage(2.0, "test")
+	_expect(ship.is_destroyed(), "the hull runs out")
+	ship.respawn(Vector2(400.0, 0.0), Vector2.ZERO)
+	_expect(ship.hull_integrity == 1.0, "and comes back whole")
+	_expect(
+		ship.charges == charges and ship.cargo.is_empty(),
+		"with the tanks it had and the hold it lost",
+	)
+
+	_check_death_keeps_the_dead(ship)
+	loot.queue_free()
+	ship.queue_free()
+
+
+## Pokonany major zostaje pokonany. Smierc tego nie cofa.
+##
+## The only irreversible progress a pilot has that is not bolted to the
+## hull. A death that handed it back would make every fight provisional:
+## fly in, beat the elite, die on the way out, and the elite is standing
+## there again.
+func _check_death_keeps_the_dead(ship: Ship) -> void:
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+
+	var home: SystemBody = null
+	var major: Dictionary = {}
+	for index: int in range(240):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+			for entry: Variant in held.get("members", []):
+				if int((entry as Dictionary)["rank"]) == Garrison.Rank.MAJOR:
+					home = body
+					major = entry
+					break
+			if home != null:
+				break
+		if home != null:
+			break
+	_expect(home != null, "there is a major somewhere to beat")
+	if home == null:
+		sky.queue_free()
+		return
+
+	_expect(Garrison.beat(sky.deltas, major), "beating it is written down")
+	_expect(
+		not _lists(Garrison.at(home, GalaxyMap.TIERS, sky.deltas), int(major["seed"])),
+		"and the roster stops listing it",
+	)
+
+	ship.take_damage(2.0, "test")
+	ship.respawn(Vector2(900.0, 0.0), Vector2.ZERO)
+	_expect(
+		not _lists(Garrison.at(home, GalaxyMap.TIERS, sky.deltas), int(major["seed"])),
+		"dying afterwards does not bring it back",
+	)
+	sky.queue_free()
+
+
+func _lists(held: Dictionary, enemy_seed: int) -> bool:
+	for entry: Variant in held.get("members", []):
+		if int((entry as Dictionary)["seed"]) == enemy_seed:
+			return true
+	return false
+
+
+## Lotniskowiec wypuszcza swoich, a zestrzelony konczy strumien.
+##
+## This is the clause the design puts on "a minor comes back when you
+## come back, never while you are there": **nothing arrives from
+## nowhere.** A place that drips reinforcements for ever is a place to
+## run from rather than one to clear, so every enemy that appears
+## during a stay comes out of something standing there that can be shot
+## -- and shooting it stops the drip. The test is that sentence, in
+## four parts.
+func _check_carrier() -> void:
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+	var field: Node2D = Node2D.new()
+	root.add_child(field)
+	var spawner: GarrisonSpawner = GarrisonSpawner.new()
+	root.add_child(spawner)
+	var ship: Ship = _spawn_ship()
+	spawner.watch(ship)
+	spawner.bind(GalaxyMap.TIERS, sky, null, field)
+
+	# A body whose roster actually has a carrier, found rather than
+	# assumed: a carrier is a roll, commoner in the core than at the
+	# rim, and at the top of the ladder it is nearly even money per
+	# defended world.
+	var home: SystemBody = null
+	for index: int in range(240):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+			for entry: Variant in held.get("members", []):
+				if int((entry as Dictionary)["archetype"]) == Garrison.Archetype.CARRIER:
+					home = body
+					break
+			if home != null:
+				break
+		if home != null:
+			break
+	_expect(home != null, "there is a world with a carrier on it")
+	if home == null:
+		spawner.queue_free()
+		field.queue_free()
+		ship.queue_free()
+		sky.queue_free()
+		return
+
+	spawner.stand_up(home, null)
+	var carrier: Foe = null
+	for foe: Foe in spawner.standing():
+		if int(foe.member.get("archetype", -1)) == Garrison.Archetype.CARRIER:
+			carrier = foe
+			break
+	_expect(carrier != null, "and it is standing in the world")
+	if carrier == null:
+		return
+	var most: int = int(carrier.member["brood"])
+	var cadence: float = float(carrier.member["cadence"])
+	_expect(most > 0 and cadence > 0.0, "with a brood (%d) and a cadence (%.1f s)" % [
+		most, cadence,
+	])
+
+	# Asleep, nothing comes out. A carrier that filled the sky while the
+	# pilot was still deciding whether to go in would make the decision
+	# for them.
+	#
+	# Well outside the line, and the first version of this was not: the
+	# ship sat inside the territory, the garrison rolled aggressive,
+	# `_watch_over` woke it on the first tick, and the carrier launched
+	# three. The check was right and its premise was wrong, which is why
+	# the premise is now asserted rather than arranged.
+	ship.global_position = carrier.anchor + Vector2(float(carrier.held["territory"]) * 3.0, 0.0)
+	var before: int = spawner.standing().size()
+	for step: int in range(int(cadence * 4.0 * 60.0)):
+		spawner._physics_process(1.0 / 60.0)
+	_expect(not spawner.is_roused(home), "the garrison has not been provoked")
+	_expect(
+		spawner.standing().size() == before and carrier.brood.is_empty(),
+		"a sleeping carrier launches nothing (%d, was %d)" % [
+			spawner.standing().size(), before,
+		],
+	)
+
+	# Woken, they come out one at a time and the stream stops at the
+	# brood: it is a standing force, not a tap.
+	ship.global_position = carrier.anchor + Vector2(float(carrier.held["territory"]) * 0.4, 0.0)
+	spawner.rouse(home)
+	for step: int in range(int(cadence * float(most + 3) * 60.0)):
+		spawner._physics_process(1.0 / 60.0)
+	_expect(
+		carrier.brood.size() == most,
+		"a woken one fills its complement and stops there (%d of %d)" % [
+			carrier.brood.size(), most,
+		],
+	)
+	for child: Foe in carrier.brood:
+		_expect(
+			not child.is_major() and child.was_launched(),
+			"everything it puts out is a launched minor",
+		)
+		_expect(
+			child.global_position.distance_to(child.anchor) <= float(child.held["territory"]) + 1.0,
+			"and holds the same line the rest of the garrison holds",
+		)
+
+	# What comes out is worth nothing on its own. A carrier would be a
+	# loot printer otherwise: stand off at the edge of its reach, shoot
+	# what it sends, and the tier's rarity table pays out for ever.
+	var drops: Array[Resource] = []
+	spawner.dropped.connect(func(item: Resource, _rarity: int, _at: Vector2) -> void:
+		drops.append(item)
+	)
+	var doomed: Foe = carrier.brood[0]
+	Damage.deal(doomed, 99.0, "projectile")
+	_expect(drops.is_empty(), "a launched fighter leaves nothing behind (%d)" % drops.size())
+	_expect(
+		not Garrison.beaten(sky.deltas, int(doomed.member["seed"])),
+		"and is not written down as beaten, because it is a minor",
+	)
+
+	# Clear one and another arrives, which is what makes the carrier the
+	# thing to shoot rather than the thing to outlast.
+	for step: int in range(int(cadence * 2.0 * 60.0)):
+		spawner._physics_process(1.0 / 60.0)
+	_expect(
+		carrier.brood.size() == most,
+		"a gap in the brood is filled (%d of %d)" % [carrier.brood.size(), most],
+	)
+
+	# And the whole point: shoot the carrier and the stream ends. Not
+	# "slows" -- ends, because the bookkeeping was on the carrier.
+	var standing_then: int = spawner.standing().size()
+	Damage.deal(carrier, 99.0, "projectile")
+	_expect(
+		Garrison.beaten(sky.deltas, int(carrier.member["seed"])),
+		"the carrier is a major, so beating it is written down",
+	)
+	for step: int in range(int(cadence * 6.0 * 60.0)):
+		spawner._physics_process(1.0 / 60.0)
+	_expect(
+		spawner.standing().size() <= standing_then - 1,
+		"a downed carrier ends the stream (%d, was %d)" % [
+			spawner.standing().size(), standing_then,
+		],
+	)
+
+	spawner.queue_free()
+	field.queue_free()
+	ship.queue_free()
+	sky.queue_free()
 
 
 ## Co budzi garnizon, i co robi obudzony.

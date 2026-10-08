@@ -138,6 +138,16 @@ const HOME_WITHIN: float = 40.0
 ## at one pixel out means it arrives doing 260 px/s and leaves again.
 const ARRIVE_BAND: float = 140.0
 
+## What a launched fighter is worth as a share of what its carrier
+## rolled, and how its seed is numbered off the carrier's.
+##
+## The index is deliberately far from anything the roster uses: a
+## carrier's own members are numbered from nought, so a brood sharing
+## an index with a member would share its `deltas` key -- and the first
+## thing to break would be a launched fighter's death writing off an
+## elite that is still alive.
+const BROOD_SEED_INDEX: int = 7000
+
 ## The line, for a group that holds no body.
 ##
 ## `Garrison.adrift` gives its members no territory, because what they
@@ -224,6 +234,15 @@ var _damage: float = 0.02
 var _top_speed: float = TOP_SPEED_FIGHTER
 var _stand_off: float = STAND_OFF_PATROL
 
+## What this carrier has in the air, and how long until the next one.
+##
+## On the carrier rather than in the spawner because it is a fact about
+## this carrier: shoot it and the bookkeeping goes with it, which is
+## the whole of the rule that a downed carrier ends the stream.
+var brood: Array[Foe] = []
+var _launch_in: float = 0.0
+var _launched: int = 0
+
 ## Which way round the pilot this one takes station, as an angle.
 ##
 ## From its own seed, so a dozen defenders converging on one ship form
@@ -294,6 +313,10 @@ func arm(entry: Dictionary, garrison: Dictionary = {}) -> void:
 		_:
 			_stand_off = STAND_OFF_PATROL
 	territory = float(garrison.get("territory", 0.0))
+	# The first one does not arrive the instant the fight starts: a
+	# carrier that launches on the same frame it wakes reads as a
+	# carrier that was holding one in the tube for you.
+	_launch_in = float(entry.get("cadence", 0.0))
 	queue_redraw()
 
 
@@ -362,6 +385,82 @@ func tick(delta: float, target: Node2D, container: Node) -> void:
 		return
 	_cooldown = _interval()
 	fire_at(lead_on(target), container)
+
+
+## Whether it is time to put another one out, and the entry to build it
+## from. Empty means not yet, or not ever.
+##
+## The carrier counts what it has in the air rather than what it has
+## launched, so the stream is a standing force and not a tap: clear its
+## brood and another arrives, leave them alive and none does. That is
+## what makes a carrier a thing to shoot rather than a thing to outlast.
+##
+## **Nothing arrives from nowhere.** The clause the design puts on "a
+## minor comes back when you come back" is that every enemy appearing
+## during a stay comes out of something standing there that can be
+## shot -- so this is only ever asked of a live carrier, and a dead one
+## cannot answer.
+func wants_to_launch(delta: float) -> Dictionary:
+	if hull <= 0.0 or not awake:
+		return {}
+	if int(member.get("archetype", Garrison.Archetype.PATROL)) != Garrison.Archetype.CARRIER:
+		return {}
+	var most: int = int(member.get("brood", 0))
+	if most <= 0:
+		return {}
+	var live: int = 0
+	var kept: Array[Foe] = []
+	for child: Foe in brood:
+		if is_instance_valid(child) and child.hull > 0.0:
+			kept.append(child)
+			live += 1
+	brood = kept
+	if live >= most:
+		# Full complement, so the clock does not run: a carrier that
+		# banked cadence while its brood was alive would empty the whole
+		# stream into the first gap.
+		_launch_in = float(member.get("cadence", 0.0))
+		return {}
+	_launch_in -= delta
+	if _launch_in > 0.0:
+		return {}
+	_launch_in = float(member.get("cadence", 0.0))
+	return brood_entry()
+
+
+## The roster entry a launched fighter is armed with.
+##
+## A minor, which settles what happens to it: it is not written to
+## `deltas` when it dies, and the carrier simply launches another. An
+## aggressor, because a carrier that puts out patrols is a carrier
+## whose stream can be ignored.
+##
+## **It leaves nothing behind**, and that is the one place a launched
+## fighter differs from a fighter that was rolled with the body. A
+## carrier is a loot printer otherwise: stand off at the edge of its
+## reach, shoot what comes out, and the tier's rarity table pays out
+## for ever. What the stream is worth is the carrier's own drop.
+func brood_entry() -> Dictionary:
+	_launched += 1
+	return {
+		"seed": Garrison.seed_of(
+			StarSystem.derive(int(member.get("seed", 0)), BROOD_SEED_INDEX), _launched
+		),
+		"rank": Garrison.Rank.MINOR,
+		"archetype": Garrison.Archetype.AGGRESSOR,
+		"strength": float(member.get("brood_strength", float(member.get("strength", 1.0)) * 0.75)),
+		"post": Garrison.Post.SHELL,
+		"bearing": fmod(float(member.get("bearing", 0.0)) + float(_launched) * 1.1, TAU),
+		"tier": int(member.get("tier", 1)),
+		"rarity_floor": 0,
+		"launched": true,
+	}
+
+
+## Whether this one came out of a carrier. Read by the spawner, which
+## owes a drop to everything else.
+func was_launched() -> bool:
+	return bool(member.get("launched", false))
 
 
 ## Whether this one is bolted down. A turret is the thing that does not

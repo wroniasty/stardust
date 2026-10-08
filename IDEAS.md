@@ -3831,6 +3831,32 @@ Decyzję o tym, gdzie wraca statek, podejmuje świat, nie statek: statek jedynie
 melduje, że skończył mu się kadłub. Respawn jest na orbicie kołowej na 2.0 R,
 nad miejscem katastrofy, żeby pilot nie stracił orientacji.
 
+**Co śmierć kosztuje: ładownię, i nic poza tym** (`Ship.spill`, M5.1).
+
+Zostaje kadłub i wszystko, co w nim przykręcone, bo odrabianie loadoutu po
+każdej śmierci to kara, której piaskownica stojąca na „explore fast, die
+often" nie udwignie: pilot, który traci działa, traci też następną godzinę, a
+godzina jest grą. Zostają też zbiorniki, ładunki skoku i energia, i to z
+twardszego powodu — śmierć, która opróżnia zbiorniki, może zostawić pilota w
+systemie bez wyjścia, a to nie konsekwencja, tylko ślepa uliczka.
+
+Idzie ładownia, i to wystarcza, bo to jest wszystko, po co był ten lot.
+Przedmioty rozsypują się na wraku jako skrzynki, z 2,5 s karencji — bez niej
+nowy statek wstaje we własnym rozsypanym ładunku i zbiera go z powrotem, czyli
+umieranie jest darmowe. Strata jest więc odwracalna dla kogoś na tyle
+odważnego, żeby wrócić przez to, co go zabiło.
+
+Liczone zapasy przepadają bez skrzynek, i to jest decyzja, nie przeoczenie:
+skrzynka trzyma rzecz, a część zamienna jest ilością, więc sto czterdzieści
+sztuk to sto czterdzieści skrzynek albo typ skrzynki, którego nie ma.
+Rafineria jest sposobem na ich odtworzenie.
+
+`Galaxy.deltas` nie jest niczym ruszane w ścieżce śmierci: kratery zostają
+wykopane, systemy widziane, pokonany major pokonany. To jedyny nieodwracalny
+postęp, jaki pilot ma poza sprzętem, i śmierć, która by go oddawała,
+czyniłaby każdą walkę warunkową — wlecieć, pokonać elite, zginąć po drodze
+i znaleźć go znowu stojącego.
+
 **Pociski uzbrajają się po 0.2 s.** Lufa siedzi wewnątrz promienia kontaktowego
 własnego kadłuba, więc bez chwili zwłoki każdy strzał zabijałby strzelca. To nie
 jest jednak trwałe zwolnienie — pocisk, który okrąży planetę i wróci, trafia
@@ -4000,9 +4026,73 @@ kiedyś ranić siebie nawzajem, to pytanie na dzień, w którym coś będzie umi
 zwrócić ich przeciwko sobie — odpowiadanie na nie teraz byłoby wymyślaniem
 systemu frakcji dla nikogo.
 
+### Jak obrońcy latają, i czego nie robi żaden z nich
+
+**Nikt nie goni.** To nie jest preferencja, którą steering wyraża, a pęd
+przegłosowuje — to linia, do której klamrowany jest **i** cel, **i** pozycja,
+co każdy tick. Obrońca, który wyszedłby za pilotem, zamieniałby każdy kontakt
+w zobowiązanie, a gra, w której kontakt jest zobowiązaniem, jest grą w unikanie
+kontaktu. Linia czyni z tego samego wroga decyzję: obejdę albo wejdę.
+
+Druga klamra, na pozycji, jest za pęd. Obrońca rozpędzony do celu leżącego na
+linii dolatuje tam z pełną prędkością i przelatuje przez nią; na linii
+zabierana jest składowa promieniowa prędkości, a styczna zostaje. Czyta się to
+jako skręt po własnym perymetrze, nie jak uderzenie w niewidzialną szybę.
+Zmierzone: 20 s ze statkiem zaparkowanym cztery terytoria na zewnątrz, najdalej
+4547 z 4807 px, i 8 z 12 obrońców rzeczywiście leciało — bez tej drugiej
+liczby asercja o linii przechodziłaby na szeregu posągów.
+
+**Archetypy różnią się jedną rzeczą**: gdzie wewnątrz linii chcą być, jako
+udziałem własnego zasięgu. Agresor 0,45 (przychodzi się spotkać), patrol 0,75
+(każe przyjść do siebie), uciekinier 0,95 (siedzi na skraju i odpada, gdy
+zostanie poobijany — poniżej 0,35 kadłuba), lotniskowiec 0,85, turret się nie
+rusza. To wystarcza, żeby czytały się inaczej z kokpitu, i nie wymaga drzewa
+zachowań.
+
+Prędkości: myśliwiec 260 px/s, elite 320, lotniskowiec 90, przyspieszenie 180
+px/s². Wolniej niż statek, i powód nie jest balansowy — wyjściem pilota jest
+**opuszczenie terytorium**, nie wyścig. Seryjny dart robi ok. 58 px/s na
+sekundę ciągu i trzy razy tyle na dopalaniu, więc mija każdego z nich po kilku
+sekundach otwartej przepustnicy — za to skręcają ciasniej niż on, co czyni ich
+dokuczliwymi z bliska i nieistotnymi z daleka.
+
+Każdy bierze **własny namiar wokół pilota z własnego seeda**, więc dwunastka
+zbiegająca się na jeden statek tworzy łuk, a nie stos. Taniej niż separation
+steering i deterministycznie, co tu jest warunkiem testowalności: tłum, który
+układa się inaczej przy drugiej wizycie, to tłum, którego nie da się sprawdzić.
+
+Walka chodzi w `_physics_process`, bo `move_and_slide` skaluje się deltą fizyki
+niezależnie od tego, jaką deltę mu się poda — gdziekolwiek indziej prędkość
+obrońcy zależałaby od liczby klatek.
+
+**Pasywny garnizon da się zostawić w spokoju**, po 25 s poza terytorium.
+Pierwsza wersja twierdziła, że nikt nigdy nie zasypia, i podawała powód: timer
+pozwoliłby sprowokować świat, odlecieć na chwilę i wejść na garnizon, który
+zdążył uwierzyć. Dla tego timera powód nie działa, bo zegar chodzi **tylko
+poza terytorium** — a tam i tak nikt nie dosięga pilota, skoro każdy zasięg
+jest głęboko wewnątrz własnej linii. Trafienie zeruje zegar. Bez tego
+„pasywny" znaczy „agresywny od pierwszego błędu", a to nie jest postawa.
+
+### Lotniskowiec: nic nie bierze się znikąd
+
+Lotniskowiec liczy to, co ma **w powietrzu**, nie to, co wypuścił. Dzięki temu
+strumień jest stałą siłą, a nie kranem: wyczyść brood i przyjdzie następny,
+zostaw żywych i nie przyjdzie nikt. Księgowanie siedzi na lotniskowcu, i to
+jest cała implementacja reguły „zestrzelony kończy strumień" — zestrzelony
+zabiera ją ze sobą. Pełny komplet nie bankuje kadencji, bo inaczej pierwsza
+luka dostawałaby cały zaległy strumień naraz.
+
+**Wypuszczony myśliwiec nic nie zostawia.** Inaczej lotniskowiec jest drukarnią
+lootu: stań na skraju jego zasięgu, strzelaj do tego, co wychodzi, i tabela
+rzadkości tieru płaci bez końca. Wartością strumienia jest własny drop
+lotniskowca.
+
+Seed brooda idzie przez indeks 7000, daleko od numeracji członków rosteru:
+wspólny klucz w `deltas` oznaczałby, że śmierć wypuszczonego myśliwca spisuje
+na straty żywego elite.
+
 ### Reszta, jeszcze nieruszona
 
-- Wrogowie sterowani steering behaviours (seek, pursue, orbit, flee) plus maszyna stanów. Drzewa zachowań (LimboAI) jeśli zajdzie potrzeba.
 - Na planetach: zasoby do zbierania, loot, budynki, lądowiska, spawnery wrogów.
 - Stacje: handel, naprawa, tankowanie, misje.
 - Eventy w deep space i przy misjumpach: wraki, zasadzki, anomalie.
