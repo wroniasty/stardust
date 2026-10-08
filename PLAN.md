@@ -832,10 +832,18 @@ Cel: powód, żeby latać — i kierunek, w którym się leci.
   major ginie, trafia do `deltas` i **nie wraca**. Łup leci z `rarity_floor`
   rostera przez istniejące skrzynki. Zmierzone: obrońca pada w 7 strzałach
   seryjnego działka.
-- [ ] **Wykrywanie prowokacji.** Zbliżenie — wejście w terytorium. Lądowanie —
-  stan `LANDED` na trzymanym ciele. Strzał — trafienie w członka garnizonu.
-  Kopanie — czeka na M5.2. Reguła już jest w `provoked_by()`; to jest o tym,
-  **kto ją pyta i kiedy**.
+- [x] **Wykrywanie prowokacji i ogień.** Zbliżenie, lądowanie i strzał pytają
+  teraz `provoked_by()`; kopanie czeka na M5.2 i jest już losowane. Obudzony
+  garnizon **nie zasypia** do opuszczenia systemu — nic nie kosztuje i nic nie
+  zapisuje, bo powrót i tak odtwarza roster z seeda.
+
+  Dwie liczby wyleciały po pomiarze w biegu. **Działonowy musi wyprzedzać cel**:
+  bez tego pociski szły 143 px za statkiem, który tylko spadał — w tej grze nic
+  nie stoi, więc „gdzie jest" nigdy nie jest „gdzie będzie". I **rozrzut 4° to
+  stożek 126 px przy kadłubie 24 px**, czyli działo, które miało być niecelne,
+  nie trafiało nigdy; dwa stopnie, tyle co seryjny autocannon. Zmierzone: 400 px
+  od jednego obrońcy z obrzeża przez 14 s to 5 pocisków, 4 trafienia, kadłub
+  1,000 → 0,918. Szczegóły w IDEAS.md sekcja 12.
 - [ ] **AI: trzymać teren, nie gonić.** Steering i maszyna stanów, trzy
   archetypy, i jedna rzecz, której żaden z nich nie robi — pogoń poza
   terytorium. Obudzony pasywny garnizon musi też mieć sposób, żeby znowu

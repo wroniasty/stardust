@@ -21,11 +21,11 @@ extends CharacterBody2D
 ## `body_entered`. It costs nothing while nothing moves it, and the AI
 ## that will move it is a later item.
 ##
-## What it does **not** have, on purpose and for now: any behaviour at
-## all. It stands, it can be shot, it dies. That is enough to close the
-## loop the garrison model has been waiting on -- beat a major, leave,
-## come back, and find it still gone -- and behaviour is a thing to add
-## to something that already works rather than a second unknown.
+## It stands, it shoots what comes into its territory, and it dies.
+## What it still does **not** do is move: the design says a garrison
+## holds ground rather than hunts, which makes shooting the whole of
+## the first fight -- a turret that shoots is finished, and a fighter
+## at its post is most of the way there.
 
 ## Hull a defender gets per point of strength, on the same 0..1 scale
 ## the ship's integrity uses.
@@ -48,6 +48,54 @@ const SIZE_TURRET: float = 9.0
 const SIZE_ELITE: float = 12.0
 const SIZE_CARRIER: float = 16.0
 
+## How far a defender can shoot, by what it is.
+##
+## A turret reaches as far as the player's own autocannon; a fighter
+## less, because it is supposed to be got past. Both are well inside
+## the territory they stand in -- six thousand pixels typical -- so
+## crossing the line is a warning rather than an ambush: you see them
+## light up with room to turn round.
+const REACH_FIGHTER: float = 1800.0
+const REACH_TURRET: float = 2400.0
+
+## Shots a second, and what one does to a hull.
+##
+## Slow and light on purpose. The crowd is meant to be the pressure:
+## a rim fighter is 0.011 of a hull a second and six of them, if the
+## pilot sits still inside everything's reach, take a quarter of a
+## minute. A core fighter is three times that, and the four or five of
+## them a pilot can be in range of at once are about seven seconds of
+## standing still -- which is a fight you can fly out of rather than
+## one you lose by entering.
+const ROUNDS_PER_SECOND: float = 0.8
+const DAMAGE_PER_STRENGTH: float = 0.04
+
+## And how a round leaves. The same muzzle speed and the same spread as
+## the stock autocannon, so a pilot can read a defender's fire against
+## something they already know.
+##
+## Twice the spread was the first answer -- a bolted-down gun with no
+## gunner is not an ace -- and the measurement threw it out: four
+## degrees is a cone 126 px wide at the far end of a defender's reach,
+## against a hull 24 px across, so the gun that was meant to be
+## inaccurate was simply a gun that never hits. At two degrees a
+## defender lands about one round in two at close range, which is what
+## "not an ace" should have meant.
+const MUZZLE_SPEED: float = 600.0
+const SPREAD: float = 0.0349
+
+## The physics layer defenders stand on.
+##
+## Their own, so a garrison does not shoot itself to pieces while
+## shooting at the pilot: a defender's round looks for layer one and
+## finds only the ship, while the pilot's rounds look for both. Whether
+## defenders can ever hurt each other is a question for the day
+## something can turn them on one another, and answering it now would
+## be inventing a faction system for nobody.
+const LAYER: int = 4
+
+const ROUND_SCENE: String = "res://scenes/projectile.tscn"
+
 ## Hull colours. Their own, not the interface palette: this is a thing
 ## in the world, and UI_STYLE's twelve roles are about the panel over
 ## it. Rank is the channel -- a major is the one you remember, so it is
@@ -57,6 +105,15 @@ const INK_MAJOR: Color = Color(0.96, 0.55, 0.30)
 const INK_TURRET: Color = Color(0.55, 0.47, 0.52)
 
 signal died(foe: Foe)
+
+## Shot at. The garrison it belongs to wants to know, whatever its
+## posture: being shot is the one provocation nobody rolls for.
+signal hurt(foe: Foe)
+
+## Whether this one is in the fight. Set by the spawner, which owns the
+## question of what woke the garrison; a foe only has to know the
+## answer.
+var awake: bool = false
 
 ## What the roster said this one is. Kept whole rather than unpacked
 ## into fields: the spawner needs it back to write the kill down, and
@@ -73,13 +130,18 @@ var hull_full: float = 1.0
 var _size: float = SIZE_FIGHTER
 var _ink: Color = INK_MINOR
 var _shape: CollisionShape2D = null
+var _reach: float = REACH_FIGHTER
+var _damage: float = 0.02
+
+## Seconds until this one can fire again. Started at a fraction of the
+## interval drawn from the member's own seed, so a garrison opens up
+## as a scatter rather than as one volley -- six rounds arriving on the
+## same frame is a wall, and the same six staggered is a fight.
+var _cooldown: float = 0.0
 
 
 func _ready() -> void:
-	# Layer one, the same one the player's hull is on, because that is
-	# what the round's mask looks for. A second layer would be a second
-	# thing to keep in step with every weapon in the game.
-	collision_layer = 1
+	collision_layer = LAYER
 	collision_mask = 1
 	if _shape == null:
 		_shape = CollisionShape2D.new()
@@ -111,7 +173,25 @@ func arm(entry: Dictionary, garrison: Dictionary = {}) -> void:
 			_ink = INK_MAJOR if major else INK_MINOR
 	if _shape != null and _shape.shape is CircleShape2D:
 		(_shape.shape as CircleShape2D).radius = _size
+	_reach = (
+		REACH_TURRET if archetype == Garrison.Archetype.TURRET
+		else REACH_FIGHTER * (1.2 if major else 1.0)
+	)
+	_damage = float(entry.get("strength", 1.0)) * DAMAGE_PER_STRENGTH
+	_cooldown = _interval() * (
+		float(absi(int(entry.get("seed", 0))) % 1000) / 1000.0
+	)
 	queue_redraw()
+
+
+func _interval() -> float:
+	return 1.0 / maxf(ROUNDS_PER_SECOND, 0.01)
+
+
+## How far this one can shoot. Public because the spawner decides who
+## is worth firing at and the answer has to be the same number.
+func reach() -> float:
+	return _reach
 
 
 ## Whether this one never comes back once it is gone.
@@ -125,9 +205,80 @@ func take_damage(amount: float, _cause: String = "") -> void:
 	if amount <= 0.0 or hull <= 0.0:
 		return
 	hull = maxf(hull - amount, 0.0)
+	hurt.emit(self)
 	queue_redraw()
 	if hull <= 0.0:
 		died.emit(self)
+
+
+## One tick of standing watch. Does nothing at all while the garrison
+## is asleep, which is what makes a passive world cost nothing to fly
+## past.
+##
+## **It leads the target**, and the first version did not. The reason
+## given then was that a pilot who keeps moving should be hard to hit
+## and that leading belongs to a gunner. Both true, and together they
+## produced a garrison that could not hit anything: measured in the
+## running game, rounds passing 143 px behind a ship that was doing
+## nothing but falling. In this game nothing is ever still -- the ship
+## falls, the crates fall, the rounds themselves fall -- so "where it
+## is" is never where it will be, and a gunner who cannot hit a falling
+## object cannot hit anything near a planet.
+##
+## First order, which is the honest amount: the round flies straight at
+## a constant speed, so the time to arrive is the distance over that
+## speed, and the lead is what the target does in that time. A pilot's
+## defence is **changing** velocity rather than merely having one,
+## which is a better lesson than the one the miss was teaching.
+func tick(delta: float, target: Node2D, container: Node) -> void:
+	if not awake or hull <= 0.0 or target == null or not is_instance_valid(target):
+		return
+	var out: Vector2 = target.global_position - global_position
+	if out.length() > _reach:
+		return
+	rotation = out.angle() + PI * 0.5
+	_cooldown -= delta
+	if _cooldown > 0.0:
+		return
+	_cooldown = _interval()
+	fire_at(lead_on(target), container)
+
+
+## Where to aim to hit something that is going somewhere.
+##
+## Duck-typed on `linear_velocity`, like the damage path: a gunner has
+## no business knowing whether it is shooting at a hull, a drone or
+## whatever is shootable next.
+func lead_on(target: Node2D) -> Vector2:
+	var at: Vector2 = target.global_position
+	if not ("linear_velocity" in target):
+		return at
+	var travel: Vector2 = target.get("linear_velocity")
+	var flight: float = at.distance_to(global_position) / maxf(MUZZLE_SPEED, 1.0)
+	return at + travel * flight
+
+
+## Puts one round down the line. Public so a test can make it shoot
+## without waiting for a cadence.
+func fire_at(at: Vector2, container: Node) -> Node2D:
+	if container == null or not is_instance_valid(container):
+		return null
+	var scene: PackedScene = load(ROUND_SCENE) as PackedScene
+	if scene == null:
+		return null
+	var shot: Projectile = scene.instantiate() as Projectile
+	if shot == null:
+		return null
+	var aim: float = (at - global_position).angle() + randf_range(-SPREAD, SPREAD)
+	shot.shooter = self
+	shot.damage = _damage
+	# Layer one only: the pilot's hull and nothing else. See `LAYER`.
+	shot.collision_mask = 1
+	shot.global_position = global_position
+	shot.velocity = Vector2.RIGHT.rotated(aim) * MUZZLE_SPEED
+	shot.rotation = shot.velocity.angle() + PI * 0.5
+	container.add_child(shot)
+	return shot
 
 
 func _draw() -> void:
@@ -171,3 +322,8 @@ func _draw() -> void:
 	)
 	if is_major():
 		draw_arc(Vector2.ZERO, _size * 1.35, 0.0, TAU, 20, ink, 1.0)
+	if awake:
+		# One ring, drawn only while it is in the fight. A defender that
+		# looked the same awake and asleep would make "passive" a thing
+		# the pilot can only learn by being shot.
+		draw_arc(Vector2.ZERO, _size * 1.9, 0.0, TAU, 24, Color(ink, 0.55), 1.0)

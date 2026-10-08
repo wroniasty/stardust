@@ -39,9 +39,30 @@ const ORBIT_BAND: float = 0.25
 const SHELL_FROM: float = 0.45
 const SHELL_TO: float = 0.95
 
+## How close to a held body counts as landing on it, as a multiple of
+## its own radius. Generous: a pilot setting down anywhere on a world
+## is landing on that world, and arguing about which hemisphere would
+## be arguing with somebody who is already on the ground.
+const LANDED_WITHIN: float = 1.6
+
 var _tier: int = 1
 var _galaxy: Node = null
 var _manager: Node = null
+
+## Who the defenders are watching for, and who they shoot at. The
+## player's ship in the game; whatever a test hands over otherwise.
+var _target: Node2D = null
+
+## Bodies whose garrison is in the fight.
+##
+## **Nothing wakes up and goes back to sleep.** Once roused, a garrison
+## stays roused until the pilot leaves the system -- which costs
+## nothing to implement and nothing to store, because leaving and
+## coming back regenerates the roster from the seed anyway. The
+## alternative is a forgetting timer, and a timer would mean a pilot
+## could provoke a world, back off for twenty seconds and walk in on a
+## garrison that had decided to believe them.
+var _roused: Dictionary = {}
 
 ## Where the foes go. Not under the body: bodies are taken down and
 ## rebuilt by the manager, and a defender parented to one would be
@@ -63,6 +84,10 @@ func bind(tier: int, galaxy: Node, manager: Node, field: Node2D) -> void:
 	_tier = tier
 	_galaxy = galaxy
 	_field = field
+	# A new system is a new set of grudges. This is the only place the
+	# roused list is cleared, which is also the whole of the rule about
+	# it: leaving is what calms a garrison, and nothing else does.
+	_roused.clear()
 	if _manager == manager:
 		return
 	if _manager != null and is_instance_valid(_manager):
@@ -97,6 +122,17 @@ func catch_up() -> void:
 		stand_up(body, _manager.node_for(body))
 
 
+## Who the defenders are watching for. Handed in rather than looked up
+## by group or by path, like everything else here.
+func watch(target: Node2D) -> void:
+	_target = target
+
+
+## Whether this body's garrison is in the fight.
+func is_roused(body: SystemBody) -> bool:
+	return bool(_roused.get(body, false))
+
+
 ## Everything standing right now, for a test and for the HUD that will
 ## eventually want to mark them.
 func standing() -> Array[Foe]:
@@ -106,6 +142,87 @@ func standing() -> Array[Foe]:
 			if is_instance_valid(foe):
 				out.append(foe)
 	return out
+
+
+func _process(delta: float) -> void:
+	if _target == null or not is_instance_valid(_target):
+		return
+	for body: Variant in _standing:
+		_watch_over(body as SystemBody, delta)
+
+
+## One body's garrison, one tick: see whether anything has woken it,
+## and let whoever is awake shoot.
+func _watch_over(body: SystemBody, delta: float) -> void:
+	var raised: Array = _standing[body]
+	if raised.is_empty():
+		return
+	var held: Dictionary = (raised[0] as Foe).held
+	if not is_roused(body):
+		var reason: int = _provocation(body, held)
+		if reason != 0 and Garrison.provoked_by(held, reason as Garrison.Provocation):
+			rouse(body)
+	for foe: Variant in raised:
+		if is_instance_valid(foe):
+			(foe as Foe).tick(delta, _target, _field)
+
+
+## What the pilot has just done, as the garrison would read it.
+##
+## One provocation at a time and the nearest reason wins, because the
+## answer is only ever used to ask `provoked_by()`: a world that minds
+## being landed on and not being approached has to be able to say so,
+## and a pilot who lands on it has certainly also approached it.
+func _provocation(body: SystemBody, held: Dictionary) -> int:
+	var at: Vector2 = _body_at(body)
+	var away: float = _target.global_position.distance_to(at)
+	var ship: Ship = _target as Ship
+	if (
+		ship != null
+		and ship.flight_mode == Ship.FlightMode.LANDED
+		and away < body.radius * LANDED_WITHIN
+	):
+		return Garrison.Provocation.LANDED
+	if away <= float(held.get("territory", 0.0)):
+		return Garrison.Provocation.APPROACHED
+	return 0
+
+
+## Wakes a garrison, and says so on every defender in it.
+##
+## Public because being shot at is a provocation nobody rolls for and
+## it arrives through a signal rather than through the tick.
+func rouse(body: SystemBody) -> void:
+	if not _standing.has(body) or is_roused(body):
+		return
+	_roused[body] = true
+	for foe: Variant in _standing[body]:
+		if is_instance_valid(foe):
+			(foe as Foe).awake = true
+			(foe as Foe).queue_redraw()
+
+
+## Where a body is, which is where its garrison is standing round.
+##
+## Off the live node when there is one, because a planet turns and a
+## station orbits; off the first defender's own station otherwise,
+## which is what a test without a built world sees.
+func _body_at(body: SystemBody) -> Vector2:
+	if _manager != null and is_instance_valid(_manager):
+		var node: Node2D = _manager.node_for(body)
+		if node != null:
+			return node.global_position
+	return _centre_of(body)
+
+
+func _centre_of(body: SystemBody) -> Vector2:
+	if not _standing.has(body) or (_standing[body] as Array).is_empty():
+		return Vector2.ZERO
+	var first: Foe = _standing[body][0]
+	var post: Vector2 = GarrisonSpawner.station_for(
+		first.held, first.member, Vector2.ZERO, body.radius
+	)
+	return first.global_position - post
 
 
 func _on_body_awake(body: SystemBody, node: Node2D) -> void:
@@ -139,6 +256,11 @@ func stand_up(body: SystemBody, node: Node2D) -> int:
 		# worth shooting at is going to come from.
 		foe.rotation = (foe.global_position - at).angle() + PI * 0.5
 		foe.died.connect(_on_foe_died.bind(body))
+		# Being shot wakes a garrison whatever it rolled, which is the
+		# one provocation that is not a roll: a defender that let itself
+		# be taken apart out of politeness is not a defender.
+		foe.hurt.connect(_on_foe_hurt.bind(body))
+		foe.awake = is_roused(body)
 		raised.append(foe)
 	_standing[body] = raised
 	return raised.size()
@@ -149,6 +271,10 @@ func stand_up(body: SystemBody, node: Node2D) -> int:
 func stand_down(body: SystemBody) -> void:
 	if not _standing.has(body):
 		return
+	# The grudge goes with them. A garrison rebuilt from the seed is a
+	# garrison that has not met anybody yet, which is the same rule the
+	# minors come back under.
+	_roused.erase(body)
 	for foe: Variant in _standing[body]:
 		if not is_instance_valid(foe):
 			continue
@@ -205,6 +331,10 @@ func _surface_under(planet: Planet, body: SystemBody, member: Dictionary) -> flo
 
 ## A defender is gone. A major is gone for good and that is the one
 ## thing here worth writing down.
+func _on_foe_hurt(_foe: Foe, body: SystemBody) -> void:
+	rouse(body)
+
+
 func _on_foe_died(foe: Foe, body: SystemBody) -> void:
 	if not is_instance_valid(foe):
 		return

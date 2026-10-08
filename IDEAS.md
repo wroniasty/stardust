@@ -3940,6 +3940,51 @@ i wraca na patrol, to elita, której gracz nigdy nie spotkał. Jest warta 2,5
 minora swojego tiera — „przyprowadź kogoś albo miej plan”, a nie „wróć
 później” — i ma podłogę rzadkości łupu, bo to jest powód, żeby go nie ominąć.
 
+### Prowokacja i ogień: co budzi garnizon i czym strzela
+
+Reguła `provoked_by()` powstała razem z modelem i przez jeden commit **nikt jej
+nie pytał** — terytorium było liczbą w słowniku. To jest ta połowa, która daje
+jej pytającego, i ta, przez którą przekroczenie granicy cokolwiek znaczy.
+
+Ponieważ garnizon **trzyma teren zamiast gonić**, strzelanie jest całą pierwszą
+walką: działko, które strzela, jest skończone, a myśliwiec na posterunku w
+większości. Ruch, który zwykle jest fundamentem AI, zrobił się tu mniejszą sprawą
+niż zwykle.
+
+**Jak obudzony garnizon zasypia: nie zasypia.** Raz poruszony zostaje poruszony
+do opuszczenia systemu. Nie kosztuje nic do zrobienia i nic do zapisania, bo
+wyjście i powrót i tak odtwarza roster z seeda — „ta wizyta" jest naturalną
+granicą. Alternatywą był timer zapominania, a timer znaczy, że pilot prowokuje
+świat, odlatuje na dwadzieścia sekund i wraca do garnizonu, który postanowił mu
+uwierzyć.
+
+**Działonowy musi wyprzedzać cel, i pierwsza wersja tego nie robiła.** Uzasadnienie
+brzmiało: pilot, który się rusza, ma być trudny do trafienia, a wyprzedzanie należy
+do AI. Oba zdania prawdziwe, a razem dały garnizon, który nie trafia w nic —
+zmierzone w biegu: pociski przechodzące **143 px za statkiem, który nic nie robił,
+tylko spadał**. W tej grze nic nigdy nie stoi: spada statek, spadają skrzynki,
+spadają same pociski. Wyprzedzenie pierwszego rzędu, czyli odległość przez
+prędkość wylotową razy prędkość celu. Obroną pilota jest **zmienianie** prędkości,
+a nie samo jej posiadanie — i to jest lepsza lekcja niż ta, której uczyło pudło.
+
+**Rozrzut 4° wyrzucony tym samym pomiarem.** Cztery stopnie to stożek szeroki na
+126 px na końcu zasięgu obrońcy, przy kadłubie szerokim na 24 — działo, które
+miało być niecelne, było po prostu działem, które nie trafia nigdy. Dwa stopnie,
+czyli tyle, co seryjny autocannon, żeby pilot czytał ogień obrońcy względem
+czegoś, co już zna.
+
+Zmierzone na końcu, zaparkowany 400 px od jednego obrońcy z obrzeża przez 14 s:
+**5 pocisków, 4 trafienia, kadłub 1,000 → 0,918.** Jeden obrońca to około 0,006
+kadłuba na sekundę; presja ma pochodzić z tego, że w zasięgu bywa ich kilku,
+nie z tego, że jeden boli.
+
+**Warstwy fizyki rozdzielone**, żeby garnizon nie rozstrzelał sam siebie przy
+okazji strzelania do pilota: obrońcy stoją na własnej warstwie, ich pociski
+szukają tylko warstwy statku, a pociski gracza szukają obu. Czy obrońcy mogą
+kiedyś ranić siebie nawzajem, to pytanie na dzień, w którym coś będzie umiało
+zwrócić ich przeciwko sobie — odpowiadanie na nie teraz byłoby wymyślaniem
+systemu frakcji dla nikogo.
+
 ### Reszta, jeszcze nieruszona
 
 - Wrogowie sterowani steering behaviours (seek, pursue, orbit, flee) plus maszyna stanów. Drzewa zachowań (LimboAI) jeśli zajdzie potrzeba.

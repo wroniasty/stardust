@@ -1215,6 +1215,7 @@ func _evaluate_phase() -> void:
 			_check_galaxy_chart()
 			_check_garrison()
 			_check_spawner()
+			_check_provocation()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -12226,6 +12227,191 @@ func _check_tiered_loot() -> void:
 		"and the rung runs 0 to 1 across the ladder",
 	)
 	loot.queue_free()
+
+
+## Co budzi garnizon, i co robi obudzony.
+##
+## The rule was written when the garrison model landed and nobody asked
+## it anything: `provoked_by()` sat unused while a territory was a
+## number in a dictionary. This is the half that gives it a questioner,
+## and the half that makes crossing a line mean something.
+func _check_provocation() -> void:
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+	var field: Node2D = Node2D.new()
+	root.add_child(field)
+	var spawner: GarrisonSpawner = GarrisonSpawner.new()
+	root.add_child(spawner)
+
+	# A passive garrison and an aggressive one, found rather than
+	# assumed: which a world is, is a roll.
+	var passive: SystemBody = null
+	var shooty: SystemBody = null
+	for index: int in range(240):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+			if held.is_empty():
+				continue
+			if passive == null and int(held["posture"]) == Garrison.Posture.PASSIVE:
+				passive = body
+			elif shooty == null and int(held["posture"]) == Garrison.Posture.AGGRESSIVE:
+				shooty = body
+		if passive != null and shooty != null:
+			break
+	_expect(
+		passive != null and shooty != null,
+		"there is a world that waits and one that does not",
+	)
+	if passive == null or shooty == null:
+		return
+
+	# A ship far outside: nothing stirs, whatever the posture. A world
+	# that woke up at any distance would make "territory" a word.
+	var ship: Ship = _spawn_ship()
+	spawner.watch(ship)
+	spawner.bind(GalaxyMap.TIERS, sky, null, field)
+	spawner.stand_up(shooty, null)
+	var held_shooty: Dictionary = Garrison.at(shooty, GalaxyMap.TIERS, sky.deltas)
+	ship.global_position = Vector2(float(held_shooty["territory"]) * 3.0, 0.0)
+	spawner._process(0.1)
+	_expect(
+		not spawner.is_roused(shooty),
+		"a garrison does not notice a ship that is nowhere near it",
+	)
+
+	# Inside the territory, the aggressive one opens up and the passive
+	# one is the interesting case: it depends on what it rolled.
+	ship.global_position = Vector2(float(held_shooty["territory"]) * 0.5, 0.0)
+	spawner._process(0.1)
+	_expect(
+		spawner.is_roused(shooty),
+		"crossing an aggressive garrison's line wakes it",
+	)
+	var lit: int = 0
+	for foe: Foe in spawner.standing():
+		if foe.awake:
+			lit += 1
+	_expect(
+		lit == spawner.standing().size() and lit > 0,
+		"and every defender in it knows (%d of %d)" % [lit, spawner.standing().size()],
+	)
+
+	_check_passive_waking(spawner, passive, sky, ship, field)
+	_check_foe_fire(spawner, shooty, ship, field)
+
+	spawner.queue_free()
+	field.queue_free()
+	ship.queue_free()
+	sky.queue_free()
+
+
+## Pasywny: budzi się na to, co wylosował, i zawsze na strzał.
+func _check_passive_waking(
+	spawner: GarrisonSpawner, body: SystemBody, sky: Node, ship: Ship, _field: Node2D
+) -> void:
+	var held: Dictionary = Garrison.at(body, GalaxyMap.TIERS, sky.deltas)
+	spawner.stand_down(body)
+	spawner.stand_up(body, null)
+	ship.global_position = Vector2(float(held["territory"]) * 0.5, 0.0)
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	spawner._process(0.1)
+	_expect(
+		spawner.is_roused(body)
+		== Garrison.provoked_by(held, Garrison.Provocation.APPROACHED),
+		"a passive garrison minds being approached only if it minds (%s)" % [
+			Garrison.provoked_by(held, Garrison.Provocation.APPROACHED),
+		],
+	)
+
+	# Shot at, whatever it rolled. The one provocation that is not a
+	# roll: a defender that let itself be taken apart out of politeness
+	# is not a defender.
+	spawner.stand_down(body)
+	spawner.stand_up(body, null)
+	ship.global_position = Vector2(float(held["territory"]) * 9.0, 0.0)
+	spawner._process(0.1)
+	var target: Foe = null
+	for foe: Foe in spawner.standing():
+		if foe.held["body"] == body:
+			target = foe
+			break
+	_expect(target != null, "there is somebody to shoot at out there")
+	if target == null:
+		return
+	_expect(not spawner.is_roused(body), "nobody has touched it yet")
+	Damage.deal(target, 0.001, "projectile")
+	_expect(
+		spawner.is_roused(body),
+		"but shooting one wakes the lot, whatever the world rolled",
+	)
+
+
+## Obudzony strzela, śpiący nie, i obaj celują przed cel.
+func _check_foe_fire(
+	spawner: GarrisonSpawner, body: SystemBody, ship: Ship, field: Node2D
+) -> void:
+	spawner.stand_down(body)
+	spawner.stand_up(body, null)
+	var foe: Foe = null
+	for standing: Foe in spawner.standing():
+		if standing.held["body"] == body and not standing.is_major():
+			foe = standing
+			break
+	_expect(foe != null, "there is a defender to fire")
+	if foe == null:
+		return
+
+	ship.global_position = foe.global_position + Vector2(300.0, 0.0)
+	ship.linear_velocity = Vector2.ZERO
+	foe.awake = false
+	var before: int = _rounds_in(field)
+	foe.tick(10.0, ship, field)
+	_expect(
+		_rounds_in(field) == before,
+		"a sleeping defender does not shoot at anything",
+	)
+	foe.awake = true
+	foe.tick(10.0, ship, field)
+	_expect(_rounds_in(field) > before, "a woken one does")
+
+	# Out of reach is out of the fight. A defender that could shoot
+	# across its whole territory would make the territory the weapon.
+	var far: int = _rounds_in(field)
+	ship.global_position = foe.global_position + Vector2(foe.reach() * 2.0, 0.0)
+	foe.tick(10.0, ship, field)
+	_expect(
+		_rounds_in(field) == far,
+		"and nobody shoots at something out of their reach",
+	)
+
+	# The lead, which the first version did without and which measured
+	# out at rounds passing 143 px behind a ship that was only falling.
+	# In this game nothing is ever still.
+	ship.global_position = foe.global_position + Vector2(600.0, 0.0)
+	ship.linear_velocity = Vector2(0.0, 300.0)
+	var aim: Vector2 = foe.lead_on(ship)
+	_expect(
+		aim.distance_to(ship.global_position) > 100.0
+		and absf(aim.x - ship.global_position.x) < 1.0,
+		"a gunner aims ahead of a moving ship, along its track (%.0f px)" % [
+			aim.distance_to(ship.global_position),
+		],
+	)
+	ship.linear_velocity = Vector2.ZERO
+	_expect(
+		foe.lead_on(ship).is_equal_approx(ship.global_position),
+		"and straight at a still one",
+	)
+
+
+func _rounds_in(field: Node) -> int:
+	var count: int = 0
+	for child: Node in field.get_children():
+		if child is Projectile:
+			count += 1
+	return count
 
 
 ## Garnizon staje w świecie, i znika razem ze swoim ciałem.

@@ -166,6 +166,7 @@ func _build_garrisons() -> void:
 	_garrisons = GarrisonSpawner.new()
 	add_child(_garrisons)
 	_garrisons.dropped.connect(_on_garrison_dropped)
+	_garrisons.watch((player as Player).ship)
 	_garrisons.bind(_tier_here(), Galaxy, StreamingManager, field)
 
 
