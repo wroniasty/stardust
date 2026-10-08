@@ -69,9 +69,32 @@ func bind(tier: int, galaxy: Node, manager: Node, field: Node2D) -> void:
 		_manager.body_awake.disconnect(_on_body_awake)
 		_manager.body_asleep.disconnect(_on_body_asleep)
 	_manager = manager
-	if _manager != null:
-		_manager.body_awake.connect(_on_body_awake)
-		_manager.body_asleep.connect(_on_body_asleep)
+	if _manager == null:
+		return
+	_manager.body_awake.connect(_on_body_awake)
+	_manager.body_asleep.connect(_on_body_asleep)
+	catch_up()
+
+
+## Stands up the garrisons of everything that is **already** awake.
+##
+## The signal only tells a listener about worlds that wake after it,
+## and the first planet of a system is always built before anything
+## else exists to hear about it -- the world opens the system and then
+## builds the screens. Without this, the one world a pilot starts next
+## to is the one world with no defenders on it, at the start of a new
+## game and again after every jump.
+##
+## Found by asking the running game rather than by reading the code:
+## the model said fifteen defenders across three held bodies and the
+## field held none.
+func catch_up() -> void:
+	if _manager == null or not is_instance_valid(_manager):
+		return
+	if not _manager.has_method("awake_bodies"):
+		return
+	for body: SystemBody in _manager.awake_bodies():
+		stand_up(body, _manager.node_for(body))
 
 
 ## Everything standing right now, for a test and for the HUD that will

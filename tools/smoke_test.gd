@@ -12279,6 +12279,26 @@ func _check_spawner() -> void:
 	if held_body == null or quiet_body == null:
 		return
 
+	# Binding to a manager that already has worlds awake has to catch up
+	# with them. Found by asking a running game rather than by reading
+	# the code: the model said fifteen defenders in the starting system
+	# and the field held none, because the world opens the system -- and
+	# builds its first planet -- before it builds the screens that
+	# listen. Every jump has the same shape.
+	manager._nodes[held_body] = field
+	var late: GarrisonSpawner = GarrisonSpawner.new()
+	root.add_child(late)
+	late.bind(GalaxyMap.TIERS, sky, manager, field)
+	_expect(
+		late.standing().size() > 0,
+		"a spawner built after a world woke stands its garrison up anyway (%d)" % [
+			late.standing().size(),
+		],
+	)
+	late.stand_down(held_body)
+	late.queue_free()
+	manager._nodes.erase(held_body)
+
 	var roster: Array = Garrison.at(held_body, GalaxyMap.TIERS, sky.deltas)["members"]
 	_expect(
 		spawner.stand_up(held_body, null) == roster.size()

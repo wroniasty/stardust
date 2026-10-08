@@ -174,6 +174,20 @@ func level_of(body: SystemBody) -> Level:
 	return _levels.get(body, Level.GONE) as Level
 
 
+## Every body that exists as a node right now.
+##
+## Public because something arriving after the fact has to be able to
+## catch up: a listener that only hears `body_awake` learns about the
+## worlds that wake **after** it, and the first planet of a system is
+## always built before anything else has had a chance to listen.
+func awake_bodies() -> Array[SystemBody]:
+	var out: Array[SystemBody] = []
+	for body: Variant in _nodes:
+		if is_instance_valid(_nodes[body]):
+			out.append(body as SystemBody)
+	return out
+
+
 func node_for(body: SystemBody) -> Node2D:
 	var node: Node2D = _nodes.get(body)
 	return node if is_instance_valid(node) else null
