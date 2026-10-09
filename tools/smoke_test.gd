@@ -1218,6 +1218,10 @@ func _evaluate_phase() -> void:
 			_check_provocation()
 			_check_carrier()
 			_check_death_costs()
+			_check_hold_is_a_decision()
+			_check_ore()
+			_check_deposits()
+			_check_corona()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -12280,6 +12284,442 @@ func _check_tiered_loot() -> void:
 		"and the rung runs 0 to 1 across the ladder",
 	)
 	loot.queue_free()
+
+
+## Stardust z korony, nie z przelotu przez gwiazdę.
+##
+## Premise point 4, and the whole of why it is a band rather than a
+## collision shape: `star.gd` records that a ship heading into a star
+## dies of heat thousands of pixels out, which is a decision and not an
+## omission. So the stream sits **outside** the radius the heat model
+## calls survivable, thickest at its inner edge -- the pilot buys a
+## faster scoop with a hull that is cooking, and the cost is a model
+## that already exists.
+func _check_corona() -> void:
+	var burn: float = 4000.0
+	_expect(
+		is_equal_approx(Corona.density_at(burn * Corona.FROM, burn), 1.0)
+		and Corona.density_at(burn * Corona.TO, burn) <= 0.0
+		and Corona.density_at(burn * 10.0, burn) <= 0.0,
+		"the wind is thickest at the burn radius and gone outside the band",
+	)
+	_expect(
+		is_equal_approx(Corona.density_at(burn * 0.1, burn), 1.0),
+		"and no thicker further in -- the reward for flying into a star is dying",
+	)
+	var mid: float = Corona.density_at(burn * (Corona.FROM + Corona.TO) * 0.5, burn)
+	_expect(
+		mid > 0.2 and mid < 0.8,
+		"it thins across the band rather than switching off (%.2f halfway)" % mid,
+	)
+	_expect(
+		Corona.units_per_second(0.0, burn, burn) == 0.0
+		and Corona.units_per_second(1.0, burn, burn) > 0.0,
+		"and none of it is anybody's without a scoop",
+	)
+
+	# Ten seconds a jump charge at the inner edge with a full scoop,
+	# which is the number the constant was chosen for.
+	var seconds: float = (
+		float(Refinery.STARDUST_PER_CHARGE) / Corona.units_per_second(1.0, burn, burn)
+	)
+	_expect(
+		seconds > 6.0 and seconds < 16.0,
+		"a full scoop is %.0f s a jump charge at the inner edge" % seconds,
+	)
+
+	_check_scoop_mod()
+
+
+## Mod, nie moduł z własną wnęką.
+##
+## The interesting modules are the ones that move a number they have no
+## business moving (IDEAS section 14), and a bay for one errand is a bay
+## nobody fits anything else in. So the scoop is an affix on tanks, and
+## it costs the tank the room to hold fuel.
+func _check_scoop_mod() -> void:
+	var ship: Ship = _spawn_ship()
+	_expect(
+		ship.dust_scoop() == 0.0,
+		"a stock ship holds none of a star's wind (%.2f)" % ship.dust_scoop(),
+	)
+
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	var found: Array[StringName] = loot.affixes_for(
+		load("res://resources/tanks/standard_tank.tres") as Resource, LOOT_SCRIPT.TANK_AFFIXES
+	)
+	_expect(
+		found.has(&"scooped"),
+		"a tank can roll the scoop (%s)" % [found],
+	)
+
+	# And a ship wearing one has a scoop, which is the claim that
+	# matters: the stat has to reach the ship through the same machinery
+	# every other cross-stat affix uses.
+	var tank: TankData = (
+		load("res://resources/tanks/standard_tank.tres") as TankData
+	).duplicate() as TankData
+	tank.stat_add = {&"dust_scoop": 1.0}
+	if ship.tank_bay != null:
+		ship.tank_bay.installed = tank
+		ship.rebuild_control_groups(false)
+		_expect(
+			ship.dust_scoop() > 0.0,
+			"and fitting one gives the ship a scoop (%.2f)" % ship.dust_scoop(),
+		)
+	loot.queue_free()
+	ship.queue_free()
+
+
+## Złoża z seeda: te same pod tym samym namiarem, i wykopane znikają.
+##
+## The same two claims every model in this project has to make -- the
+## seed reproduces it and `deltas` remembers what the pilot did to it --
+## plus the one that is specific to the ground: a buried patch is not
+## reachable until the rock over it is gone.
+func _check_deposits() -> void:
+	var sky: Node = GALAXY_SCRIPT.new()
+	root.add_child(sky)
+	sky.reset(TEST_SEED)
+
+	var rich: SystemBody = null
+	var buried: Dictionary = {}
+	var exposed: Dictionary = {}
+	for index: int in range(120):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			var patches: Array[Dictionary] = Deposits.on(body, 5, sky.deltas)
+			if patches.is_empty():
+				continue
+			for patch: Dictionary in patches:
+				if float(patch["depth"]) > 0.0 and buried.is_empty():
+					buried = patch
+					rich = body
+				elif float(patch["depth"]) <= 0.0 and exposed.is_empty():
+					exposed = patch
+		if not buried.is_empty() and not exposed.is_empty():
+			break
+	_expect(
+		not buried.is_empty() and not exposed.is_empty(),
+		"there is ore on the surface and ore under it",
+	)
+	if buried.is_empty() or rich == null:
+		sky.queue_free()
+		return
+
+	# A station has no ground, whatever its system is sitting on.
+	var dock: SystemBody = SystemBody.new()
+	dock.kind = SystemBody.Kind.STATION
+	dock.seed = rich.seed
+	_expect(
+		Deposits.on(dock, 10, sky.deltas).is_empty() and not Deposits.diggable(dock),
+		"a station has nothing to dig",
+	)
+
+	# The seed, twice, which is the claim the whole generator rests on.
+	var again: Array[Dictionary] = Deposits.on(rich, 5, sky.deltas)
+	var once: Array[Dictionary] = Deposits.on(rich, 5, sky.deltas)
+	_expect(again.size() == once.size(), "the same world rolls the same patches")
+	var same: bool = true
+	for at: int in range(once.size()):
+		if (
+			int(once[at]["seed"]) != int(again[at]["seed"])
+			or absf(float(once[at]["bearing"]) - float(again[at]["bearing"])) > 0.0001
+			or int(once[at]["kind"]) != int(again[at]["kind"])
+		):
+			same = false
+	_expect(same, "under the same bearings, of the same kinds")
+
+	# Rock over a buried patch is the whole of why carving is
+	# prospecting. Measured against the crust band rather than a pixel
+	# count, because the band is a share of the planet.
+	var deep: float = Deposits.radius_of(buried, rich.radius)
+	_expect(
+		not Deposits.reachable(buried, rich.radius, rich.radius)
+		and Deposits.reachable(buried, deep, rich.radius)
+		and Deposits.reachable(exposed, rich.radius * 1.05, rich.radius),
+		"buried ore waits for the hole, exposed ore does not (%.0f of %.0f px)" % [
+			deep, rich.radius,
+		],
+	)
+
+	# And what is taken stays taken, under the patch's own seed -- the
+	# key schema every other entry in `deltas` uses.
+	var total: int = int(buried["units"])
+	var got: int = Deposits.take(sky.deltas, buried, 3)
+	_expect(
+		got == 3 and Deposits.taken(sky.deltas, int(buried["seed"])) == 3,
+		"three units out is three units written down",
+	)
+	_expect(
+		int(buried["left"]) == total - 3,
+		"and the patch knows it is three lighter (%d of %d)" % [
+			int(buried["left"]), total,
+		],
+	)
+	var greedy: int = Deposits.take(sky.deltas, buried, total * 4)
+	_expect(
+		greedy == total - 3 and int(buried["left"]) == 0,
+		"asking for more than is there gives what is there (%d)" % greedy,
+	)
+	var left: Array[Dictionary] = Deposits.on(rich, 5, sky.deltas)
+	var still_listed: bool = false
+	for patch: Dictionary in left:
+		if int(patch["seed"]) == int(buried["seed"]):
+			still_listed = true
+	_expect(not still_listed, "a worked-out patch stops being listed")
+
+	_check_digging(sky)
+	sky.queue_free()
+
+
+## Kopanie: tylko wylądowanym, tylko nad złożem, i nigdy w ziemię.
+##
+## The rig's one rule worth stating out loud is the order of the two
+## writes: the ground is debited only for what the hold can take. A unit
+## written to `deltas` and not carried is a unit nobody will ever find
+## again, and the seed cannot put it back.
+func _check_digging(sky: Node) -> void:
+	var rig: MiningRig = MiningRig.new()
+	root.add_child(rig)
+	var ship: Ship = _spawn_ship()
+	rig.bind(5, sky, null, ship)
+
+	# Not standing on anything: the key does nothing and says why.
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	ship.mine_command = true
+	rig._physics_process(1.0)
+	_expect(
+		rig.snag() == MiningRig.Snag.NOT_LANDED and not ship.mining,
+		"a ship in flight digs nothing, and the readout says why (%s)" % [
+			MiningRig.snag_name(rig.snag()),
+		],
+	)
+	_expect(
+		rig.under().is_empty() and rig.patches().is_empty(),
+		"and there is no ground under it to ask about",
+	)
+
+	rig.queue_free()
+	ship.queue_free()
+
+
+## Dwie rudy, po jednej na każde źródło, i pełna ładownia warta tyle samo.
+##
+## The claim the numbers are for: a hold of iron is 2.4 hull rebuilds
+## and a hold of dust is 2.4 jump charges, so the choice between them is
+## about what the pilot needs rather than about which pays better. A
+## table where one simply paid more would have no choice in it, and the
+## numbers that make them equal are spread over `Stores.BULK`,
+## `Refinery.ORE_YIELD`, `HULL_PARTS` and `STARDUST_PER_CHARGE` -- four
+## files that can drift apart without anybody noticing.
+func _check_ore() -> void:
+	var hold: float = Ship.FINDS_PER_HOLD * 1.5
+	var iron_units: int = Stores.fits_in(Stores.Kind.IRON_ORE, hold)
+	var dust_units: int = Stores.fits_in(Stores.Kind.DUST_ORE, hold)
+	var parts: int = Refinery.units_from(
+		Stores.Kind.IRON_ORE, iron_units, Refinery.Place.DOCKED
+	)
+	var dust: int = Refinery.units_from(
+		Stores.Kind.DUST_ORE, dust_units, Refinery.Place.DOCKED
+	)
+	var hulls: float = float(parts) / float(Refinery.HULL_PARTS)
+	var charges: float = float(dust) / float(Refinery.STARDUST_PER_CHARGE)
+	_expect(
+		absf(hulls - charges) < 0.15,
+		"a hold of iron is %.1f hull rebuilds and a hold of dust %.1f charges" % [
+			hulls, charges,
+		],
+	)
+	# And neither ore is dearer in volume than what it becomes, which is
+	# what keeps a refining run from ever being refused for space.
+	for ore: int in [Stores.Kind.IRON_ORE, Stores.Kind.DUST_ORE]:
+		var into: int = Refinery.refines_into(ore)
+		var each: float = float((Refinery.ORE_YIELD[ore] as Dictionary)["each"])
+		_expect(
+			each * Stores.BULK[into] <= Stores.BULK[ore] + 0.0001,
+			"%s is no smaller than what comes out of it (%.3f of %.3f)" % [
+				Stores.kind_name(ore), each * Stores.BULK[into], Stores.BULK[ore],
+			],
+		)
+	_expect(
+		Refinery.refines_into(Stores.Kind.IRON_ORE) == Stores.Kind.SPARE_PARTS
+		and Refinery.refines_into(Stores.Kind.DUST_ORE) == Stores.Kind.STARDUST
+		and Refinery.refines_into(Stores.Kind.SPARE_PARTS) == -1,
+		"each ore has one sink, and what is not ore has none",
+	)
+
+	# Where you stand still decides what you get, the same one number as
+	# everything else the refinery does.
+	_expect(
+		Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.SPACE)
+		< Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.LANDED)
+		and Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.LANDED)
+		< Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.DOCKED),
+		"rock is worth more where there is a floor (%d, %d, %d of 20)" % [
+			Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.SPACE),
+			Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.LANDED),
+			Refinery.units_from(Stores.Kind.IRON_ORE, 20, Refinery.Place.DOCKED),
+		],
+	)
+
+	_check_refining_swells()
+
+
+## Przerób nigdy nie kosztuje miejsca, a w złym miejscu je daje.
+##
+## The first version of this test asserted the opposite -- that iron ore
+## swells and a full hold of it cannot all be refined -- and it was
+## wrong twice. In space the efficiency throws away nearly half the rock,
+## so the load shrinks; and at a yard, where it would have swelled, the
+## arithmetic blocked refining entirely in the one place it works best.
+## The ore bulks were changed to make the swap even at a yard
+## (`Stores.BULK`), and what is left to test is the invariant: whatever
+## the tables say, a refining run never overfills a hold.
+func _check_refining_swells() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.release()
+	ship.cargo.clear()
+	ship.stores.clear()
+
+	# A hold filled with iron, refined at a yard, which is the tightest
+	# case the tables allow: even, to the pixel.
+	ship.flight_mode = Ship.FlightMode.DOCKED
+	var loaded: int = ship.load_units(Stores.Kind.IRON_ORE, 999)
+	_expect(loaded > 10, "a hold full of iron ore (%d units)" % loaded)
+	_expect(ship.cargo_free() < Stores.BULK[Stores.Kind.IRON_ORE], "and it is full")
+	var made: int = ship.refine(Stores.Kind.IRON_ORE, loaded)
+	_expect(
+		made > 0 and ship.carrying(Stores.Kind.IRON_ORE) == 0,
+		"a full hold of iron refines whole at a yard (%d parts, %d ore left)" % [
+			made, ship.carrying(Stores.Kind.IRON_ORE),
+		],
+	)
+	_expect(
+		ship.cargo_used() <= ship.cargo_capacity() + 0.001,
+		"and never overfills the hold doing it (%.2f of %.2f)" % [
+			ship.cargo_used(), ship.cargo_capacity(),
+		],
+	)
+
+	# The same ore in space, where the loss is what buys the room.
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	ship.stores.clear()
+	ship.load_units(Stores.Kind.IRON_ORE, 999)
+	var tight: float = ship.cargo_free()
+	ship.refine(Stores.Kind.IRON_ORE, 999)
+	_expect(
+		ship.cargo_free() > tight,
+		"refining badly on purpose is how you make room (%.2f -> %.2f free)" % [
+			tight, ship.cargo_free(),
+		],
+	)
+
+	# Dust the other way: a full hold of it refines whole, and there is
+	# more room afterwards than before.
+	ship.stores.clear()
+	var dust: int = ship.load_units(Stores.Kind.DUST_ORE, 999)
+	var before: float = ship.cargo_free()
+	var fuel: int = ship.refine(Stores.Kind.DUST_ORE, dust)
+	_expect(
+		ship.carrying(Stores.Kind.DUST_ORE) == 0 and fuel > 0,
+		"a full hold of dust ore refines whole (%d stardust)" % fuel,
+	)
+	_expect(
+		ship.cargo_free() > before,
+		"and leaves more room than it took (%.2f -> %.2f free)" % [
+			before, ship.cargo_free(),
+		],
+	)
+
+	# Nothing comes of nothing, and nothing comes of what is not ore.
+	ship.stores.clear()
+	_expect(
+		ship.refine(Stores.Kind.IRON_ORE, 10) == 0
+		and ship.refine(Stores.Kind.SPARE_PARTS, 10) == 0,
+		"an empty bin and a thing that is not ore both refine into nothing",
+	)
+	ship.queue_free()
+
+
+## Ładownia jest parametrem premisy, nie liczba z kadłuba.
+##
+## Premise point 7: loot galore against a small hold is a sequence of
+## decisions, against a big one it is hoovering. So the hold is sized
+## against what one cleared world hands over, and this asserts that
+## relation rather than the bulk figure -- the figure is derived from two
+## things that can both move, the generator's bulk distribution and the
+## garrison's size, and either moving should fail here rather than
+## quietly turn the first hours of the game back into hoovering.
+func _check_hold_is_a_decision() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	var total: float = 0.0
+	var rolls: int = 0
+	for item_seed: int in range(4000):
+		var module: ModuleData = loot.generate(item_seed) as ModuleData
+		if module == null:
+			continue
+		rolls += 1
+		total += module.bulk
+	var find: float = total / maxf(float(rolls), 1.0)
+	_expect(rolls > 3000 and find > 0.1, "an average find is %.2f bulk over %d rolls" % [
+		find, rolls,
+	])
+
+	var ship: Ship = _spawn_ship()
+	# The hull's hold, which is what the premise figure is about. What a
+	# pilot actually has is this minus whatever the fitted generator
+	# crowds out, and that is their own trade rather than the premise's
+	# -- measured here as well, because it can only be smaller and the
+	# claim below has to hold for the smaller number.
+	var finds: float = ship.hull_cargo_capacity / find
+	_expect(
+		absf(finds - Ship.FINDS_PER_HOLD) < 0.3,
+		"the stock hull's hold is %.1f finds, and the premise says %.1f" % [
+			finds, Ship.FINDS_PER_HOLD,
+		],
+	)
+	var carryable: float = ship.cargo_capacity() / find
+	_expect(
+		carryable <= finds,
+		"what the fitted ship can carry is %.1f finds, never more" % carryable,
+	)
+
+	# And the claim that figure is for: one cleared rim world does not fit
+	# in it. This is the whole of "a sequence of decisions" -- if it fits,
+	# the first hours of the game have no such decision in them.
+	var rim: float = _haul_of(1)
+	var core: float = _haul_of(GalaxyMap.TIERS)
+	_expect(
+		rim > carryable,
+		"one cleared rim world is %.1f finds, more than the %.1f aboard" % [
+			rim, carryable,
+		],
+	)
+	_expect(
+		core > rim * 2.0,
+		"and a core world is %.1f, so by then the choice is which quarter" % core,
+	)
+	loot.queue_free()
+	ship.queue_free()
+
+
+## How many items one defended body of this tier hands over, on average.
+## One per defender, so the roster size is the haul.
+func _haul_of(tier: int) -> float:
+	var bodies: int = 0
+	var members: int = 0
+	for index: int in range(90):
+		var system: StarSystem = StarSystem.generate(StarSystem.derive(TEST_SEED, index))
+		for body: SystemBody in system.bodies:
+			var held: Dictionary = Garrison.at(body, tier, {})
+			if held.is_empty():
+				continue
+			bodies += 1
+			members += (held["members"] as Array).size()
+	return float(members) / maxf(float(bodies), 1.0)
 
 
 ## Co kosztuje smierc, i czego nie cofa.

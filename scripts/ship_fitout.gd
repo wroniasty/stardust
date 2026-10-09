@@ -274,7 +274,11 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	# the same dart and had to agree about it by hand.
 	ship.hull = hull
 	ship.hull_outline = hull.outline
-	ship.hull_cargo_capacity = hull.cargo_capacity
+	# Zero on a hull means "this shape does not say", which the hull's own
+	# field documents and this used to ignore -- a refit onto one of the
+	# creative-tool shapes handed the ship a hold of nothing.
+	if hull.cargo_capacity > 0.0:
+		ship.hull_cargo_capacity = hull.cargo_capacity
 	if ship.gear != null and not hull.legs.is_empty():
 		ship.gear.legs = hull.legs.duplicate()
 	var drawn: Polygon2D = ship.get_node_or_null("Hull") as Polygon2D

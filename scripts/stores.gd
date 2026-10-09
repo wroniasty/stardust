@@ -21,21 +21,57 @@ extends RefCounted
 ## bulk sum. And `ship.gd` is two and a half thousand lines already,
 ## which is its own argument.
 
-## What can be carried by the unit. Ore kinds are appended here when
-## mining lands; nothing else in the game needs changing when they are,
-## which is the point of the enum.
-enum Kind { SPARE_PARTS, STARDUST }
+## What can be carried by the unit.
+##
+## **Two ores, and one each.** PLAN.md M5.2 asks for few kinds and many
+## decisions, and the way to get both is to make every ore the raw form
+## of something the pilot already runs out of: iron ore becomes spare
+## parts, which is repair, and dust ore becomes stardust, which is
+## range. A third ore would need a third sink or it would be a second
+## road to the same place -- and "which of these two do I need more" is
+## already the question, so a third road would only dilute it.
+##
+## Append-only. The save keys on the enum's own values, so a reorder is
+## a save that means something else.
+enum Kind { SPARE_PARTS, STARDUST, IRON_ORE, DUST_ORE }
 
-const NAMES: Array[String] = ["spare parts", "stardust"]
+const NAMES: Array[String] = ["spare parts", "stardust", "iron ore", "dust ore"]
 
 ## How much room one unit takes, derived from what a full hold is worth
 ## of it rather than chosen as a number.
 ##
-## The stock hull holds twelve bulk, so: a hold of nothing but parts is
-## a hundred of them, and a hold of nothing but stardust is two hundred
-## and fifty. Both are figures a pilot can hold in their head, which is
-## the only reason either number is what it is.
-const BULK: Array[float] = [0.12, 0.048]
+## The stock hull holds six bulk (`Ship.FINDS_PER_HOLD`), so: a hold of
+## nothing but parts is fifty of them -- two hull rebuilds -- and a hold
+## of nothing but stardust is a hundred and twenty-five, which is four
+## hyperdrive charges and so exactly one full drive. Three figures a
+## pilot can hold in their head, which is the only reason either number
+## is what it is.
+##
+## They were derived against a twelve-bulk hold and are unchanged: the
+## hold halving is what made a full load of stardust come out at one
+## full drive rather than two, and that is a better number than the one
+## it replaced.
+## **A full hold is worth the same in either ore**, on purpose:
+## twenty-five iron ore make fifty parts, which is two hull rebuilds,
+## and twenty dust ore make sixty stardust, which is two jump charges.
+## The choice is which of the two you need, not which pays better -- a
+## table where one ore simply paid more would have no choice in it.
+##
+## And an ore is **at least as bulky as what comes out of it**, which is
+## not decoration: iron at 0.20 was tried first, and at a yard twenty-
+## five of it refines into fifty parts worth 6.0 bulk out of 5.0 freed.
+## Refining would have been blocked in the one place it works best,
+## which reads as a bug however well it is explained. At 0.24 the swap
+## is exactly even at a yard and frees room anywhere worse, where the
+## material thrown away is what buys the space.
+const BULK: Array[float] = [0.12, 0.048, 0.24, 0.30]
+
+
+## Whether this is something that has to be refined before it is any
+## use. Asked by the panels, which show raw rock differently, and by the
+## refinery, which is the only thing that consumes it.
+static func is_ore(kind: int) -> bool:
+	return kind == Kind.IRON_ORE or kind == Kind.DUST_ORE
 
 
 ## Kind -> whole units held. Missing is zero; nothing writes a zero.

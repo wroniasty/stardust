@@ -534,10 +534,47 @@ var cargo: Array[Dictionary] = []
 ## what the premise is made of -- see `Stores`.
 var stores: Stores = Stores.new()
 
+## How many average finds the stock hold holds. **The premise parameter**,
+## and the reason the hold is a number with an argument behind it rather
+## than a number off a hull (PLAN.md, premise point 7).
+##
+## "Loot galore" against a small hold is a sequence of decisions; against
+## a big one it is hoovering. So the hold is sized against **what one
+## cleared world hands over**, and both sides of that were measured
+## rather than guessed:
+##
+## - An average rolled module is **1.54 bulk** (20000 rolls across every
+##   kind: a weapon 1.39, an engine 1.71, a tank or jump drive 2.22, a
+##   shot mod 0.20).
+## - One defended body hands over one item per defender: **4.2 at the rim**
+##   (worst 7), 9.2 mid-ladder, **15.5 in the core** (worst 21).
+##
+## Four, so clearing one rim world slightly overfills the hold. That is
+## the shape the premise asks for at the only place it can be taught: at
+## the rim the pilot can take nearly everything and learns that the hold
+## is the limit, and by the core they are carrying a quarter of what they
+## kill and choosing which quarter.
+##
+## The hold used to be 11 bulk, which is 7.1 finds -- larger than
+## anything the rim could hand over, so the first few hours of the game
+## had no such decision in them at all.
+##
+## The figure is about the **hull's** hold. What a given ship can carry
+## is that minus whatever its fitted generator crowds out
+## (`CARGO_CROWDING`) and plus whatever a cargo module adds
+## (`cargo_capacity` is in `STATS`) -- the stock ship comes out at 3.3
+## finds for the first reason, which is the pilot's trade rather than
+## the premise's, and a cargo module being a real find rather than a
+## filler is the second.
+const FINDS_PER_HOLD: float = 4.0
+
 ## Total bulk the cargo bay can hold, before anything a module adds. A
 ## property of the hull, set in the scene, because how much a ship can carry
 ## is the first thing that distinguishes a hauler from a fighter.
-@export var hull_cargo_capacity: float = 12.0
+##
+## The default is the stock hull's, derived from `FINDS_PER_HOLD` and the
+## measured average find; the hulls that say nothing keep it.
+@export var hull_cargo_capacity: float = 6.0
 
 
 ## What the bay actually holds, hull plus whatever the fitted modules
@@ -570,6 +607,7 @@ const STATS: Array[StringName] = [
 	&"energy_delay",
 	&"cargo_capacity",
 	&"fuel_capacity",
+	&"dust_scoop",
 ]
 
 ## key -> { "add": float, "mul": float }, and key -> the modules behind it.
@@ -633,6 +671,17 @@ const CARGO_BAY: Vector2 = Vector2(0.0, 1.75)
 ## fits in it.
 const CARGO_MASS_PER_BULK: float = 0.35
 
+
+## Held, not tapped: digging is a thing you do for a while, the same
+## shape as holding the trigger.
+var mine_command: bool = false
+
+## And whether ore is actually coming out, which is a different
+## question: the key can be down over bare rock, over a patch that is
+## still buried, or into a hold with no room. Set by `MiningRig`, and
+## read by the garrison -- a world that minds being dug has to be able
+## to tell digging from parking.
+var mining: bool = false
 
 var _landed_planet: Planet = null
 var _landed_angle: float = 0.0
@@ -826,6 +875,55 @@ func load_units(kind: Stores.Kind, units: int) -> int:
 		rebuild_control_groups(false)
 		cargo_changed.emit()
 	return taken
+
+
+## Turns raw ore into what it is for, as much of it as the hold can take
+## the result of.
+##
+## Returns how many units came out, and spends only the ore it actually
+## used -- a partial run rather than a refusal, the same shape as
+## loading into a hold with room for half.
+##
+## The room check will not fire as the tables stand: both ores are at
+## least as bulky as what comes out of them, so refining is even at a
+## yard and frees room anywhere worse (`Stores.BULK`). It is here
+## because that is a property of four numbers in three files, and a
+## change to any of them must not be able to quietly overfill a hold --
+## so the batch walks down to the largest one whose product fits in the
+## room the batch itself frees, and the test asserts the invariant
+## rather than the arithmetic.
+func refine(kind: Stores.Kind, units: int) -> int:
+	var place: Refinery.Place = Refinery.place_of(self)
+	var into: int = Refinery.refines_into(kind)
+	if into < 0:
+		return 0
+	var batch: int = mini(units, stores.count(kind))
+	var free: float = cargo_free()
+	while batch > 0:
+		var made: int = Refinery.units_from(kind, batch, place)
+		if made <= 0:
+			batch -= 1
+			continue
+		var swell: float = (
+			Stores.bulk_of(into, made) - Stores.bulk_of(kind, batch)
+		)
+		if swell <= free:
+			break
+		batch -= 1
+	if batch <= 0:
+		return 0
+	var made: int = Refinery.units_from(kind, batch, place)
+	if made <= 0:
+		return 0
+	stores.spend(kind, batch)
+	# Straight into `held`, not through `load_units`: the room was
+	# already worked out above against the ore this run is spending, and
+	# asking again would measure it against a hold that has just got
+	# emptier.
+	stores.held[into] = stores.count(into as Stores.Kind) + made
+	rebuild_control_groups(false)
+	cargo_changed.emit()
+	return made
 
 
 ## Takes units out of the hold -- to spend, to refine, or to throw away.
@@ -1247,6 +1345,7 @@ func _physics_process(delta: float) -> void:
 		# rather than working in world angles.
 		aim_point = get_global_mouse_position()
 		fire_command = Input.is_action_pressed("ship_fire")
+		mine_command = Input.is_action_pressed("mine")
 		fire_secondary_command = Input.is_action_pressed("ship_fire_secondary")
 		if Input.is_action_just_pressed("toggle_gear") and gear != null:
 			gear.set_deployed(not gear.is_deployed() and not gear.is_moving())
@@ -2379,6 +2478,30 @@ func take_damage(amount: float, cause: String = "") -> void:
 		_destroy()
 
 
+## How much of a star's wind this ship can hold on to, where 1.0 is a
+## full scoop. Nought without a mod that grants it, which is the whole of
+## premise point 4: the stardust is in the corona and only a fitted mod
+## can take any of it.
+func dust_scoop() -> float:
+	return maxf(stat(&"dust_scoop", 0.0), 0.0)
+
+
+## The world this ship is standing on, or null if it is not standing on
+## one. Public because digging is somebody else's job and the ground
+## belongs to the planet.
+func landed_on() -> Planet:
+	if flight_mode != FlightMode.LANDED:
+		return null
+	return _landed_planet if is_instance_valid(_landed_planet) else null
+
+
+## And where round it, in the planet's own polar frame -- not a world
+## angle, because the ground turns and a bearing that did not turn with
+## it would walk off the patch it was standing on.
+func landed_bearing() -> float:
+	return _landed_angle
+
+
 func is_destroyed() -> bool:
 	return hull_integrity <= 0.0
 
@@ -2417,6 +2540,8 @@ func respawn(at: Vector2, velocity: Vector2) -> void:
 	heading_command = ControlChords.Chord.NONE
 	brake_command = false
 	fire_command = false
+	mine_command = false
+	mining = false
 	energy = energy_capacity()
 	_since_spend = energy_recharge_delay()
 	repair_engines()

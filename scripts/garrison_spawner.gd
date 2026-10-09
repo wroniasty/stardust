@@ -232,6 +232,12 @@ func _provocation(body: SystemBody, held: Dictionary, away: float) -> int:
 		and ship.flight_mode == Ship.FlightMode.LANDED
 		and away < body.radius * LANDED_WITHIN
 	):
+		# Digging is the more specific reading of the same position, and
+		# it is a separate roll: a world can mind being dug and not mind
+		# being parked on, which is what makes it a world sitting on
+		# something rather than a world with an opinion about visitors.
+		if "mining" in ship and ship.mining:
+			return Garrison.Provocation.MINED
 		return Garrison.Provocation.LANDED
 	if away <= float(held.get("territory", 0.0)):
 		return Garrison.Provocation.APPROACHED

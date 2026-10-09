@@ -53,6 +53,7 @@ const LABELS: Array[Dictionary] = [
 	{"block": "FLIGHT", "action": &"toggle_gear", "says": "landing gear"},
 	{"block": "FLIGHT", "action": &"ship_fire", "says": "fire"},
 	{"block": "FLIGHT", "action": &"ship_fire_secondary", "says": "fire, second group"},
+	{"block": "FLIGHT", "action": &"mine", "says": "dig, or scoop a corona"},
 
 	{"block": "COMPUTER", "action": &"hold_prograde", "says": "nose into the motion"},
 	{"block": "COMPUTER", "action": &"hold_retrograde", "says": "nose against the motion"},

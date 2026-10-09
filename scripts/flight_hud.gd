@@ -114,6 +114,7 @@ const ARROW_LENGTH: float = 15.0
 const ARROW_HEAD: float = 4.0
 
 var _ship: Ship = null
+var _rig: MiningRig = null
 var _canvas: Control = null
 
 
@@ -148,6 +149,13 @@ func _ready() -> void:
 	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_canvas.draw.connect(_draw_hud)
 	add_child(_canvas)
+
+
+## What is under the legs, for the ORE row. Handed in rather than looked
+## up, like everything else here, and allowed to be null: a HUD with no
+## rig simply has nothing to say about the ground.
+func watch_ground(rig: MiningRig) -> void:
+	_rig = rig
 
 
 func bind(ship: Ship) -> void:
@@ -455,7 +463,42 @@ func _draw_instrument_corner(font: Font, at: Rect2, planet: GravityWell) -> void
 			_canvas, font, Vector2(at.position.x, y), at.size.x, "GEAR",
 			_gear_text(), _gear_colour(), _ink.label,
 		)
+		y += ROW
+		_draw_ore(font, Vector2(at.position.x, y), at.size.x)
 	_draw_warning(font, Rect2(at.position - Vector2(UiFrame.PAD, UiFrame.PAD), at.size))
+
+
+## What is in the ground here, in one row.
+##
+## Blank while flying and over bare rock, because a row that always says
+## something is a row that says nothing: "no ore here" printed over every
+## square inch of every world would train the pilot to stop reading it.
+## The one case it must speak for is **buried** -- ore the pilot is
+## standing on and cannot have is the whole reason carving the crust is
+## prospecting rather than vandalism, and nothing else in the game would
+## ever tell them.
+func _draw_ore(font: Font, at: Vector2, width: float) -> void:
+	if _rig == null or not is_instance_valid(_rig):
+		return
+	var found: Dictionary = _rig.readout()
+	var kind: int = int(found.get("kind", -1))
+	if kind < 0:
+		return
+	var snag: int = int(found["snag"])
+	var says: String = "%d" % int(found["left"])
+	var ink: Color = _ink.ok if bool(found["digging"]) else _ink.value
+	if snag == MiningRig.Snag.BURIED:
+		# How deep, as a share of the crust band, because that is the
+		# number that says how much digging is left.
+		says = "deep %.0f%%" % (float(found["depth"]) * 100.0)
+		ink = _ink.caution
+	elif snag != MiningRig.Snag.NONE:
+		says = MiningRig.snag_name(snag)
+		ink = _ink.label
+	UiDraw.row(
+		_canvas, font, at, width, Stores.kind_name(kind).to_upper().left(4),
+		says, ink, _ink.label,
+	)
 
 
 ## Which way the ship is going, for when there is no orbit to draw.

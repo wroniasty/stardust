@@ -68,6 +68,48 @@ const HULL_PARTS: int = 25
 ## not.
 const ENGINE_PARTS_PER_BULK: float = 10.0
 
+## What one unit of raw ore becomes at a yard, and what of.
+##
+## Derived rather than chosen: see `Stores.BULK` for why both come out
+## at 2.4 of their own sink per full hold.
+##
+## **Refining never costs room**, and that is a property of the bulks
+## rather than a coincidence -- see `Stores.BULK`. At a yard iron is
+## exactly even, twenty-five units of rock for fifty parts of the same
+## volume; everywhere worse it frees room, because what a bad place
+## does is throw material away and the material it throws is the
+## volume. Dust frees room everywhere.
+##
+## So a refining run is never refused for space, and a pilot who needs
+## room right now can get it by refining badly on purpose. That is a
+## decision rather than a punishment, which is the whole shape this
+## mechanic is supposed to have.
+const ORE_YIELD: Dictionary = {
+	Stores.Kind.IRON_ORE: {"into": Stores.Kind.SPARE_PARTS, "each": 2.0},
+	Stores.Kind.DUST_ORE: {"into": Stores.Kind.STARDUST, "each": 3.0},
+}
+
+
+## What this ore refines into, or -1 if it is not ore.
+static func refines_into(kind: int) -> int:
+	if not ORE_YIELD.has(kind):
+		return -1
+	return int((ORE_YIELD[kind] as Dictionary)["into"])
+
+
+## How many units this much ore yields here, in whole units.
+##
+## Floored once over the whole batch rather than per unit, so refining
+## thirty at a time is not quietly worse than refining thirty one at a
+## time -- which is the kind of difference that teaches a pilot to click
+## thirty times.
+static func units_from(kind: int, units: int, place: Place) -> int:
+	if units <= 0 or not ORE_YIELD.has(kind):
+		return 0
+	var each: float = float((ORE_YIELD[kind] as Dictionary)["each"])
+	return int(floor(each * float(units) * efficiency(place)))
+
+
 ## Stardust for one hyperdrive charge, at a yard.
 ##
 ## Thirty, so a full hold of nothing but stardust is eight charges and

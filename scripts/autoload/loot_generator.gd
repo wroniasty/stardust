@@ -279,6 +279,17 @@ const TANK_AFFIXES: Array[Dictionary] = [
 		"amount": Vector2(0.6, 1.8),
 		"cost_field": "fuel_capacity", "cost": Vector2(0.78, 0.90),
 	},
+	# The mod premise point 4 asks for: a tank plumbed to take a star's
+	# wind, which costs it the room to hold fuel. A mod rather than a
+	# module with a bay of its own, for the reason section 14 gives --
+	# the interesting modules are the ones that move a number they have
+	# no business moving, and a bay for one errand is a bay nobody fits
+	# anything else in. See `Corona`.
+	{
+		"name": &"scooped", "stat_add": &"dust_scoop",
+		"amount": Vector2(0.55, 1.35),
+		"cost_field": "fuel_capacity", "cost": Vector2(0.74, 0.90),
+	},
 ]
 
 ## Shot mods, as a fixed catalogue rather than a rolled template: a mod is a

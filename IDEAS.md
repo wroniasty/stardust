@@ -92,6 +92,26 @@ odpowiedzią, na której da się coś zrobić.
 Afiksy `compact` (gabaryt w dół, ciąg w dół) i `oversized` (ciąg w górę,
 gabaryt w górę) czynią z tego handel wymienny, a nie drabinę.
 
+**Ładownia jest parametrem premisy, nie liczbą z kadłuba** (punkt 7 premisy).
+Dużo lootu przy małej ładowni to ciąg decyzji; przy dużej — odkurzanie. Więc
+`Ship.FINDS_PER_HOLD` = 4: seryjny kadłub trzyma cztery średnie znaleziska.
+Obie strony tego **zmierzone**, a nie zgadnięte — średni wylosowany moduł to
+**1,54 bulk** na 20000 rzutów (broń 1,39, silnik 1,71, zbiornik i napęd skoku
+2,22, shot mod 0,20), a jedno bronione ciało wydaje jeden przedmiot na
+obrońcę: **4,2 na obrzeżu** (najgorzej 7), 9,2 w środku drabiny, **15,5 w
+rdzeniu** (najgorzej 21).
+
+Cztery, żeby wyczyszczenie jednego świata z obrzeża **nieco** przepełniało
+ładownię — w jedynym miejscu, w którym tej lekcji da się nauczyć: na obrzeżu
+pilot zabiera prawie wszystko i dowiaduje się, że ładownia jest limitem, a w
+rdzeniu wozi czwartą część tego, co zabija, i wybiera, którą. Było 11 bulk,
+czyli 7,1 znaleziska — więcej, niż obrzeże potrafi wydać, więc pierwsze godziny
+gry nie miały w sobie tej decyzji w ogóle.
+
+Liczba dotyczy **kadłuba**. To, co dany statek uniesie, to tyle minus miejsce
+zabrane przez wstawiony generator (seryjny wychodzi na 3,3) plus to, co doda
+moduł ładunkowy — i to jest handel pilota, nie premisy.
+
 **Gniazdo głównego napędu ma tyle miejsca, ile wynosi sufit gabarytu w
 generatorze** (`ShipFitout.MAIN_DRIVE_SOCKET` = `LIMITS["bulk"]` = 8,0), więc
 żaden wylosowany silnik nie jest za duży na gniazdo główne — na żadnym
@@ -4091,9 +4111,78 @@ Seed brooda idzie przez indeks 7000, daleko od numeracji członków rosteru:
 wspólny klucz w `deltas` oznaczałby, że śmierć wypuszczonego myśliwca spisuje
 na straty żywego elite.
 
+### Grunt: dwie rudy, po jednej na każde źródło
+
+Ruda żelaza daje spare parts, czyli naprawę. Ruda pyłowa daje stardust, czyli
+zasięg. **Trzecia ruda potrzebowałaby trzeciego źródła** albo byłaby drugą drogą
+do tego samego miejsca — a „której z tych dwu potrzebuję bardziej" jest już
+pytaniem, więc trzecia droga tylko by je rozcieńczyła. Pyłowa jest rzadka na
+obrzeżu i częsta w środku, więc grunt mówi to samo, co reszta galaktyki, i nie
+wprowadza drugiej skali do pilnowania obok tieru.
+
+**Pełna ładownia jest warta tyle samo w jednej i w drugiej**: 25 jednostek rudy
+żelaza to 50 części, czyli dwie naprawy kadłuba; 20 jednostek rudy pyłowej to 60
+stardustu, czyli dwa ładunki skoku. Wybór jest o potrzebie, nie o tym, co płaci
+lepiej — tabela, w której jedna ruda po prostu płaci więcej, nie ma w sobie
+żadnego wyboru.
+
+**Ruda jest nie mniejsza od tego, co z niej wychodzi**, i to nie jest ozdoba.
+Żelazo próbowało najpierw 0,20: w stoczni dwadzieścia pięć jednostek rudy
+przerabiało się na pięćdziesiąt części o objętości 6,0 z uwolnionych 5,0, więc
+przerób był **zablokowany w jedynym miejscu, w którym działa najlepiej** — co
+czyta się jak błąd, jakkolwiek dobrze by się to wyjaśniło. Przy 0,24 wymiana
+jest w stoczni dokładnie równa, a wszędzie gorzej **daje** miejsce: wyrzucony
+materiał to właśnie ta objętość. Więc przerób nigdy nie jest odmawiany za brak
+miejsca, a pilot, któremu brakuje miejsca teraz, może je zrobić przerabiając
+świadomie kiepsko. To decyzja, nie kara.
+
+**Głębokość złoża jest ułamkiem pasa skorupy, nie liczbą pikseli.** Pas to 10%
+promienia planety (`PlanetTerrain.DEPTH_FRACTION`), więc złoże mierzone w
+pikselach byłoby odsłonięte na księżycu i nieosiągalne na gazowym olbrzymie.
+Połowa łat jest zakopana i czeka na dziurę — i to jest to, co zamienia rycie w
+skorupie z wandalizmu w poszukiwania, bez jednej nowej mechaniki: krater już
+jest bitmapą, którą broń umie dziurawić, i już przetrwa odlot przez `deltas`.
+
+Wykopane znika pod seedem własnej łaty — ten sam schemat kluczy, co `crust`
+ciała, `seen` systemu i `beaten` członka garnizonu. Grunt jest obciążany **tylko
+tym, co ładownia przyjmie**: jednostka zapisana w `deltas` i nieprzewieziona to
+jednostka, której seed nie odtworzy.
+
+Kopie **statek**, nie dron, i to jest tymczasowe — drony są następnym
+milestone'em i zrobią to lepiej. Dotąd kosztuje to jeden klawisz i żadnej nowej
+maszynerii, a pętlę zasobów da się **oceniać**, zanim powstanie rzecz, która ma
+ją uwygodnić. Pętla, w którą nikt nie grał, to pętla, o której nikt nie wie, czy
+warto ją automatyzować.
+
+### Korona: stardust z wiatru, nie z przelotu przez gwiazdę
+
+Pasmo od promienia spalenia (`Ship.burn_radius`, liczonego z własnych
+współczynników nagrzewania i chłodzenia statku) do 2,6 jego długości,
+**najgęstsze przy wewnętrznej krawędzi**. Czyli najlepszy zbiór jest dokładnie
+tam, gdzie najgorzej się siedzi, a kosztem jest model ciepła, który już istnieje
+i już ma pasek na HUD-zie — nic w `Corona` nie wie o cieplę, tylko urządza tak,
+żeby pilot chciał być tam, gdzie jest ciepło.
+
+Wewnątrz promienia **nie jest gęściej**: nagrodą za wlot w gwiazdę ma być
+śmierć, nie bonus. Pasmo zaczynające się wewnątrz promienia miałoby najlepszą
+część nieosiągalną, a zaczynające się daleko na zewnątrz czyniłoby ciepło
+nieistotnym — w oba przypadki wybór, po który ta mechanika istnieje, przestaje
+istnieć.
+
+Dziesięć sekund na ładunek skoku przy pełnym zgarniaczu, ok. czterdzieści na
+pełną ładownię. Oba to liczby, o których da się decydować, patrząc na rosnący
+pasek ciepła — a to jedyny zegar, który tu cokolwiek znaczy.
+
+**Zgarniacz jest modem, nie modułem z własną wnęką**: afiks `scooped` na
+zbiornikach, płaci pojemnością paliwa. Z powodu z sekcji 14 — ciekawe moduły to
+te, które ruszają liczbę, której „nie dotyczą” — i z tego, że wnęka na jedno
+zadanie to wnęka, w którą nikt nie wstawi nic innego. Ten sam klawisz co
+kopanie, bo to ten sam czasownik, a statek nie może być wylądowany i w koronie
+jednocześnie.
+
 ### Reszta, jeszcze nieruszona
 
-- Na planetach: zasoby do zbierania, loot, budynki, lądowiska, spawnery wrogów.
+- Na planetach: budynki, lądowiska, ruiny.
 - Stacje: handel, naprawa, tankowanie, misje.
 - Eventy w deep space i przy misjumpach: wraki, zasadzki, anomalie.
 

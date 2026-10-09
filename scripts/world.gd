@@ -67,6 +67,7 @@ var _editor: ShipEditor = null
 var _map: SystemMap = null
 var _chart: GalaxyChart = null
 var _garrisons: GarrisonSpawner = null
+var _mining: MiningRig = null
 var _help: HelpScreen = null
 var _flight: FlightHud = null
 var _energy: EnergyHud = null
@@ -101,6 +102,7 @@ func _ready() -> void:
 	_build_map()
 	_build_chart()
 	_build_garrisons()
+	_build_mining()
 	_build_help()
 	_build_flight_hud()
 	_build_creative()
@@ -141,6 +143,9 @@ func _build_flight_hud() -> void:
 	_flight = FlightHud.new()
 	add_child(_flight)
 	_flight.bind((player as Player).ship)
+	# After the rig, which is built first, so the ORE row has something
+	# to ask from the first frame rather than from the first jump.
+	_flight.watch_ground(_mining)
 
 
 func _build_map() -> void:
@@ -174,6 +179,24 @@ func _build_garrisons() -> void:
 ## than from a system index, for the reason the loot generator wants
 ## the same answer: a misjump has no index and the dark between two
 ## core systems is still the core.
+## Digging, which needs nothing built: the deposits are a model and the
+## only node involved is the ship, which already knows what it is
+## standing on.
+func _build_mining() -> void:
+	_mining = MiningRig.new()
+	add_child(_mining)
+	_mining.struck.connect(_on_ore_struck)
+	_mining.bind(_tier_here(), Galaxy, StreamingManager, (player as Player).ship)
+	_mining.watch_star(Star.of(get_tree()))
+
+
+## One line per whole unit would be one line every half second, so this
+## says the kind and leaves the running total to the hold panel.
+func _on_ore_struck(kind: int, units: int, _at: Vector2) -> void:
+	if units <= 0:
+		print("hold full: the %s stays in the ground" % Stores.kind_name(kind))
+
+
 func _tier_here() -> int:
 	return 1 if Galaxy.map == null else Galaxy.map.tier_at(Galaxy.at)
 
@@ -324,6 +347,8 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	_chart.bind(Galaxy.map, ship, Galaxy, to_index, Galaxy.at)
 	_tier_the_loot()
 	_garrisons.bind(_tier_here(), Galaxy, StreamingManager, _garrisons_field())
+	_mining.bind(_tier_here(), Galaxy, StreamingManager, ship)
+	_mining.watch_star(Star.of(get_tree()))
 	_dress_sky(landing)
 	print("jumped to %s (%s), out at %.0f px" % [
 		landing.display_name,

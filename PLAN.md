@@ -949,17 +949,84 @@ robi. Każdy zasób więcej to jeden powód mniej, żeby zdecydować, który zab
   odmową" zostaje w mocy, a ładunek kupuje **czysty** skok. Wydawany przy
   rozkręcaniu, nie przy przylocie — jest niepodzielny, więc przerwanie kosztuje
   cały, i to jest ta lekcja, którą ta reguła ma dawać.
-- [ ] **Stardust** — surowiec, z którego robi się jedno i drugie.
-- [ ] **Raw ore**, kilka rodzajów. Złoża leżą na powierzchni i pod nią, losowane
-  z seeda planety — więc odtwarzalne, a wykopane znikają przez `deltas`, tak jak
-  już znika teren.
-- [ ] **Przetwarzanie na statku**: każdy raw ore idzie na jeden z zasobów, a
-  **wydajność zależy od miejsca** — zadokowany, wylądowany, w przestrzeni.
-  Jedna liczba na trzy stany, bez cen i bez podaży: to ma być powód, żeby
-  gdzieś usiąść, a nie arkusz kalkulacyjny.
-- [ ] **Stardust z korony gwiazdy** przy odpowiednim modzie. Nie „przez
-  gwiazdę" — powód w punkcie 4 analizy.
-- [ ] Pojemność ładowni jako parametr tej premisy (punkt 7).
+- [x] **Raw ore, dwie rudy — po jednej na każde źródło.** `Deposits` — czysta
+  dana, jak `Garrison`. Ruda żelaza daje spare parts (naprawa), ruda pyłowa daje
+  stardust (zasięg); trzecia ruda potrzebowałaby trzeciego źródła albo byłaby
+  drugą drogą do tego samego miejsca, a „której z tych dwu potrzebuję bardziej"
+  jest już pytaniem. Pyłowa jest rzadka na obrzeżu i częsta w środku, więc grunt
+  mówi to samo, co reszta galaktyki, bez drugiej skali do pilnowania.
+  - **Pełna ładownia warta tyle samo w jednej i w drugiej**: 25 rudy żelaza to
+    50 części, czyli dwie naprawy kadłuba; 20 rudy pyłowej to 60 stardustu,
+    czyli dwa ładunki skoku. Wybór jest o potrzebie, nie o tym, co płaci lepiej.
+  - **Ruda jest nie mniejsza od tego, co z niej wychodzi**, i to nie jest
+    ozdoba: przy 0,20 za żelazo dwudziestą piątkę rudy przerabiało się w
+    stoczni na 50 części o objętości 6,0 z uwolnionych 5,0 — czyli przerób był
+    zablokowany w jedynym miejscu, w którym działa najlepiej. Przy 0,24 wymiana
+    jest w stoczni dokładnie równa, a wszędzie gorzej **daje** miejsce, bo
+    wyrzucony materiał to właśnie ta objętość.
+  - Złoża losowane z seeda ciała (`SEED_INDEX` 2000, daleko od 1000 garnizonu i
+    7000 brooda), połowa zakopana. Głębokość jako **ułamek pasa skorupy**, nie
+    w pikselach: pas to 10% promienia (`PlanetTerrain.DEPTH_FRACTION`), więc
+    złoże mierzone w pikselach byłoby odsłonięte na księżycu i nieosiągalne na
+    olbrzymie. Zakopane czeka na dziurę — i to jest to, co zamienia rycie w
+    skorupie z wandalizmu w poszukiwania.
+  - Wykopane znika przez `deltas`, pod seedem własnej łaty — ten sam schemat
+    kluczy, co `crust` ciała, `seen` systemu i `beaten` członka garnizonu.
+- [x] **Przetwarzanie na statku**: `Refinery.ORE_YIELD`, jedno źródło na rudę,
+  i ta sama jedna liczba na trzy miejsca, którą już miała rozbiórka
+  (`YIELD_AT`). Przerób **nigdy nie jest odmawiany za brak miejsca**, i w złym
+  miejscu je daje — więc pilot, któremu brakuje miejsca teraz, może je zrobić
+  przerabiając świadomie kiepsko. To decyzja, nie kara.
+- [x] **Kopanie ze statku.** `MiningRig` — wylądowanym, nad łatą, i nigdy do
+  ziemi: grunt jest obciążany tylko tym, co ładownia przyjmie, bo jednostka
+  zapisana w `deltas` i nieprzewieziona to jednostka, której seed nie odtworzy.
+  Dwie jednostki na sekundę, czyli ok. 12 s na pełną ładownię. Klawisz **V**,
+  trzymany jak spust. Odczyt ORE w HUD-ie mil czy tylko wtedy, gdy ma co
+  powiedzieć — a musi powiedzieć **„zakopane"**, bo ruda, na której pilot
+  stoi i której nie może mieć, to jedyna rzecz, o której nic innego w grze by
+  go nie poinformowało.
+  - **Dron zrobi to lepiej** (M5.3). Dotąd robi to statek, co kosztuje jeden
+    klawisz i żadnej nowej maszynerii — a pętlę zasobów da się oceniać, zanim
+    powstanie rzecz, która ma ją uwygodnić. Pętla, w którą nikt nie grał, to
+    pętla, o której nikt nie wie, czy warto ją automatyzować.
+  - `Provocation.MINED` **w końcu jest o co pytane**. Kopanie jest bardziej
+    szczegółowym odczytem tej samej pozycji niż lądowanie i jest osobnym rzutem:
+    świat może mieć coś przeciwko kopaniu i nic przeciwko parkowaniu, i to jest
+    różnica między światem, który na czymś siedzi, a światem, który ma opinię
+    o gościach.
+- [x] **Stardust z korony gwiazdy** przy odpowiednim modzie. `Corona` — pasmo od
+  promienia spalenia (`Ship.burn_radius`) do 2,6 jego długości, najgęstsze przy
+  **wewnętrznej** krawędzi. Czyli najlepszy zbiór jest dokładnie tam, gdzie
+  najgorzej się siedzi, a kosztem jest model ciepła, który już istnieje i już ma
+  pasek na HUD-zie. Wewnątrz promienia nie jest gęściej — nagrodą za wlot w
+  gwiazdę ma być śmierć, nie bonus. 10 s na ładunek skoku przy pełnym zgarniaczu.
+  - **Mod, nie moduł z własną wnęką**: afiks `scooped` na zbiornikach, płaci
+    pojemnością paliwa. Z powodu z sekcji 14 — ciekawe moduły to te, które
+    ruszają liczbę, której nie dotyczą, a wnęka na jedno zadanie to wnęka, w
+    którą nikt nie wstawi nic innego.
+  - Ten sam klawisz co kopanie, bo to ten sam czasownik, a statek nie może być
+    wylądowany i w koronie jednocześnie. Które z dwojga znaczy, decyduje to,
+    gdzie jest, a nie druga klawiszologia.
+- [x] **Stardust** — jest i ma dwa źródła: ruda pyłowa z gruntu i korona wiatrem.
+  Jedno chce opuszczonych nóg, drugie rosnącego paska ciepła.
+- [x] **Pojemność ładowni jako parametr tej premisy** (punkt 7).
+  `Ship.FINDS_PER_HOLD` = 4: seryjny kadłub trzyma cztery średnie znaleziska.
+  Obie strony tego zmierzone, nie zgadnięte — średni wylosowany moduł to **1,54
+  bulk** (20000 rzutów), a jedno bronione ciało wydaje jeden przedmiot na
+  obrońcę: **4,2 na obrzeżu**, 9,2 w środku drabiny, **15,5 w rdzeniu**.
+  - Cztery, żeby wyczyszczenie jednego świata z obrzeża **nieco** przepełniało
+    ładownię. To jest kształt, o który premisa prosi, w jedynym miejscu, w którym
+    da się go nauczyć: na obrzeżu pilot zabiera prawie wszystko i uczy się, że
+    ładownia jest limitem, a w rdzeniu wozi czwartą część tego, co zabija, i
+    wybiera, którą.
+  - Było 11 bulk, czyli **7,1 znaleziska** — więcej, niż obrzeże potrafi wydać,
+    więc pierwsze godziny gry nie miały w sobie tej decyzji w ogóle.
+  - Liczba dotyczy **kadłuba**. To, co dany statek uniesie, to tyle minus
+    miejsce zabrane przez wstawiony generator — seryjny wychodzi na 3,3 — i to
+    jest handel pilota, nie premisy. Test pilnuje **relacji** do zmierzonej
+    średniej, bo zmiana rozkładu gabarytów w generatorze albo liczebności
+    garnizonu musi tu pęknąć, a nie cicho zamienić pierwsze godziny gry w
+    odkurzanie.
 
 ### 5.3 Drony zamiast pojazdu
 
