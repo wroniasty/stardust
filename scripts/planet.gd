@@ -739,6 +739,21 @@ func _build_atmosphere() -> void:
 ## flies through the middle of it, so every cloud was a slice of one continuous
 ## field bent along the horizon and the sky read as a doughnut. Clouds need
 ## edges and positions.
+## How many clouds this world's sky holds in total, across every layer.
+##
+## Coverage is what fraction of the circumference has cloud standing on
+## it, which is the only definition that survives changing the planet's
+## size. Its own function so that the share-out below and anything
+## checking the share-out read the **same** number -- a test that
+## recomputed this would be a test that could agree with a mistake in it.
+func cloud_total() -> int:
+	var base: float = cloud_base_radius()
+	var deck: float = maxf(cloud_ceiling() - base, 1.0)
+	var mid: float = base + deck * 0.5
+	var width: float = deck * cloud_puff_size
+	return int(TAU * mid * cloud_coverage / maxf(width, 1.0))
+
+
 func _build_clouds() -> void:
 	for child: Node in _clouds.get_children():
 		child.queue_free()
@@ -769,9 +784,18 @@ func _build_clouds() -> void:
 	var width: float = deck * cloud_puff_size
 	var size: Vector2 = Vector2(width, deck * cloud_puff_height)
 
-	# Coverage is what fraction of the circumference has cloud standing on it,
-	# which is the only definition that survives changing the planet's size.
-	var total: int = int(TAU * mid * cloud_coverage / maxf(width, 1.0))
+	var total: int = cloud_total()
+	# Shared out, remainder included. `total / CLOUD_LAYERS` is integer
+	# division, so a sky of a hundred clouds over three layers built
+	# ninety-nine of them and a sky of a hundred and one built the same
+	# ninety-nine: up to two clouds short of the coverage the planet
+	# rolled, every time, on every world.
+	#
+	# The remainder goes to the **low** layers, which is the one place it
+	# can go without arguing with anything: the deck thins upwards, so the
+	# densest layers are the inner ones and an extra puff belongs there.
+	var share: int = total / CLOUD_LAYERS
+	var spare: int = total % CLOUD_LAYERS
 
 	for layer: int in range(CLOUD_LAYERS):
 		var field: CloudField = CloudField.new()
@@ -786,7 +810,7 @@ func _build_clouds() -> void:
 		var fade: float = 1.0 - fraction * 0.35
 		field.build(
 			hash_seed(planet_seed, layer),
-			int(total / CLOUD_LAYERS),
+			share + (1 if layer < spare else 0),
 			base + deck * fraction,
 			deck / float(CLOUD_LAYERS) * (1.0 + cloud_height_variation),
 			size * fade,

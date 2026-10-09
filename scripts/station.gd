@@ -89,7 +89,9 @@ func dock_radius() -> float:
 
 ## What to call it in a readout.
 func catalogue_name() -> String:
-	return name if body == null else body.display_name
+	# See `GravityWell.catalogue_name`: a `StringName` and a `String` are
+	# not the same type, and a ternary wants both sides to be.
+	return String(name) if body == null else body.display_name
 
 
 ## Why `ship` cannot dock from where it is, or "" if it can.

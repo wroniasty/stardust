@@ -96,7 +96,11 @@ var body: SystemBody = null
 ## What to call this in a readout. The catalogue name when there is one,
 ## and the node's own name when the body was built from a bare seed.
 func catalogue_name() -> String:
-	return name if body == null else body.display_name
+	# `String(name)`, because `Node.name` is a `StringName` and
+	# `display_name` is a `String`: the two sides of the ternary were not
+	# the same type, which is a warning now and a surprise the day
+	# something compares the result with `==`.
+	return String(name) if body == null else body.display_name
 
 
 func _enter_tree() -> void:
@@ -284,24 +288,27 @@ func circular_orbit_speed(radius: float) -> float:
 func orbit_extremes(point: Vector2, velocity: Vector2) -> Vector2:
 	var arm: Vector2 = point - global_position
 	var radius: float = arm.length()
-	var mu: float = mu()
-	if radius < 0.001 or mu <= 0.0:
+	# Named `pull` rather than `mu`, which shadowed the method it is
+	# calling. The file already uses `pull` for the same quantity further
+	# down, so this is the name it had anyway.
+	var pull: float = mu()
+	if radius < 0.001 or pull <= 0.0:
 		return Vector2(0.0, INF)
 
-	var energy: float = velocity.length_squared() * 0.5 - mu / radius
+	var energy: float = velocity.length_squared() * 0.5 - pull / radius
 	# Angular momentum: in 2D the cross product is the scalar h.
 	var momentum: float = arm.cross(velocity)
 	var eccentricity: float = sqrt(maxf(
-		0.0, 1.0 + 2.0 * energy * momentum * momentum / (mu * mu)
+		0.0, 1.0 + 2.0 * energy * momentum * momentum / (pull * pull)
 	))
 
 	if energy >= 0.0:
 		# Unbound: there is still a periapsis, from the conic's semi-latus
 		# rectum, but no far side to come back to.
-		var latus: float = momentum * momentum / mu
+		var latus: float = momentum * momentum / pull
 		return Vector2(latus / maxf(1.0 + eccentricity, 0.001), INF)
 
-	var semi_major: float = -mu / (2.0 * energy)
+	var semi_major: float = -pull / (2.0 * energy)
 	var apoapsis: float = semi_major * (1.0 + eccentricity)
 	if apoapsis >= influence_radius:
 		return Vector2(semi_major * (1.0 - eccentricity), INF)
@@ -322,12 +329,15 @@ func orbit_shape(point: Vector2, velocity: Vector2) -> Dictionary:
 	}
 	var arm: Vector2 = point - global_position
 	var radius: float = arm.length()
-	var mu: float = mu()
-	if radius < 0.001 or mu <= 0.0:
+	# Named `pull` rather than `mu`, which shadowed the method it is
+	# calling. The file already uses `pull` for the same quantity further
+	# down, so this is the name it had anyway.
+	var pull: float = mu()
+	if radius < 0.001 or pull <= 0.0:
 		return shape
 	shape["eccentricity"] = (
-		arm * (velocity.length_squared() - mu / radius) - velocity * arm.dot(velocity)
-	) / mu
+		arm * (velocity.length_squared() - pull / radius) - velocity * arm.dot(velocity)
+	) / pull
 	return shape
 
 
@@ -397,7 +407,12 @@ func seconds_to_apsis(point: Vector2, velocity: Vector2) -> Vector2:
 		return never
 
 	var shape: Dictionary = orbit_shape(point, velocity)
-	var periapsis: float = float(shape["periapsis"])
+	# Straight into a typed local rather than through `float()`. A
+	# dictionary hands back a `Variant`, and `float(Variant)` is the
+	# unsafe-argument warning; the assignment is checked the same way at
+	# runtime and says what it means. `aim` on the next line always did
+	# it this way.
+	var periapsis: float = shape["periapsis"]
 	var aim: Vector2 = shape["eccentricity"]
 	var eccentricity: float = aim.length()
 	if periapsis <= 0.0 or eccentricity < CIRCULAR:

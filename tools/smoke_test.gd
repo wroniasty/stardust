@@ -8019,6 +8019,115 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.queue_free()
 
 
+## Każda chmura, którą pokrycie wylosowało, zostaje zbudowana.
+##
+## `total / CLOUD_LAYERS` is integer division, so the remainder was going
+## nowhere: a sky of a hundred clouds over three layers built ninety-nine
+## of them, and a sky of a hundred and one built the same ninety-nine. Up
+## to two short of the coverage the planet rolled, on every world, for
+## ever -- the kind of error that is invisible one cloud at a time and is
+## still wrong.
+##
+## Counted off the built layers rather than off the formula, because the
+## formula is the thing under test: a test that divided by three as well
+## would have agreed with the bug.
+## Takes a node out of the tree **now** and frees it later.
+##
+## `queue_free` alone is not enough inside this suite: it runs at the
+## end of the frame and the whole suite runs inside one, so anything
+## built and "freed" by an early check is still in its groups for
+## every check after it.
+func _discard(node: Node) -> void:
+	if node.get_parent() != null:
+		node.get_parent().remove_child(node)
+	node.queue_free()
+
+
+func _check_cloud_count() -> void:
+	# Sixty worlds are built here, and every one has to leave the tree
+	# **now** rather than at the end of the frame. `queue_free` is
+	# deferred and the whole suite runs inside one frame, so the first
+	# version left all sixty in the `gravity_sources` group: the scanner
+	# check two hundred lines later reported sixty-two bodies in range of
+	# a ship parked next to one, and six other checks went with it. The
+	# garrison spawner learned this the same way -- see
+	# `GarrisonSpawner.stand_down`.
+	var checked: int = 0
+	var short_of: int = 0
+	for roll: int in range(60):
+		var planet: Planet = (
+			(load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+		)
+		planet.planet_seed = 31000 + roll
+		root.add_child(planet)
+		if not planet.has_clouds:
+			_discard(planet)
+			continue
+		var deck: Node = planet.get_node_or_null("Clouds")
+		if deck == null:
+			_discard(planet)
+			continue
+		var built: int = 0
+		var layers: int = 0
+		for layer: Node in deck.get_children():
+			var field: CloudField = layer as CloudField
+			if field == null:
+				continue
+			layers += 1
+			built += field.cloud_count()
+		if layers != Planet.CLOUD_LAYERS:
+			_discard(planet)
+			continue
+		# A layer sitting on `MAX_CLOUDS` has been clamped, and a clamped
+		# sky is allowed to be short of its coverage. Skipped rather than
+		# excused, so the assertion below stays exact.
+		var clamped: bool = false
+		for layer: Node in deck.get_children():
+			var each: CloudField = layer as CloudField
+			if each != null and each.cloud_count() >= CloudField.MAX_CLOUDS:
+				clamped = true
+		if clamped:
+			_discard(planet)
+			continue
+		checked += 1
+		if built != planet.cloud_total():
+			short_of += 1
+		_discard(planet)
+	_expect(checked > 10, "there are cloudy worlds to count (%d)" % checked)
+	_expect(
+		short_of == 0,
+		"every world builds all the clouds its coverage asked for (%d short of %d)" % [
+			short_of, checked,
+		],
+	)
+
+	# And the share-out is a share-out rather than a round-up: the layers
+	# differ by at most one, so the remainder is spread and not dumped.
+	var planet: Planet = (
+		(load(PLANET_SCENE) as PackedScene).instantiate() as Planet
+	)
+	planet.planet_seed = 31000
+	root.add_child(planet)
+	var deck: Node = planet.get_node_or_null("Clouds")
+	if deck != null and planet.has_clouds:
+		var counts: Array[int] = []
+		for layer: Node in deck.get_children():
+			var field: CloudField = layer as CloudField
+			if field != null:
+				counts.append(field.cloud_count())
+		if counts.size() > 1:
+			var most: int = counts[0]
+			var fewest: int = counts[0]
+			for each: int in counts:
+				most = maxi(most, each)
+				fewest = mini(fewest, each)
+			_expect(
+				most - fewest <= 1,
+				"and spreads it rather than dumping it on one layer (%s)" % [counts],
+			)
+	_discard(planet)
+
+
 ## Przebudowa, która się nie uda, nie może niczego zdjąć.
 ##
 ## `apply` used to strip every engine and gun and then look for the hull,
@@ -8285,6 +8394,7 @@ func _check_fitout_presets() -> void:
 	_check_main_socket_takes_anything(ship)
 	_check_refit_is_safe()
 	_check_preset_fields()
+	_check_cloud_count()
 
 	# A refit is in place, so everything pointing at this ship has to still
 	# be pointing at something: a cached hardpoint list naming nodes the
