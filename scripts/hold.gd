@@ -9,7 +9,7 @@ extends RefCounted
 ## two pieces taken off it.
 ##
 ## **The ship's own API did not change.** `ship.carried`, `ship.cargo`,
-## `ship.stores`, `ship.charges`, `ship.take()`, `ship.stow()` and the rest
+## `ship.stores`, `ship.take()`, `ship.stow()` and the rest
 ## all still work, because ninety-seven places read those fields and a
 ## hundred and thirty-six call those methods, and a refactor whose value is
 ## "the file is shorter" does not get to spend two hundred and thirty edits
@@ -54,11 +54,6 @@ var cargo: Array[Dictionary] = []
 ## hold with no room for the drive you just found, and that trade is
 ## what the premise is made of -- see `Stores`.
 var stores: Stores = Stores.new()
-
-## Hyperdrive charges. Not a bulk: a charge is a thing the drive holds
-## rather than a thing the bay holds, which is why it has a capacity of
-## its own (`Ship.charge_capacity`) and takes no room here.
-var charges: int = 0
 
 ## How many average finds the stock hold holds. **The premise parameter**,
 ## and the reason the hold is a number with an argument behind it rather
@@ -283,8 +278,6 @@ func scrap_cargo(index: int, capacity: float, place: Refinery.Place) -> int:
 ## forty crates, or a crate type that does not exist yet. The refinery
 ## is how they are replaced.
 ##
-## The charges stay, which is the rule above: `charges` is not emptied
-## here and nothing in this function touches it.
 func spill() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if carried != null:
@@ -295,23 +288,3 @@ func spill() -> Array[Dictionary]:
 	cargo.clear()
 	stores.clear()
 	return out
-
-
-## Spends one charge. Returns whether there was one.
-##
-## The only thing that makes a jump a clean jump; without it the drive
-## will still fire, on engine fuel and at the old shortfall risk, which
-## is what keeps a dry magazine from being a wall.
-func draw_charge() -> bool:
-	if charges <= 0:
-		return false
-	charges -= 1
-	return true
-
-
-## Puts charges in, up to what the magazine holds. Returns how many fit.
-func add_charges(count: int, capacity: int) -> int:
-	var room: int = maxi(capacity - charges, 0)
-	var put: int = clampi(count, 0, room)
-	charges += put
-	return put

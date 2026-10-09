@@ -42,15 +42,13 @@ const NAMES: Array[String] = ["spare parts", "stardust", "iron ore", "dust ore"]
 ##
 ## The stock hull holds six bulk (`Hold.FINDS_PER_HOLD`), so: a hold of
 ## nothing but parts is fifty of them -- two hull rebuilds -- and a hold
-## of nothing but stardust is a hundred and twenty-five, which is four
-## hyperdrive charges and so exactly one full drive. Three figures a
-## pilot can hold in their head, which is the only reason either number
-## is what it is.
+## of nothing but stardust is a hundred and twenty-five, which is
+## sixty-two fuel, or half a tank. Both are figures a pilot can hold in
+## their head, which is the only reason either number is what it is.
 ##
-## They were derived against a twelve-bulk hold and are unchanged: the
-## hold halving is what made a full load of stardust come out at one
-## full drive rather than two, and that is a better number than the one
-## it replaced.
+## The stardust figure used to be quoted in hyperdrive charges, which
+## are gone: one tank pays for the jumps and the thrust now, so the
+## honest unit for stardust is fuel.
 ## **A full hold is worth the same in either ore**, on purpose:
 ## twenty-five iron ore make fifty parts, which is two hull rebuilds,
 ## and twenty dust ore make sixty stardust, which is two jump charges.

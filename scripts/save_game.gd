@@ -92,7 +92,6 @@ static func _capture_ship(ship: Ship) -> Dictionary:
 		"heat": ship.hull_heat,
 		"energy": ship.energy,
 		"fuel": ship.fuel,
-		"charges": ship.charges,
 		"fitted": fitted,
 		"mods": mods,
 		"cargo": stowed,
@@ -217,9 +216,9 @@ static func _restore_ship(hull: Dictionary, ship: Ship) -> void:
 	# must not hand back more than the tank now fitted can hold.
 	ship.energy = clampf(float(hull["energy"]), 0.0, ship.energy_capacity())
 	ship.fuel = clampf(float(hull["fuel"]), 0.0, ship.fuel_capacity())
-	# Clamped like the pools above, and defaulted like them too: a save
-	# written before the magazine existed comes back with an empty one.
-	ship.charges = clampi(int(hull.get("charges", 0)), 0, ship.charge_capacity())
+	# A `charges` key written by an older build is read and dropped: the
+	# magazine is gone and one tank pays for everything now, so there is
+	# nothing for the number to mean.
 
 
 ## Whether this is a save this build can read.

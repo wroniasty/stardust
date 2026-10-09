@@ -1041,11 +1041,6 @@ func _draw_facts(font: Font, rect: Rect2) -> void:
 		font, Vector2(x, y), width, "fuel",
 		_ship.fuel / maxf(_ship.fuel_capacity(), 0.001), _ink.accent,
 	)
-	y += ROW
-	_draw_bar(
-		font, Vector2(x, y), width, "jumps",
-		float(_ship.charges) / maxf(float(_ship.charge_capacity()), 1.0), _ink.nav,
-	)
 
 	# Why fitting is or is not available, which belongs with the ship
 	# rather than with the item: it is a fact about where it is standing.

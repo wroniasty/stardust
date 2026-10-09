@@ -528,7 +528,7 @@ var last_landing_rejection: String = ""
 ## Everything the ship is carrying. See `Hold`, which was lifted out of
 ## this file: the four fields below are forwarding properties so that the
 ## ninety-seven places which read `ship.carried`, `ship.cargo`,
-## `ship.stores` and `ship.charges` keep working. The code moved; the
+## and `ship.stores` keep working. The code moved; the
 ## interface did not.
 var hold: Hold = Hold.new()
 
@@ -639,15 +639,6 @@ var tank_bay: TankBay = null
 ## it is the thing that decides how far from a dock a pilot is willing to
 ## be.
 var fuel: float = 0.0
-
-## Hyperdrive charges in the drive's magazine. Whole things: one jump
-## takes one, and a pilot plans a route by counting them. Kept by the
-## `Hold`; here as a forwarding property, like the rest of it.
-var charges: int:
-	get:
-		return hold.charges
-	set(value):
-		hold.charges = value
 
 ## Contact points along the outline, without the gear's. Built once.
 var _outline_contacts: Array[Vector2] = []
@@ -1406,25 +1397,30 @@ func fuel_capacity() -> float:
 	return stat(&"fuel_capacity", fitted.fuel_capacity if fitted != null else 0.0)
 
 
-## How many charges the fitted drive can hold. Zero without one, like
-## the tank: a ship with no drive is not a ship with a small magazine.
-func charge_capacity() -> int:
-	var drive: JumpDriveData = jump_drive()
-	return 0 if drive == null else maxi(drive.charge_capacity, 0)
-
-
-## Spends one charge. Returns whether there was one.
+## Burns stardust into the tank. Returns how much fuel went in.
 ##
-## The only thing that makes a jump a clean jump; without it the drive
-## will still fire, on engine fuel and at the old shortfall risk, which
-## is what keeps a dry magazine from being a wall.
-func draw_charge() -> bool:
-	return hold.draw_charge()
-
-
-## Puts charges in, up to what the magazine holds. Returns how many fit.
-func add_charges(count: int) -> int:
-	return hold.add_charges(count, charge_capacity())
+## Spends only what the tank can hold, so a full tank costs nothing and
+## a nearly-full one costs the stardust it needed and not a unit more --
+## the same partial-run shape as refining ore, and for the same reason:
+## a transaction that half-finished would leave the pilot's stores in two
+## states at once.
+##
+## The two-step -- dust ore into stardust, stardust into fuel -- is on
+## purpose. The corona hands over stardust directly (`Corona`), so it has
+## to exist as something carryable; the ground and the star then converge
+## on one intermediate rather than each having a pipeline of its own.
+func refuel(units: int) -> float:
+	var place: Refinery.Place = Refinery.place_of(self)
+	var short: float = maxf(fuel_capacity() - fuel, 0.0)
+	if short <= 0.0 or units <= 0:
+		return 0.0
+	var wanted: int = mini(units, Refinery.stardust_for_fuel(short, place))
+	var spent: int = spend_units(Stores.Kind.STARDUST, wanted)
+	if spent <= 0:
+		return 0.0
+	var made: float = minf(Refinery.fuel_from(spent, place), short)
+	fuel += made
+	return made
 
 
 ## Takes fuel out of the tank. Returns how much it actually got, which is

@@ -1196,7 +1196,7 @@ func _evaluate_phase() -> void:
 			_check_editor_buttons()
 			_check_editor_scrap()
 			_check_scrap_and_mend()
-			_check_charges()
+			_check_one_fuel()
 			_check_transit_veil()
 			_check_misjump()
 			_check_save()
@@ -4897,8 +4897,7 @@ func _check_jump_balks(
 	jump.crossed.connect(
 		func(_a: int, _b: int, _at: Vector2, _h: float) -> void: crossings += 1
 	)
-	ship.add_charges(1)
-	var charges_before: int = ship.charges
+	var fuel_before: float = ship.fuel
 	# Aimed the way the drive is actually aimed: by pointing the nose.
 	# `UP.rotated(rotation)` is the nose, so this is the rotation that
 	# puts it along the lane.
@@ -4920,8 +4919,8 @@ func _check_jump_balks(
 	)
 	_expect(crossings == 0, "nothing crossed")
 	_expect(
-		ship.charges < charges_before,
-		"and the charge is gone, which is what makes it a failure and not a refusal",
+		ship.fuel < fuel_before,
+		"and the fuel is gone, which is what makes it a failure and not a refusal",
 	)
 	_expect(
 		jump.phase == JumpController.Phase.IDLE,
@@ -5599,15 +5598,14 @@ func _check_jump_sequence() -> void:
 	# the drive with a dry tank, and a tank would fire it with an empty
 	# magazine. Only having neither is nothing to jump with.
 	ship.fuel = 0.0
-	ship.charges = 0
 	# The drive has to be on before holding the key means anything.
 	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	_expect(
 		pilot.phase == JumpController.Phase.IDLE
-		and excuses[excuses.size() - 1] == "no charge, no fuel",
-		"with neither charge nor fuel it refuses before it starts (%s)" % excuses[excuses.size() - 1],
+		and excuses[excuses.size() - 1] == "no fuel",
+		"with a dry tank it refuses before it starts (%s)" % excuses[excuses.size() - 1],
 	)
 
 	pilot.free()
@@ -8141,7 +8139,7 @@ func _thrust_of(ship: Ship) -> float:
 ## four fields and fifteen methods on a `RigidBody2D`.
 ##
 ## The other half is that nothing outside noticed. Ninety-seven places
-## read `ship.carried`, `ship.cargo`, `ship.stores` or `ship.charges` and
+## read `ship.carried`, `ship.cargo` or `ship.stores` and
 ## a hundred and thirty-six call the methods; those are forwarding
 ## properties and delegates now, and the rest of this suite is what says
 ## they still work. What is checked **here** is that they forward to the
@@ -8200,22 +8198,8 @@ func _check_hold_alone() -> void:
 		"and spending takes them back out",
 	)
 
-	# Charges are the one thing in here that is not a volume, so it has a
-	# capacity of its own and takes no room.
-	var before: float = hold.used()
-	_expect(hold.add_charges(3, 4) == 3, "charges go in up to the magazine")
-	_expect(hold.add_charges(9, 4) == 1, "and no further (%d)" % hold.charges)
-	_expect(
-		is_equal_approx(hold.used(), before),
-		"a charge takes no room in the bay",
-	)
-	_expect(
-		hold.draw_charge() and hold.charges == 3,
-		"and one comes back out",
-	)
-
-	# Spilling is what dying costs: the items come back to be scattered,
-	# the counted stores are gone, the charges stay.
+	# Spilling is what dying costs: the items come back to be scattered
+	# and the counted stores are gone.
 	hold.take(loot.weapon(11) as Resource)
 	var spilled: Array[Dictionary] = hold.spill()
 	_expect(spilled.size() == 2, "everything in the hold spills (%d)" % spilled.size())
@@ -8224,8 +8208,6 @@ func _check_hold_alone() -> void:
 		and hold.carrying(Stores.Kind.SPARE_PARTS) == 0,
 		"and the hold is empty afterwards",
 	)
-	_expect(hold.charges == 3, "but the charges stay -- see Hold.spill")
-
 	_check_ship_forwards_to_its_hold()
 	loot.queue_free()
 
@@ -8265,13 +8247,6 @@ func _check_ship_forwards_to_its_hold() -> void:
 	_expect(
 		ship.carried == null,
 		"and the ship reads back what the hold was set to directly",
-	)
-
-	ship.charges = 0
-	ship.add_charges(2)
-	_expect(
-		ship.charges == ship.hold.charges and ship.charges > 0,
-		"charges forward both ways (%d)" % ship.charges,
 	)
 
 	# And the rule the split gave one home: the hold changing is mass
@@ -13129,128 +13104,178 @@ func _check_mending(ship: Ship, yard: Refinery.Place) -> void:
 	)
 
 
-## Ładunek to pozwolenie na skok, paliwo to sposób desperacki.
+## Jedno paliwo: skok i ciąg płacą z tego samego baku.
 ##
-## The split M5.2 asks for, and the shape of it is the part worth
-## pinning. A charge is one jump whatever the distance, so "four jumps
-## left" is a number a pilot plans a route with; distance keeps costing
-## what it always cost, which is risk at the edge of the reach. And an
-## empty magazine is **not** a wall: the drive still fires on engine
-## fuel at the old shortfall risk, because IDEAS.md section 10 is
-## explicit that a shortfall is a decision rather than a stop.
-func _check_charges() -> void:
+## The hyperdrive charge is gone. It was a coupon -- one clean jump,
+## whatever the distance -- and **nothing in the game ever produced
+## one**, so for three milestones the magazine was a bar that read zero
+## and a branch that never ran. One tank pays for everything now.
+##
+## What that leaves is simpler and is what IDEAS.md section 10 wrote
+## before the charge was invented: distance costs fuel, a shortfall is
+## **risk** rather than a refusal, and the edge of the drive's reach
+## costs risk on its own. No exception to carry.
+func _check_one_fuel() -> void:
 	var map: GalaxyMap = GalaxyMap.generate(TEST_SEED)
 	var here: int = map.start_index()
 	var system: StarSystem = StarSystem.generate(TEST_SEED)
 	var galaxy: Node = GALAXY_SCRIPT.new()
 	root.add_child(galaxy)
 	galaxy.reset(TEST_SEED)
-
 	var ship: Ship = _spawn_ship()
 	var pilot: JumpController = JumpController.new()
 	pilot.use_player_input = false
 	root.add_child(pilot)
-	pilot.bind(ship, system, map, here, galaxy)
+	pilot.bind(ship, system, map, here, galaxy, Vector2.INF, 0.0)
 
-	var drive: JumpDriveData = ship.jump_drive()
-	_expect(
-		drive != null and ship.charge_capacity() == drive.charge_capacity
-		and ship.charge_capacity() > 0,
-		"the fitted drive says how many charges it holds (%d)" % ship.charge_capacity(),
-	)
-	ship.charges = 0
-	_expect(
-		ship.add_charges(99) == ship.charge_capacity()
-		and ship.charges == ship.charge_capacity(),
-		"the magazine fills to what it holds and no further",
-	)
-
-	var neighbour: int = map.neighbours(here, GalaxyMap.BASE_REACH)[0]
-	var away: float = map.positions[here].distance_to(map.positions[neighbour])
-	_expect(
-		away < drive.reach * JumpController.STRAIN_FROM,
-		"there is a neighbour inside the easy part of the range to aim at (%.1f ly)" % away,
-	)
-
-	# Out past the lock first: every question below is about the drive,
-	# and inside the lock the honest answer to all of them is the star.
+	var neighbours: PackedInt32Array = map.neighbours(here, GalaxyMap.BASE_REACH)
+	if neighbours.is_empty():
+		_expect(false, "there is somewhere to jump to")
+		return
+	var target: int = neighbours[0]
+	# Clear of everything, or the refusal under test is the clearance
+	# rule rather than the tank: the origin is where the star is.
 	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
 
-	# An empty tank and a full magazine: no shortfall, because that is
-	# what a charge buys.
+	# A full tank is many jumps, and the figure is the one a pilot plans
+	# with. Measured rather than quoted: the fare comes off the drive and
+	# the mass, so a heavier ship gets fewer.
+	var fare: float = pilot.bill_for(target)
+	ship.fuel = ship.fuel_capacity()
+	_expect(
+		fare > 0.0 and ship.fuel / fare > 2.0,
+		"a tank is %.1f jumps to the nearest neighbour" % [ship.fuel / fare],
+	)
+
+	# Enough in the tank is no risk from the tank. Whatever risk is left
+	# is the reach's, which is a different thing and keeps its own name.
+	_expect(
+		pilot.misjump_risk(target) < 0.001,
+		"a full tank carries no shortfall risk (%.3f)" % pilot.misjump_risk(target),
+	)
+
+	# Half the fare is half the risk, and that is the whole rule now that
+	# there is no coupon to take it away.
+	ship.fuel = fare * 0.5
+	_expect(
+		absf(pilot.misjump_risk(target) - 0.5) < 0.02,
+		"half a fare is about half the risk (%.2f)" % pilot.misjump_risk(target),
+	)
+	ship.fuel = fare * 0.9
+	_expect(
+		pilot.misjump_risk(target) < 0.15,
+		"and nearly enough is nearly safe (%.2f)" % pilot.misjump_risk(target),
+	)
+
+	# An empty tank is the one refusal, because there is nothing left to
+	# improvise with -- the drive used to fall back on fuel when the
+	# magazine was empty, and fuel is now the only thing there is.
 	ship.fuel = 0.0
 	_expect(
-		pilot.misjump_risk(neighbour) <= 0.001,
-		"with a charge aboard a dry tank costs nothing (%.2f)" % pilot.misjump_risk(neighbour),
-	)
-	ship.charges = 0
-	_expect(
-		pilot.misjump_risk(neighbour) > 0.9,
-		"with neither, the old shortfall rule is back (%.2f)" % pilot.misjump_risk(neighbour),
-	)
-	_expect(
-		pilot.blocked_by(neighbour) != "",
-		"and with neither there is nothing to fire the drive with at all",
+		pilot.blocked_by(target) == "no fuel",
+		"a dry tank refuses, and says so (%s)" % pilot.blocked_by(target),
 	)
 	ship.fuel = ship.fuel_capacity()
 	_expect(
-		pilot.blocked_by(neighbour) == "",
-		"fuel alone is enough to try, which is the half of the rule that matters",
-	)
-	_expect(
-		pilot.misjump_risk(neighbour) <= 0.001,
-		"and a full tank pays the old fare cleanly (%.2f)" % pilot.misjump_risk(neighbour),
+		pilot.blocked_by(target).is_empty(),
+		"and a full one does not (%s)" % pilot.blocked_by(target),
 	)
 
-	# And the spending. Driven through the real state machine, because
-	# which currency a jump runs on is decided when the spool starts and
-	# a test that called the accessor would be testing the accessor.
-	var out: Vector2 = (map.positions[neighbour] - map.positions[here]).normalized()
-	ship.global_rotation = out.angle() - Vector2.UP.angle()
-	ship.charges = 2
-	ship.fuel = ship.fuel_capacity()
-	var tank: float = ship.fuel
-	# The drive has to be on before holding the key means anything.
-	pilot.set_armed(true)
-	pilot.holding = true
-	pilot.advance(1.0 / 60.0)
-	pilot.advance(1.0 / 60.0)
-	_expect(
-		pilot.phase == JumpController.Phase.CHARGING,
-		"the drive spools up when it is pointed somewhere it can go",
-	)
-	_expect(
-		ship.charges == 1 and absf(ship.fuel - tank) < 0.001,
-		"a jump on a charge spends the charge and not a drop of fuel (%d left, %.1f fuel)" % [
-			ship.charges, ship.fuel,
-		],
-	)
+	_check_stardust_is_fuel(ship)
 
-	# The same jump with an empty magazine burns the tank, as it always
-	# did. Not a wall, which is the whole point of keeping this path.
-	pilot.holding = false
-	pilot.advance(1.0 / 60.0)
-	ship.charges = 0
-	ship.fuel = ship.fuel_capacity()
-	tank = ship.fuel
-	# The drive has to be on before holding the key means anything.
-	pilot.set_armed(true)
-	pilot.holding = true
-	pilot.advance(1.0 / 60.0)
-	pilot.advance(1.0 / 60.0)
-	_expect(
-		pilot.phase == JumpController.Phase.CHARGING and ship.fuel < tank,
-		"with an empty magazine the drive improvises on engine fuel (%.1f burned)" % [
-			tank - ship.fuel,
-		],
-	)
-
-	_check_refinery(ship)
-
-	pilot.holding = false
 	pilot.queue_free()
 	ship.queue_free()
 	galaxy.queue_free()
+
+
+## Stardust to paliwo — ujście, którym był ładunek.
+##
+## With charges gone stardust had no sink at all, and a resource with no
+## sink is a resource that is only weight. It has a better one now: fuel
+## pays for the jumps **and** for the thrust, so a substance that becomes
+## fuel becomes range and the ability to manoeuvre when you arrive.
+func _check_stardust_is_fuel(ship: Ship) -> void:
+	ship.stores.clear()
+	ship.fuel = 0.0
+	_expect(
+		ship.refuel(10) == 0.0,
+		"stardust nobody has refuels nothing",
+	)
+
+	var put: int = ship.load_units(Stores.Kind.STARDUST, 40)
+	_expect(put > 0, "a hold of stardust (%d units)" % put)
+	var made: float = ship.refuel(put)
+	_expect(
+		made > 0.0 and ship.fuel > 0.0,
+		"and it goes into the tank (%.1f fuel)" % made,
+	)
+	_expect(
+		ship.carrying(Stores.Kind.STARDUST) < put,
+		"spending the stardust it used (%d left)" % ship.carrying(Stores.Kind.STARDUST),
+	)
+
+	# A full tank costs nothing, which is the partial-run shape the rest
+	# of the refinery answers to: a transaction that half-finished would
+	# leave the stores in two states at once.
+	ship.fuel = ship.fuel_capacity()
+	var held: int = ship.carrying(Stores.Kind.STARDUST)
+	_expect(
+		ship.refuel(999) == 0.0 and ship.carrying(Stores.Kind.STARDUST) == held,
+		"a full tank takes none and costs none",
+	)
+
+	# And it never overfills: a nearly-full tank spends what it needed
+	# and not a unit more.
+	ship.fuel = ship.fuel_capacity() - 1.0
+	ship.load_units(Stores.Kind.STARDUST, 200)
+	var before: int = ship.carrying(Stores.Kind.STARDUST)
+	ship.refuel(999)
+	_expect(
+		ship.fuel <= ship.fuel_capacity() + 0.001,
+		"a topped-up tank is never overfilled (%.2f of %.2f)" % [
+			ship.fuel, ship.fuel_capacity(),
+		],
+	)
+	_expect(
+		before - ship.carrying(Stores.Kind.STARDUST) < 10,
+		"and one unit of room costs about one unit of stardust (%d spent)" % [
+			before - ship.carrying(Stores.Kind.STARDUST),
+		],
+	)
+
+	# Where the work is done still decides what it is worth, which is the
+	# one number the whole refinery shares.
+	_expect(
+		Refinery.fuel_from(100, Refinery.Place.SPACE)
+		< Refinery.fuel_from(100, Refinery.Place.LANDED)
+		and Refinery.fuel_from(100, Refinery.Place.LANDED)
+		< Refinery.fuel_from(100, Refinery.Place.DOCKED),
+		"stardust is worth more where there is a floor (%.0f, %.0f, %.0f)" % [
+			Refinery.fuel_from(100, Refinery.Place.SPACE),
+			Refinery.fuel_from(100, Refinery.Place.LANDED),
+			Refinery.fuel_from(100, Refinery.Place.DOCKED),
+		],
+	)
+
+	# The symmetry the numbers were chosen for: a full hold is two of a
+	# thing either way, so the choice between the ores is about need.
+	var hold_bulk: float = Hold.FINDS_PER_HOLD * 1.5
+	var iron: int = Stores.fits_in(Stores.Kind.IRON_ORE, hold_bulk)
+	var dust: int = Stores.fits_in(Stores.Kind.DUST_ORE, hold_bulk)
+	var parts: int = Refinery.units_from(
+		Stores.Kind.IRON_ORE, iron, Refinery.Place.DOCKED
+	)
+	var grains: int = Refinery.units_from(
+		Stores.Kind.DUST_ORE, dust, Refinery.Place.DOCKED
+	)
+	var hulls: float = float(parts) / float(Refinery.HULL_PARTS)
+	var jumps: float = Refinery.fuel_from(grains, Refinery.Place.DOCKED) / 14.6
+	_expect(
+		absf(hulls - jumps) < 0.5,
+		"a hold of iron is %.1f hull rebuilds and a hold of dust %.1f jumps" % [
+			hulls, jumps,
+		],
+	)
 
 
 ## Jedna liczba na trzy miejsca.
@@ -13260,22 +13285,22 @@ func _check_charges() -> void:
 ## discount -- known, because a card that said one thing and a hold that
 ## did another would be the market this deliberately is not.
 func _check_refinery(ship: Ship) -> void:
-	var docked: int = Refinery.stardust_for_charge(Refinery.Place.DOCKED)
-	var landed: int = Refinery.stardust_for_charge(Refinery.Place.LANDED)
-	var adrift: int = Refinery.stardust_for_charge(Refinery.Place.SPACE)
+	var docked: int = Refinery.stardust_for_fuel(30.0, Refinery.Place.DOCKED)
+	var landed: int = Refinery.stardust_for_fuel(30.0, Refinery.Place.LANDED)
+	var adrift: int = Refinery.stardust_for_fuel(30.0, Refinery.Place.SPACE)
 	_expect(
 		docked < landed and landed < adrift,
-		"a charge costs least at a yard and most in the dark (%d, %d, %d)" % [
+		"a tankful costs least in stardust at a yard (%d, %d, %d)" % [
 			docked, landed, adrift,
 		],
 	)
 	_expect(
-		docked == Refinery.STARDUST_PER_CHARGE,
-		"and the yard is the figure on the card (%d)" % docked,
-	)
-	_expect(
-		Refinery.charges_from(docked * 3 + docked - 1, Refinery.Place.DOCKED) == 3,
-		"stardust that does not cover a whole charge does not make one",
+		is_equal_approx(
+			Refinery.fuel_from(docked, Refinery.Place.DOCKED), 30.0
+		),
+		"and the two directions agree: %d stardust is %.1f fuel" % [
+			docked, Refinery.fuel_from(docked, Refinery.Place.DOCKED),
+		],
 	)
 
 	# Off the flight mode, so nothing new has to be tracked and the two
@@ -13427,14 +13452,16 @@ func _check_corona() -> void:
 		"and none of it is anybody's without a scoop",
 	)
 
-	# Ten seconds a jump charge at the inner edge with a full scoop,
-	# which is the number the constant was chosen for.
-	var seconds: float = (
-		float(Refinery.STARDUST_PER_CHARGE) / Corona.units_per_second(1.0, burn, burn)
-	)
+	# Seconds per jump's worth of fuel at the inner edge with a full
+	# scoop, which is the number the constant was chosen for. Quoted in
+	# jumps rather than in charges, because charges are gone and the
+	# scoop's whole point is that a tank can be filled away from a dock.
+	var jump: float = 14.6
+	var grains: float = Refinery.stardust_for_fuel(jump, Refinery.Place.SPACE)
+	var seconds: float = grains / Corona.units_per_second(1.0, burn, burn)
 	_expect(
-		seconds > 6.0 and seconds < 16.0,
-		"a full scoop is %.0f s a jump charge at the inner edge" % seconds,
+		seconds > 5.0 and seconds < 35.0,
+		"a full scoop is %.0f s of sitting per jump's worth of fuel" % seconds,
 	)
 
 	_check_scoop_mod()
@@ -13616,13 +13643,14 @@ func _check_digging(sky: Node) -> void:
 
 ## Dwie rudy, po jednej na każde źródło, i pełna ładownia warta tyle samo.
 ##
-## The claim the numbers are for: a hold of iron is 2.4 hull rebuilds
-## and a hold of dust is 2.4 jump charges, so the choice between them is
-## about what the pilot needs rather than about which pays better. A
-## table where one simply paid more would have no choice in it, and the
-## numbers that make them equal are spread over `Stores.BULK`,
-## `Refinery.ORE_YIELD`, `HULL_PARTS` and `STARDUST_PER_CHARGE` -- four
-## files that can drift apart without anybody noticing.
+## The claim the numbers are for: a hold of iron is about two hull
+## rebuilds and a hold of dust about two jumps, so the choice between
+## them is about what the pilot needs rather than about which pays
+## better. A table where one simply paid more would have no choice in
+## it, and the numbers that make them equal are spread over
+## `Stores.BULK`, `Refinery.ORE_YIELD`, `HULL_PARTS` and
+## `FUEL_PER_STARDUST` -- four files that can drift apart without
+## anybody noticing.
 func _check_ore() -> void:
 	var hold: float = Hold.FINDS_PER_HOLD * 1.5
 	var iron_units: int = Stores.fits_in(Stores.Kind.IRON_ORE, hold)
@@ -13634,11 +13662,12 @@ func _check_ore() -> void:
 		Stores.Kind.DUST_ORE, dust_units, Refinery.Place.DOCKED
 	)
 	var hulls: float = float(parts) / float(Refinery.HULL_PARTS)
-	var charges: float = float(dust) / float(Refinery.STARDUST_PER_CHARGE)
+	# A neighbour jump at the stock drive and the stock mass, measured.
+	var jumps: float = Refinery.fuel_from(dust, Refinery.Place.DOCKED) / 14.6
 	_expect(
-		absf(hulls - charges) < 0.15,
-		"a hold of iron is %.1f hull rebuilds and a hold of dust %.1f charges" % [
-			hulls, charges,
+		absf(hulls - jumps) < 0.5,
+		"a hold of iron is %.1f hull rebuilds and a hold of dust %.1f jumps" % [
+			hulls, jumps,
 		],
 	)
 	# And neither ore is dearer in volume than what it becomes, which is
@@ -13863,11 +13892,9 @@ func _check_death_costs() -> void:
 	_expect(ship.take(loot.weapon(12) as Resource, 3), "and something else in the hands")
 	var parts: int = ship.load_units(Stores.Kind.SPARE_PARTS, 40)
 	var dust: int = ship.load_units(Stores.Kind.STARDUST, 12)
-	ship.add_charges(2)
-	var charges: int = ship.charges
 	_expect(
-		parts > 0 and dust > 0 and charges > 0,
-		"and counted stores (%d parts, %d stardust, %d charges)" % [parts, dust, charges],
+		parts > 0 and dust > 0,
+		"and counted stores (%d parts, %d stardust)" % [parts, dust],
 	)
 
 	var items: int = ship.cargo.size() + (1 if ship.carried != null else 0)
@@ -13906,15 +13933,19 @@ func _check_death_costs() -> void:
 		left == engines and still_armed == armed,
 		"nothing bolted to the hull comes off (%d engines, %d guns)" % [left, still_armed],
 	)
-	_expect(ship.charges == charges, "and the jump charges stay (%d)" % ship.charges)
+	_expect(
+		ship.fuel > 0.0,
+		"and the tank stays, which is the rule that matters now that the"
+		+ " tank is the only thing a jump runs on (%.1f)" % ship.fuel,
+	)
 
 	ship.take_damage(2.0, "test")
 	_expect(ship.is_destroyed(), "the hull runs out")
 	ship.respawn(Vector2(400.0, 0.0), Vector2.ZERO)
 	_expect(ship.hull_integrity == 1.0, "and comes back whole")
 	_expect(
-		ship.charges == charges and ship.cargo.is_empty(),
-		"with the tanks it had and the hold it lost",
+		ship.fuel > 0.0 and ship.cargo.is_empty(),
+		"with the tank it had and the hold it lost (%.1f fuel)" % ship.fuel,
 	)
 
 	_check_death_keeps_the_dead(ship)

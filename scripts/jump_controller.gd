@@ -152,11 +152,6 @@ var _target: int = -1
 var _bill: float = 0.0
 var _spent: float = 0.0
 
-## Whether this jump is running on a hyperdrive charge rather than on
-## engine fuel. Decided when the spool starts and kept, so that a tank
-## filled mid-charge cannot quietly change what the jump costs.
-var _on_charge: bool = false
-
 ## Latched with the target, for the same reason: the pilot committed to
 ## a gamble with known odds, and odds that moved while the drive spooled
 ## would be odds nobody agreed to.
@@ -256,8 +251,8 @@ func blocked_by(index: int) -> String:
 	var away: float = _at.distance_to(_map.positions[index])
 	if not drive.can_cross(away):
 		return "out of range"
-	if _ship.charges <= 0 and _ship.fuel <= 0.0:
-		return "no charge, no fuel"
+	if _ship.fuel <= 0.0:
+		return "no fuel"
 	return ""
 
 
@@ -300,12 +295,10 @@ func bill_for(index: int) -> float:
 ## which is what makes "I have almost enough" a decision instead of a
 ## wall.
 ##
-## **A charge takes the shortfall out of the question entirely.** That
-## is what a charge is for: it buys a clean jump, and the only thing
-## left to worry about is how far. With an empty magazine the drive
-## improvises on engine fuel and the old rule applies unchanged -- which
-## is how the split keeps its promise that a dry hold is a problem
-## rather than a stop.
+## **It applies to every jump now.** A hyperdrive charge used to take the
+## shortfall out of the question -- that was what a charge was for -- and
+## charges are gone, so the rule section 10 wrote is the only rule. One
+## tank, one shortfall, no exceptions to carry.
 func misjump_risk(index: int) -> float:
 	if _ship == null or not is_instance_valid(_ship) or _map == null:
 		return 0.0
@@ -313,11 +306,9 @@ func misjump_risk(index: int) -> float:
 	if drive == null or index < 0 or index >= _map.count():
 		return 0.0
 	var fare: float = bill_for(index)
-	var shortfall: float = 0.0
-	if _ship.charges <= 0:
-		shortfall = (
-			0.0 if fare <= 0.0 else clampf(1.0 - _ship.fuel / fare, 0.0, 1.0)
-		)
+	var shortfall: float = (
+		0.0 if fare <= 0.0 else clampf(1.0 - _ship.fuel / fare, 0.0, 1.0)
+	)
 	var away: float = _at.distance_to(_map.positions[index])
 	var strain: float = clampf(
 		(away / maxf(drive.reach, 0.001) - STRAIN_FROM) / maxf(1.0 - STRAIN_FROM, 0.001),
@@ -451,19 +442,9 @@ func _idle() -> void:
 	# takes the shortfall out of the risk and the pilot is owed the
 	# figure they were shown when they pressed.
 	_risk = misjump_risk(wanted)
-	# Which currency this jump runs on, decided once and here. A charge
-	# if there is one, engine fuel if there is not -- the drive fires
-	# either way, and the difference is how likely it is to arrive where
-	# it was pointed.
-	#
-	# **Spent at the spool-up, not at the arrival.** A charge is dumped
-	# into the coils to start the thing, so an interruption costs the
-	# whole of it; the fuel path already works that way and a charge
-	# cannot be burned by the second because it is indivisible. It makes
-	# starting a jump in a fight an expensive way to find out you are
-	# in one, which is the lesson that rule exists to teach.
-	_on_charge = _ship.draw_charge()
-	_bill = 0.0 if _on_charge else bill_for(wanted)
+	# Spent by the second while the drive spools, which is what makes a
+	# cancelled charge cost something without a second rule for it.
+	_bill = bill_for(wanted)
 	_spent = 0.0
 	_charge = 0.0
 	_enter(Phase.CHARGING)

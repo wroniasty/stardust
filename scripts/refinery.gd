@@ -110,13 +110,26 @@ static func units_from(kind: int, units: int, place: Place) -> int:
 	return int(floor(each * float(units) * efficiency(place)))
 
 
-## Stardust for one hyperdrive charge, at a yard.
+## Fuel out of one unit of stardust, at a yard.
 ##
-## Thirty, so a full hold of nothing but stardust is eight charges and
-## the stock drive's four is a hundred and twenty units. Both are
-## numbers a pilot can do in their head while deciding whether this
-## system is worth one more look.
-const STARDUST_PER_CHARGE: int = 30
+## **This is the sink the hyperdrive charge used to be.** With charges
+## gone, stardust had no reason to exist; it has a better one now,
+## because one tank pays for the jumps and for the thrust, so a substance
+## that becomes fuel is a substance that becomes range *and* the ability
+## to manoeuvre when you get there.
+##
+## A half, and it is the same derivation the ores answer to. A full hold
+## of dust ore is twenty units, which makes sixty stardust, which makes
+## thirty fuel -- about two jumps at the stock drive's rate. A full hold
+## of iron ore is twenty-five units, which makes fifty parts, which is
+## two hull rebuilds. **Two of a thing either way**, so the choice stays
+## about which you need rather than which pays better.
+##
+## Refined stardust carried straight is worth more again, because it is
+## the lighter form: a hold of nothing but stardust is a hundred and
+## twenty-five units, which is sixty-two fuel -- half a tank. That is
+## what makes the corona worth sitting in.
+const FUEL_PER_STARDUST: float = 0.5
 
 
 ## Where this ship is, for the purposes of making things.
@@ -140,16 +153,24 @@ static func efficiency(place: Place) -> float:
 	return YIELD_AT[clampi(int(place), 0, YIELD_AT.size() - 1)]
 
 
-## What one charge costs here, in stardust. Rounded up, because a charge
-## is a whole thing and half a charge is not a thing at all.
-static func stardust_for_charge(place: Place) -> int:
-	return int(ceil(float(STARDUST_PER_CHARGE) / efficiency(place)))
+## What this much stardust is worth in fuel here.
+##
+## Not rounded to whole anything: fuel is a float in a tank and always
+## was, which is the one place in this game where a partial unit means
+## something on its own.
+static func fuel_from(stardust: int, place: Place) -> float:
+	if stardust <= 0:
+		return 0.0
+	return FUEL_PER_STARDUST * float(stardust) * efficiency(place)
 
 
-## The most charges this much stardust could make here.
-static func charges_from(stardust: int, place: Place) -> int:
-	var each: int = stardust_for_charge(place)
-	return 0 if each <= 0 else stardust / each
+## And how much stardust it would take to fill this much of a tank,
+## rounded up: you cannot feed in nine tenths of a unit.
+static func stardust_for_fuel(fuel: float, place: Place) -> int:
+	var each: float = FUEL_PER_STARDUST * efficiency(place)
+	if fuel <= 0.0 or each <= 0.0:
+		return 0
+	return int(ceil(fuel / each))
 
 
 ## Which family a module belongs to.
