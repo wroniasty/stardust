@@ -8019,6 +8019,155 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.queue_free()
 
 
+## Przebudowa, która się nie uda, nie może niczego zdjąć.
+##
+## `apply` used to strip every engine and gun and then look for the hull,
+## so a preset naming a hull that does not exist left the pilot with a
+## bare fuselage and a line in the log. The ship being refitted is the
+## one the player is flying, so a refit has to fail having changed
+## nothing.
+func _check_refit_is_safe() -> void:
+	var ship: Ship = _spawn_ship()
+	var engines: int = ship.engine_mounts().size()
+	var guns: int = ship.hardpoints.size()
+	var fitted: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		if mount.installed != null:
+			fitted += 1
+	_expect(
+		engines > 0 and guns > 0 and fitted > 0,
+		"a ship with %d mounts, %d of them filled, and %d guns" % [
+			engines, fitted, guns,
+		],
+	)
+
+	# Four ways to be wrong, and each one has to be caught **before** the
+	# first thing comes off. Built rather than rolled: a preset table
+	# cannot be relied on to contain a broken entry, and if it ever did
+	# that would be the bug rather than the fixture.
+	var good: Dictionary = ShipFitout.preset("dart (stock)")
+	_expect(ShipFitout.fault_in(good).is_empty(), "the stock preset is sound")
+	var broken: Array[Dictionary] = [
+		{"name": "no hull", "hull": &"no-such-hull", "mounts": [], "guns": []},
+		{"name": "no mounts", "hull": &"dart", "guns": []},
+		{
+			"name": "bad engine", "hull": &"dart", "guns": [],
+			"mounts": [{"name": "Nose", "size": 1.0, "at": Vector2.ZERO,
+				"engine": "no-such-engine"}],
+		},
+		{"name": "bad gun", "hull": &"dart", "mounts": [], "guns": ["no-such-gun"]},
+		{
+			"name": "homeless mount", "hull": &"dart", "guns": [],
+			"mounts": [{"name": "Nose", "size": 1.0, "engine": "torque"}],
+		},
+	]
+	for preset: Dictionary in broken:
+		_expect(
+			not ShipFitout.fault_in(preset).is_empty(),
+			"%s is refused, and says why (%s)" % [
+				preset["name"], ShipFitout.fault_in(preset),
+			],
+		)
+		_expect(
+			not ShipFitout.apply(ship, preset),
+			"applying it says it did not happen",
+		)
+		var left: int = 0
+		for mount: EngineMount in ship.engine_mounts():
+			if mount.installed != null:
+				left += 1
+		_expect(
+			ship.engine_mounts().size() == engines
+			and ship.hardpoints.size() == guns
+			and left == fitted,
+			"and the ship still has everything it had (%d mounts, %d filled, %d guns)" % [
+				ship.engine_mounts().size(), left, ship.hardpoints.size(),
+			],
+		)
+
+	# And a sound one still works, so the guard is a guard and not a wall.
+	_expect(
+		ShipFitout.apply(ship, ShipFitout.preset("freighter")),
+		"a sound preset still refits",
+	)
+	ship.queue_free()
+
+
+## Żadne pole presetu nie udaje, że coś robi.
+##
+## The gun list carried a hardpoint name and a position, and `apply` read
+## neither: guns go where the hull says. A main drive entry carried a
+## position for the same non-reason. Two fields that look like they place
+## something and do not are worse than no fields, because the next person
+## to move one will believe it.
+func _check_preset_fields() -> void:
+	# Every preset the game ships has to be sound. This is the guard that
+	# replaced a runtime `push_error`: a malformed preset now fails a
+	# build instead of printing a line into a log nobody reads.
+	for preset: Dictionary in ShipFitout.all():
+		_expect(
+			ShipFitout.fault_in(preset).is_empty(),
+			"%s is a preset that can actually be flown (%s)" % [
+				preset.get("name", "<unnamed>"), ShipFitout.fault_in(preset),
+			],
+		)
+	for preset: Dictionary in ShipFitout.all():
+		for gun: Variant in preset["guns"]:
+			_expect(
+				gun is String,
+				"%s lists its guns as weapon names (%s)" % [preset["name"], gun],
+			)
+		for entry: Dictionary in preset["mounts"]:
+			if String(entry["name"]) != "MainDrive":
+				continue
+			_expect(
+				not entry.has("at"),
+				"%s does not pretend to place its main drive" % preset["name"],
+			)
+
+	# And the blurb is computed off the same expression the engines are,
+	# which is the whole of why it can no longer be wrong. It was: a
+	# preset advertised as "50% heavier" at a thrust factor of 1.75 is
+	# 52.5% heavier, because the share lands on the increase and not on
+	# the whole.
+	var scale: float = ShipFitout.STRONGER_JETS
+	var heavier: float = (ShipFitout.bulk_factor(scale) - 1.0) * 100.0
+	_expect(
+		absf(heavier - 52.5) < 0.01,
+		"scaling thrust by %.2f makes an engine %.1f%% heavier" % [scale, heavier],
+	)
+	var says: String = ShipFitout.scaled_blurb(scale)
+	_expect(
+		says.contains("%.0f%%" % ((scale - 1.0) * 100.0))
+		and says.contains("%.1f%%" % heavier),
+		"and the blurb says both of those numbers (%s)" % says,
+	)
+
+	# Measured on the built ship rather than off the formula, which is the
+	# half the old blurb could not have caught: the engines have to come
+	# out at the figure the sentence quotes.
+	var stock: Ship = _spawn_ship()
+	ShipFitout.apply(stock, ShipFitout.preset("dart (stock)"))
+	var plain: float = _drive_bulk(stock)
+	ShipFitout.apply(stock, _preset_named("stronger jets"))
+	var strong: float = _drive_bulk(stock)
+	_expect(
+		plain > 0.0 and absf(strong / plain - ShipFitout.bulk_factor(scale)) < 0.01,
+		"and the ship it builds is %.1f%% heavier in the drives, not %.1f%%" % [
+			(strong / maxf(plain, 0.0001) - 1.0) * 100.0, heavier,
+		],
+	)
+	stock.queue_free()
+
+
+func _drive_bulk(ship: Ship) -> float:
+	var total: float = 0.0
+	for mount: EngineMount in ship.engine_mounts():
+		if mount.installed != null:
+			total += mount.installed.bulk
+	return total
+
+
 ## Gniazdo głównego napędu przyjmuje wszystko, co generator umie wylosować.
 ##
 ## Reported from the cockpit as "the epic engine will not go in anywhere"
@@ -8134,6 +8283,8 @@ func _check_fitout_presets() -> void:
 		)
 
 	_check_main_socket_takes_anything(ship)
+	_check_refit_is_safe()
+	_check_preset_fields()
 
 	# A refit is in place, so everything pointing at this ship has to still
 	# be pointing at something: a cached hardpoint list naming nodes the

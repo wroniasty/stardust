@@ -32,6 +32,10 @@ const WEAPONS: Dictionary = {
 
 const MOUNT_SCENE: String = "res://scenes/engine_mount.tscn"
 
+## What the "stronger jets" preset multiplies its engines by. Named
+## because the blurb is computed from it as well as the engines.
+const STRONGER_JETS: float = 1.75
+
 ## How much room a main drive socket has.
 ##
 ## The generator's own bulk ceiling, so **no engine the game can roll is
@@ -70,14 +74,14 @@ static func all() -> Array[Dictionary]:
 			"blurb": "four torque jets, a main drive, a retro and two strafe",
 			"hull": &"dart",
 			"mounts": _stock_mounts(),
-			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
+			"guns": ["autocannon"],
 		},
 		{
 			"name": "dart, stronger jets",
-			"blurb": "the same layout, every engine 75% stronger and 50% heavier",
+			"blurb": scaled_blurb(STRONGER_JETS),
 			"hull": &"dart",
-			"mounts": _scaled(_stock_mounts(), 1.75),
-			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -14), "weapon": "autocannon"}],
+			"mounts": _scaled(_stock_mounts(), STRONGER_JETS),
+			"guns": ["autocannon"],
 		},
 		{
 			"name": "twin gimbal (force couple)",
@@ -89,13 +93,13 @@ static func all() -> Array[Dictionary]:
 			"hull": &"rhombus",
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-						"at": Vector2(0, 13), "engine": "gimbal", "centered": true},
+						"engine": "gimbal", "centered": true},
 				# Nose nozzle, pointing the other way: it is the retro and
 				# the other half of the couple at the same time.
 				{"name": "NoseDrive", "size": MAIN_DRIVE_SOCKET,
 					"at": Vector2(0, -13), "turn": AFT, "engine": "gimbal"},
 			],
-			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -17), "weapon": "pulse"}],
+			"guns": ["pulse"],
 		},
 		{
 			"name": "single gimbal (drifts)",
@@ -103,7 +107,7 @@ static func all() -> Array[Dictionary]:
 			"hull": &"broad_dart",
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-						"at": Vector2(0, 12), "engine": "gimbal", "centered": true},
+						"engine": "gimbal", "centered": true},
 				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(9, 1.75),
 					"turn": LEFT, "engine": "thruster"},
 				{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-9, 1.75),
@@ -111,7 +115,7 @@ static func all() -> Array[Dictionary]:
 				{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -14),
 					"turn": AFT, "engine": "retro"},
 			],
-			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -16), "weapon": "beam"}],
+			"guns": ["beam"],
 		},
 		{
 			"name": "interceptor",
@@ -119,7 +123,7 @@ static func all() -> Array[Dictionary]:
 			"hull": &"interceptor",
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-					"at": Vector2(0, 9), "engine": "main", "scale": 0.8},
+					"engine": "main", "scale": 0.8},
 				{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-6, -11), "turn": RIGHT,
 					"engine": "torque", "scale": 1.4},
 				{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(6, -11), "turn": LEFT,
@@ -136,8 +140,8 @@ static func all() -> Array[Dictionary]:
 					"engine": "retro"},
 			],
 			"guns": [
-				{"name": "LeftHardpoint", "at": Vector2(-5, -10), "weapon": "pulse"},
-				{"name": "RightHardpoint", "at": Vector2(5, -10), "weapon": "pulse"},
+				"pulse",
+				"pulse",
 			],
 		},
 		{
@@ -146,7 +150,7 @@ static func all() -> Array[Dictionary]:
 			"hull": &"freighter",
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-					"at": Vector2(0, 6), "engine": "main", "scale": 1.4},
+					"engine": "main", "scale": 1.4},
 				{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-12, -14), "turn": RIGHT,
 					"engine": "torque"},
 				{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(12, -14), "turn": LEFT,
@@ -162,7 +166,7 @@ static func all() -> Array[Dictionary]:
 				{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -16), "turn": AFT,
 					"engine": "retro"},
 			],
-			"guns": [{"name": "NoseHardpoint", "at": Vector2(0, -18), "weapon": "rocket"}],
+			"guns": ["rocket"],
 		},
 		{
 			"name": "bare hull",
@@ -170,7 +174,7 @@ static func all() -> Array[Dictionary]:
 			"hull": &"dart",
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-					"at": Vector2(0, 10), "engine": "main"},
+					"engine": "main"},
 			],
 			"guns": [],
 		},
@@ -180,7 +184,7 @@ static func all() -> Array[Dictionary]:
 static func _stock_mounts() -> Array[Dictionary]:
 	return [
 		{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-			"at": Vector2(0, 10), "engine": "main"},
+			"engine": "main"},
 		{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-8, -10), "turn": RIGHT,
 			"engine": "torque"},
 		{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(8, -10), "turn": LEFT,
@@ -195,6 +199,33 @@ static func _stock_mounts() -> Array[Dictionary]:
 			"engine": "thruster"},
 		{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -12), "turn": AFT,
 			"engine": "retro"},
+	]
+
+
+## How much of a thrust increase is paid for in bulk.
+##
+## Not all of it: a bigger engine of the same design is heavier, and not
+## in proportion, or there would be no reason to want one. Seven tenths,
+## which is a decision and the only reason this number exists.
+const BULK_SHARE: float = 0.7
+
+
+## What scaling an engine by `factor` does to its bulk.
+##
+## Its own function because **a blurb was written by hand against it and
+## got it wrong**: a preset advertised as "50% heavier" at a thrust factor
+## of 1.75 is 52.5% heavier, because the share is applied to the increase
+## rather than to the whole. Now the sentence is computed from the same
+## expression the engine is, so the two cannot disagree again.
+static func bulk_factor(scale: float) -> float:
+	return 1.0 + (scale - 1.0) * BULK_SHARE
+
+
+## The sentence that goes with a scaled preset, in the figures it will
+## actually fly with.
+static func scaled_blurb(factor: float) -> String:
+	return "the same layout, every engine %.0f%% stronger and %.1f%% heavier" % [
+		(factor - 1.0) * 100.0, (bulk_factor(factor) - 1.0) * 100.0,
 	]
 
 
@@ -221,19 +252,30 @@ static func preset(preset_name: String) -> Dictionary:
 ## pointing at this ship -- the camera, the HUDs, the editor, the streaming
 ## manager -- would have to be told, and a sandbox that invalidates half
 ## the game's references is a sandbox that crashes instead of teaching.
-static func apply(ship: Ship, preset: Dictionary) -> void:
+static func apply(ship: Ship, preset: Dictionary) -> bool:
+	# **Checked before anything comes off.** This used to strip the engines
+	# and the guns and then look for the hull, so a preset naming a hull
+	# that does not exist left the pilot with a bare fuselage and an error
+	# in the log -- a refit that fails has to fail having changed nothing,
+	# because the ship it was refitting is the one the player is flying.
+	var fault: String = fault_in(preset)
+	if not fault.is_empty():
+		# Reported and returned, not pushed as an engine error. A refused
+		# refit is a refused operation carrying its reason -- the same
+		# shape as `JumpController.blocked_by` -- and the guard against a
+		# malformed preset shipping is the test that walks `all()` and
+		# asks `fault_in` of each, which fails a build rather than
+		# printing a line into a log nobody reads.
+		print("refit refused: %s" % fault)
+		return false
+
+	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
+	var hull: HullData = hull_of(preset)
+
 	for child: Node in ship.get_children():
 		if child is EngineMount or child is Hardpoint:
 			ship.remove_child(child)
 			child.queue_free()
-
-	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
-	# The hull first: where its places are decides where the main drives go.
-	var named: Variant = preset["hull"]
-	var hull: HullData = named as HullData if named is HullData else HullData.of(named)
-	if hull == null:
-		push_error("preset %s names no hull" % preset["name"])
-		return
 
 	for entry: Dictionary in preset["mounts"]:
 		if entry["name"] == "MainDrive":
@@ -250,11 +292,15 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 
 	# Guns go in the hull's hardpoints and nowhere else. The preset says which
 	# weapons it carries, in order; the hull says where the places are, and the
-	# weapons fill them front first, then the sides, then astern. A preset's own
-	# position for a gun is not read.
+	# weapons fill them front first, then the sides, then astern.
+	#
+	# So the list is **weapon names and nothing else**. It used to be a list
+	# of entries carrying a hardpoint name and a position as well, neither
+	# of which was ever read: two fields that looked like they placed a gun
+	# and did not, which is worse than no fields at all.
 	var weapons: Array[WeaponData] = []
-	for entry: Dictionary in preset["guns"]:
-		weapons.append(load(WEAPONS[entry["weapon"]]) as WeaponData)
+	for gun: Variant in preset["guns"]:
+		weapons.append(load(WEAPONS[String(gun)]) as WeaponData)
 	var next_weapon: int = 0
 	for slot: Dictionary in hull.slots():
 		if slot["kind"] == HullData.SLOT_DRIVE:
@@ -291,6 +337,55 @@ static func apply(ship: Ship, preset: Dictionary) -> void:
 	ship._build_contact_points()
 	ship._build_collision_shape()
 	ship.rebuild_control_groups(false)
+	return true
+
+
+## The hull a preset names, resolved. Either a `HullData` outright -- which
+## is what the creative tool hands over for a shape that exists only in
+## memory -- or a name out of the catalogue.
+static func hull_of(preset: Dictionary) -> HullData:
+	var named: Variant = preset.get("hull")
+	if named is HullData:
+		return named as HullData
+	return HullData.of(named) if named != null else null
+
+
+## What is wrong with this preset, or "" when nothing is.
+##
+## One function, so `apply` and anything that wants to offer a preset
+## cannot come to different conclusions about whether it is usable -- the
+## same shape as `JumpController.blocked_by`. It checks everything `apply`
+## is about to read and nothing else: a field no longer read is a field
+## that should not be here to check (see `guns`).
+static func fault_in(preset: Dictionary) -> String:
+	var title: String = String(preset.get("name", "<unnamed>"))
+	if not preset.has("name"):
+		return "a preset with no name"
+	if hull_of(preset) == null:
+		return "%s names no hull" % title
+	if not (preset.get("mounts") is Array):
+		return "%s has no mounts" % title
+	for entry: Variant in preset["mounts"]:
+		if not (entry is Dictionary):
+			return "%s has a mount that is not an entry" % title
+		var mount: Dictionary = entry
+		for needed: String in ["name", "size", "engine"]:
+			if not mount.has(needed):
+				return "%s has a mount with no %s" % [title, needed]
+		if not ENGINES.has(String(mount["engine"])):
+			return "%s wants engine %s, which there is none of" % [
+				title, mount["engine"],
+			]
+		# Main drives go where the hull says, so they carry no position of
+		# their own. Everything else has to say where it is.
+		if String(mount["name"]) != "MainDrive" and not mount.has("at"):
+			return "%s has a mount %s with nowhere to be" % [title, mount["name"]]
+	if not (preset.get("guns") is Array):
+		return "%s has no gun list" % title
+	for gun: Variant in preset["guns"]:
+		if not WEAPONS.has(String(gun)):
+			return "%s wants weapon %s, which there is none of" % [title, gun]
+	return ""
 
 
 ## The preset's main drive, put into the hull's side drive slots -- or into the
@@ -377,5 +472,5 @@ static func _engine(key: String, scale: float) -> EngineData:
 	copy.max_thrust *= scale
 	# Heavier as well as stronger. Scaling only the thrust would be free
 	# power, which is the one thing a sandbox must not quietly hand out.
-	copy.bulk *= 1.0 + (scale - 1.0) * 0.7
+	copy.bulk *= bulk_factor(scale)
 	return copy
