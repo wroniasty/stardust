@@ -422,8 +422,10 @@ func _refusal(slot: Node, item: Resource) -> String:
 		var module: ModuleData = item as ModuleData
 		if bay.fits(module):
 			return ""
-		if not bay.accepts(module):
-			return "%s does not take that kind" % bay.name
+		if not bay.takes(module):
+			# A bay has no kind, so the only wrong kind left is a machine
+			# with a socket of its own: a gun, an engine, a leg.
+			return "%s is a module bay, not a mount" % bay.name
 		return "too bulky for %s: %.2f against %.2f" % [
 			bay.name, module.bulk, bay.size
 		]
@@ -1427,19 +1429,19 @@ func _draw_slot_glyph(at: Vector2, mount: Node, colour: Color) -> void:
 	_draw_kind_glyph(at, _glyph_for_mount(mount), colour)
 
 
-## Which shape a socket wears. The bays, which are the ones a mount and
-## an item agree about.
+## Which shape a socket wears.
+##
+## A bay wears whatever is in it, through the same function a loose
+## module goes through, so the schematic and the inventory cannot draw
+## the same machine two different ways. It used to read the bay's own
+## subclass, which is how an empty generator bay could show a cell it did
+## not have -- and which stopped meaning anything the moment a bay
+## stopped having a kind. An empty bay has no glyph, because there is
+## nothing in it to draw.
 func _glyph_for_mount(mount: Node) -> Glyph:
-	if mount is GeneratorBay:
-		return Glyph.CELL
-	if mount is ScannerBay:
-		return Glyph.DISH
-	if mount is JumpDriveBay:
-		return Glyph.RING
-	if mount is TankBay:
-		return Glyph.DRUM
-	if mount is ComputerBay:
-		return Glyph.CHIP
+	var bay: ModuleBay = mount as ModuleBay
+	if bay != null:
+		return _glyph_for_item(bay.installed)
 	if mount is LandingGear:
 		return Glyph.STRUT
 	return Glyph.NONE

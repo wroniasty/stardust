@@ -1,12 +1,8 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="2_hull"]
-[ext_resource type="Script" path="res://scripts/generator_bay.gd" id="13_generator_bay"]
-[ext_resource type="Script" path="res://scripts/computer_bay.gd" id="15_computer_bay"]
-[ext_resource type="Script" path="res://scripts/scanner_bay.gd" id="20_scanner_bay"]
-[ext_resource type="Script" path="res://scripts/jump_drive_bay.gd" id="21_drive_bay"]
-[ext_resource type="Script" path="res://scripts/tank_bay.gd" id="22_tank_bay"]
+[ext_resource type="Script" path="res://scripts/module_bay.gd" id="13_module_bay"]
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="23_short_hop"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="24_tank"]
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="25_survey"]
@@ -40,30 +36,30 @@ shape = SubResource("ConvexPolygonShape2D_hull")
 
 [node name="ComputerBay" type="Node2D" parent="."]
 position = Vector2(0, -2)
-script = ExtResource("15_computer_bay")
+script = ExtResource("13_module_bay")
 size = 1.5
 
 [node name="GeneratorBay" type="Node2D" parent="."]
 position = Vector2(0, 1.75)
-script = ExtResource("13_generator_bay")
+script = ExtResource("13_module_bay")
 size = 3.0
 installed = ExtResource("14_cell")
 
 [node name="ScannerBay" type="Node2D" parent="."]
 position = Vector2(0, 1.75)
-script = ExtResource("20_scanner_bay")
+script = ExtResource("13_module_bay")
 size = 1.6
 installed = ExtResource("25_survey")
 
 [node name="JumpDriveBay" type="Node2D" parent="."]
 position = Vector2(0, 1.75)
-script = ExtResource("21_drive_bay")
+script = ExtResource("13_module_bay")
 size = 2.6
 installed = ExtResource("23_short_hop")
 
 [node name="TankBay" type="Node2D" parent="."]
 position = Vector2(0, 1.75)
-script = ExtResource("22_tank_bay")
+script = ExtResource("13_module_bay")
 size = 2.4
 installed = ExtResource("24_tank")
 

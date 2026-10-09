@@ -574,10 +574,11 @@ var stores: Stores:
 ## every caller has to remember is not the whole story.
 func cargo_capacity() -> float:
 	var total: float = stat(&"cargo_capacity", hull_cargo_capacity)
-	if generator_bay != null and generator_bay.installed != null:
+	var cell: GeneratorData = generator()
+	if cell != null:
 		# A generator takes room in the hull, not only mass. Nothing else
 		# does yet.
-		total -= generator_bay.installed.bulk * CARGO_CROWDING
+		total -= cell.bulk * CARGO_CROWDING
 	return maxf(total, 0.0)
 
 
@@ -615,20 +616,14 @@ var _since_spend: float = 0.0
 ## One list rather than one field per kind, because every list that used
 ## to name them individually -- mass, inertia, the fitted inventory, the
 ## editor's schematic -- wanted all of them and none wanted a particular
-## one. The named fields below are lookups into this, kept because the
-## code that asks for the generator wants the generator.
+## one.
+##
+## There used to be five named fields beside it as well, each found by
+## the bay's own subclass. A bay has no kind any more, so the question
+## "where is the generator" is answered by looking at what is **fitted**
+## (`bay_holding`), and it has to be asked rather than cached: the answer
+## changes the moment anything is installed.
 var bays: Array[ModuleBay] = []
-
-## The generator bay, if the hull has one. Found at ready like the mounts.
-var generator_bay: GeneratorBay = null
-
-## The flight computer bay, if the hull has one.
-var computer_bay: ComputerBay = null
-
-## The three that decide whether this hull can leave the system at all.
-var scanner_bay: ScannerBay = null
-var jump_bay: JumpDriveBay = null
-var tank_bay: TankBay = null
 
 ## Fuel in the tank. Range's clock, against energy's combat one.
 ##
@@ -714,11 +709,6 @@ var _terrain_contacts: int = 0
 func collect_parts() -> void:
 	hardpoints.clear()
 	bays.clear()
-	generator_bay = null
-	computer_bay = null
-	scanner_bay = null
-	jump_bay = null
-	tank_bay = null
 	gear = null
 	for child: Node in get_children():
 		if child is Hardpoint:
@@ -727,17 +717,51 @@ func collect_parts() -> void:
 			bays.append(child as ModuleBay)
 		elif child is LandingGear:
 			gear = child as LandingGear
+
+
+## The first bay holding a module of this kind, or null when none is
+## fitted.
+##
+## First rather than best, and that is a rule rather than an oversight.
+## A bay has no kind, so nothing stops a pilot fitting two generators --
+## and the honest answer is that one of them is wired in and the other is
+## ballast that still weighs its bulk. Where that gets said is the
+## configuration report, not here.
+func bay_holding(kind: Script) -> ModuleBay:
 	for bay: ModuleBay in bays:
-		if bay is GeneratorBay:
-			generator_bay = bay as GeneratorBay
-		elif bay is ComputerBay:
-			computer_bay = bay as ComputerBay
-		elif bay is ScannerBay:
-			scanner_bay = bay as ScannerBay
-		elif bay is JumpDriveBay:
-			jump_bay = bay as JumpDriveBay
-		elif bay is TankBay:
-			tank_bay = bay as TankBay
+		if bay.installed != null and is_instance_of(bay.installed, kind):
+			return bay
+	return null
+
+
+## The first module of this kind fitted, or null.
+func fitted(kind: Script) -> ModuleData:
+	var bay: ModuleBay = bay_holding(kind)
+	return bay.installed if bay != null else null
+
+
+## Where this module would go: the bay already holding one of its kind,
+## else the roomiest empty bay it fits.
+##
+## Swap first, because fitting a better generator means replacing the one
+## that is wired in rather than carrying both. Roomiest of the empties
+## after that, so a small module does not take the one big hole that the
+## next big one was going to need. Null when there is nowhere, which is
+## a thing a kindless ship can genuinely be: four bays, four modules, and
+## a fifth find that has to stay in the hold.
+func bay_for(data: ModuleData) -> ModuleBay:
+	if data == null:
+		return null
+	var swap_into: ModuleBay = bay_holding(data.get_script() as Script)
+	if swap_into != null and swap_into.fits(data):
+		return swap_into
+	var best: ModuleBay = null
+	for bay: ModuleBay in bays:
+		if bay.installed != null or not bay.fits(data):
+			continue
+		if best == null or bay.size > best.size:
+			best = bay
+	return best
 
 
 func _ready() -> void:
@@ -1365,25 +1389,25 @@ func _record_stat(key: StringName, source: String, kind: String, value: float) -
 ## The flight computer fitted, or null when the ship flies on the built-in
 ## weight heuristic.
 func computer() -> FlightComputerData:
-	return computer_bay.installed as FlightComputerData if computer_bay != null else null
+	return fitted(FlightComputerData) as FlightComputerData
 
 
 ## The survey scanner fitted, or null for a ship that cannot see past
 ## the system it is in.
 func scanner() -> ScannerData:
-	return scanner_bay.installed as ScannerData if scanner_bay != null else null
+	return fitted(ScannerData) as ScannerData
 
 
 ## The jump drive fitted, or null for a ship that is not going anywhere.
 func jump_drive() -> JumpDriveData:
-	return jump_bay.installed as JumpDriveData if jump_bay != null else null
+	return fitted(JumpDriveData) as JumpDriveData
 
 
 ## The tank fitted, or null. A drive with no tank is a drive with nothing
 ## to burn, which is a configuration the report should talk about rather
 ## than one the code should prevent.
 func tank() -> TankData:
-	return tank_bay.installed as TankData if tank_bay != null else null
+	return fitted(TankData) as TankData
 
 
 ## How much fuel this hull can hold.
@@ -1442,7 +1466,7 @@ func add_fuel(amount: float) -> float:
 
 ## The generator fitted, or null when running on the hull's own rail.
 func generator() -> GeneratorData:
-	return generator_bay.installed as GeneratorData if generator_bay != null else null
+	return fitted(GeneratorData) as GeneratorData
 
 
 func energy_capacity() -> float:

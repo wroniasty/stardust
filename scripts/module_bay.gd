@@ -7,43 +7,46 @@ extends Node2D
 ## geometry here and the machine in a `Resource` is what lets a module be
 ## loot -- the same split as `EngineMount` and `Hardpoint`.
 ##
-## One class, five slots. There used to be one class per kind, each
-## seventeen lines and sixteen of them the same, and every list in the
-## ship and the editor named them one at a time. Two of those was a
-## pattern; five would have been four places in `ship.gd` naming eight
-## bays by hand and a sixth kind arriving to be forgotten in one of them.
-## What differs between slots is which modules they take, and that is one
-## overridden method.
+## **A hole has no opinion about what goes in it.** There used to be one
+## class per kind, and then one class with five subclasses whose whole job
+## was an `accepts()` returning `data is GeneratorData`. Both encoded the
+## same idea: that a ship is born with one generator socket and one tank
+## socket, and that no amount of refitting could ever make it a ship with
+## two tanks and no scanner. How many sockets a ship has and how big they
+## are is a property of the ship, so it belongs to the preset that
+## describes one; which machine goes in which is the pilot's business.
 ##
-## How big the hole is belongs to the **hull**, not to the kind of slot:
-## two ships with a generator bay are allowed to disagree about how much
-## generator fits. So `size` is set in the scene rather than defaulted per
-## subclass, which is also the only way it could be, now that there is one
-## subclass-shaped thing left and it is a type check.
+## What a bay does still refuse is a machine that has a socket of its own.
+## Guns go in hardpoints, engines in mounts, legs in the landing gear --
+## and `WeaponData`, `EngineData` and `GearData` are all `ModuleData`
+## subclasses, so without that rule a generic bay would cheerfully
+## swallow a main drive.
 
-## How much module fits, against `ModuleData.bulk`.
+## How much module fits, against `ModuleData.bulk`. Set by whoever builds
+## the bay: `ShipPreset` for a ship out of the catalogue.
 @export var size: float = 1.0
 
 ## What is in it, or null for an empty slot.
 @export var installed: ModuleData = null
 
 
-## Whether this kind of slot takes this kind of module. Overridden by each
-## slot; the base takes anything, which is what a test bay wants.
-func accepts(_data: ModuleData) -> bool:
-	return true
-
-
-## Whether this module could go in: right kind, and small enough.
+## Whether a bay is the right sort of place for this machine at all.
 ##
-## Both halves, which the per-kind classes never checked: each was typed
-## to its own data class, so the kind test was done by the caller and
-## anything that reached `fits` was already the right sort. Now that the
-## slots are one class the kind has to be asked about here, which is the
-## better place for it anyway -- the editor was the one deciding what goes
-## where, and that is the hull's business.
+## Written as the exclusion rather than as a list of the kinds that do
+## fit, because the point of a bay without a kind is that a sixth sort of
+## module works without being added to a table here. The three that are
+## excluded are excluded for a reason that will not change: they already
+## have somewhere to go.
+func takes(data: ModuleData) -> bool:
+	return data != null and not (
+		data is WeaponData or data is EngineData or data is GearData
+	)
+
+
+## Whether this module could go in: somewhere it belongs, and small
+## enough for the hole.
 func fits(data: ModuleData) -> bool:
-	return data != null and data.bulk <= size and accepts(data)
+	return takes(data) and data.bulk <= size
 
 
 ## Mass the slot contributes: the module's own bulk, nothing when empty.

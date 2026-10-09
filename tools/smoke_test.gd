@@ -1582,13 +1582,18 @@ func _mount_spool(mount_name: String) -> float:
 
 ## Puts a flight computer in the bay, with or without the orbit function.
 func _fit_computer(ship: Ship, with_auto_orbit: bool) -> void:
-	if ship.computer_bay == null:
-		return
 	var box: FlightComputerData = FlightComputerData.new()
 	box.allocation = FlightComputerData.Allocation.NNLS
 	box.has_auto_orbit = with_auto_orbit
 	box.bulk = 0.5
-	ship.computer_bay.installed = box
+	# Built before the bay is chosen, because which bay takes it depends
+	# on how big it is now that bays have no kind. `bay_for` swaps a
+	# computer already fitted and otherwise finds an empty hole, so
+	# calling this twice does not leave two computers aboard.
+	var hole: ModuleBay = ship.bay_for(box)
+	if hole == null:
+		return
+	hole.installed = box
 	ship.rebuild_control_groups(false)
 
 
@@ -3089,8 +3094,9 @@ func _check_energy() -> void:
 	)
 
 	# A bad module choice is a poor ship, never a dead one.
-	var cell: GeneratorData = ship.generator_bay.installed
-	ship.generator_bay.installed = null
+	var cell_bay: ModuleBay = ship.bay_holding(GeneratorData)
+	var cell: GeneratorData = cell_bay.installed as GeneratorData
+	cell_bay.installed = null
 	ship.rebuild_control_groups(false)
 	_expect(
 		is_equal_approx(ship.energy_capacity(), Ship.HULL_RAIL_CAPACITY),
@@ -3106,7 +3112,7 @@ func _check_energy() -> void:
 		"the rail is worse than any real generator, which is the point of it",
 	)
 	var roomier: float = ship.cargo_capacity()
-	ship.generator_bay.installed = cell
+	cell_bay.installed = cell
 	ship.rebuild_control_groups(false)
 	_expect(
 		ship.cargo_capacity() < roomier,
@@ -5172,7 +5178,11 @@ func _check_jump_kit() -> void:
 	# trickle of, a ship without one is a ship staying in this system --
 	# and saying so plainly beats a litre of mystery fuel.
 	var held: TankData = ship.tank()
-	ship.tank_bay.installed = null
+	# Captured before it is emptied: with kindless bays the question
+	# "which one is the tank bay" is answered by what is in it, and in a
+	# moment there will be nothing in it.
+	var tank_hole: ModuleBay = ship.bay_holding(TankData)
+	tank_hole.installed = null
 	ship.rebuild_control_groups(false)
 	_expect(
 		is_equal_approx(ship.fuel_capacity(), 0.0) and is_equal_approx(ship.fuel, 0.0),
@@ -5180,7 +5190,7 @@ func _check_jump_kit() -> void:
 	)
 	# And refitting is not a reload. The pool is clamped down on a swap and
 	# never topped up, for the same reason the energy pool is.
-	ship.tank_bay.installed = held
+	tank_hole.installed = held
 	ship.rebuild_control_groups(false)
 	_expect(
 		ship.fuel_capacity() > 0.0 and is_equal_approx(ship.fuel, 0.0),
@@ -5259,13 +5269,14 @@ func _check_jump_hud() -> void:
 		],
 	)
 	var kept: ScannerData = ship.scanner()
-	ship.scanner_bay.installed = null
+	var eye_hole: ModuleBay = ship.bay_holding(ScannerData)
+	eye_hole.installed = null
 	ship.rebuild_control_groups(false)
 	_expect(
 		hud.silence() == "no scanner",
 		"no scanner is a different silence from being too close (%s)" % hud.silence(),
 	)
-	ship.scanner_bay.installed = kept
+	eye_hole.installed = kept
 	ship.rebuild_control_groups(false)
 
 	# Clear of everything, where the scanner starts working.
@@ -5338,7 +5349,7 @@ func _check_jump_hud() -> void:
 	_expect(spans.size() >= 2, "the scanner sees more than one system (%d)" % spans.size())
 	var stubby: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
 	stubby.reach = (spans[0] + spans[spans.size() - 1]) * 0.5
-	ship.jump_bay.installed = stubby
+	ship.bay_holding(JumpDriveData).installed = stubby
 	seen = hud.contacts(flat, view)
 	var far_off: Dictionary = {}
 	var near_by: Dictionary = {}
@@ -5382,11 +5393,11 @@ func _check_jump_hud() -> void:
 	# rather than a longer one.
 	var bearing_only: ScannerData = kept.duplicate() as ScannerData
 	bearing_only.depth = ScannerData.Depth.BEARING
-	ship.scanner_bay.installed = bearing_only
+	ship.bay_holding(ScannerData).installed = bearing_only
 	var blind: String = hud.contacts(flat, view)[0]["label"]
 	var deep: ScannerData = kept.duplicate() as ScannerData
 	deep.depth = ScannerData.Depth.DEEP
-	ship.scanner_bay.installed = deep
+	ship.bay_holding(ScannerData).installed = deep
 	var told: String = hud.contacts(flat, view)[0]["label"]
 	_expect(
 		blind.length() < told.length() and told.contains("p"),
@@ -5394,7 +5405,7 @@ func _check_jump_hud() -> void:
 			blind, told,
 		],
 	)
-	ship.scanner_bay.installed = kept
+	ship.bay_holding(ScannerData).installed = kept
 
 	# And the nose picks the target. Nearest to dead ahead inside the
 	# cone, not the first one found: two markers a few degrees apart would
@@ -5750,7 +5761,7 @@ func _check_misjump() -> void:
 	# opening. The drive is this test's instrument, not its subject.
 	var roomy: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
 	roomy.reach = GalaxyMap.BASE_REACH * 1.6
-	ship.jump_bay.installed = roomy
+	ship.bay_holding(JumpDriveData).installed = roomy
 	ship.rebuild_control_groups(false)
 	var reachable: PackedInt32Array = map.neighbours(here, ship.jump_drive().reach)
 	_expect(reachable.size() >= 2, "there are two places to go (%d)" % reachable.size())
@@ -5782,7 +5793,7 @@ func _check_misjump() -> void:
 	var stretched: JumpDriveData = ship.jump_drive().duplicate() as JumpDriveData
 	var span: float = map.positions[here].distance_to(map.positions[far])
 	stretched.reach = span / 0.95
-	ship.jump_bay.installed = stretched
+	ship.bay_holding(JumpDriveData).installed = stretched
 	var at_the_edge: float = pilot.misjump_risk(far)
 	stretched.reach = span / 0.5
 	var well_within: float = pilot.misjump_risk(far)
@@ -5804,7 +5815,7 @@ func _check_misjump() -> void:
 		both < 0.31 + at_the_edge and both >= maxf(0.3, at_the_edge) - 0.01,
 		"two ways to court it count once, not twice (%.2f)" % both,
 	)
-	ship.jump_bay.installed = ship.jump_drive()
+	ship.bay_holding(JumpDriveData).installed = ship.jump_drive()
 	ship.fuel = ship.fuel_capacity()
 
 	# And now one that fails. The roll is seeded so the test can be run
@@ -5919,7 +5930,7 @@ func _check_save() -> void:
 	# hold with things in it, a dented hull and a half-empty tank, in a
 	# system nobody started in.
 	var prize: JumpDriveData = loot.jump_drive(31337, 4)
-	ship.jump_bay.installed = prize
+	ship.bay_holding(JumpDriveData).installed = prize
 	ship.rebuild_control_groups(false)
 	ship.cargo.append({"item": loot.weapon(99, 3), "rarity": 3})
 	ship.cargo.append({"item": loot.scanner(98, 2), "rarity": 2})
@@ -10060,9 +10071,10 @@ func _check_stat_cards() -> void:
 		editor._fitted_in(ship.engine_mounts()[0]) == ship.engine_mounts()[0].installed,
 		"an engine mount reports its engine",
 	)
+	var cell_bay: ModuleBay = ship.bay_holding(GeneratorData)
 	_expect(
-		editor._fitted_in(ship.generator_bay) == ship.generator_bay.installed,
-		"and the generator bay its cell",
+		editor._fitted_in(cell_bay) == cell_bay.installed,
+		"and the bay with the cell in it reports the cell",
 	)
 
 	# And the comparison says which way each number went.
@@ -11551,28 +11563,26 @@ func _cutoff() -> float:
 	return muffle.cutoff_hz if muffle != null else 0.0
 
 
-## Sockets: one class, and they police the kind themselves now.
+## Gniazda: dziura w kadlubie nie ma zdania, co w niej wisi.
 ##
-## Five slots that were five classes, sixteen of whose seventeen lines
-## were the same. What actually differed was which modules each takes,
-## and none of them checked: each was typed to its own data class, so the
-## kind test was done by whoever called it and anything that arrived was
-## already the right sort. That worked while the editor held its own list
-## of which kind goes where -- a second copy of something the hull knew.
+## This checked the opposite until the slots lost their kinds, and the
+## capability it checked was a real one: a generator bay refused a
+## computer on its own, without the editor holding a second copy of the
+## which-goes-where table. It is gone on purpose. The idea it encoded was
+## that a ship is born with one generator socket and one tank socket and
+## can never be refitted into a ship with two tanks, and how many sockets
+## a ship has is a property of the ship.
 ##
-## So the capability here is new, not just rearranged, and it is what
-## this checks: a slot refuses the wrong machine on its own, without
-## being told by the thing holding it.
+## What is left is two rules, and this is where they are pinned. A bay
+## takes any machine that has no socket of its own, whatever kind it is,
+## if it is small enough. And "the generator bay" now means the bay with
+## a generator in it, which is a question rather than a field, because
+## the answer changes when anything is fitted.
 func _check_bays() -> void:
 	var ship: Ship = _spawn_ship()
 	_expect(
 		ship.bays.size() >= 2,
 		"the hull reports its slots as one list (%d)" % ship.bays.size(),
-	)
-	_expect(
-		ship.generator_bay != null and ship.computer_bay != null
-		and ship.bays.has(ship.generator_bay) and ship.bays.has(ship.computer_bay),
-		"and the named lookups point into it rather than beside it",
 	)
 
 	# Through the script, not the autoload: the smoke test has none.
@@ -11580,41 +11590,106 @@ func _check_bays() -> void:
 	var cell: GeneratorData = loot.generator(7, 0)
 	var box: FlightComputerData = loot.computer(7, 0)
 	var gun: WeaponData = loot.weapon(7, 0)
+	var motor: EngineData = loot.engine(7, 0)
 	loot.free()
-	_expect(
-		ship.generator_bay.fits(cell) and not ship.generator_bay.fits(box)
-		and not ship.generator_bay.fits(gun),
-		"a generator bay takes a generator and refuses a computer or a gun",
-	)
-	_expect(
-		ship.computer_bay.fits(box) and not ship.computer_bay.fits(cell),
-		"and the computer bay the other way round",
-	)
-	_expect(not ship.generator_bay.fits(null), "neither takes nothing at all")
 
-	# Size is still size. The kind test is in addition to the bulk test,
-	# not instead of it.
-	var fat: GeneratorData = cell.duplicate() as GeneratorData
-	fat.bulk = ship.generator_bay.size + 0.1
+	# The new rule, stated on one hole: the same bay takes a generator
+	# and a computer. This is the assertion that used to be its own
+	# opposite.
+	var roomy: ModuleBay = ModuleBay.new()
+	roomy.size = maxf(cell.bulk, box.bulk) + 0.5
 	_expect(
-		not ship.generator_bay.fits(fat),
-		"and a generator too big for the hole still does not go in (%.1f of %.1f)" % [
-			fat.bulk, ship.generator_bay.size,
+		roomy.fits(cell) and roomy.fits(box),
+		"one hole takes a generator and a computer alike",
+	)
+
+	# And the rule that stayed, because these three already have
+	# somewhere to go: a gun in a hardpoint, an engine in a mount.
+	_expect(
+		not roomy.fits(gun) and not roomy.fits(motor),
+		"but never a gun or an engine, however much room there is",
+	)
+	_expect(not roomy.fits(null), "and not nothing at all")
+
+	# Size is still size, and it is the whole of the test now rather than
+	# half of it.
+	var fat: GeneratorData = cell.duplicate() as GeneratorData
+	fat.bulk = roomy.size + 0.1
+	_expect(
+		not roomy.fits(fat),
+		"a module too big for the hole does not go in (%.1f of %.1f)" % [
+			fat.bulk, roomy.size,
 		],
 	)
+	_expect(roomy.module_mass() == 0.0, "an empty hole weighs nothing")
+	roomy.free()
 
-	# The hole is the hull's, not the slot class's. That is the part the
-	# fold changed on purpose: two ships with a generator bay are allowed
-	# to disagree about how much generator fits, and a default baked into
-	# the subclass made that impossible to express.
-	var bare: ModuleBay = ModuleBay.new()
-	bare.size = 0.5
-	_expect(
-		bare.accepts(cell) and not bare.fits(cell) and bare.module_mass() == 0.0,
-		"a plain slot takes any kind, weighs nothing, and still has a size",
-	)
-	bare.free()
+	_check_a_bay_is_known_by_its_contents(ship, cell)
 	ship.queue_free()
+
+
+## "Zatoka generatora" to zatoka, w ktorej jest generator.
+##
+## The lookup used to be a field set at ready from the bay's subclass,
+## which could not survive bays without kinds -- and which was wrong in a
+## way nobody could see: an empty generator bay was still the generator
+## bay, so a ship with no cell reported one slot as its generator's and
+## the schematic drew a cell in it.
+func _check_a_bay_is_known_by_its_contents(ship: Ship, cell: GeneratorData) -> void:
+	var holding: ModuleBay = ship.bay_holding(GeneratorData)
+	_expect(
+		holding != null and holding.installed == ship.generator()
+		and ship.bays.has(holding),
+		"the bay with the cell in it is the one found, and it is in the list",
+	)
+	if holding == null:
+		return
+
+	# Emptied, the question has no answer. That is the honest reading: a
+	# ship with no generator has no generator bay, it has a hole.
+	var was: GeneratorData = holding.installed as GeneratorData
+	holding.installed = null
+	_expect(
+		ship.bay_holding(GeneratorData) == null and ship.generator() == null,
+		"pull the cell and nothing claims to be the generator's bay",
+	)
+
+	# Fitting is a swap, not hoarding: a second cell goes where the first
+	# one is rather than into the spare hole, so a ship cannot quietly end
+	# up carrying two generators when one is wired in.
+	holding.installed = was
+	var spare: GeneratorData = cell.duplicate() as GeneratorData
+	spare.bulk = minf(cell.bulk, holding.size)
+	_expect(
+		ship.bay_for(spare) == holding,
+		"a better cell goes in the hole the old one is in, not beside it",
+	)
+
+	# And the ballast rule, which only exists because bays lost their
+	# kinds. Two generators fit if two holes are big enough; the first is
+	# wired in and the second still weighs what it weighs.
+	var empty: ModuleBay = null
+	for bay: ModuleBay in ship.bays:
+		if bay.installed == null and bay.fits(spare):
+			empty = bay
+			break
+	if empty == null:
+		return
+	var before: float = ship.mass
+	empty.installed = spare
+	ship.rebuild_control_groups(false)
+	_expect(
+		ship.generator() == was,
+		"with two cells aboard the first is the one that is wired in",
+	)
+	_expect(
+		ship.mass > before,
+		"and the second is ballast that still weighs (%.2f -> %.2f kg)" % [
+			before, ship.mass,
+		],
+	)
+	empty.installed = null
+	ship.rebuild_control_groups(false)
 
 
 ## Seams for the soundtrack: ignition, cut-out, the shot.
@@ -13857,8 +13932,9 @@ func _check_scoop_mod() -> void:
 		load("res://resources/tanks/standard_tank.tres") as TankData
 	).duplicate() as TankData
 	tank.stat_add = {&"dust_scoop": 1.0}
-	if ship.tank_bay != null:
-		ship.tank_bay.installed = tank
+	var tank_hole: ModuleBay = ship.bay_for(tank)
+	if tank_hole != null:
+		tank_hole.installed = tank
 		ship.rebuild_control_groups(false)
 		_expect(
 			ship.dust_scoop() > 0.0,
@@ -15598,7 +15674,7 @@ func _check_galaxy_chart() -> void:
 	var kept: ScannerData = eyes
 	var blind: ScannerData = kept.duplicate() as ScannerData
 	blind.reach = 0.5
-	ship.scanner_bay.installed = blind
+	ship.bay_holding(ScannerData).installed = blind
 	ship.rebuild_control_groups(false)
 	_expect(
 		chart.charted().size() == 2,
@@ -15611,7 +15687,7 @@ func _check_galaxy_chart() -> void:
 	# and is deliberately not the first.
 	var reader: ScannerData = kept.duplicate() as ScannerData
 	reader.depth = ScannerData.Depth.BEARING
-	ship.scanner_bay.installed = reader
+	ship.bay_holding(ScannerData).installed = reader
 	ship.rebuild_control_groups(false)
 	var stranger: int = -1
 	for index: int in map.within(galaxy.at, reader.reach):
