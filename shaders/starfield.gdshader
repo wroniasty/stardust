@@ -37,6 +37,26 @@ uniform vec3 near_color : source_color = vec3(1.0, 0.97, 0.90);
 // stars, so that is what is taken away.
 uniform float daylight : hint_range(0.0, 1.0) = 0.0;
 
+// How far the sky is being dragged, 0 for a still one and 1 for a jump.
+//
+// Each star is sampled several times along `streak_along` and the
+// brightest tap wins, which is a motion blur of the field rather than a
+// blur of the frame: a star becomes a line and the space between stars
+// stays black. Blurring the finished image would have greyed the gaps
+// too and read as fog.
+//
+// `streak_along` is a **world** direction, like `world_offset`, because
+// that is the argument it is added to. The lane the drive is pointed
+// down is a world heading, so no turning is needed or wanted here.
+uniform float streak : hint_range(0.0, 1.0) = 0.0;
+uniform vec2 streak_along = vec2(0.0, -1.0);
+
+// How long a line a full streak draws, in pixels of the nearest layer.
+// The far layers get less of it in the same proportion they get less
+// parallax, which is why the effect reads as depth rather than as a
+// smear: the near stars are the ones that become lines first.
+uniform float streak_reach = 420.0;
+
 // The galactic band and the clouds hanging off it, rolled from the
 // system's seed by the script. Nothing here is hand-placed; a system
 // is the same sky every time you come back to it.
@@ -114,6 +134,30 @@ vec2 turn(vec2 v, float angle) {
 	return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
 }
 
+// How many taps a streak is drawn with. Six: enough that a line looks
+// continuous at 640x360 and few enough to stay affordable on a
+// full-screen quad.
+const int STREAK_TAPS = 6;
+
+
+// One layer, dragged. The taps fade along the trail so a line has a
+// head and a tail -- a flat trail looks like a scratch on the glass.
+float dragged(vec2 pos, float cell, float fill, float radius, vec2 slide) {
+	float lit = star_layer(pos, cell, fill, radius);
+	if (streak <= 0.001) {
+		return lit;
+	}
+	for (int i = 1; i <= STREAK_TAPS; i++) {
+		float along = float(i) / float(STREAK_TAPS);
+		lit = max(
+			lit,
+			star_layer(pos + slide * along, cell, fill, radius) * (1.0 - along * 0.6)
+		);
+	}
+	return clamp(lit, 0.0, 1.0);
+}
+
+
 void fragment() {
 	// A screen offset of d from the centre looks along world direction
 	// d turned by the camera's rotation, so the field is sampled there. Only
@@ -121,9 +165,12 @@ void fragment() {
 	vec2 screen_center = 0.5 / SCREEN_PIXEL_SIZE;
 	vec2 pixel = turn(FRAGCOORD.xy - screen_center, view_rotation) + screen_center;
 
-	float far = star_layer(pixel + world_offset * 0.10, 17.0, 0.55, 0.055);
-	float mid = star_layer(pixel + world_offset * 0.30, 41.0, 0.45, 0.045);
-	float near = star_layer(pixel + world_offset * 0.65, 96.0, 0.40, 0.030);
+	// The same parallax factors the layers are offset by, so what streaks
+	// most is what moves most.
+	vec2 drag = normalize(streak_along + vec2(0.0001, 0.0)) * streak * streak_reach;
+	float far = dragged(pixel + world_offset * 0.10, 17.0, 0.55, 0.055, drag * 0.10);
+	float mid = dragged(pixel + world_offset * 0.30, 41.0, 0.45, 0.045, drag * 0.30);
+	float near = dragged(pixel + world_offset * 0.65, 96.0, 0.40, 0.030, drag * 0.65);
 
 	// The band sits furthest away of anything here -- further than the
 	// far stars -- which is the whole reason it reads as the galaxy

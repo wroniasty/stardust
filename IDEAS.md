@@ -3222,32 +3222,94 @@ Skok, ale ciągły w odbiorze: bez portali, bez stargate, bez ekranu mapy jako o
 
 Galaktyka ma własne współrzędne (system to punkt na płaszczyźnie, umowna jednostka), niezależne od jednostek w systemie. Obie są 2D w tej samej płaszczyźnie, więc kierunek do innego systemu na mapie galaktyki jest tym samym kierunkiem, w którym trzeba lecieć w scenie. Żeby skoczyć na północny wschód, obracasz statek na północny wschód i lecisz. Wylatujesz z celu na jego południowo-zachodniej krawędzi, z gwiazdą przed dziobem.
 
-### Mass lock i strefa skoku
+### Dwie lokalne reguły skoku (zamiast mass locka)
 
-Gwiazda ma promień mass lock (np. 1.5 promienia orbity ostatniej planety). Poza nim skaner zaczyna działać i skok jest możliwy.
+**Mass lock został usunięty, i zabiła go własna liczba.** Reguła brzmiała: 1,5
+promienia zewnętrznego całego układu, mierzone względem wszystkiego, co gwiazda
+trzyma. Zmierzone na 300 seedach wychodziło od **72 tys. do 504 tys. pikseli**, a
+najszerszy widok w grze ma 582 px. Czyli opuszczenie układu to było od stu
+dwudziestu do niemal dziewięciuset ekranów trzymania jednego klawisza — i nic w
+tym czasie nie było rozstrzygane. Stary wpis nazywał rozległy układ „uciążliwym
+do opuszczenia"; uczciwe słowo to symulator czekania.
 
-**Realizacja (M4).** 1,5, ale liczone względem **wszystkiego**, co gwiazda
-trzyma (`outer_radius()`), a nie względem ostatniej planety. Głęboka stacja
-potrafi stać dalej niż najdalszy świat, a blokada kończąca się przed nią
-pozwalałaby skoczyć z doku — czyli z jedynego miejsca w układzie, z którego
-wyjście powinno znaczyć „najpierw wylecieć".
+Zastępują go **dwie reguły, obie lokalne**, i każda odpowiada na inne pytanie.
 
-Skoro cały układ leży wtedy wewnątrz z definicji, **nie ma drugiej reguły dla
-planet**: wszędzie tam, gdzie planeta mogłaby cię przytrzymać, gwiazda już
-trzyma. Jedna liczba, jedno pytanie, jedno miejsce w kodzie.
+**1. Czyste miejsce — czy napęd się zapali.** `StarSystem.holding(point, time)`
+zwraca **ciało**, które jest za blisko: `JUMP_CLEARANCE` = 2,5 jego własnego
+promienia, liczone od środka. Planeta 1000 px puszcza 1500 px nad powierzchnią,
+czyli trzy ekrany i ok. pięć sekund palenia; dok (55–110 px) puszcza niemal od
+razu, co jest właściwe, bo odbicie się od niego **jest** odlotem. Skalowane
+promieniem ciała, nie płaskie, więc gazowy olbrzym to dłuższe odepchnięcie niż
+księżyc.
 
-Zmierzone na 300 seedach: promień blokady wychodzi od 72 tys. do 504 tys.
-pikseli, czyli siedmiokrotny rozrzut. To jest cecha, nie wada — ciasny
-układ jest wygodną bazą, rozległy jest uciążliwy do opuszczenia — i jest do
-przyjęcia tylko dlatego, że w próżni nie ma oporu: 900 N na 16,6 kg to
-54 px/s², więc pierwsza minuta ciągłego palenia to już około 97 tys. pikseli.
-Wspinaczka z największego układu to kilka minut palenia, a nie dwadzieścia
-minut lotu ze stałą prędkością.
+Zwraca ciało, a nie `bool`, i to nie jest wygoda: „nie możesz skoczyć" to nie
+jest zdanie, które przyrząd ma prawo powiedzieć sam. Pilot, któremu powiesz
+**co** go trzyma, wie, w którą stronę lecieć; pilot, któremu powiesz tylko
+„nie", musi zgadywać.
 
-`is_mass_locked(point)` i `jump_clearance(point)` to **jedna odpowiedź**, nie
-dwie: pierwsze jest tym, na czym rozgałęzi się maszyna stanów, drugie tym, co
-odlicza odczyt, i granica, co do której by się nie zgadzały, to HUD mówiący
-„czysto" obok napędu odmawiającego ładowania.
+Elegancka wersja — „poza każdą studnią grawitacyjną" — została zmierzona i
+odrzucona: studnia gwiazdy to 1,2 promienia zewnętrznego układu, więc byłaby to
+ta sama mechanika pod nową nazwą.
+
+**2. Wolny tor — czy jest gdzie wyjść.** `lane_blocked(from, toward, time)` zwraca
+pierwsze ciało, którego środek leży bliżej niż `LANE_CLEARANCE` = 1,25 jego
+promienia od promienia wybiegającego ze statku w stronę celu — tylko to, co
+**przed** dziobem, bo planeta minęta jest za napędem, nie przed nim. To jest ta
+połowa, która sprawia, że liczy się **gdzie stoisz**, a nie tylko jak daleko
+wyleciałeś.
+
+Ciała krążą, więc obie reguły biorą zegar, względem którego czytane są ich
+pozycje: ten sam zamrożony `StreamingManager.visit_time`, którym postawiono
+planety w scenie. Model i węzły nie mogą się więc nie zgadzać co do tego, gdzie
+co jest.
+
+### Zapchany tor zawodzi, nie odmawia
+
+Wszystko, co wylicza `blocked_by`, nie pozwala napędowi się **zapalić** i nie
+kosztuje nic. Zapchany tor to inne zdarzenie: napęd się zapala, rozkręca, wydaje
+ładunek — i **kaszle**, bo potrzebował miejsca, gdzie postawić statek, a tam była
+planeta. Dwa różne zdarzenia o dwu różnych cenach, więc dwa osobne sygnały
+(`refused` i `balked`).
+
+Sprawdzane **w chwili, w której napęd by wystrzelił**, nie wtedy, gdy go
+zapalono. Dwa powody, i drugi jest lepszy: ładunek jest już wtedy wydany, więc
+zapchany tor kosztuje tyle, ile kosztuje skok; a ciała przesunęły się w czasie
+rozkręcania, więc planeta, która weszła w tor w trakcie, blokuje skok dokładnie
+tak samo jak ta, która stała tam od początku. Pilot został ostrzeżony, zanim
+zaczął — HUD maluje taki cel na czerwono i podpisuje „thru <nazwa>", co jest
+instrukcją („obleć albo wybierz inny"), nie skargą.
+
+### Napęd się włącza
+
+Tap **J** uzbraja, przytrzymanie **J** ładuje. Jeden klawisz, dwie prace, i jedna
+liczba, żeby je rozróżnić (`ARM_TAP` 0,22 s). Tap czytany jest **przy
+puszczeniu**, i to jest jedyne wyjście z dwuznaczności: każde przytrzymanie
+zaczyna się wciśnięciem, więc wciśnięcie nie może znaczyć „przełącz" bez
+przełączania na początku każdego ładowania.
+
+Cele na pierścieniu ekranu pojawiają się **tylko przy uzbrojonym napędzie**, co
+czyni je rzeczą, o którą pilot poprosił, a nie tapetą. Przylot wyłącza napęd:
+skok to jedna podróż, a pilot, który właśnie z niej wyszedł, powinien patrzeć na
+to, gdzie jest, a nie na sześć kursów na wylot.
+
+### Smugi: gwiazdy w linie
+
+Każda gwiazda próbkowana jest sześć razy wzdłuż ciągnięcia i wygrywa
+najjaśniejsza próbka — czyli to **motion blur pola**, nie rozmycie klatki:
+gwiazda staje się linią, a przestrzeń między gwiazdami zostaje czarna. Rozmycie
+gotowego obrazu poszłoby też po przerwach i czytałoby się jak mgła. Dalsze
+warstwy smużą w tej samej proporcji, w której biorą paralaksę, więc bliższe
+gwiazdy zamieniają się w linie pierwsze — i dlatego efekt czyta się jako
+głębia, a nie jako smar.
+
+Narasta przy rozkręcaniu, trzyma pełną siłę przez podmianę światów i opada
+**szybko** (kwadratowo), bo przylot to nie wytracanie pędu.
+
+Kaszlnięcie ma własną próbkę, nie blip odmowy: narastający świst, kaszel tam,
+gdzie powinien być strzał, i świst opadający **pod** wysokość, od której
+zaczął. Pojedynczy ton opadający czytałby się jak wyłączanie zasilania, a to ma
+się czytać jak rzecz, która **miała** zadziałać.
+
 
 **Na mapie układu** zasięg rysowania sięga teraz blokady z niewielkim
 zapasem, a nie ostatniej orbity: mapa ucinająca jedyne kółko, którego szuka
@@ -3298,10 +3360,10 @@ pikselach. Trzy wejścia i żadne z nich nie jest tym samym, co inne:
 - zasięg napędu i stan baku → **jakim kolorem** (szary poza zasięgiem,
   bursztyn w zasięgu bez paliwa, nawigacyjny, gdy stać).
 
-**Trzy rozróżnialne obrazy braku**, nie pusty ekran: „brak skanera",
-„mass lock, jeszcze N px" i normalna praca. HUD, który nic nie rysuje w
-trzech różnych sytuacjach, powiedział pilotowi trzy razy to samo i za
-każdym razem co innego.
+**Cztery rozróżnialne obrazy braku**, nie pusty ekran: „brak skanera",
+„napęd wyłączony", „za blisko <nazwa>, jeszcze N px" i normalna praca. HUD,
+który nic nie rysuje w czterech różnych sytuacjach, powiedział pilotowi cztery
+razy to samo i za każdym razem co innego.
 
 Sześć znaczników naraz, najbliższe — ta sama reguła, co przy skrzynkach:
 dziewięć nazw dookoła ramki 640x360 zlewa się w jedną szarą plamę.
@@ -3340,7 +3402,7 @@ Pierwotny budżet testu, 8 s, był na to za ciasny i został podniesiony do
 
 Maszyna stanów w kontrolerze statku:
 
-1. **Idle**: poza mass lock, cel wybrany przez wycelowanie dziobem w wskaźnik (stożek ±15°) i przytrzymanie klawisza.
+1. **Idle**: napęd uzbrojony tapem J, statek czysty względem wszystkich ciał (`holding()`), cel wybrany przez wycelowanie dziobem w wskaźnik (stożek ±15°) i przytrzymanie klawisza.
 2. **Charging**: 2 do 4 s, przerywane obrażeniami lub puszczeniem klawisza, częściowe spalenie paliwa, awaryjny napęd może przerwać sam.
 3. **Transit**: shader pełnoekranowy (smugi, radialne rozmycie, przesunięcie koloru), 1.5 do 2 s. Pod efektem: zapis delty starego systemu, zwolnienie sceny, generacja nowej z seedu w wątku, instancjonowanie.
 4. **Arrival**: pozycja = `target.outer_radius * (source_pos - target_pos).normalized()`, kierunek zachowany, prędkość zredukowana. Efekt wygasa, lecisz dalej.
@@ -3412,7 +3474,7 @@ numer -1"; da się być w punkcie. `Galaxy.at` jest prawdziwym adresem,
 `Galaxy.here` wygodą (-1 w przerwie), a skaner działa w pustce bez żadnej
 zmiany, bo zawsze pytał o punkt, nie o pozycję na liście.
 
-`StarSystem.deep_space()` — bez gwiazdy, bez ciał, bez mass locka. Brak
+`StarSystem.deep_space()` — bez gwiazdy i bez ciał, więc nie ma do czego być za blisko. Brak
 gwiazdy to jedyna łaska tego miejsca: nic cię nie trzyma, trzyma cię bak, i
 to jest inny rodzaj uwięzienia. Okazało się mniejszą robotą, niż brzmi:
 `StreamingManager` sprawdzał `star != null` od M3, bo system bez gwiazdy i

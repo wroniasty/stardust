@@ -179,6 +179,7 @@ func _build_hull() -> void:
 	_store(_servo(), "gear_servo")
 	_store(_clunk(), "gear_touch")
 	_store(_deny(), "deny")
+	_store(_balk(), "drive_balk")
 	_store(_blast(), "explode")
 	_store(_revive(), "respawn")
 
@@ -384,6 +385,45 @@ func _clunk() -> PackedFloat32Array:
 
 ## No. Two short falling blips, which is the shape of a refusal in every
 ## cockpit anyone has ever sat in.
+## A hyperdrive that tries and does not go.
+##
+## Three beats, and the shape is the joke: a whine winding up, a cough
+## where it should have fired, and the whine sagging away flat. A
+## single descending tone would read as a power-down; what this has to
+## read as is a thing that was about to work.
+func _balk() -> PackedFloat32Array:
+	var out: PackedFloat32Array = PackedFloat32Array()
+	var length: int = int(RATE * 0.95)
+	var wind: float = 0.42
+	var cough: float = 0.52
+	var phase: float = 0.0
+	for i: int in range(length):
+		var at: float = float(i) / float(RATE)
+		var hz: float = 0.0
+		var level: float = 0.0
+		if at < wind:
+			# Winding up, and a little sharp of true at the top so it
+			# sounds like it is straining rather than arriving.
+			var up: float = at / wind
+			hz = lerpf(210.0, 760.0, up * up)
+			level = 0.25 + 0.45 * up
+		elif at < cough:
+			# The cough: broadband, short, and louder than either side.
+			hz = 120.0
+			level = 0.8 * (1.0 - (at - wind) / (cough - wind))
+		else:
+			# Sagging away, under the pitch it started at: whatever was
+			# spinning has nothing left to spin against.
+			var down: float = (at - cough) / maxf(0.95 - cough, 0.001)
+			hz = lerpf(430.0, 90.0, sqrt(down))
+			level = 0.5 * (1.0 - down) * (1.0 - down)
+		phase += TAU * hz / float(RATE)
+		var tone: float = sin(phase) * 0.7 + sin(phase * 2.01) * 0.2
+		var grit: float = (randf() * 2.0 - 1.0) * (0.5 if at >= wind and at < cough else 0.08)
+		out.append(clampf((tone + grit) * level, -1.0, 1.0))
+	return out
+
+
 func _deny() -> PackedFloat32Array:
 	var out: PackedFloat32Array = PackedFloat32Array()
 	var length: int = int(RATE * 0.2)

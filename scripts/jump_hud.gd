@@ -63,6 +63,10 @@ var _at: Vector2 = Vector2.ZERO
 ## about and the one that would make the labels untestable.
 var _galaxy: Node = null
 
+## The clock the bodies in this scene were placed against, so the
+## clearance readout asks about the planets the pilot can see.
+var _clock: float = 0.0
+
 ## Who decides what the nose is on. The HUD used to work it out itself,
 ## through the canvas transform, which gave the right answer for the
 ## wrong reason: aiming is a question about two headings in the world
@@ -91,6 +95,7 @@ func bind(
 	galaxy: Node = null,
 	jump: JumpController = null,
 	at: Vector2 = Vector2.INF,
+	clock: float = 0.0,
 ) -> void:
 	_ship = ship
 	_system = system
@@ -98,6 +103,7 @@ func bind(
 	_here = here
 	_galaxy = galaxy
 	_jump = jump
+	_clock = clock
 	if at != Vector2.INF:
 		_at = at
 	elif map != null and here >= 0 and here < map.count():
@@ -112,8 +118,8 @@ func _process(_delta: float) -> void:
 ## Why there is nothing to show, or an empty string when there is.
 ##
 ## Three distinguishable answers rather than a blank screen. A HUD that
-## draws nothing when the scanner is missing, nothing when the star is
-## holding you down and nothing when there is genuinely nowhere to go has
+## draws nothing when the scanner is missing, nothing when a planet is
+## filling the sky and nothing when there is genuinely nowhere to go has
 ## told the pilot the same thing three times and meant something
 ## different each time.
 func silence() -> String:
@@ -121,8 +127,17 @@ func silence() -> String:
 		return "no ship"
 	if _ship.scanner() == null:
 		return "no scanner"
-	if _system != null and _system.is_mass_locked(_ship.global_position):
-		return "mass lock  %.0f px" % _system.jump_clearance(_ship.global_position)
+	if _jump != null and is_instance_valid(_jump) and not _jump.armed:
+		# Not a fault, so it reads as an instruction rather than as a
+		# complaint: the drive is a thing the pilot turns on.
+		return "jump drive off"
+	var holding: SystemBody = (
+		null if _system == null else _system.holding(_ship.global_position, _clock)
+	)
+	if holding != null:
+		return "too close to %s  %.0f px" % [
+			holding.display_name, _system.clearance_to(_ship.global_position, _clock),
+		]
 	return ""
 
 
@@ -160,6 +175,13 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 
 		var crossable: bool = drive != null and drive.can_cross(away)
 		var cost: float = drive.fuel_for(away, _ship.mass) if drive != null else INF
+		# What is standing in this particular lane, which is a different
+		# answer per destination: the same ship in the same place has a
+		# clear run to one system and a planet in the way of the next.
+		var fouled: SystemBody = (
+			_jump.lane_blocked(index) if _jump != null and is_instance_valid(_jump)
+			else null
+		)
 		found.append({
 			"index": index,
 			"at": centre + _on_ring(heading, extent),
@@ -168,8 +190,15 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 			"cost": cost,
 			"crossable": crossable,
 			"affordable": crossable and cost <= _ship.fuel,
-			"label": _label_for(index, away, eyes),
-			"colour": _colour_for(crossable, crossable and cost <= _ship.fuel),
+			"blocked_by": fouled,
+			"label": (
+				"thru %s" % fouled.display_name if fouled != null
+				else _label_for(index, away, eyes)
+			),
+			"colour": (
+				_ink.alarm if fouled != null
+				else _colour_for(crossable, crossable and cost <= _ship.fuel)
+			),
 		})
 	return found
 
@@ -209,6 +238,13 @@ func _system_at(index: int) -> StarSystem:
 	return _galaxy.system(index) as StarSystem
 
 
+## A destination whose lane is fouled is drawn in `alarm` and labelled
+## with what is in the way, rather than being left off the ring.
+##
+## Left off would be the wrong answer twice over: the pilot would not
+## know the system is there, and they would not know that turning a
+## little would clear it. A red heading saying "thru Velath III" is an
+## instruction -- fly round, or pick another.
 func _colour_for(crossable: bool, affordable: bool) -> Color:
 	if not crossable:
 		return _ink.inert

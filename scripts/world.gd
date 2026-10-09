@@ -263,9 +263,13 @@ func _build_jump_hud() -> void:
 	var ship: Ship = (player as Player).ship
 	_jump = JumpController.new()
 	add_child(_jump)
-	_jump.bind(ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at)
+	_jump.bind(
+		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at,
+		StreamingManager.visit_time,
+	)
 	_jump.crossed.connect(_on_crossed)
 	_jump.refused.connect(_on_jump_refused)
+	_jump.balked.connect(_on_jump_balked)
 	_jump.arrived.connect(_on_jump_arrived)
 	_jump.misjumped.connect(_on_misjumped)
 	# A misjump is an arrival too, and the one most worth having
@@ -284,7 +288,8 @@ func _build_jump_hud() -> void:
 	_jump_hud = JumpHud.new()
 	add_child(_jump_hud)
 	_jump_hud.bind(
-		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, _jump, Galaxy.at
+		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, _jump, Galaxy.at,
+		StreamingManager.visit_time,
 	)
 
 
@@ -341,8 +346,14 @@ func _on_crossed(_from_index: int, to_index: int, at: Vector2, heading: float) -
 	if eye != null:
 		eye.snap()
 
-	_jump.bind(ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at)
-	_jump_hud.bind(ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at)
+	_jump.bind(
+		ship, landing, Galaxy.map, to_index, Galaxy, Galaxy.at,
+		StreamingManager.visit_time,
+	)
+	_jump_hud.bind(
+		ship, landing, Galaxy.map, to_index, Galaxy, _jump, Galaxy.at,
+		StreamingManager.visit_time,
+	)
 	_map.bind(landing, ship, StreamingManager)
 	_chart.bind(Galaxy.map, ship, Galaxy, to_index, Galaxy.at)
 	_tier_the_loot()
@@ -382,17 +393,39 @@ func _tier_the_loot() -> void:
 		LootGenerator.tier = Galaxy.map.tier_at(Galaxy.at)
 
 
+## What a balked drive sounds like. Its own cue rather than the refusal
+## blip: a refusal is the game saying no before anything happened, and
+## this is machinery failing in the middle of working.
+const BALK_SOUND: String = "res://resources/audio/drive_balk.tres"
+
+
 ## Rolls this system's sky. From the system's own seed, so two systems
 ## are two skies and the same system is the same sky every visit.
 func _dress_sky(system: StarSystem) -> void:
 	var sky: Starfield = get_node_or_null("Starfield") as Starfield
 	if sky != null and system != null:
 		sky.dress(system.seed)
+	if sky != null:
+		sky.watch_jump(_jump)
 
 
 
 func _on_jump_refused(reason: String) -> void:
 	print("jump: %s" % reason)
+
+
+## The drive spooled, spent its charge and found a planet where the exit
+## was meant to be. Named, because "the jump failed" is not something a
+## pilot can do anything with and "Velath III was in the way" is.
+func _on_jump_balked(blocker: SystemBody) -> void:
+	print("jump balked: %s in the lane" % blocker.display_name)
+	var mixer: Soundscape = Soundscape.of()
+	var ship: Ship = (player as Player).ship
+	if mixer != null and ship != null and is_instance_valid(ship):
+		mixer.play(
+			load(BALK_SOUND) as AudioStream, ship.global_position,
+			Soundscape.Path.CONDUCTED, 1.0,
+		)
 
 
 ## Arriving is the autosave point.
@@ -428,9 +461,13 @@ func _finish_resume() -> void:
 		return
 	var ship: Ship = (player as Player).ship
 	SaveGame.restore_ship(_resuming, ship)
-	_jump.bind(ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at)
+	_jump.bind(
+		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at,
+		StreamingManager.visit_time,
+	)
 	_jump_hud.bind(
-		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, _jump, Galaxy.at
+		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, _jump, Galaxy.at,
+		StreamingManager.visit_time,
 	)
 	print("resumed in %s, %.0f px out, fuel %.0f" % [
 		Galaxy.current().display_name, ship.global_position.length(), ship.fuel,

@@ -1187,7 +1187,8 @@ func _evaluate_phase() -> void:
 			_check_item_names()
 			_check_seeker_targets()
 			_check_galaxy()
-			_check_mass_lock()
+			_check_jump_clearance()
+			_check_jump_arming()
 			_check_jump_kit()
 			_check_jump_hud()
 			_check_jump_sequence()
@@ -4785,77 +4786,272 @@ func _mean_gap(map: GalaxyMap, from: float, to: float) -> float:
 	return 0.0 if counted == 0 else total / float(counted)
 
 
-## Mass lock: where the star stops holding on.
+## Napęd trzeba włączyć, a zapchany tor kończy się kaszlnięciem.
 ##
-## One rule for the whole system, which is the part worth checking.
-## IDEAS.md section 10 measures the lock against the last orbit; it is
-## measured here against **everything** the star holds, because a deep
-## station can sit outside the outermost world and a lock that stopped
-## short of it would let a pilot jump from a dock. Since every body is
-## then inside it by construction, there is no second rule for planets:
-## anywhere a planet could hold you, the star already does.
-##
-## Three hundred seeds, like `_check_system_model`, and invariants rather
-## than numbers: a system with wider orbits should be a longer climb out,
-## and nothing should be able to generate one where the climb is zero.
-func _check_mass_lock() -> void:
-	var leaky: int = 0
-	var backwards: int = 0
-	var tightest: float = INF
-	var widest: float = 0.0
-	for roll: int in range(300):
-		var system: StarSystem = StarSystem.generate(20260000 + roll)
-		var lock: float = system.mass_lock_radius()
-		if lock <= system.outer_radius():
-			backwards += 1
-		for body: SystemBody in system.bodies:
-			# At its furthest, which for anything on an orbit is not where it
-			# started: a lock that only held at phase zero would be a lock
-			# that opened once a year.
-			var furthest: float = body.position_at(0.0).length() + body.radius
-			if body.orbit_period > 0.0:
-				furthest = body.orbit_radius + body.radius
-				var above: SystemBody = body.parent_body()
-				if above != null:
-					furthest += above.orbit_radius
-			if furthest >= lock:
-				leaky += 1
-		tightest = minf(tightest, lock)
-		widest = maxf(widest, lock)
+## Two halves of the same request. The drive is a thing the pilot turns
+## on -- so the destinations on the ring are something they asked for
+## rather than wallpaper -- and a jump pointed through a planet fails
+## rather than being refused, which is a different event with a
+## different price.
+func _check_jump_arming() -> void:
+	var ship: Ship = _spawn_ship()
+	var system: StarSystem = StarSystem.generate(20260922)
+	var map: GalaxyMap = GalaxyMap.generate(TEST_SEED)
+	var jump: JumpController = JumpController.new()
+	jump.use_player_input = false
+	root.add_child(jump)
+	jump.bind(ship, system, map, map.start_index(), null, Vector2.INF, 0.0)
+
+	# Clear of everything, so nothing but the arming is being tested.
+	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
+	_expect(not jump.armed, "a drive starts off")
+
+	# Holding the key on a cold drive does nothing at all -- not even a
+	# refusal, because there is nothing to refuse: the pilot has not
+	# asked for a jump yet.
+	var excuses: Array[String] = []
+	jump.refused.connect(func(why: String) -> void: excuses.append(why))
+	# Deliberately **not** armed: that is the whole of this check. A
+	# blanket edit that armed every controller before every hold put a
+	# `set_armed(true)` here too and quietly turned this into a test of a
+	# working jump -- which passed, and measured nothing.
+	jump.holding = true
+	for step: int in range(20):
+		jump.advance(1.0 / 60.0)
 	_expect(
-		backwards == 0,
-		"the star holds a ship past the far edge of its own system",
+		jump.phase == JumpController.Phase.IDLE and excuses.is_empty(),
+		"and a cold drive ignores the key rather than complaining (%s)" % [excuses],
+	)
+
+	jump.set_armed(true)
+	_expect(jump.armed, "tapping it on arms it")
+
+	_check_jump_balks(ship, system, map, jump)
+
+	jump.queue_free()
+	ship.queue_free()
+
+
+## Zapchany tor: napęd się rozkręca, wydaje ładunek i kaszle.
+##
+## The lane is checked when the drive would fire rather than when it was
+## lit, which is what makes the charge the price of finding out. The HUD
+## has already said which planet is in the way, so this is the cough and
+## not the news.
+func _check_jump_balks(
+	ship: Ship, system: StarSystem, map: GalaxyMap, jump: JumpController
+) -> void:
+	# Put the ship so that a destination's lane runs through the star:
+	# on the far side of it from wherever that destination lies.
+	var here: int = map.start_index()
+	var eyes: ScannerData = ship.scanner()
+	var drive: JumpDriveData = ship.jump_drive()
+	if eyes == null or drive == null:
+		_expect(false, "the stock ship has a scanner and a drive to jump with")
+		return
+	# The nearest system the ship can both see and reach, so the only
+	# thing left to stop the jump is what is standing in the lane.
+	var target: int = -1
+	var nearest: float = INF
+	for index: int in map.within(map.positions[here], eyes.reach):
+		if index == here:
+			continue
+		var away: float = map.positions[here].distance_to(map.positions[index])
+		if drive.can_cross(away) and away < nearest:
+			nearest = away
+			target = index
+	if target < 0:
+		_expect(false, "there is somewhere this drive can reach")
+		return
+	var toward: Vector2 = (map.positions[target] - map.positions[here]).normalized()
+	if toward.is_zero_approx():
+		toward = Vector2.RIGHT
+	# Behind the star, pointed at it: the star is the one body that is
+	# always there and always at the origin.
+	var back: float = system.star.radius * 6.0
+	ship.global_position = -toward * back
+	_expect(
+		system.holding(ship.global_position, 0.0) == null,
+		"standing clear of everything, %.0f px out" % ship.global_position.length(),
 	)
 	_expect(
-		leaky == 0,
-		"and past every single thing in it, wherever that thing is on its orbit",
-	)
-	_expect(
-		tightest > 0.0 and widest / tightest > 1.3,
-		"a sprawling system is a longer climb out than a compact one (%.0f to %.0f px)" % [
-			tightest, widest,
+		jump.lane_blocked(target) == system.star,
+		"with the star square in the lane (%s)" % [
+			"clear" if jump.lane_blocked(target) == null
+			else jump.lane_blocked(target).display_name,
 		],
 	)
 
-	# The two readings have to be the same reading. `is_mass_locked` is
-	# what a state machine branches on and `jump_clearance` is what a
-	# readout counts down, and a boundary they disagreed about would be a
-	# HUD saying "clear" next to a drive refusing to charge.
-	var one: StarSystem = StarSystem.generate(20260922)
-	var edge: float = one.mass_lock_radius()
+	# It is not a refusal: the drive lights, because everything
+	# `blocked_by` asks about is fine.
+	_expect(
+		jump.blocked_by(target).is_empty(),
+		"the drive still lights, because nothing is holding the ship (%s)" % [
+			jump.blocked_by(target),
+		],
+	)
+
+	var coughed: Array[SystemBody] = []
+	jump.balked.connect(func(blocker: SystemBody) -> void: coughed.append(blocker))
+	var crossings: int = 0
+	jump.crossed.connect(
+		func(_a: int, _b: int, _at: Vector2, _h: float) -> void: crossings += 1
+	)
+	ship.add_charges(1)
+	var charges_before: int = ship.charges
+	# Aimed the way the drive is actually aimed: by pointing the nose.
+	# `UP.rotated(rotation)` is the nose, so this is the rotation that
+	# puts it along the lane.
+	ship.global_rotation = toward.angle() + PI * 0.5
+	_expect(
+		jump.aimed_at() == target,
+		"the nose is on it (%d, wanted %d)" % [jump.aimed_at(), target],
+	)
+	# The drive has to be on before holding the key means anything.
+	jump.set_armed(true)
+	jump.holding = true
+	for step: int in range(600):
+		jump.advance(1.0 / 60.0)
+		if not coughed.is_empty():
+			break
+	_expect(
+		coughed.size() == 1 and coughed[0] == system.star,
+		"and holding anyway spools, spends and coughs, naming what was in the way",
+	)
+	_expect(crossings == 0, "nothing crossed")
+	_expect(
+		ship.charges < charges_before,
+		"and the charge is gone, which is what makes it a failure and not a refusal",
+	)
+	_expect(
+		jump.phase == JumpController.Phase.IDLE,
+		"the drive is back at idle, ready to be aimed somewhere else",
+	)
+
+
+## Dwie lokalne reguły skoku zamiast blokady masy.
+##
+## The mass lock is gone and the measurement is why: 1.5 times the whole
+## system's outer radius came out at 72000 to 504000 px over 300 seeds,
+## and the widest view in the game is 582 px across. That is a hundred
+## and twenty to nearly nine hundred screens of holding one key with no
+## decision in any of it.
+##
+## What replaces it is local and in two halves, and this checks both
+## plus the thing the old test was really about: that the rule a state
+## machine branches on and the number a readout counts down are **one
+## answer**, not two that can disagree at the boundary.
+func _check_jump_clearance() -> void:
+	var system: StarSystem = StarSystem.generate(20260922)
+	_expect(system.star != null, "a system with a star to be too close to")
+	if system.star == null:
+		return
+
+	# Held at a planet, and free a little way off it. Measured against
+	# the planet's own radius, which is what the rule is made of.
+	var world: SystemBody = system.planets()[0]
+	var centre: Vector2 = world.position_at(0.0)
+	var out: Vector2 = (centre - Vector2.ZERO).normalized()
+	if out.is_zero_approx():
+		out = Vector2.RIGHT
+	_expect(
+		system.holding(centre, 0.0) == world,
+		"standing on a planet, the planet is what is holding you",
+	)
+	var edge: float = world.radius * StarSystem.JUMP_CLEARANCE
+	_expect(
+		system.holding(centre + out * (edge * 1.02), 0.0) == null,
+		"and a little past its own clearance nothing is (%.0f px out)" % edge,
+	)
+
+	# One answer, not two: `holding` is what the machine branches on and
+	# `clearance_to` is what the readout counts down.
 	var split: int = 0
-	for step: int in range(40):
-		var out: Vector2 = Vector2.from_angle(float(step)) * (
-			edge * lerpf(0.2, 1.8, float(step) / 39.0)
+	for step: int in range(60):
+		var probe: Vector2 = centre + Vector2.from_angle(float(step)) * (
+			edge * lerpf(0.1, 1.9, float(step) / 59.0)
 		)
-		if one.is_mass_locked(out) != (one.jump_clearance(out) > 0.0):
+		if (system.holding(probe, 0.0) != null) != (system.clearance_to(probe, 0.0) > 0.0):
 			split += 1
 	_expect(split == 0, "held and how-much-further are one answer, not two")
+
+	# And it is **local**, which is the whole point of the change: a ship
+	# well inside the system but away from everything can jump. Under the
+	# old rule the whole system was inside the lock by construction.
+	var gap: Vector2 = _spot_clear_of_bodies(system)
 	_expect(
-		one.is_mass_locked(one.planets()[0].position_at(0.0))
-		and not one.is_mass_locked(Vector2.RIGHT * edge * 1.01),
-		"you are held at a planet and free a hair past the ring (%.0f px)" % edge,
+		gap != Vector2.INF and system.holding(gap, 0.0) == null,
+		"there is room to jump from inside the system, between the bodies",
 	)
+	if gap != Vector2.INF:
+		_expect(
+			gap.length() < system.outer_radius(),
+			"and it is inside the outermost orbit, not past it (%.0f of %.0f px)" % [
+				gap.length(), system.outer_radius(),
+			],
+		)
+
+	_check_jump_lane(system)
+
+
+## Druga połowa: tor do celu musi być wolny.
+##
+## This is what makes **where** you stand matter rather than only how far
+## out you are. A drive pointed through a planet has nowhere to put the
+## ship, and the pilot is told which planet rather than merely "no".
+func _check_jump_lane(system: StarSystem) -> void:
+	var world: SystemBody = system.planets()[0]
+	var centre: Vector2 = world.position_at(0.0)
+	var out: Vector2 = Vector2.RIGHT if centre.is_zero_approx() else centre.normalized()
+
+	# Standing well short of a planet and pointed through it.
+	var behind: Vector2 = centre - out * world.radius * 8.0
+	_expect(
+		system.lane_blocked(behind, out, 0.0) == world
+		or system.lane_blocked(behind, out, 0.0) == system.star,
+		"a lane pointed through a world is blocked by something in it",
+	)
+
+	# Pointed the other way, the same planet is behind the ship and not
+	# in the way. A test that passed for a body astern would be a test of
+	# distance rather than of direction.
+	var away: SystemBody = system.lane_blocked(behind, -out, 0.0)
+	_expect(
+		away != world,
+		"and the same world astern is not in the way (%s)" % [
+			"clear" if away == null else away.display_name,
+		],
+	)
+
+	# Square across it: wide of the body by more than its margin, so the
+	# lane clears. Measured off the rule's own ratio rather than a guess.
+	var aside: Vector2 = centre + out.orthogonal() * world.radius * (
+		StarSystem.LANE_CLEARANCE + 0.5
+	)
+	_expect(
+		system.lane_blocked(aside, out.orthogonal(), 0.0) != world,
+		"a lane passing wide of a world is not blocked by it",
+	)
+
+	# A zero heading is not a lane. Nothing should divide by it.
+	_expect(
+		system.lane_blocked(behind, Vector2.ZERO, 0.0) == null,
+		"and no heading at all blocks nothing",
+	)
+
+
+## A point inside the system that nothing is holding, or INF if the seed
+## has not left one. Walked rather than solved: the bodies move, and a
+## closed-form gap would be a second copy of the rule.
+func _spot_clear_of_bodies(system: StarSystem) -> Vector2:
+	var reach: float = system.outer_radius()
+	for step: int in range(360):
+		var probe: Vector2 = Vector2.from_angle(
+			float(step) * 0.0873
+		) * reach * (0.2 + 0.7 * float(step % 7) / 7.0)
+		if system.holding(probe, 0.0) == null:
+			return probe
+	return Vector2.INF
 
 
 ## Scanner, jump drive and tank: the three modules that decide whether you leave.
@@ -5043,6 +5239,11 @@ func _check_jump_hud() -> void:
 	var hud: JumpHud = JumpHud.new()
 	root.add_child(hud)
 	hud.bind(ship, system, map, here, galaxy, pilot)
+	# The drive is off until the pilot turns it on, and a dark ring is
+	# the first thing this HUD now says. Everything below is about what
+	# it says once it is lit, so light it.
+	_expect(hud.silence() == "jump drive off", "a cold drive shows nothing (%s)" % hud.silence())
+	pilot.set_armed(true)
 
 	var view: Vector2 = Vector2(640.0, 360.0)
 	var flat: Transform2D = Transform2D.IDENTITY
@@ -5052,21 +5253,24 @@ func _check_jump_hud() -> void:
 	# is the rule UI_STYLE asks for and the one a blank screen breaks.
 	ship.global_position = system.planets()[0].position_at(0.0)
 	_expect(
-		hud.silence().begins_with("mass lock") and hud.contacts(flat, view).is_empty(),
-		"inside the lock there is nothing to pick and a reason given (%s)" % hud.silence(),
+		hud.silence().begins_with("too close to")
+		and hud.contacts(flat, view).is_empty(),
+		"standing on a world there is nothing to pick, and it says which world (%s)" % [
+			hud.silence(),
+		],
 	)
 	var kept: ScannerData = ship.scanner()
 	ship.scanner_bay.installed = null
 	ship.rebuild_control_groups(false)
 	_expect(
 		hud.silence() == "no scanner",
-		"no scanner is a different silence from mass lock (%s)" % hud.silence(),
+		"no scanner is a different silence from being too close (%s)" % hud.silence(),
 	)
 	ship.scanner_bay.installed = kept
 	ship.rebuild_control_groups(false)
 
-	# Out past the lock, where the scanner starts working.
-	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	# Clear of everything, where the scanner starts working.
+	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
 	_expect(hud.silence().is_empty(), "outside it, the instrument is simply on")
 	var seen: Array[Dictionary] = hud.contacts(flat, view)
 	_expect(not seen.is_empty(), "and there is somewhere to go (%d systems)" % seen.size())
@@ -5243,22 +5447,27 @@ func _check_jump_sequence() -> void:
 
 	# Held down inside the lock: refused, with a reason. "Nothing
 	# happened" is the one answer an instrument must never give.
+	pilot.set_armed(true)
 	ship.global_position = system.planets()[0].position_at(0.0)
 	var excuses: Array[String] = []
 	pilot.refused.connect(func(reason: String) -> void: excuses.append(reason))
 	var neighbour: int = map.neighbours(here, GalaxyMap.BASE_REACH)[0]
 	var out: Vector2 = (map.positions[neighbour] - map.positions[here]).normalized()
 	ship.global_rotation = out.angle() - Vector2.UP.angle()
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
-	var held_down: Array[String] = ["mass lock"]
+	var held_down: Array[String] = [
+		"too close to %s" % system.planets()[0].display_name
+	]
 	_expect(
 		pilot.phase == JumpController.Phase.IDLE and excuses == held_down,
-		"the star holds the drive down, and says which thing is stopping you (%s)" % [excuses],
+		"the world underfoot holds the drive down, and is named (%s)" % [excuses],
 	)
 
 	# Clear of it, pointed at a neighbour, and holding.
-	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
 	_expect(
 		pilot.aimed_at() == neighbour,
 		"out here the nose picks a target in the world's own frame",
@@ -5267,6 +5476,7 @@ func _check_jump_sequence() -> void:
 	_expect(bill > 0.0, "and the jump has a price (%.1f of %.0f)" % [bill, ship.fuel])
 
 	var tank: float = ship.fuel
+	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	_expect(
@@ -5290,6 +5500,8 @@ func _check_jump_sequence() -> void:
 	)
 
 	# A hit stops it too, and for the same price.
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	for tick: int in range(30):
@@ -5313,6 +5525,8 @@ func _check_jump_sequence() -> void:
 
 	var phases: Array[int] = []
 	pilot.phase_changed.connect(func(phase: int) -> void: phases.append(phase))
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	for tick: int in range(900):
 		pilot.advance(1.0 / 60.0)
@@ -5360,8 +5574,8 @@ func _check_jump_sequence() -> void:
 		],
 	)
 	_expect(
-		target_system.is_mass_locked(arrival),
-		"and inside its hold, so leaving again means flying out again",
+		target_system.holding(arrival, 0.0) == null,
+		"and clear of everything there, so the drive is live on arrival",
 	)
 
 	# Charging is spending, so a dry tank cannot start one.
@@ -5386,6 +5600,8 @@ func _check_jump_sequence() -> void:
 	# magazine. Only having neither is nothing to jump with.
 	ship.fuel = 0.0
 	ship.charges = 0
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	_expect(
@@ -5420,7 +5636,7 @@ func _check_transit_veil() -> void:
 	galaxy.reset(20260922)
 
 	var ship: Ship = _spawn_ship()
-	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
 	var pilot: JumpController = JumpController.new()
 	pilot.use_player_input = false
 	root.add_child(pilot)
@@ -5445,6 +5661,8 @@ func _check_transit_veil() -> void:
 	var neighbour: int = map.neighbours(here, GalaxyMap.BASE_REACH)[0]
 	var out: Vector2 = (map.positions[neighbour] - map.positions[here]).normalized()
 	ship.global_rotation = out.angle() - Vector2.UP.angle()
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 
 	var charging_peak: float = 0.0
@@ -5519,7 +5737,7 @@ func _check_misjump() -> void:
 	galaxy.reset(20260922)
 
 	var ship: Ship = _spawn_ship()
-	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
 	var pilot: JumpController = JumpController.new()
 	pilot.use_player_input = false
 	root.add_child(pilot)
@@ -5602,6 +5820,8 @@ func _check_misjump() -> void:
 	var out: Vector2 = (map.positions[near] - map.positions[here]).normalized()
 	ship.global_rotation = out.angle() - Vector2.UP.angle()
 	pilot.rolls_with(4242)
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	for tick: int in range(900):
 		pilot.advance(1.0 / 60.0)
@@ -5645,10 +5865,10 @@ func _check_misjump() -> void:
 		"the gap is a system with nothing in it (%s)" % gap.display_name,
 	)
 	_expect(
-		is_equal_approx(gap.mass_lock_radius(), 0.0)
-		and not gap.is_mass_locked(Vector2.ZERO)
+		gap.holding(Vector2.ZERO, 0.0) == null
+		and is_equal_approx(gap.clearance_to(Vector2.ZERO, 0.0), 0.0)
 		and gap.outer_radius() > 0.0,
-		"with no star to hold you down and still somewhere to be (%.0f px)" % [
+		"with nothing to be too close to and still somewhere to be (%.0f px)" % [
 			gap.outer_radius(),
 		],
 	)
@@ -7517,13 +7737,16 @@ func _check_system_map() -> void:
 		"and the whole system fits on it (%.0f px of %.0f)" % [outermost, minf(view.x, view.y) * 0.5],
 	)
 
-	# And so does the mass lock, which is the circle somebody planning to
-	# leave is actually looking for. A map that stopped at the last orbit
-	# would cut it off and turn "how much further" back into a guess.
-	var lock: float = system.mass_lock_radius() * float(plan["scale"])
+	# And there is room past the last orbit, which used to be where the
+	# mass lock ring went and is now simply margin: the map's job is to
+	# hold the system with an edge round it rather than to show one big
+	# circle somebody is flying towards.
+	var rim: float = system.outer_radius() * SystemMap.LOCK_HEADROOM * float(plan["scale"])
 	_expect(
-		lock > outermost and lock < minf(view.x, view.y) * 0.5,
-		"the jump ring is outside the last orbit and still on the map (%.0f px)" % lock,
+		rim > outermost and rim <= minf(view.x, view.y) * 0.5,
+		"the outermost orbit has room round it on the map (%.0f px of %.0f)" % [
+			outermost, rim,
+		],
 	)
 
 	# Clicking works before a single frame has been drawn. The ship editor
@@ -11186,7 +11409,9 @@ func _check_sky() -> void:
 	# wrong place would undo it without anybody noticing.
 	var sky_shader: Shader = load("res://shaders/starfield.gdshader") as Shader
 	var source: String = sky_shader.code
-	var layers: int = source.count("star_layer(pixel + world_offset")
+	# `dragged` since the sky learned to streak: the same three calls,
+	# each now with a motion-blur tap count wrapped round `star_layer`.
+	var layers: int = source.count("dragged(pixel + world_offset")
 	_expect(
 		layers >= 3,
 		"the field is drawn in %d layers rather than one" % layers,
@@ -12341,7 +12566,7 @@ func _check_charges() -> void:
 
 	# Out past the lock first: every question below is about the drive,
 	# and inside the lock the honest answer to all of them is the star.
-	ship.global_position = Vector2.RIGHT * system.mass_lock_radius() * 1.2
+	ship.global_position = Vector2.RIGHT * system.outer_radius() * 2.0
 
 	# An empty tank and a full magazine: no shortfall, because that is
 	# what a charge buys.
@@ -12377,6 +12602,8 @@ func _check_charges() -> void:
 	ship.charges = 2
 	ship.fuel = ship.fuel_capacity()
 	var tank: float = ship.fuel
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	pilot.advance(1.0 / 60.0)
@@ -12398,6 +12625,8 @@ func _check_charges() -> void:
 	ship.charges = 0
 	ship.fuel = ship.fuel_capacity()
 	tank = ship.fuel
+	# The drive has to be on before holding the key means anything.
+	pilot.set_armed(true)
 	pilot.holding = true
 	pilot.advance(1.0 / 60.0)
 	pilot.advance(1.0 / 60.0)

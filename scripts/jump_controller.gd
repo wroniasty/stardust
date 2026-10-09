@@ -35,6 +35,15 @@ enum Phase {
 ## while turning, narrow enough that two candidates rarely tie.
 const CONE: float = 0.26179939
 
+## How long a press may last and still count as a tap.
+##
+## The drive is armed and disarmed by tapping the key and charged by
+## holding it, which is one key doing two jobs and needs one number to
+## tell them apart. A fifth of a second: longer than anybody taps,
+## shorter than anybody notices waiting before a charge that takes
+## seconds anyway.
+const ARM_TAP: float = 0.22
+
 ## How long the crossing lasts, and where in it the worlds change over.
 ##
 ## The swap is at the middle rather than at either end so that the effect
@@ -62,6 +71,19 @@ const STRAIN_FROM: float = 0.85
 ## How far along the lane a failed jump drops the ship.
 const FELL_SHORT: Vector2 = Vector2(0.35, 0.80)
 
+## The drive was switched on or off. The HUD shows destinations only
+## while it is on, which is what makes arming a thing the pilot does
+## rather than a state they are in by default.
+signal armed_changed(armed: bool)
+
+## The drive spooled, spent its charge and had nowhere to put the ship.
+##
+## Its own signal rather than a `refused`, because the two are different
+## events: a refusal happens instead of a jump and costs nothing, and
+## this happens **as** a jump and costs the whole charge. Carries what
+## was in the way, so the cough can name it.
+signal balked(blocker: SystemBody)
+
 signal phase_changed(phase: Phase)
 
 ## Why a jump would not start. Carries the reason, because "nothing
@@ -86,6 +108,17 @@ var phase: Phase = Phase.IDLE
 var use_player_input: bool = true
 var holding: bool = false
 
+## Whether the drive is lit and looking for somewhere to go.
+##
+## **Off by default, and off again after every arrival.** A jump is one
+## trip; a pilot who has just come out of one should be looking at where
+## they are rather than at six headings out of it, and re-arming is the
+## moment they decide to go on.
+var armed: bool = false
+
+## How long the key has been down, for telling a tap from a hold.
+var _held_for: float = 0.0
+
 var _ship: Ship = null
 var _system: StarSystem = null
 var _map: GalaxyMap = null
@@ -105,6 +138,11 @@ var _galaxy: Node = null
 ## The roll. Seeded from the clock in the game and set by hand in a
 ## test, because a risk nobody can reproduce is a risk nobody can check.
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
+## The system clock the bodies were placed against. See `bind`. Not
+## `_clock`, which is this machine's own transit timer -- two different
+## clocks, and the one that got the plain name was here first.
+var _visit_time: float = 0.0
 
 ## What the charge is for, and what it costs. Latched when the charge
 ## starts: the nose is how you pick a target, not how you keep one, and
@@ -144,6 +182,7 @@ func bind(
 	here: int,
 	galaxy: Node = null,
 	at: Vector2 = Vector2.INF,
+	clock: float = 0.0,
 ) -> void:
 	if _ship != null and is_instance_valid(_ship) and _ship.hull_impact.is_connected(_on_hit):
 		_ship.hull_impact.disconnect(_on_hit)
@@ -152,6 +191,11 @@ func bind(
 	_map = map
 	_here = here
 	_galaxy = galaxy
+	# The moment the bodies in this scene were placed at, frozen on
+	# arrival (`StreamingManager.visit_time`). Handed in rather than read,
+	# so the clearance rules ask about the planets the pilot can see
+	# rather than about where they would be if the clock had run on.
+	_visit_time = clock
 	if at != Vector2.INF:
 		_at = at
 	elif map != null and here >= 0 and here < map.count():
@@ -201,8 +245,11 @@ func blocked_by(index: int) -> String:
 		return "no ship"
 	if index < 0 or _map == null or index >= _map.count() or index == _here:
 		return "no target"
-	if _system != null and _system.is_mass_locked(_ship.global_position):
-		return "mass lock"
+	var holding: SystemBody = (
+		null if _system == null else _system.holding(_ship.global_position, _visit_time)
+	)
+	if holding != null:
+		return "too close to %s" % holding.display_name
 	var drive: JumpDriveData = _ship.jump_drive()
 	if drive == null:
 		return "no drive"
@@ -212,6 +259,24 @@ func blocked_by(index: int) -> String:
 	if _ship.charges <= 0 and _ship.fuel <= 0.0:
 		return "no charge, no fuel"
 	return ""
+
+
+## What the lane to a destination runs into, or null when it is clear.
+##
+## **Not part of `blocked_by`**, and that is the decision rather than an
+## oversight. Everything `blocked_by` lists stops the drive from
+## lighting at all: no target, no drive, nothing in the tank, a planet
+## filling the sky. A fouled lane is different -- the drive will light,
+## spool and spend the charge, and then fail, because the thing it needed
+## was somewhere to put the ship and there was a planet there. The HUD
+## says so first, loudly; a pilot who holds anyway gets the cough.
+func lane_blocked(index: int) -> SystemBody:
+	if _ship == null or not is_instance_valid(_ship) or _system == null:
+		return null
+	if _map == null or index < 0 or index >= _map.count() or index == _here:
+		return null
+	var toward: Vector2 = _map.positions[index] - _at
+	return _system.lane_blocked(_ship.global_position, toward, _visit_time)
 
 
 ## What a jump to `index` would cost, in fuel.
@@ -304,6 +369,20 @@ func adrift_arrival(toward: int) -> Vector2:
 	return out * StarSystem.VOID_REACH
 
 
+## Which way the drive is pointed, in the world's frame, or zero when it
+## is pointed nowhere.
+##
+## The lane and the heading are the same thing because the galaxy and the
+## system are the same plane -- the decision the whole of section 10
+## rests on. Public because the sky streaks along it and the sky has no
+## business working it out a second time.
+func lane_heading() -> Vector2:
+	var index: int = showing()
+	if _map == null or index < 0 or index >= _map.count():
+		return Vector2.ZERO
+	return (_map.positions[index] - _at).normalized()
+
+
 func _system_at(index: int) -> StarSystem:
 	if _galaxy == null or not _galaxy.has_method("system"):
 		return null
@@ -312,8 +391,34 @@ func _system_at(index: int) -> StarSystem:
 
 func _physics_process(delta: float) -> void:
 	if use_player_input:
-		holding = Input.is_action_pressed(&"jump")
+		_read_key(delta)
 	advance(delta)
+
+
+## One key, two jobs. A tap toggles the drive; a press that outlives a
+## tap is a hold, and a hold on a live drive is a charge.
+##
+## The tap is read on release rather than on press, which is the only way
+## round the ambiguity: every hold begins as a press, so a press cannot
+## mean "toggle" without also toggling at the start of every charge.
+func _read_key(delta: float) -> void:
+	if Input.is_action_pressed(&"jump"):
+		_held_for += delta
+		holding = armed and _held_for >= ARM_TAP
+		return
+	if _held_for > 0.0 and _held_for < ARM_TAP and phase == Phase.IDLE:
+		set_armed(not armed)
+	_held_for = 0.0
+	holding = false
+
+
+## Switches the drive on or off. Public and free of input, like every
+## other door into this machine, so a test can arm it without a keyboard.
+func set_armed(on: bool) -> void:
+	if armed == on:
+		return
+	armed = on
+	armed_changed.emit(armed)
 
 
 ## One step of the machine. Public and free of input, so a test can run a
@@ -331,7 +436,7 @@ func advance(delta: float) -> void:
 
 
 func _idle() -> void:
-	if not holding:
+	if not holding or not armed:
 		return
 	var wanted: int = aimed_at()
 	var excuse: String = blocked_by(wanted)
@@ -395,10 +500,25 @@ func _charging(delta: float) -> void:
 	# can still let go.
 	_spent += _ship.draw_fuel(want)
 	_charge += delta
-	if _charge >= drive.charge_time:
-		_clock = 0.0
-		_swapped = false
-		_enter(Phase.TRANSIT)
+	if _charge < drive.charge_time:
+		return
+	# The lane is checked **here**, at the moment the drive would fire,
+	# and not when it was lit. Two reasons, and the second is the better
+	# one: the charge has been spent by now, so a fouled lane costs what
+	# a jump costs; and the bodies have moved during the spool, so a
+	# planet that drifted into the way balks the jump exactly as a
+	# planet that was always there does. The pilot was told before they
+	# started -- `lane_blocked` is on the HUD -- so this is the cough
+	# rather than the news.
+	var fouled: SystemBody = lane_blocked(_target)
+	if fouled != null:
+		_target = -1
+		_enter(Phase.IDLE)
+		balked.emit(fouled)
+		return
+	_clock = 0.0
+	_swapped = false
+	_enter(Phase.TRANSIT)
 
 
 func _transit(delta: float) -> void:
@@ -435,6 +555,7 @@ func _transit(delta: float) -> void:
 		_enter(Phase.ARRIVAL)
 
 
+## Arriving switches the drive off. See `armed`.
 func _arrival(delta: float) -> void:
 	_clock += delta
 	if _clock < ARRIVAL_SECONDS:

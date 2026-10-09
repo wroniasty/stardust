@@ -28,9 +28,48 @@ const NEBULA_AMOUNT: Vector2 = Vector2(0.35, 1.0)
 ## terminator at speed should fade the stars in, not switch them.
 const DAY_RESPONSE: float = 0.5
 
+## The jump this field is reacting to, or null. Handed in, and allowed
+## to be missing: a sky with no drive to watch simply never streaks.
+var _jump: JumpController = null
+
 var _ship: Ship = null
 var _daylight: float = 0.0
 var _material: ShaderMaterial = null
+
+
+## How much of the streak each phase of a jump is worth.
+##
+## The shape the request asked for: the sky winds up while the drive
+## spools, the stars are lines across the crossing, and then it **slows
+## down quickly** rather than easing out -- which is the squared decay
+## on arrival. A linear fade would read as the ship coasting to a stop,
+## and a ship that has just arrived has not coasted anywhere.
+const SPOOL_STREAK: float = 0.35
+const ARRIVAL_EASE: float = 2.5
+
+
+## The drive whose jumps drag the sky.
+func watch_jump(jump: JumpController) -> void:
+	_jump = jump
+
+
+## How far the sky is being dragged right now, 0..1.
+##
+## Public because it is the whole of the effect's timing and a test
+## should be able to read the curve without a rendered frame.
+func streak() -> float:
+	if _jump == null or not is_instance_valid(_jump):
+		return 0.0
+	var along: float = _jump.progress()
+	match _jump.phase:
+		JumpController.Phase.CHARGING:
+			return SPOOL_STREAK * along
+		JumpController.Phase.TRANSIT:
+			return lerpf(SPOOL_STREAK, 1.0, clampf(along * 2.0, 0.0, 1.0))
+		JumpController.Phase.ARRIVAL:
+			return pow(1.0 - along, ARRIVAL_EASE)
+		_:
+			return 0.0
 
 
 func _ready() -> void:
@@ -41,6 +80,16 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if _material == null:
 		return
+	# The drag first, because it is the one thing here that has to keep
+	# running while the view is being swapped out under it.
+	var drag: float = streak() if Presentation.is_on() else 0.0
+	_material.set_shader_parameter("streak", drag)
+	if drag > 0.0 and _jump != null and is_instance_valid(_jump):
+		var along: Vector2 = _jump.lane_heading()
+		if not along.is_zero_approx():
+			# Trailing **behind** the ship, which is where a star goes
+			# when the ship goes forward.
+			_material.set_shader_parameter("streak_along", -along)
 	var camera: Camera2D = get_viewport().get_camera_2d()
 	if camera == null:
 		return

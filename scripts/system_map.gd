@@ -116,9 +116,13 @@ const PICK_RADIUS: float = 9.0
 ## 7500 is "this planet and its moons" in any system there is.
 const ZOOM_REACH: Array[float] = [0.0, 30000.0, 7500.0, 2000.0]
 
-## How much past the mass lock the unzoomed map shows. Enough that the
-## ring is a ring and not the frame.
-const LOCK_HEADROOM: float = 1.12
+## How much past the outermost thing the unzoomed map shows.
+##
+## Used to be measured past the mass lock, which was 1.5 times this and
+## is gone: a jump is now a local question (`StarSystem.JUMP_CLEARANCE`),
+## so there is no one ring to leave room for and the map's job is simply
+## to hold the system with an edge round it.
+const LOCK_HEADROOM: float = 1.35
 
 signal teleport_requested(body: SystemBody)
 
@@ -384,12 +388,10 @@ func zoom_level() -> int:
 ## this out rather than reading back what the last `_draw` left behind.
 func layout(view: Vector2) -> Dictionary:
 	var room: float = minf(view.x, view.y) * 0.5 - PAD * 3.0
-	# Out to the mass lock rather than to the last orbit, with a little
-	# room past it. A map that stopped at the outermost planet would cut
-	# off the one circle a pilot planning to leave is looking for, and
-	# "how much further" is not a question a map should make you guess.
+	# A little past the outermost thing the star holds, so the furthest
+	# orbit is a circle on the map rather than the frame of it.
 	var reach: float = (
-		_system.mass_lock_radius() * LOCK_HEADROOM if _system != null else 1.0
+		_system.outer_radius() * LOCK_HEADROOM if _system != null else 1.0
 	)
 	if ZOOM_REACH[_zoom] > 0.0:
 		reach = ZOOM_REACH[_zoom]
@@ -483,12 +485,15 @@ func _draw_map() -> void:
 		LABEL,
 	)
 
-	# The star's hold, before the orbits: it is the biggest circle here and
-	# a solid one would read as the edge of the map rather than as a thing
-	# in the system.
-	var lock: float = _system.mass_lock_radius() * float(plan["scale"])
-	if lock >= 2.0:
-		_dashed(_ring(to_map(Vector2.ZERO, plan), lock), LOCK)
+	# Where the drive will not light, which is now one bubble per body
+	# rather than one ring round the lot. Before the orbits, because a
+	# solid circle under a line reads as the line being broken.
+	for body: SystemBody in _system.bodies:
+		var bubble: float = (
+			body.radius * StarSystem.JUMP_CLEARANCE * float(plan["scale"])
+		)
+		if bubble >= 2.0:
+			_dashed(_ring(to_map(_position_of(body), plan), bubble), LOCK)
 
 	# Orbits first, so no marker is drawn under a line.
 	for body: SystemBody in _system.bodies:
@@ -509,15 +514,17 @@ func _draw_map() -> void:
 		_draw_body(body, to_map(_position_of(body), plan), float(plan["scale"]))
 
 	if _ship != null and is_instance_valid(_ship):
-		var togo: float = _system.jump_clearance(_ship.global_position)
+		var holding: SystemBody = _system.holding(_ship.global_position, _clock())
+		var togo: float = _system.clearance_to(_ship.global_position, _clock())
 		_text(
 			font,
 			Vector2(PAD, PAD + float(FONT_SIZE) * 4.0),
 			(
-				"mass lock  %.0f px to go" % togo if togo > 0.0
-				else "mass lock  clear, jump available"
+				"too close to %s  %.0f px" % [holding.display_name, togo]
+				if holding != null
+				else "clear of everything, jump available"
 			),
-			LOCK if togo > 0.0 else LOCK_CLEAR,
+			LOCK if holding != null else LOCK_CLEAR,
 		)
 
 	# After the bodies, so the pin is never under a planet's dot, and
@@ -546,6 +553,16 @@ func _position_of(body: SystemBody) -> Vector2:
 	if _manager != null and is_instance_valid(_manager):
 		return _manager.position_of(body)
 	return body.position_at(0.0)
+
+
+## The clock the live bodies were placed against, so the clearance rule
+## and `_position_of` cannot disagree about where a planet is. Zero
+## without a manager, which is what a test sees and is also what
+## `_position_of` falls back to.
+func _clock() -> float:
+	if _manager != null and is_instance_valid(_manager) and "visit_time" in _manager:
+		return float(_manager.visit_time)
+	return 0.0
 
 
 ## Whether this body is in the world right now, or only in the model.

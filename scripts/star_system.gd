@@ -75,17 +75,37 @@ const MOON_PARENT_RADIUS: float = 1300.0
 ## How far past everything in the system the star holds a ship down, as a
 ## multiple of the outermost thing orbiting it.
 ##
-## IDEAS.md section 10 puts this at one and a half times the last orbit,
-## and measures it against **everything** the star holds rather than
-## against the last planet. A deep station can sit outside the outermost
-## world, and a lock that stopped short of it would let a pilot jump from
-## a dock -- which is the one place in a system where leaving should mean
-## flying out first.
+## How far from a body a ship has to be before the drive will light, as a
+## multiple of that body's own radius and measured from its centre.
 ##
-## The whole system is inside it by construction, so this is also the only
-## mass lock there is: no separate rule for planets, because anywhere a
-## planet can hold you the star already does.
-const MASS_LOCK_RATIO: float = 1.5
+## **This replaces the mass lock**, which was 1.5 times the whole
+## system's outer radius and measured out at 72000 to 504000 px across
+## 300 seeds. Against a view 582 px wide at the widest zoom, that is a
+## hundred and twenty to nearly nine hundred screens of holding one key:
+## the old note called a sprawling system "a nuisance to leave", and the
+## honest word is a waiting simulator. Nothing about a jump was being
+## decided during that climb.
+##
+## So the rule is local. A body holds you down while you are near it,
+## and 2.5 of its own radius is what "near it" means -- a thousand-pixel
+## planet lets go fifteen hundred pixels above its surface, which is
+## about three screens and five seconds of burn. A dock at 55 to 110 px
+## lets go almost at once, which is right: pushing off is leaving.
+##
+## Scaled by the body rather than flat, so a gas giant is a longer push
+## than a moon. That is the same shape as every other reach in this
+## project and it keeps one number where a table would otherwise grow.
+const JUMP_CLEARANCE: float = 2.5
+
+## And how wide of a body the lane to the destination has to pass, as a
+## multiple of that body's radius.
+##
+## The other half of the rule, and the half that makes where you stand
+## matter rather than only how far out you are: a drive pointed through a
+## planet has nowhere to put the ship. A quarter of the body's own size
+## as margin, because the lane is a corridor a hull flies down and not a
+## mathematical line.
+const LANE_CLEARANCE: float = 1.25
 
 ## Docks. One always, and sometimes a second out in the dark between orbits.
 const STATION_RADIUS: Vector2 = Vector2(55.0, 110.0)
@@ -296,32 +316,65 @@ func outer_radius() -> float:
 	return out
 
 
-## How far from the star a ship has to get before it can jump, in pixels.
+## Which body is too close for the drive to light, or null when none is.
 ##
-## The outer edge of the system and then half as much again. Derived
-## rather than rolled: a system with wider orbits is a longer climb out,
-## which is what makes a compact system a convenient one to be based in
-## and a sprawling one a nuisance to leave.
-func mass_lock_radius() -> float:
-	# Zero where there is no star. Nothing is holding you; the question
-	# out here is whether the tank will reach anywhere, which is a
-	# different kind of trapped.
-	return 0.0 if star == null else outer_radius() * MASS_LOCK_RATIO
-
-
-## Whether a point in this system is still held down by the star.
+## The body rather than a bool, because "you cannot jump" is not
+## something an instrument may say on its own: a pilot who is told
+## *what* is holding them knows which way to fly, and a pilot told only
+## "no" has to guess. The nearest offender when several overlap, for the
+## same reason.
 ##
-## The star sits at the origin of the system frame, which is also the
-## origin of the scene, so a ship can be asked about with its own global
-## position and no arithmetic in between.
-func is_mass_locked(point: Vector2) -> bool:
-	return point.length() < mass_lock_radius()
+## Bodies orbit, so this takes the clock their positions are read
+## against -- the same frozen `StreamingManager.visit_time` every planet
+## in the scene was placed with, so the model and the nodes cannot
+## disagree about where anything is.
+func holding(point: Vector2, time: float = 0.0) -> SystemBody:
+	var worst: SystemBody = null
+	var closest: float = INF
+	for body: SystemBody in bodies:
+		var reach: float = body.radius * JUMP_CLEARANCE
+		var away: float = point.distance_to(body.position_at(time))
+		if away < reach and away < closest:
+			closest = away
+			worst = body
+	return worst
 
 
-## How much further out a point still has to get, in pixels. Zero or
-## negative once the ship is clear, which is what a readout counts down.
-func jump_clearance(point: Vector2) -> float:
-	return mass_lock_radius() - point.length()
+## How much further the ship has to get, in pixels, before the drive will
+## light. Zero once it is clear, which is what a readout counts down.
+func clearance_to(point: Vector2, time: float = 0.0) -> float:
+	var body: SystemBody = holding(point, time)
+	if body == null:
+		return 0.0
+	return body.radius * JUMP_CLEARANCE - point.distance_to(body.position_at(time))
+
+
+## Which body the lane to a destination runs into, or null when it is
+## clear.
+##
+## The lane is a ray from the ship along the heading to the destination,
+## and anything whose centre sits within `LANE_CLEARANCE` of its own
+## radius of that ray is in the way. Only what is **ahead**: a planet
+## the ship has already passed is behind the drive, not in front of it.
+##
+## The nearest obstruction rather than any, because that is the one the
+## pilot would hit first and the one worth naming.
+func lane_blocked(from: Vector2, toward: Vector2, time: float = 0.0) -> SystemBody:
+	var along: Vector2 = toward.normalized()
+	if along.is_zero_approx():
+		return null
+	var worst: SystemBody = null
+	var nearest: float = INF
+	for body: SystemBody in bodies:
+		var at: Vector2 = body.position_at(time)
+		var ahead: float = (at - from).dot(along)
+		if ahead <= 0.0:
+			continue
+		var sideways: float = absf((at - from).cross(along))
+		if sideways < body.radius * LANE_CLEARANCE and ahead < nearest:
+			nearest = ahead
+			worst = body
+	return worst
 
 
 func planets() -> Array[SystemBody]:
