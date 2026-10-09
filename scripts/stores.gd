@@ -40,7 +40,7 @@ const NAMES: Array[String] = ["spare parts", "stardust", "iron ore", "dust ore"]
 ## How much room one unit takes, derived from what a full hold is worth
 ## of it rather than chosen as a number.
 ##
-## The stock hull holds six bulk (`Ship.FINDS_PER_HOLD`), so: a hold of
+## The stock hull holds six bulk (`Hold.FINDS_PER_HOLD`), so: a hold of
 ## nothing but parts is fifty of them -- two hull rebuilds -- and a hold
 ## of nothing but stardust is a hundred and twenty-five, which is four
 ## hyperdrive charges and so exactly one full drive. Three figures a

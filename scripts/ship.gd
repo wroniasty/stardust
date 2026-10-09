@@ -504,75 +504,42 @@ var gear: LandingGear = null
 ## Why the last touchdown was refused, for the HUD. Empty once landed.
 var last_landing_rejection: String = ""
 
-## The one module the ship is carrying loose, and how good it was. One slot,
-## not an inventory: a full hold has to be dealt with before the next find,
-## which keeps the loadout screen to a single decision (IDEAS.md section 4).
-var carried: Resource = null
+## Everything the ship is carrying. See `Hold`, which was lifted out of
+## this file: the four fields below are forwarding properties so that the
+## ninety-seven places which read `ship.carried`, `ship.cargo`,
+## `ship.stores` and `ship.charges` keep working. The code moved; the
+## interface did not.
+var hold: Hold = Hold.new()
 
+var carried: Resource:
+	get:
+		return hold.carried
+	set(value):
+		hold.carried = value
 
 ## How good the thing in the hold is. Read off the module rather than stored,
 ## so it cannot disagree with what is actually being carried.
 var carried_rarity: int:
 	get:
-		var module: ModuleData = carried as ModuleData
-		return module.rarity if module != null else 0
+		return hold.carried_rarity()
 
-## The cargo bay: things stowed for later, measured in the same bulk unit as
-## everything else. Not slots -- a capacity -- so "can I take this" is a
-## question about the machine rather than about a grid, and a full bay of
-## heavy modules is felt in how the ship flies.
-##
-## Entries are { "item": Resource, "rarity": int }, in the order they were
-## stowed. Rarity rides alongside because no module Resource carries it.
-var cargo: Array[Dictionary] = []
+var cargo: Array[Dictionary]:
+	get:
+		return hold.cargo
+	set(value):
+		hold.cargo = value
 
-## And what it carries by the unit: spare parts, stardust, and the ore
-## kinds that arrive with mining.
-##
-## The same volume as the modules, deliberately. A hold full of ore is a
-## hold with no room for the drive you just found, and that trade is
-## what the premise is made of -- see `Stores`.
-var stores: Stores = Stores.new()
-
-## How many average finds the stock hold holds. **The premise parameter**,
-## and the reason the hold is a number with an argument behind it rather
-## than a number off a hull (PLAN.md, premise point 7).
-##
-## "Loot galore" against a small hold is a sequence of decisions; against
-## a big one it is hoovering. So the hold is sized against **what one
-## cleared world hands over**, and both sides of that were measured
-## rather than guessed:
-##
-## - An average rolled module is **1.54 bulk** (20000 rolls across every
-##   kind: a weapon 1.39, an engine 1.71, a tank or jump drive 2.22, a
-##   shot mod 0.20).
-## - One defended body hands over one item per defender: **4.2 at the rim**
-##   (worst 7), 9.2 mid-ladder, **15.5 in the core** (worst 21).
-##
-## Four, so clearing one rim world slightly overfills the hold. That is
-## the shape the premise asks for at the only place it can be taught: at
-## the rim the pilot can take nearly everything and learns that the hold
-## is the limit, and by the core they are carrying a quarter of what they
-## kill and choosing which quarter.
-##
-## The hold used to be 11 bulk, which is 7.1 finds -- larger than
-## anything the rim could hand over, so the first few hours of the game
-## had no such decision in them at all.
-##
-## The figure is about the **hull's** hold. What a given ship can carry
-## is that minus whatever its fitted generator crowds out
-## (`CARGO_CROWDING`) and plus whatever a cargo module adds
-## (`cargo_capacity` is in `STATS`) -- the stock ship comes out at 3.3
-## finds for the first reason, which is the pilot's trade rather than
-## the premise's, and a cargo module being a real find rather than a
-## filler is the second.
-const FINDS_PER_HOLD: float = 4.0
+var stores: Stores:
+	get:
+		return hold.stores
+	set(value):
+		hold.stores = value
 
 ## Total bulk the cargo bay can hold, before anything a module adds. A
 ## property of the hull, set in the scene, because how much a ship can carry
 ## is the first thing that distinguishes a hauler from a fighter.
 ##
-## The default is the stock hull's, derived from `FINDS_PER_HOLD` and the
+## The default is the stock hull's, derived from `Hold.FINDS_PER_HOLD` and the
 ## measured average find; the hulls that say nothing keep it.
 @export var hull_cargo_capacity: float = 6.0
 
@@ -653,8 +620,13 @@ var tank_bay: TankBay = null
 var fuel: float = 0.0
 
 ## Hyperdrive charges in the drive's magazine. Whole things: one jump
-## takes one, and a pilot plans a route by counting them.
-var charges: int = 0
+## takes one, and a pilot plans a route by counting them. Kept by the
+## `Hold`; here as a forwarding property, like the rest of it.
+var charges: int:
+	get:
+		return hold.charges
+	set(value):
+		hold.charges = value
 
 ## Contact points along the outline, without the gear's. Built once.
 var _outline_contacts: Array[Vector2] = []
@@ -838,29 +810,31 @@ func fit_engine(mount: EngineMount, data: EngineData) -> EngineData:
 ## Takes a loose module into the hold. Returns false when the hold is full,
 ## which is the caller's cue to tell the pilot rather than to lose the item.
 func take(item: Resource, rarity: int = -1) -> bool:
-	if carried != null or item == null:
+	if not hold.take(item, rarity):
 		return false
-	# A caller that knows better may still say so, but nothing has to
-	# remember to: the module carries its own grade.
-	if rarity >= 0 and item is ModuleData:
-		(item as ModuleData).rarity = rarity
-	carried = item
-	hold_changed.emit(carried)
+	hold_changed.emit(hold.carried)
 	return true
 
 
-## How big any module is, whichever kind it is. The one place that knows
-## that both module Resources answer to the same field.
+## How big any module is, whichever kind it is. Kept here as well as on
+## `Hold` because thirteen callers outside this file ask the ship.
 static func module_bulk(item: Resource) -> float:
-	var module: ModuleData = item as ModuleData
-	return module.bulk if module != null else 0.0
+	return Hold.module_bulk(item)
 
 
 func cargo_used() -> float:
-	var total: float = stores.bulk()
-	for entry: Dictionary in cargo:
-		total += module_bulk(entry["item"] as Resource)
-	return total
+	return hold.used()
+
+
+## What the hold changing means for the rest of the ship.
+##
+## One place, which it was not before: eight functions each remembered to
+## rebuild the control groups and emit, and the one that forgot would have
+## been a ship whose handling did not know it was carrying two hundred
+## spare parts. What is in the hold is mass, and mass is handling.
+func _hold_shifted() -> void:
+	rebuild_control_groups(false)
+	cargo_changed.emit()
 
 
 ## Puts units aboard, as many as the hold has room for. Returns how many
@@ -870,10 +844,9 @@ func cargo_used() -> float:
 ## does: what is in the hold is mass, and mass is handling. Two hundred
 ## spare parts are not free to carry.
 func load_units(kind: Stores.Kind, units: int) -> int:
-	var taken: int = stores.add(kind, units, cargo_free())
+	var taken: int = hold.load_units(kind, units, cargo_capacity())
 	if taken > 0:
-		rebuild_control_groups(false)
-		cargo_changed.emit()
+		_hold_shifted()
 	return taken
 
 
@@ -893,55 +866,29 @@ func load_units(kind: Stores.Kind, units: int) -> int:
 ## room the batch itself frees, and the test asserts the invariant
 ## rather than the arithmetic.
 func refine(kind: Stores.Kind, units: int) -> int:
-	var place: Refinery.Place = Refinery.place_of(self)
-	var into: int = Refinery.refines_into(kind)
-	if into < 0:
-		return 0
-	var batch: int = mini(units, stores.count(kind))
-	var free: float = cargo_free()
-	while batch > 0:
-		var made: int = Refinery.units_from(kind, batch, place)
-		if made <= 0:
-			batch -= 1
-			continue
-		var swell: float = (
-			Stores.bulk_of(into, made) - Stores.bulk_of(kind, batch)
-		)
-		if swell <= free:
-			break
-		batch -= 1
-	if batch <= 0:
-		return 0
-	var made: int = Refinery.units_from(kind, batch, place)
-	if made <= 0:
-		return 0
-	stores.spend(kind, batch)
-	# Straight into `held`, not through `load_units`: the room was
-	# already worked out above against the ore this run is spending, and
-	# asking again would measure it against a hold that has just got
-	# emptier.
-	stores.held[into] = stores.count(into as Stores.Kind) + made
-	rebuild_control_groups(false)
-	cargo_changed.emit()
+	var made: int = hold.refine(
+		kind, units, cargo_capacity(), Refinery.place_of(self)
+	)
+	if made > 0:
+		_hold_shifted()
 	return made
 
 
 ## Takes units out of the hold -- to spend, to refine, or to throw away.
 ## Returns how many there were.
 func spend_units(kind: Stores.Kind, units: int) -> int:
-	var given: int = stores.spend(kind, units)
+	var given: int = hold.spend_units(kind, units)
 	if given > 0:
-		rebuild_control_groups(false)
-		cargo_changed.emit()
+		_hold_shifted()
 	return given
 
 
 func carrying(kind: Stores.Kind) -> int:
-	return stores.count(kind)
+	return hold.carrying(kind)
 
 
 func cargo_free() -> float:
-	return maxf(cargo_capacity() - cargo_used(), 0.0)
+	return hold.room_left(cargo_capacity())
 
 
 ## Moves what is in the hold into the bay. Fails, rather than overfilling,
@@ -949,26 +896,19 @@ func cargo_free() -> float:
 ##
 ## Rebuilds the control groups, because cargo is mass and mass is handling.
 func stow() -> bool:
-	if carried == null or module_bulk(carried) > cargo_free():
+	if not hold.stow(cargo_capacity()):
 		return false
-	cargo.append({"item": carried, "rarity": carried_rarity})
-	carried = null
-	rebuild_control_groups(false)
 	hold_changed.emit(null)
-	cargo_changed.emit()
+	_hold_shifted()
 	return true
 
 
 ## Moves one thing out of the bay and into the hold, which must be empty.
 func retrieve(index: int) -> bool:
-	if carried != null or index < 0 or index >= cargo.size():
+	if not hold.retrieve(index):
 		return false
-	var entry: Dictionary = cargo[index]
-	cargo.remove_at(index)
-	carried = entry["item"]
-	rebuild_control_groups(false)
-	hold_changed.emit(carried)
-	cargo_changed.emit()
+	hold_changed.emit(hold.carried)
+	_hold_shifted()
 	return true
 
 
@@ -984,30 +924,22 @@ func retrieve(index: int) -> bool:
 ## job that silently half-finished would leave a module in two states
 ## at once.
 func scrap_carried() -> int:
-	if carried == null:
+	if hold.carried == null:
 		return 0
-	var made: int = Refinery.parts_from(carried, Refinery.place_of(self))
-	carried = null
-	carried_rarity = 0
-	var kept: int = stores.add(Stores.Kind.SPARE_PARTS, made, cargo_free())
-	rebuild_control_groups(false)
+	var kept: int = hold.scrap_carried(cargo_capacity(), Refinery.place_of(self))
 	hold_changed.emit(null)
-	cargo_changed.emit()
+	_hold_shifted()
 	return kept
 
 
 ## The same for something already in the bay.
 func scrap_cargo(index: int) -> int:
-	if index < 0 or index >= cargo.size():
+	if index < 0 or index >= hold.cargo.size():
 		return 0
-	var entry: Dictionary = cargo[index]
-	var made: int = Refinery.parts_from(
-		entry["item"] as Resource, Refinery.place_of(self)
+	var kept: int = hold.scrap_cargo(
+		index, cargo_capacity(), Refinery.place_of(self)
 	)
-	cargo.remove_at(index)
-	var kept: int = stores.add(Stores.Kind.SPARE_PARTS, made, cargo_free())
-	rebuild_control_groups(false)
-	cargo_changed.emit()
+	_hold_shifted()
 	return kept
 
 
@@ -1116,24 +1048,15 @@ func eject_velocity() -> Vector2:
 ## forty crates, or a crate type that does not exist yet. The refinery
 ## is how they are replaced.
 func spill() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	if carried != null:
-		out.append({"item": carried, "rarity": carried_rarity})
-		carried = null
-	for entry: Dictionary in cargo:
-		out.append(entry)
-	cargo.clear()
-	stores.clear()
-	rebuild_control_groups(false)
+	var out: Array[Dictionary] = hold.spill()
 	hold_changed.emit(null)
-	cargo_changed.emit()
+	_hold_shifted()
 	return out
 
 
 ## Empties the hold and returns what was in it.
 func release() -> Resource:
-	var item: Resource = carried
-	carried = null
+	var item: Resource = hold.release()
 	hold_changed.emit(null)
 	return item
 
@@ -1498,18 +1421,12 @@ func charge_capacity() -> int:
 ## will still fire, on engine fuel and at the old shortfall risk, which
 ## is what keeps a dry magazine from being a wall.
 func draw_charge() -> bool:
-	if charges <= 0:
-		return false
-	charges -= 1
-	return true
+	return hold.draw_charge()
 
 
 ## Puts charges in, up to what the magazine holds. Returns how many fit.
 func add_charges(count: int) -> int:
-	var room: int = maxi(charge_capacity() - charges, 0)
-	var put: int = clampi(count, 0, room)
-	charges += put
-	return put
+	return hold.add_charges(count, charge_capacity())
 
 
 ## Takes fuel out of the tank. Returns how much it actually got, which is

@@ -13331,7 +13331,7 @@ func _check_digging(sky: Node) -> void:
 ## `Refinery.ORE_YIELD`, `HULL_PARTS` and `STARDUST_PER_CHARGE` -- four
 ## files that can drift apart without anybody noticing.
 func _check_ore() -> void:
-	var hold: float = Ship.FINDS_PER_HOLD * 1.5
+	var hold: float = Hold.FINDS_PER_HOLD * 1.5
 	var iron_units: int = Stores.fits_in(Stores.Kind.IRON_ORE, hold)
 	var dust_units: int = Stores.fits_in(Stores.Kind.DUST_ORE, hold)
 	var parts: int = Refinery.units_from(
@@ -13492,9 +13492,9 @@ func _check_hold_is_a_decision() -> void:
 	# claim below has to hold for the smaller number.
 	var finds: float = ship.hull_cargo_capacity / find
 	_expect(
-		absf(finds - Ship.FINDS_PER_HOLD) < 0.3,
+		absf(finds - Hold.FINDS_PER_HOLD) < 0.3,
 		"the stock hull's hold is %.1f finds, and the premise says %.1f" % [
-			finds, Ship.FINDS_PER_HOLD,
+			finds, Hold.FINDS_PER_HOLD,
 		],
 	)
 	var carryable: float = ship.cargo_capacity() / find
