@@ -4418,5 +4418,5 @@ losowym zanikaniem broni.
   bazach, kiedy energia będzie już w kodzie (sekcja 14).
 - Kondensator jako moduł: jednorazowy zrzut całej puli na impuls ciągu albo
   tarczę, z długim doładowaniem?
-- Śmierć: co gracz traci, co zostaje (statek, loot, odkryte systemy)?
+- ~~Śmierć: co gracz traci, co zostaje (statek, loot, odkryte systemy)?~~ Rozstrzygnięte w M5.1: zostaje kadłub z osprzętem, zbiorniki i `deltas`; idzie ładownia, i rozsypuje się na wraku. Powód w sekcji 11, „Śmierć i restart".
 - Zapis: autosave przy skoku i lądowaniu, czy permadeath z meta-progresją?
