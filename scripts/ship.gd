@@ -274,28 +274,6 @@ signal engine_cut(engine: EngineInstance)
 ## because there is nothing for a mode to do about it (see IDEAS.md section 8).
 enum FlightMode { PHYSICAL, LANDED, DOCKED }
 
-## What a dock mends, per second.
-##
-## Over time rather than on arrival, so docking is a pause in the flight
-## and not a button: a wrecked hull takes the best part of ten seconds to
-## put right, which is long enough to be a decision about whether you can
-## afford to sit still and short enough that nobody waits for it twice.
-##
-## Energy fills faster than the generator manages on its own, because that
-## is what being plugged into something bigger than you means.
-const DOCK_HULL_RATE: float = 0.12
-const DOCK_ENGINE_RATE: float = 0.18
-const DOCK_ENERGY_RATE: float = 3.0
-
-## And of the tank, per second docked.
-##
-## Slower than the energy pool on purpose. Energy is combat's clock and
-## refills itself anywhere; fuel is range's clock and only comes from a
-## dock, so sitting still for it is the price of having gone a long way
-## (IDEAS.md section 14). Still generous -- the wait is meant to be felt,
-## not endured.
-const DOCK_FUEL_RATE: float = 0.12
-
 ## Emitted when the ship touches down or leaves the ground.
 signal flight_mode_changed(mode: FlightMode)
 
@@ -952,36 +930,13 @@ func scrap_cargo(index: int) -> int:
 ## the sandbox and a dock use -- because a developer key and a cost are
 ## two different things.
 func mend_hull() -> int:
-	var missing: float = 1.0 - hull_integrity
-	if missing <= 0.0001:
-		return 0
-	var place: Refinery.Place = Refinery.place_of(self)
-	var bill: int = Refinery.parts_for_hull(missing, place)
-	var paid: int = spend_units(Stores.Kind.SPARE_PARTS, bill)
-	if paid <= 0:
-		return 0
-	hull_integrity = clampf(
-		hull_integrity + missing * float(paid) / float(bill), 0.0, 1.0
-	)
-	hull_changed.emit(hull_integrity)
-	return paid
+	return Shipwright.mend_hull(self)
 
 
 ## And one engine, which costs by its bulk: what goes into a drive is
 ## not the plating that comes out of a wreck.
 func mend_engine(engine: EngineInstance) -> int:
-	if engine == null or engine.data == null or engine.health >= 0.9999:
-		return 0
-	var missing: float = 1.0 - engine.health
-	var place: Refinery.Place = Refinery.place_of(self)
-	var bill: int = Refinery.parts_for_engine(engine.data.bulk, missing, place)
-	var paid: int = spend_units(Stores.Kind.SPARE_PARTS, bill)
-	if paid <= 0:
-		return 0
-	engine.health = clampf(
-		engine.health + missing * float(paid) / float(bill), 0.0, 1.0
-	)
-	return paid
+	return Shipwright.mend_engine(self, engine)
 
 
 ## Throws what is in the hold overboard. Announced rather than destroyed: who
@@ -1744,30 +1699,12 @@ func undock() -> void:
 ## seconds instead of being free -- which is the whole point of there
 ## being somewhere to fly to.
 func _mend(delta: float) -> void:
-	if hull_integrity < 1.0:
-		hull_integrity = minf(hull_integrity + DOCK_HULL_RATE * delta, 1.0)
-		hull_changed.emit(hull_integrity)
-	hull_heat = maxf(hull_heat - DOCK_HULL_RATE * delta, 0.0)
-	for engine: EngineInstance in engines:
-		engine.health = minf(engine.health + DOCK_ENGINE_RATE * delta, 1.0)
-	energy = minf(energy + energy_capacity() * DOCK_ENERGY_RATE * delta, energy_capacity())
-	# And the tank, which is what a dock is actually for. M3 left this
-	# line out on purpose -- "the dock tops up energy for now, and when
-	# fuel exists this is where it gets bought" -- because there was no
-	# fuel to put in. There is now.
-	add_fuel(fuel_capacity() * DOCK_FUEL_RATE * delta)
+	Shipwright.service(self, delta)
 
 
 ## True while everything a dock can mend is mended.
 func fully_serviced() -> bool:
-	if hull_integrity < 1.0 or energy < energy_capacity() - 0.01:
-		return false
-	if fuel < fuel_capacity() - 0.01:
-		return false
-	for engine: EngineInstance in engines:
-		if engine.health < 1.0:
-			return false
-	return true
+	return Shipwright.fully_serviced(self)
 
 
 ## How fast the hull is going **through the air**, which is not how fast
@@ -2333,15 +2270,11 @@ func _gear_point() -> Vector2:
 ## hold. The sandbox wants the one without the other -- carry on from
 ## where you are, undamaged -- and so will a repair bay at a station.
 func repair_hull() -> void:
-	hull_integrity = 1.0
-	hull_heat = 0.0
-	accumulated_damage = 0.0
-	last_landing_rejection = ""
+	Shipwright.repair_hull(self)
 
 
 func repair_engines() -> void:
-	for engine: EngineInstance in engines:
-		engine.health = 1.0
+	Shipwright.repair_engines(self)
 
 
 ## The worst-off engine, for the HUD and the configuration report.

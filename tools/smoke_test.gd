@@ -8019,6 +8019,183 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.queue_free()
 
 
+## Ładownia bez statku, i interfejs statku bez zmian.
+##
+## `Hold` and `Shipwright` came out of a three-thousand-line `ship.gd`,
+## and the point of the move is this check: the hold can be exercised
+## with no ship, no scene and no frame, which it could not when it was
+## four fields and fifteen methods on a `RigidBody2D`.
+##
+## The other half is that nothing outside noticed. Ninety-seven places
+## read `ship.carried`, `ship.cargo`, `ship.stores` or `ship.charges` and
+## a hundred and thirty-six call the methods; those are forwarding
+## properties and delegates now, and the rest of this suite is what says
+## they still work. What is checked **here** is that they forward to the
+## same object rather than to a copy -- a property that handed back a
+## duplicate would pass every read and silently drop every write.
+func _check_hold_alone() -> void:
+	var hold: Hold = Hold.new()
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+
+	# A capacity handed in, which is the whole of the boundary: the hold
+	# does not know how big it is, so it can be asked about any size.
+	var room: float = 6.0
+	var engine: EngineData = loot.engine(7) as EngineData
+	_expect(hold.take(engine), "an empty hold takes a find")
+	_expect(not hold.take(loot.engine(8) as EngineData), "and a full one does not")
+	_expect(hold.carried == engine, "what it took is what it has")
+	_expect(
+		hold.carried_rarity() == engine.rarity,
+		"and the grade is read off the module rather than stored",
+	)
+
+	_expect(hold.stow(room), "the hands empty into the bay")
+	_expect(
+		hold.carried == null and hold.cargo.size() == 1,
+		"which leaves the hands free and the bay holding one",
+	)
+	_expect(
+		absf(hold.used() - engine.bulk) < 0.001,
+		"the bay is measured in bulk (%.2f of %.2f)" % [hold.used(), engine.bulk],
+	)
+	_expect(
+		absf(hold.room_left(room) - (room - engine.bulk)) < 0.001,
+		"and room is what is left of the capacity it was handed",
+	)
+	_expect(
+		hold.room_left(0.0) == 0.0,
+		"a hold with no capacity has no room, never a negative one",
+	)
+
+	# Units, which share the same volume as the modules -- the trade the
+	# premise is made of.
+	var parts: int = hold.load_units(Stores.Kind.SPARE_PARTS, 9999, room)
+	_expect(parts > 0, "units go in by the unit (%d)" % parts)
+	_expect(
+		hold.room_left(room) < Stores.BULK[Stores.Kind.SPARE_PARTS],
+		"and fill what the modules left",
+	)
+	_expect(
+		hold.load_units(Stores.Kind.SPARE_PARTS, 10, room) == 0,
+		"a full hold takes no more",
+	)
+	_expect(
+		hold.spend_units(Stores.Kind.SPARE_PARTS, 5) == 5
+		and hold.carrying(Stores.Kind.SPARE_PARTS) == parts - 5,
+		"and spending takes them back out",
+	)
+
+	# Charges are the one thing in here that is not a volume, so it has a
+	# capacity of its own and takes no room.
+	var before: float = hold.used()
+	_expect(hold.add_charges(3, 4) == 3, "charges go in up to the magazine")
+	_expect(hold.add_charges(9, 4) == 1, "and no further (%d)" % hold.charges)
+	_expect(
+		is_equal_approx(hold.used(), before),
+		"a charge takes no room in the bay",
+	)
+	_expect(
+		hold.draw_charge() and hold.charges == 3,
+		"and one comes back out",
+	)
+
+	# Spilling is what dying costs: the items come back to be scattered,
+	# the counted stores are gone, the charges stay.
+	hold.take(loot.weapon(11) as Resource)
+	var spilled: Array[Dictionary] = hold.spill()
+	_expect(spilled.size() == 2, "everything in the hold spills (%d)" % spilled.size())
+	_expect(
+		hold.carried == null and hold.cargo.is_empty()
+		and hold.carrying(Stores.Kind.SPARE_PARTS) == 0,
+		"and the hold is empty afterwards",
+	)
+	_expect(hold.charges == 3, "but the charges stay -- see Hold.spill")
+
+	_check_ship_forwards_to_its_hold()
+	loot.queue_free()
+
+
+## Statek przekazuje do **tej samej** ładowni, nie do kopii.
+##
+## The failure this is for would pass every read: a forwarding property
+## that handed back a duplicated array or a copied `Stores` would let
+## `ship.cargo.size()` answer correctly and quietly drop
+## `ship.cargo.append(...)`. Written against the object's identity rather
+## than its contents, because contents are what a copy gets right.
+func _check_ship_forwards_to_its_hold() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.release()
+	ship.cargo.clear()
+	ship.stores.clear()
+
+	_expect(ship.hold != null, "a ship has a hold")
+	_expect(
+		ship.stores == ship.hold.stores,
+		"`ship.stores` is the hold's stores, not a copy of them",
+	)
+	_expect(
+		ship.cargo == ship.hold.cargo,
+		"and `ship.cargo` is the hold's bay",
+	)
+
+	# Writes through the ship land in the hold, and the other way round.
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	ship.take(loot.engine(21) as Resource)
+	_expect(
+		ship.hold.carried != null and ship.carried == ship.hold.carried,
+		"something taken through the ship is in the hold",
+	)
+	ship.hold.carried = null
+	_expect(
+		ship.carried == null,
+		"and the ship reads back what the hold was set to directly",
+	)
+
+	ship.charges = 0
+	ship.add_charges(2)
+	_expect(
+		ship.charges == ship.hold.charges and ship.charges > 0,
+		"charges forward both ways (%d)" % ship.charges,
+	)
+
+	# And the rule the split gave one home: the hold changing is mass
+	# changing. Measured off the ship's own mass rather than off a signal,
+	# because the signal is the announcement and the mass is the fact.
+	var light: float = ship.mass
+	ship.load_units(Stores.Kind.SPARE_PARTS, 40)
+	_expect(
+		ship.mass > light,
+		"loading the hold changes what the ship weighs (%.2f -> %.2f)" % [
+			light, ship.mass,
+		],
+	)
+	ship.spend_units(Stores.Kind.SPARE_PARTS, 40)
+	_expect(
+		absf(ship.mass - light) < 0.001,
+		"and emptying it changes it back",
+	)
+
+	# Shipwright reaches into the ship, which is the honest shape for a
+	# repair: it is not a thing a ship has, it is a thing done to one.
+	ship.hull_integrity = 0.5
+	ship.load_units(Stores.Kind.SPARE_PARTS, 999)
+	var spent: int = Shipwright.mend_hull(ship)
+	_expect(
+		spent > 0 and ship.hull_integrity > 0.5,
+		"Shipwright mends a hull with parts out of the hold (%d parts)" % spent,
+	)
+	ship.hull_integrity = 0.5
+	Shipwright.repair_hull(ship)
+	_expect(
+		ship.hull_integrity == 1.0,
+		"and the free total repair is a different door, as it always was",
+	)
+	loot.queue_free()
+	ship.queue_free()
+
+
 ## Decyzja o ostrzeżeniach jest decyzją, nie przypadkiem.
 ##
 ## Four warning classes are off, and that is a judgement recorded in
@@ -8449,6 +8626,7 @@ func _check_fitout_presets() -> void:
 	_check_preset_fields()
 	_check_cloud_count()
 	_check_warning_policy()
+	_check_hold_alone()
 
 	# A refit is in place, so everything pointing at this ship has to still
 	# be pointing at something: a cached hardpoint list naming nodes the
