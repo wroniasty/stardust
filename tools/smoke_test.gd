@@ -8019,6 +8019,120 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.queue_free()
 
 
+## Ciąg kosztuje paliwo, cicho, i nigdy nie zostawia na lodzie.
+##
+## `EngineData.fuel_cost` said of itself that "the fuel economy itself
+## lands in M5", and for three milestones a number called `fuel_cost`
+## cost no fuel: it was rolled by `frugal` and `tuned`, printed on every
+## engine card, and read by nothing. This is that item.
+##
+## Three claims, and the third is the one with a design argument behind
+## it rather than an arithmetic one.
+func _check_thrust_burns_fuel() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.use_player_input = false
+	_expect(ship.fuel > 0.0, "a fresh ship comes out of the yard fuelled")
+
+	# Idle burns nothing. A drive that is not pushing is not burning,
+	# however long the ship sits there.
+	var full: float = ship.fuel
+	for step: int in range(60):
+		ship._resolve_thrust_fuel(1.0 / 60.0)
+	_expect(
+		is_equal_approx(ship.fuel, full),
+		"a ship with its engines idle burns nothing (%.3f of %.3f)" % [ship.fuel, full],
+	)
+
+	# Open the throttles and it costs. Measured off a whole second so the
+	# figure can be compared with the rate rather than with a tick.
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 1.0
+		engine.target_throttle = 1.0
+	var demand: float = 0.0
+	for engine: EngineInstance in ship.engines:
+		demand += engine.fuel_demand(Ship.THRUST_FUEL_RATE)
+	_expect(demand > 0.0, "an open throttle asks for fuel (%.3f/s)" % demand)
+	ship._resolve_thrust_fuel(1.0)
+	_expect(
+		absf((full - ship.fuel) - demand) < 0.001,
+		"and a second of it costs what it asked for (%.3f of %.3f)" % [
+			full - ship.fuel, demand,
+		],
+	)
+
+	# And it is **faint**, which is the whole of the 0.02 decision: a
+	# minute of holding the throttle wide open has to cost a fraction of
+	# one jump, or fuel becomes a second combat clock next to energy.
+	var drive: JumpDriveData = ship.jump_drive()
+	if drive != null:
+		var jump: float = drive.fuel_for(GalaxyMap.BASE_REACH, ship.mass)
+		var minute: float = demand * 60.0
+		_expect(
+			jump > 0.0 and minute < jump * 0.5,
+			"a minute of full thrust is %.2f of a jump, not a multiple of one" % [
+				minute / maxf(jump, 0.0001),
+			],
+		)
+
+	_check_dry_tank_is_not_a_wall(ship)
+	ship.queue_free()
+
+
+## Pusty bak to słaby statek, nie uwięziony.
+##
+## The same argument the death rules turned on. A fuel share of zero is
+## no force at all, which is a ship that cannot move, cannot land, cannot
+## dig and therefore can never refuel -- a dead end rather than a
+## consequence. The jump drive already answers to this: an empty magazine
+## is not a wall, the drive improvises and takes the risk.
+func _check_dry_tank_is_not_a_wall(ship: Ship) -> void:
+	for engine: EngineInstance in ship.engines:
+		engine.throttle = 1.0
+		engine.target_throttle = 1.0
+	ship._resolve_thrust_fuel(1.0 / 60.0)
+	var pushing: float = _thrust_of(ship)
+	_expect(pushing > 0.0, "a fuelled ship pushes (%.0f N)" % pushing)
+
+	ship.fuel = 0.0
+	ship._resolve_thrust_fuel(1.0 / 60.0)
+	var dregs: float = _thrust_of(ship)
+	_expect(
+		dregs > 0.0,
+		"and a dry one still pushes, or it could never reach fuel again (%.0f N)" % dregs,
+	)
+	_expect(
+		absf(dregs / maxf(pushing, 0.0001) - Ship.DRY_THRUST_SHARE) < 0.01,
+		"at the share the rule names: %.2f of full, wanted %.2f" % [
+			dregs / maxf(pushing, 0.0001), Ship.DRY_THRUST_SHARE,
+		],
+	)
+
+	# Boost is not charged to the tank. Energy paces the fight and refills
+	# itself anywhere; fuel paces the range and does not (IDEAS 14), and
+	# one number paying for both would put them in the same job.
+	ship.fuel = ship.fuel_capacity()
+	var before: float = ship.fuel
+	var pool: float = ship.energy
+	ship.boost_command = true
+	ship._resolve_boost(1.0)
+	_expect(
+		ship.energy < pool,
+		"holding boost spends the pool (%.1f -> %.1f)" % [pool, ship.energy],
+	)
+	_expect(
+		is_equal_approx(ship.fuel, before),
+		"and not a drop of the tank (%.2f of %.2f)" % [ship.fuel, before],
+	)
+	ship.boost_command = false
+
+
+func _thrust_of(ship: Ship) -> float:
+	var total: float = 0.0
+	for engine: EngineInstance in ship.engines:
+		total += engine.current_force().length()
+	return total
+
+
 ## Ładownia bez statku, i interfejs statku bez zmian.
 ##
 ## `Hold` and `Shipwright` came out of a three-thousand-line `ship.gd`,
@@ -8627,6 +8741,7 @@ func _check_fitout_presets() -> void:
 	_check_cloud_count()
 	_check_warning_policy()
 	_check_hold_alone()
+	_check_thrust_burns_fuel()
 
 	# A refit is in place, so everything pointing at this ship has to still
 	# be pointing at something: a cached hardpoint list naming nodes the

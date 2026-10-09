@@ -50,13 +50,21 @@ enum Type {
 ## oscillating thrust.
 @export_range(0.0, 1.0) var reliability: float = 1.0
 
-## Fuel burned per second at full throttle. The fuel economy itself lands
-## in M5; until then this is the rate `boost_burn` multiplies, and the
-## pool it comes out of is the ship's energy (see Ship.BOOST_RESERVE).
+## Fuel burned per second at full throttle.
+##
+## **This is the M5 item the field was waiting for.** It said so itself:
+## "the fuel economy itself lands in M5; until then this is the rate
+## `boost_burn` multiplies, and the pool it comes out of is the ship's
+## energy". So for three milestones a number called `fuel_cost` cost no
+## fuel, was rolled by two affixes (`frugal`, `tuned`) that moved
+## nothing, and was printed on every engine card.
+##
+## It is fuel now, scaled by `Ship.THRUST_FUEL_RATE` -- the one knob
+## that says how much a burn costs against what a jump costs.
 @export var fuel_cost: float = 0.0
 
 ## Emergency power: what the thrust is multiplied by while the pilot holds
-## boost, and what the burn is multiplied by to pay for it.
+## boost.
 ##
 ## A way out of a hole, and that is the whole reason it exists. A ship can
 ## be put somewhere its engines cannot lift it out of -- a heavy world, a
@@ -64,14 +72,23 @@ enum Type {
 ## answer is to respawn. One is the default, meaning this engine has no
 ## emergency setting; only the big drives get one, because a thruster
 ## running at three times its rating is not a thruster, it is a bomb.
-##
-## The burn multiplier is deliberately far steeper than the thrust one.
-## Boost is not a better engine with a drawback, it is the same engine
-## spent faster: three times the push for twelve times the burn means
-## roughly eight seconds of it on a full pool, which is enough to get off
-## the ground and not enough to fly anywhere on.
 @export var boost_thrust: float = 1.0
-@export var boost_burn: float = 1.0
+
+## And what it draws from the **energy pool** while it is lit, per second
+## at full output.
+##
+## An absolute rate rather than a multiple of `fuel_cost`, which is what
+## it used to be. One number cannot mean fuel per second and also be the
+## base of an energy rate: the day `fuel_cost` started costing fuel, a
+## `frugal` engine would have become cheaper to boost as a side effect of
+## being cheaper to fly, which is two decisions made by one roll.
+##
+## The figures are the ones that multiple produced, so the balance is
+## unchanged: twelve a second on the stock main drive against a pool of
+## about a hundred is roughly eight seconds of boost, which is enough to
+## get off the ground and not enough to fly anywhere on. Boost is not a
+## better engine with a drawback, it is the same engine spent faster.
+@export var boost_draw: float = 0.0
 
 
 ## Whether this engine has an emergency setting at all.
@@ -94,7 +111,7 @@ func stat_rows() -> Array[Dictionary]:
 	]
 	if can_boost():
 		rows.append(row("boost", boost_thrust, 1, 1, "x"))
-		rows.append(row("burn", fuel_cost * boost_burn, 1, -1, "/s"))
+		rows.append(row("boost draw", boost_draw, 1, -1, "/s"))
 	if gimbal_range > 0.0:
 		rows.append(row("gimbal", rad_to_deg(gimbal_range), 0, 1, " deg"))
 		rows.append(row("gimbal rate", rad_to_deg(gimbal_rate), 0, 1, " deg/s"))

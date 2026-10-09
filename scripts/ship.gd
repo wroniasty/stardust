@@ -274,6 +274,49 @@ signal engine_cut(engine: EngineInstance)
 ## because there is nothing for a mode to do about it (see IDEAS.md section 8).
 enum FlightMode { PHYSICAL, LANDED, DOCKED }
 
+## How much fuel a second of full thrust costs, per unit of an engine's
+## `fuel_cost`.
+##
+## **One knob, and it is the only one.** What it has to settle is how a
+## burn compares with a jump, because those are now the two things the
+## same tank pays for. Measured against a standard tank of 120 and a
+## neighbour jump of about 14.6 -- eight jumps on a tank if nothing else
+## burns:
+##
+## | rate  | main drive alone | everything open | a 60 s burn   |
+## |-------|------------------|-----------------|---------------|
+## | 0.02  | 100 min          | 45 min          | 0.08 of a jump|
+## | 0.05  | 40 min           | 18 min          | 0.21 of a jump|
+## | 0.25  | 8 min            | 3.6 min         | 1.03 of a jump|
+##
+## **Two hundredths**, which is the faint end on purpose: a minute of
+## holding the throttle open is a twelfth of a jump, so manoeuvring is
+## free in practice and only a long crossing shows up in the tank. The
+## thing being avoided is fuel becoming a second combat clock -- energy
+## already is one, refills itself, and paces a fight in seconds; fuel
+## paces range in jumps and only comes from a dock or from ore. A rate
+## that made a dogfight expensive would have put the two in the same job.
+##
+## It is also why the affixes are worth rolling again: `frugal` takes up
+## to half off this and `tuned` adds up to three fifths, and until now
+## both moved a number nothing read.
+const THRUST_FUEL_RATE: float = 0.02
+
+## What the engines still manage on an empty tank.
+##
+## **Not zero, and this is the same argument the death rules turned on.**
+## A share of zero is no force at all, which is a ship that cannot move,
+## cannot land, cannot dig and therefore cannot ever refuel: a dead end
+## rather than a consequence. The jump drive already answers to this --
+## an empty magazine is not a wall, the drive improvises and takes the
+## risk -- and an empty tank gets the same treatment.
+##
+## Fifteen per cent is a bad ship rather than a free one: the stock dart
+## makes 58 px/s^2 at full thrust and 9 on the dregs, which will not lift
+## it off anything with gravity worth the name. It is enough to crawl to
+## a world and dig, which is the one thing it has to be enough for.
+const DRY_THRUST_SHARE: float = 0.15
+
 ## Emitted when the ship touches down or leaves the ground.
 signal flight_mode_changed(mode: FlightMode)
 
@@ -1505,6 +1548,7 @@ func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 			else:
 				engine_cut.emit(engine)
 	_resolve_boost(state.step)
+	_resolve_thrust_fuel(state.step)
 
 	_applied_force = Vector2.ZERO
 	_applied_torque = 0.0
@@ -1609,6 +1653,35 @@ func _resolve_boost(step: float) -> void:
 ## every tick and setting `self_modulate`. It is `ShipSkin._hand_back()`
 ## now, which is a presentation node reading `daylight_at()` the same way
 ## it reads throttle and gear travel. Nothing about the picture changed.
+
+
+## What the thrust costs, and what the ship gets for what it could pay.
+##
+## After the throttles have moved and after the boost, because both
+## change what the engines are managing and therefore what they are
+## asking for. Before any force is applied, because the answer scales it.
+##
+## **A dry tank is a weak ship, not a stalled one.** The share is handed
+## to every engine and multiplied into its force, so the last of the fuel
+## is a hull that pushes feebly rather than one that stops dead -- the
+## same rule the jump drive answers to, where a shortfall is risk and not
+## a refusal (IDEAS.md section 10). A ship whose engines cut out at the
+## bottom of the tank would be a ship stranded by a number.
+##
+## Boost is **not** charged here. It is paid for out of the energy pool
+## (`_resolve_boost`), which is the split section 14 asks for: energy
+## paces the fight and refills itself anywhere, fuel paces the range and
+## does not.
+func _resolve_thrust_fuel(step: float) -> void:
+	var demand: float = 0.0
+	for engine: EngineInstance in engines:
+		demand += engine.fuel_demand(THRUST_FUEL_RATE)
+	var share: float = 1.0
+	if demand > 0.0 and step > 0.0:
+		var wanted: float = demand * step
+		share = clampf(draw_fuel(wanted) / wanted, DRY_THRUST_SHARE, 1.0)
+	for engine: EngineInstance in engines:
+		engine.fuel_share = share
 
 
 ## Ties up to a station, mends things while tied, and lets go.

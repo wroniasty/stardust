@@ -188,6 +188,15 @@ func exhaust_flow() -> float:
 ## only stretches so far.
 var boosting: bool = false
 
+## How much of the fuel this engine asked for it actually got, 0..1.
+##
+## Set by the ship once a tick, like `boosting`, and multiplied into the
+## force. **A dry tank is a weak engine, not a dead one**: it is the same
+## shortfall rule the jump drive answers to, and a ship whose thrust
+## switched off at the bottom of the tank would be a ship stranded by a
+## number rather than by a decision.
+var fuel_share: float = 1.0
+
 
 ## What the thrust is multiplied by right now. One unless this engine has
 ## an emergency setting and is being asked for it.
@@ -195,14 +204,22 @@ func boost_factor() -> float:
 	return data.boost_thrust if boosting and data.can_boost() else 1.0
 
 
-## Fuel per second this engine would burn on emergency power at what it is
-## currently managing. Zero for an engine with no boost, and zero for one
-## that is idle, dropped out or dead -- a drive that is not pushing is not
-## burning, however hard the pilot leans on the key.
+## Energy per second this engine would draw on emergency power at what it
+## is currently managing. Zero for an engine with no boost, and zero for
+## one that is idle, dropped out or dead -- a drive that is not pushing is
+## not burning, however hard the pilot leans on the key.
 func boost_demand() -> float:
 	if not data.can_boost():
 		return 0.0
-	return data.fuel_cost * data.boost_burn * effective_output()
+	return data.boost_draw * effective_output()
+
+
+## And fuel per second at what it is currently managing, given the ship's
+## rate. The same shape as the boost's draw, and for the same reason: a
+## drive at a quarter throttle burns a quarter as much, and a dead one
+## burns nothing at all.
+func fuel_demand(rate: float) -> float:
+	return data.fuel_cost * rate * effective_output()
 
 
 ## What counts as lit, and what counts as out.
@@ -243,7 +260,10 @@ func thrust_direction() -> Vector2:
 
 ## Force in the ship's local frame at the current throttle.
 func current_force() -> Vector2:
-	return thrust_direction() * data.max_thrust * effective_output() * boost_factor()
+	return (
+		thrust_direction() * data.max_thrust * effective_output()
+		* boost_factor() * fuel_share
+	)
 
 
 ## Force in the ship's local frame at full throttle, ignoring health.
