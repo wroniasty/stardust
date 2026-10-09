@@ -62,13 +62,26 @@ const SIZE_CARRIER: float = 16.0
 
 ## How far a defender can shoot, by what it is.
 ##
-## A turret reaches as far as the player's own autocannon; a fighter
-## less, because it is supposed to be got past. Both are well inside
-## the territory they stand in -- six thousand pixels typical -- so
-## crossing the line is a warning rather than an ambush: you see them
-## light up with room to turn round.
-const REACH_FIGHTER: float = 1800.0
-const REACH_TURRET: float = 2400.0
+## **Derived from the camera, not from the guns.** Reported from the
+## cockpit as being shot by things that were nowhere on screen, and the
+## measurement agreed: the design frame is 640x360
+## (`ShipCamera.design_frame`) and the zoom rungs are 1.70, 1.00 and
+## 0.55, so at rest the pilot sees 180 px above and below at the middle
+## rung and 327 px at the widest. A defender at 1800 px was shooting
+## from five screens away, and a turret at 2400 from seven.
+##
+## So both now sit inside that band, which is where a shot can be
+## answered: a fighter near its lower end, a turret near its upper, and
+## a major 1.2 times a fighter -- 264 px, still inside. At speed the
+## camera pulls back to 0.7 of the rung, so everything here is on screen
+## with room to spare exactly when the pilot is moving fastest.
+##
+## What this does **not** do is match the player's own guns, which run
+## 900 to 4200 px and are a separate decision: the whole combat range
+## scale is wider than the camera, and only the half that was shooting
+## at the pilot was asked about.
+const REACH_FIGHTER: float = 220.0
+const REACH_TURRET: float = 300.0
 
 ## Shots a second, and what one does to a hull.
 ##
@@ -86,13 +99,20 @@ const DAMAGE_PER_STRENGTH: float = 0.04
 ## the stock autocannon, so a pilot can read a defender's fire against
 ## something they already know.
 ##
-## Twice the spread was the first answer -- a bolted-down gun with no
-## gunner is not an ace -- and the measurement threw it out: four
-## degrees is a cone 126 px wide at the far end of a defender's reach,
-## against a hull 24 px across, so the gun that was meant to be
-## inaccurate was simply a gun that never hits. At two degrees a
-## defender lands about one round in two at close range, which is what
-## "not an ace" should have meant.
+## The spread has been argued twice and both arguments were about a
+## reach that no longer exists. Four degrees was the first answer -- a
+## bolted-down gun with no gunner is not an ace -- and the measurement
+## threw it out, because four degrees is a cone 126 px wide at 1800 px
+## against a hull 24 px across: a gun meant to be inaccurate was simply
+## a gun that never hit. Two degrees then landed about one round in two.
+##
+## At 220 px the same two degrees is a cone **7.7 px** wide, so a
+## defender now hits very nearly everything it fires at. That is left
+## alone on purpose rather than widened back: the short reach already
+## cuts how many of them can be shooting at once, and whether the two
+## cancel out is a question for playing it, not for arithmetic. The
+## knobs if it comes out wrong are `ROUNDS_PER_SECOND` and
+## `DAMAGE_PER_STRENGTH`, not this.
 const MUZZLE_SPEED: float = 600.0
 const SPREAD: float = 0.0349
 
@@ -167,6 +187,16 @@ const LOOSE_TERRITORY: float = 2500.0
 const LAYER: int = 4
 
 const ROUND_SCENE: String = "res://scenes/projectile.tscn"
+
+## Everything standing in the world, for anything that wants to find
+## defenders without being handed a spawner.
+##
+## A group rather than a list on `GarrisonSpawner`, the same shape as
+## `GravityWell.GROUP` and `LootCrate.LOOT_GROUP` and for the same
+## reason: the scanner reads the definitions the rest of the game uses,
+## so a carrier's brood and the loose group of M5.4 appear on the ring
+## without that file changing.
+const GROUP: StringName = &"foes"
 
 ## Hull colours. Their own, not the interface palette: this is a thing
 ## in the world, and UI_STYLE's twelve roles are about the panel over
@@ -259,6 +289,7 @@ var _cooldown: float = 0.0
 
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	collision_layer = LAYER
 	collision_mask = 1
 	if _shape == null:

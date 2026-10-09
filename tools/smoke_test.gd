@@ -1222,6 +1222,8 @@ func _evaluate_phase() -> void:
 			_check_ore()
 			_check_deposits()
 			_check_corona()
+			_check_weapon_arcs()
+			_check_reach_fits_the_screen()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -1984,10 +1986,280 @@ func _check_scanner(planet: Planet) -> void:
 	)
 	crate.queue_free()
 
+	_check_foe_markers(scanner, ship, view, centre)
+
 	_expect(scanner.distance_text(12345.0) == "12.3k", "long distances are shortened")
 	_expect(scanner.distance_text(-5.0) == "0", "and being underground does not read as negative")
 
 	scanner.queue_free()
+	ship.queue_free()
+
+
+## Zasięg obrońcy mieści się na ekranie.
+##
+## Reported from the cockpit as being shot by things that were nowhere to
+## be seen, and the camera is what settles it rather than taste: the
+## design frame is 640x360 and the zoom rungs are fixed, so "on screen"
+## is an arithmetic fact and the reach can be checked against it.
+##
+## The relation and not the figures, because three things it depends on
+## can move independently -- the base resolution, the zoom rungs, and
+## the reaches themselves -- and a test of the numbers would pass while
+## any of them drifted.
+func _check_reach_fits_the_screen() -> void:
+	var frame: Vector2 = ShipCamera.design_frame()
+	_expect(
+		frame.x > 0.0 and frame.y > 0.0,
+		"the design frame is %.0f x %.0f" % [frame.x, frame.y],
+	)
+	var rungs: Array[float] = ShipCamera.ZOOM_LEVELS
+	_expect(rungs.size() >= 3, "there are at least three zoom rungs (%d)" % rungs.size())
+	if rungs.size() < 3 or frame.y <= 0.0:
+		return
+
+	# The band the request named: what half the screen is worth at the
+	# middle rung and at the widest. Height, because it is the tighter of
+	# the two and a defender can be anywhere round the ship.
+	var middle: float = frame.y * 0.5 / rungs[1]
+	var widest: float = frame.y * 0.5 / rungs[rungs.size() - 1]
+	_expect(
+		middle < widest,
+		"the widest rung shows more than the middle one (%.0f then %.0f px)" % [
+			middle, widest,
+		],
+	)
+
+	for named: Array in [
+		["a fighter", Foe.REACH_FIGHTER],
+		["a turret", Foe.REACH_TURRET],
+		["a major", Foe.REACH_FIGHTER * 1.2],
+	]:
+		var reach: float = float(named[1])
+		_expect(
+			reach >= middle and reach <= widest,
+			"%s shoots from inside the band, %.0f px of %.0f..%.0f" % [
+				named[0], reach, middle, widest,
+			],
+		)
+
+	# Which is the whole point: at the widest rung a defender firing at
+	# its longest is on screen, with the ship allowed to sit off centre.
+	var off_centre: float = (
+		ShipCamera.MOST_OFF_CENTRE * minf(frame.x, frame.y) * 0.5 / rungs[rungs.size() - 1]
+	)
+	_expect(
+		Foe.REACH_TURRET <= widest,
+		"the longest reach fits the widest view (%.0f of %.0f px)" % [
+			Foe.REACH_TURRET, widest,
+		],
+	)
+	# At speed the camera pulls back further, which is the margin that
+	# covers the off-centre case -- so the tight one is sitting still,
+	# and sitting still is when the ship is centred.
+	var at_speed: float = frame.y * 0.5 / (rungs[rungs.size() - 1] * 0.7)
+	_expect(
+		Foe.REACH_TURRET + off_centre <= at_speed,
+		"and fits it with the ship %.0f px off centre once it is moving (%.0f of %.0f)" % [
+			off_centre, Foe.REACH_TURRET + off_centre, at_speed,
+		],
+	)
+
+	# A defender's own stand-off distances are fractions of its reach, so
+	# they came down with it: an aggressor closes to inside half of a
+	# screen's worth rather than to inside five screens.
+	_expect(
+		Foe.STAND_OFF_AGGRESSOR * Foe.REACH_FIGHTER < middle,
+		"an aggressor's station is inside the middle view (%.0f of %.0f px)" % [
+			Foe.STAND_OFF_AGGRESSOR * Foe.REACH_FIGHTER, middle,
+		],
+	)
+
+	# And the ring still warns before the shell, which is its own rule
+	# and no longer the same number as the reach.
+	var scanner: ScannerHud = ScannerHud.new()
+	root.add_child(scanner)
+	_expect(
+		scanner.foe_range > Garrison.MIN_TERRITORY,
+		"the ring reaches past the narrowest territory (%.0f of %.0f px)" % [
+			scanner.foe_range, Garrison.MIN_TERRITORY,
+		],
+	)
+	_expect(
+		scanner.foe_range > Foe.REACH_TURRET * 3.0,
+		"and far past anything that can shoot (%.0f of %.0f px)" % [
+			scanner.foe_range, Foe.REACH_TURRET,
+		],
+	)
+	scanner.queue_free()
+
+
+## Czwarty rodzaj znacznika: to, co chce cię zabić.
+##
+## The same geometry test as the other three, for the same reason: the
+## contacts are handed a world-to-screen transform, so nothing here
+## needs a camera or a rendered frame and the answers are exact.
+##
+## The rules that are this mark's own, rather than shared: it is off
+## screen only, like a planet and unlike a crate, and it is capped and
+## sorted like a crate and unlike a planet.
+func _check_foe_markers(
+	scanner: ScannerHud, ship: Ship, view: Vector2, centre: Vector2
+) -> void:
+	ship.global_position = Vector2(-90000.0, 90000.0)
+	var to_screen: Transform2D = Transform2D(0.0, centre - ship.global_position)
+	_expect(
+		scanner.foe_contacts(to_screen, view).is_empty(),
+		"empty space puts nothing on the ring",
+	)
+
+	var raised: Array[Foe] = []
+	for index: int in range(scanner.max_foes + 4):
+		var foe: Foe = Foe.new()
+		root.add_child(foe)
+		foe.arm({
+			"seed": 1000 + index,
+			"rank": Garrison.Rank.MAJOR if index == 0 else Garrison.Rank.MINOR,
+			"archetype": Garrison.Archetype.PATROL,
+			"strength": 1.0,
+			"post": Garrison.Post.SHELL,
+			"bearing": 0.0,
+			"tier": 1,
+		}, {})
+		# Spread out along one bearing, so "nearest first" has an order to
+		# get right, and far enough out to be off screen.
+		foe.global_position = ship.global_position + Vector2(
+			0.0, 900.0 + float(index) * 120.0
+		)
+		raised.append(foe)
+
+	var found: Array[Dictionary] = scanner.foe_contacts(to_screen, view)
+	_expect(
+		found.size() == scanner.max_foes,
+		"a crowd is cut to the nearest %d (got %d of %d standing)" % [
+			scanner.max_foes, found.size(), raised.size(),
+		],
+	)
+	var ordered: bool = true
+	for at: int in range(found.size() - 1):
+		if float(found[at]["distance"]) > float(found[at + 1]["distance"]):
+			ordered = false
+	_expect(ordered, "and the ones it keeps are the near ones, in order")
+	if found.is_empty():
+		for foe: Foe in raised:
+			foe.queue_free()
+		return
+
+	# On the ring, pointing out at the thing, and the major is the bigger
+	# mark -- which is the only thing the shape says about rank.
+	var mark: Vector2 = found[0]["at"]
+	_expect(
+		absf(absf(mark.x - centre.x) - (centre.x - scanner.ring_margin)) < 0.01
+		or absf(absf(mark.y - centre.y) - (centre.y - scanner.ring_margin)) < 0.01,
+		"a mark sits on the ring, not somewhere in the view (%.0f, %.0f)" % [
+			mark.x, mark.y,
+		],
+	)
+	_expect(
+		float(found[0]["size"]) == ScannerHud.FOE_SIZE_MAJOR,
+		"a major gets the bigger chevron (%.1f)" % float(found[0]["size"]),
+	)
+
+	# Awake is a brightness rather than a second shape, which is what lets
+	# the ring say "nine of them, none has seen you".
+	_expect(not bool(found[0]["awake"]), "a defender that has not noticed is marked dim")
+	raised[0].awake = true
+	_expect(
+		bool(scanner.foe_contacts(to_screen, view)[0]["awake"]),
+		"and one in the fight is marked lit",
+	)
+
+	# Off screen only. A defender you can see is drawn with its own hull,
+	# its own ring and a stream of rounds; a chevron over that is a
+	# chevron over the one thing impossible to miss.
+	raised[0].global_position = ship.global_position + Vector2(20.0, 30.0)
+	var seen: Array[Dictionary] = scanner.foe_contacts(to_screen, view)
+	var still_marked: bool = false
+	for contact: Dictionary in seen:
+		if contact["foe"] == raised[0]:
+			still_marked = true
+	_expect(not still_marked, "a defender on screen is not also on the ring")
+
+	# Out of range, and dead, both stop being marked. The second matters
+	# because a foe is freed a frame after it dies.
+	raised[1].global_position = ship.global_position + Vector2(
+		0.0, scanner.foe_range + 500.0
+	)
+	raised[2].hull = 0.0
+	var after: Array[Dictionary] = scanner.foe_contacts(to_screen, view)
+	var gone: bool = true
+	for contact: Dictionary in after:
+		if contact["foe"] == raised[1] or contact["foe"] == raised[2]:
+			gone = false
+	_expect(gone, "nothing out of range or already dead is on the ring")
+
+	# And it reaches further than anything can shoot from, so a garrison
+	# is on the ring before it is in range rather than after.
+	_expect(
+		scanner.foe_range > Foe.REACH_TURRET and scanner.foe_range > Foe.REACH_FIGHTER,
+		"the ring sees further than a defender shoots (%.0f of %.0f px)" % [
+			scanner.foe_range, Foe.REACH_TURRET,
+		],
+	)
+
+	for foe: Foe in raised:
+		foe.queue_free()
+
+
+## Zakres obrotu dział: każde ma go, i żadne nie jest ponad sufitem.
+##
+## Widened across the board by 30% on request. Not a test of the figures,
+## which would be a test of history -- a test that every gun in the game
+## still has an arc the generator can work with, which is the thing a
+## bulk edit of seven files can quietly break.
+func _check_weapon_arcs() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	var ceiling: float = float((LOOT_SCRIPT.LIMITS["traverse_range"] as Vector2).y)
+	var widest: float = 0.0
+	for path: String in LOOT_SCRIPT.WEAPON_BASES:
+		var weapon: WeaponData = load(path) as WeaponData
+		_expect(
+			weapon != null and weapon.traverse_range > 0.0,
+			"%s has an arc to swing in (%.3f rad)" % [path.get_file(), weapon.traverse_range],
+		)
+		if weapon == null:
+			continue
+		widest = maxf(widest, weapon.traverse_range)
+		# Room left under the ceiling for `turreted`, which multiplies the
+		# arc by up to 1.9: a base already at the limit is a base the
+		# affix lands dead on, and the generator has no way to know.
+		_expect(
+			weapon.traverse_range * 1.9 < ceiling,
+			"and room for `turreted` over it (%.2f of %.2f)" % [
+				weapon.traverse_range * 1.9, ceiling,
+			],
+		)
+	_expect(widest < PI, "no gun swings further than half a turn (%.2f)" % widest)
+
+	# The hull still has the final say, which is the rule a wider gun
+	# makes easier to break: a recess narrower than the ring wins.
+	var ship: Ship = _spawn_ship()
+	var gun: Hardpoint = ship.hardpoints[0] if not ship.hardpoints.is_empty() else null
+	if gun != null and gun.weapon != null:
+		var ring: float = gun.weapon.traverse_range
+		gun.traverse_limit = ring * 0.5
+		_expect(
+			absf(gun.traverse() - ring * 0.5) < 0.0001,
+			"a tight recess still beats a wide ring (%.2f of %.2f)" % [
+				gun.traverse(), ring,
+			],
+		)
+		gun.traverse_limit = PI
+		_expect(
+			absf(gun.traverse() - ring) < 0.0001,
+			"and an open one lets the gun have all of it",
+		)
+	loot.queue_free()
 	ship.queue_free()
 
 
@@ -13154,7 +13426,11 @@ func _check_foe_fire(
 	if foe == null:
 		return
 
-	ship.global_position = foe.global_position + Vector2(300.0, 0.0)
+	# Half its own reach, not a fixed 300 px. The literal was chosen when a
+	# fighter reached 1800 and became "out of range" the day the reach came
+	# down to fit the screen -- which is the test asserting a number where
+	# it meant a relation.
+	ship.global_position = foe.global_position + Vector2(foe.reach() * 0.5, 0.0)
 	ship.linear_velocity = Vector2.ZERO
 	foe.awake = false
 	var before: int = _rounds_in(field)

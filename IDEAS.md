@@ -4069,6 +4069,33 @@ zostanie poobijany — poniżej 0,35 kadłuba), lotniskowiec 0,85, turret się n
 rusza. To wystarcza, żeby czytały się inaczej z kokpitu, i nie wymaga drzewa
 zachowań.
 
+**Zasięg ognia wynika z kamery, nie z dział.** Zgłoszone z kokpitu: strzelali do
+nas wrogowie, których nie było widać na ekranie. Pomiar to potwierdził — klatka
+projektowa to 640x360, szczeble zoomu to 1,70 / 1,00 / 0,55, więc w spoczynku
+pilot widzi **180 px** nad i pod sobą na szczeblu środkowym i **327 px** na
+najszerszym. Obrońca na 1800 px strzelał z pięciu ekranów, a turret z 2400 px z
+siedmiu.
+
+Więc oba zasięgi siedzą teraz **wewnątrz tego pasma**, bo to jest przedział, w
+którym na strzał da się odpowiedzieć: myśliwiec 220 px (bliżej dolnego końca),
+turret 300 px (bliżej górnego), major 1,2 myśliwca czyli 264 — też w pasmie. Przy
+prędkości kamera odjeżdża do 0,7 szczebla, więc wszystko to jest na ekranie z
+zapasem dokładnie wtedy, gdy pilot leci najszybciej. Test pilnuje **relacji**, a
+nie liczb, bo zależą od trzech rzeczy, które mogą ruszyć się niezależnie:
+rozdzielczości bazowej, szczebli zoomu i samych zasięgów.
+
+Dwie konsekwencje, które z tego wynikają i których nikt nie zamawiał. Rozsiew
+2° był wyliczony przy 1800 px, gdzie dawał stożek 63 px na kadłub 24 px; przy
+220 px ten sam rozsiew to stożek **7,7 px**, czyli obrońca trafia niemal
+wszystkim, co wystrzeli. I jednocześnie **mniej ich dosięga pilota naraz**, bo
+krótszy zasięg wycina większość tłumu z każdej wymiany ognia. Czy te dwie rzeczy
+się znoszą, jest pytaniem do gry, nie do arytmetyki — pokrętła to
+`ROUNDS_PER_SECOND` i `DAMAGE_PER_STRENGTH`, nie rozsiew.
+
+**Cała skala zasięgów walki jest szersza od kamery, nie tylko po stronie
+wrogów**: broń gracza ma 900–4200 px, czyli też strzela w rzeczy, których nie
+widzi. Pytanie o to jest otwarte — zmieniona została połowa, o którą pytano.
+
 Prędkości: myśliwiec 260 px/s, elite 320, lotniskowiec 90, przyspieszenie 180
 px/s². Wolniej niż statek, i powód nie jest balansowy — wyjściem pilota jest
 **opuszczenie terytorium**, nie wyścig. Seryjny dart robi ok. 58 px/s na
@@ -4092,6 +4119,40 @@ zdążył uwierzyć. Dla tego timera powód nie działa, bo zegar chodzi **tylko
 poza terytorium** — a tam i tak nikt nie dosięga pilota, skoro każdy zasięg
 jest głęboko wewnątrz własnej linii. Trafienie zeruje zegar. Bez tego
 „pasywny" znaczy „agresywny od pierwszego błędu", a to nie jest postawa.
+
+### Czerwone znaczniki: czwarty rodzaj znaku na pierścieniu
+
+`ScannerHud` był już domem dla znaczników na krawędzi ekranu i miał trzy rodzaje
+znaku — trójkąt to ciało niebieskie, romb to skrzynka, krzyżyk to pinezka
+pilota. Obrońca jest czwartym: **szewron**, i jedynym rysowanym w `alarm`.
+
+Czyta grupę `Foe.GROUP`, nie listę ze spawnera — ten sam kształt, co
+`GravityWell.GROUP` i `LootCrate.LOOT_GROUP`, i z tego samego powodu: skaner
+czyta definicje, których używa reszta gry, więc brood lotniskowca i luźna grupa
+z M5.4 pojawią się na pierścieniu bez zmiany w tym pliku.
+
+**Tylko poza ekranem**, czyli reguła planety, a nie skrzynki — i z powodu, którego
+skrzynka nie ma: obrońca na ekranie jest rysowany własnym kadłubem, własnym
+pierścieniem, gdy jest obudzony, i strumieniem pocisków. Szewron na tym to
+szewron na jedynej rzeczy w grze, której nie da się przegapić.
+
+**Obudzenie jest jasnością, nie drugim kształtem** (pełna siła przeciw 0,4). To
+jest cały powód, dla którego znaczenie śpiących obrońców nie jest zdradą
+pasywnych światów, na których stoją: przy jednej czwartej siły pierścień mówi
+„jest ich dziewięciu i żaden cię nie widział", co zamienia cichy świat w decyzję
+zamiast w zaskoczenie. Pełny `alarm` pojawia się dopiero, gdy coś naprawdę
+strzela — i tak ten przyrząd trzyma regułę palety: **ostrzeżenia płacą za swoją
+uwagę nieobecnością**.
+
+Numeruje się do ośmiu, najbliżsi pierwsi, bo rdzeniowy świat trzyma dwa tuziny
+obrońców, a pierścień dwudziestu czterech szewronów nie mówi niczego. Liczbę
+dostaje **tylko najbliższy**: „najbliższa rzecz, która chce cię zastrzelić, jest
+1400 px stąd" to cały odczyt, a osiem liczb wokół krawędzi by go zasypało.
+
+Zasięg pierścienia (3000 px) wynika z **terytorium**, nie z zasięgu ognia:
+`Garrison.MIN_TERRITORY` to 2500, więc garnizon jest na pierścieniu, zanim pilot
+wejdzie w jego powłokę. To inna własność niż „zanim będzie mógł strzelać" —
+zasięg ognia jest dziesięciokrotnie mniejszy.
 
 ### Lotniskowiec: nic nie bierze się znikąd
 

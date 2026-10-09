@@ -1,16 +1,17 @@
 class_name ScannerHud
 extends CanvasLayer
-## Edge-of-screen markers for what is around the ship: celestial bodies, and
-## the loot lying on them.
+## Edge-of-screen markers for what is around the ship: celestial bodies, the
+## loot lying on them, and whatever is standing there to stop you.
 ##
 ## The first piece of instrumentation that is about the world rather than
 ## about the ship: at 640x360 a planet is either filling the view or nowhere
 ## to be seen, and "nowhere to be seen" covers both "just behind me" and "half
 ## a system away". The scanner turns that into a direction and a number.
 ##
-## Two kinds of thing, two marks. A triangle is a body, sized by how big it is
-## and lit by whether the ship is in its well; a diamond is a crate, coloured
-## by rarity. They are collected separately because they share nothing but the
+## Four kinds of thing, four marks. A triangle is a body, sized by how big it
+## is and lit by whether the ship is in its well; a diamond is a crate,
+## coloured by rarity; a cross is the pilot's own pin; a chevron is a
+## defender. They are collected separately because they share nothing but the
 ## ring they sit on, and they behave differently on it: a planet stops being
 ## marked once you can see it, a crate does not.
 ##
@@ -32,6 +33,23 @@ extends CanvasLayer
 ## Most crates shown at once, nearest first, so a well picked-over planet does
 ## not turn the edge of the screen into a picket fence.
 @export var max_loot: int = 6
+
+## How far it reaches for defenders.
+##
+## More than the narrowest territory there is (`Garrison.MIN_TERRITORY` is
+## 2500 px), so a garrison is on the ring **before** the pilot is inside its
+## shell rather than after. That is the property worth having, and it is a
+## different one from "before it can shoot": a defender's reach is now 220 to
+## 300 px, a tenth of this, so by the time anything can fire the chevron has
+## been on the edge of the screen for a while.
+##
+## Not much more than that, either. The marker is a warning you have time to
+## act on, not a map of the system's politics.
+@export var foe_range: float = 3000.0
+
+## And most of them at once, nearest first. A core world holds two dozen
+## defenders and a ring of two dozen chevrons is a ring that says nothing.
+@export var max_foes: int = 8
 
 ## How far in from the edge of the screen the ring of markers sits. Only
 ## enough to keep the marker itself on screen: the markers belong to the edge,
@@ -69,6 +87,25 @@ const LOOT_BRACKET: float = 15.0
 ## readable without spending a second colour channel on it.
 const INSIDE_ALPHA: float = 1.0
 const OUTSIDE_ALPHA: float = 0.5
+
+## Half-length of a defender's chevron on the ring, and what a major gets
+## instead. Bigger than a crate's diamond and smaller than a planet's
+## triangle, which is also the order in which the three matter.
+const FOE_SIZE: float = 3.0
+const FOE_SIZE_MAJOR: float = 4.5
+
+## How bright a defender's mark is when it is in the fight, and when it has
+## not noticed anything.
+##
+## The split is the whole of why marking sleeping defenders is not a
+## betrayal of the passive worlds they stand on: at a quarter strength the
+## ring says "there are nine of them and none of them has seen you", which
+## turns a quiet world into a decision instead of a surprise. Full `alarm`
+## only appears once something is actually shooting, which is how this
+## instrument keeps the palette's rule -- warnings pay for their attention
+## by being absent.
+const FOE_AWAKE_ALPHA: float = 1.0
+const FOE_ASLEEP_ALPHA: float = 0.4
 
 ## Half-size of the navigation pin's cross on the ring, and of the one laid
 ## over the place itself once it is on screen. The second is bigger for the
@@ -177,6 +214,50 @@ func _on_ring(offset: Vector2, extent: Vector2) -> Vector2:
 	return offset * minf(scale_x, scale_y)
 
 
+## Nearby defenders, nearest first.
+##
+## Off screen only, which is the planet's rule rather than the crate's, and
+## for a reason the crate does not have: a defender on screen is drawn with
+## its own hull, its own ring when it is awake, and a stream of rounds coming
+## out of it. A chevron laid over the top of that is a chevron over the one
+## thing in the game that is already impossible to miss.
+func foe_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	if _ship == null or not is_instance_valid(_ship):
+		return found
+
+	var centre: Vector2 = view * 0.5
+	var extent: Vector2 = centre - Vector2(ring_margin, ring_margin)
+	if extent.x <= 0.0 or extent.y <= 0.0:
+		return found
+
+	for node: Node in get_tree().get_nodes_in_group(Foe.GROUP):
+		var foe: Foe = node as Foe
+		if foe == null or foe.hull <= 0.0:
+			continue
+		var distance: float = _ship.global_position.distance_to(foe.global_position)
+		if distance > foe_range:
+			continue
+		var offset: Vector2 = to_screen * foe.global_position - centre
+		if absf(offset.x) < extent.x and absf(offset.y) < extent.y:
+			continue
+		if offset.is_zero_approx():
+			continue
+		found.append({
+			"foe": foe,
+			"at": centre + _on_ring(offset, extent),
+			"direction": offset.normalized(),
+			"distance": distance,
+			"awake": foe.awake,
+			"size": FOE_SIZE_MAJOR if foe.is_major() else FOE_SIZE,
+		})
+
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["distance"]) < float(b["distance"])
+	)
+	return found.slice(0, max_foes)
+
+
 ## Nearby loot, nearest first. A separate call from contacts() because the two
 ## are different kinds of thing and carry different facts -- a well and a
 ## rarity have nothing to say to each other -- and because loot is worth
@@ -272,6 +353,15 @@ func _draw_markers() -> void:
 	# Over the bodies: loot is the smaller, more urgent mark of the two.
 	for contact: Dictionary in loot_contacts(to_screen, _canvas.size):
 		_draw_loot(font, contact)
+	# And over everything, because nothing else on the ring can kill you.
+	#
+	# Last also means its labels lose every collision, which is why only
+	# the nearest one is given a number: "the closest thing that wants to
+	# shoot you is 1400 px away" is the whole reading, and eight numbers
+	# round the edge would bury it.
+	var foes: Array[Dictionary] = foe_contacts(to_screen, _canvas.size)
+	for at: int in range(foes.size()):
+		_draw_foe(font if at == 0 else null, foes[at])
 
 
 ## The pin is a cross, so it is neither a body nor a crate at a glance.
@@ -318,6 +408,28 @@ func _draw_loot(font: Font, contact: Dictionary) -> void:
 	_canvas.draw_colored_polygon(_diamond(at, direction, LOOT_SIZE), colour)
 	if font != null:
 		_draw_label(font, at, direction, LOOT_SIZE, distance_text(contact["distance"]), colour)
+
+
+## A defender is a chevron: an arrowhead with no base, pointing out at the
+## thing. Four kinds of thing, four shapes -- triangle, diamond, cross,
+## chevron -- and this is the only one drawn in `alarm`.
+func _draw_foe(font: Font, contact: Dictionary) -> void:
+	var at: Vector2 = contact["at"]
+	var direction: Vector2 = contact["direction"]
+	var size: float = contact["size"]
+	var ink: Color = Color(
+		Palette.current().alarm,
+		FOE_AWAKE_ALPHA if bool(contact["awake"]) else FOE_ASLEEP_ALPHA,
+	)
+	var side: Vector2 = direction.orthogonal() * size * 0.85
+	var back: Vector2 = at - direction * size * 0.5
+	_canvas.draw_polyline(
+		PackedVector2Array([back + side, at + direction * size * 0.5, back - side]),
+		ink,
+		1.0,
+	)
+	if font != null:
+		_draw_label(font, at, direction, size, distance_text(contact["distance"]), ink)
 
 
 func _diamond(at: Vector2, axis: Vector2, size: float) -> PackedVector2Array:
