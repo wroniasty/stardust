@@ -8447,6 +8447,163 @@ func _check_cloud_count() -> void:
 	_discard(planet)
 
 
+## Kadłub decyduje, gdzie wiszą jego silniki — z `.tres`, nie z GDScript.
+##
+## Drives and guns had been data-driven since M3. The four torque jets,
+## the two strafe thrusters and the nose reverse had not: they were
+## literal positions in `ShipFitout`'s preset table,
+## `{"name": "NoseLeftTorque", "at": Vector2(-8, -10)}`, which meant a
+## hull could not be reshaped without editing GDScript -- and that the
+## one thing a pilot can see about a ship was the one thing missing from
+## the ship's own resource.
+##
+## What this checks is the claim rather than the positions: **move a
+## number in the resource and the mount moves with it.** A test that
+## asserted the dart's jets are at plus and minus eight would pass just
+## as well with the table still hardcoded.
+func _check_hull_places_its_engines() -> void:
+	var hull: HullData = HullData.of(&"dart")
+	_expect(hull != null, "there is a stock hull to ask")
+	if hull == null:
+		return
+
+	# Every kind the hull offers is a place with a name, and the names are
+	# the ones the presets and the tests ask for by hand.
+	var offered: Dictionary = {}
+	for slot: Dictionary in hull.slots():
+		offered[String(slot["name"])] = slot
+	for wanted: String in [
+		"NoseLeftTorque", "NoseRightTorque", "TailLeftTorque", "TailRightTorque",
+		"StrafeLeftThruster", "StrafeRightThruster", "NoseReverseThruster",
+	]:
+		_expect(offered.has(wanted), "the hull offers a place called %s" % wanted)
+
+	# And the ship is built at those places rather than at numbers in a
+	# table. Checked against the resource, so the two cannot drift.
+	var ship: Ship = _spawn_ship()
+	var wrong: int = 0
+	for named: String in offered:
+		var node: Node2D = ship.get_node_or_null(NodePath(named)) as Node2D
+		if node == null:
+			continue
+		if not node.position.is_equal_approx(offered[named]["at"]):
+			wrong += 1
+	_expect(
+		wrong == 0,
+		"every mount stands where the hull says it does (%d adrift)" % wrong,
+	)
+
+	# A place that takes an engine does not get a gun. This read
+	# `== SLOT_DRIVE` until the hull learned the other three kinds, and
+	# then quietly fitted a hardpoint to each of the seven.
+	_expect(
+		ship.hardpoints.size() == (
+			HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS
+			+ HullData.REAR_HARDPOINTS
+		),
+		"the guns are the gun places and nothing else (%d)" % ship.hardpoints.size(),
+	)
+	var engines: int = 0
+	for mount: EngineMount in ship.engine_mounts():
+		engines += 1
+	_expect(
+		engines == (
+			HullData.DRIVE_SLOTS + HullData.TORQUE_SLOTS
+			+ HullData.STRAFE_SLOTS + HullData.RETRO_SLOTS
+		),
+		"and the engine sockets are the engine places (%d)" % engines,
+	)
+	ship.queue_free()
+
+	_check_moving_a_slot_moves_the_mount()
+	_check_slot_names_follow_position()
+
+
+## Przesunięcie liczby w zasobie przesuwa mount.
+##
+## The whole point of the migration, and the only version of it that
+## cannot pass by accident: a duplicated hull with one jet moved, applied
+## to a ship, has to put the jet where the copy says.
+func _check_moving_a_slot_moves_the_mount() -> void:
+	var moved: HullData = (HullData.of(&"dart") as HullData).duplicate() as HullData
+	var shifted: Array[Vector2] = []
+	for at: Vector2 in moved.torque_slots:
+		shifted.append(at + Vector2(0.0, 3.0) if at.y < 0.0 else at)
+	moved.torque_slots = shifted
+	moved.strafe_slots = [Vector2(13.0, 4.0), Vector2(-13.0, 4.0)]
+
+	var ship: Ship = _spawn_ship()
+	var preset: Dictionary = ShipFitout.preset("dart (stock)").duplicate()
+	preset["hull"] = moved
+	_expect(ShipFitout.apply(ship, preset), "a hull handed over directly still refits")
+
+	var strafe: Node2D = ship.get_node_or_null("StrafeLeftThruster") as Node2D
+	_expect(
+		strafe != null and strafe.position.is_equal_approx(Vector2(13.0, 4.0)),
+		"a strafe thruster moved in the resource moved on the ship (%s)" % [
+			"missing" if strafe == null else strafe.position,
+		],
+	)
+	var jet: Node2D = ship.get_node_or_null("NoseLeftTorque") as Node2D
+	var says: Vector2 = Vector2.ZERO
+	for slot: Dictionary in moved.slots():
+		if String(slot["name"]) == "NoseLeftTorque":
+			says = slot["at"]
+	_expect(
+		jet != null and jet.position.is_equal_approx(says),
+		"and so did a torque jet (%s, resource says %s)" % [
+			"missing" if jet == null else jet.position, says,
+		],
+	)
+	ship.queue_free()
+
+
+## Nazwa wynika z pozycji, nie z kolejności w tablicy.
+##
+## So the four jets may be written in any order and the same ship comes
+## out. A hull whose author listed them clockwise and one who listed them
+## nose-first are the same hull, which is what makes the resource
+## editable by hand without a convention nobody wrote down.
+func _check_slot_names_follow_position() -> void:
+	var shuffled: HullData = (HullData.of(&"dart") as HullData).duplicate() as HullData
+	var backwards: Array[Vector2] = []
+	for i: int in range(shuffled.torque_slots.size()):
+		backwards.append(shuffled.torque_slots[shuffled.torque_slots.size() - 1 - i])
+	shuffled.torque_slots = backwards
+
+	var before: Dictionary = {}
+	for slot: Dictionary in (HullData.of(&"dart") as HullData).slots():
+		before[String(slot["name"])] = slot["at"]
+	var after: Dictionary = {}
+	for slot: Dictionary in shuffled.slots():
+		after[String(slot["name"])] = slot["at"]
+
+	var same: bool = before.size() == after.size()
+	for named: Variant in before:
+		if not after.has(named) or not (after[named] as Vector2).is_equal_approx(before[named]):
+			same = false
+	_expect(
+		same,
+		"the same four jets written backwards are the same four places",
+	)
+
+	# And a hull that says nothing about a kind still gets a frame, which
+	# is what a shape invented in the creative tool flies on.
+	var bare: HullData = HullData.new()
+	bare.outline = PackedVector2Array([
+		Vector2(0.0, -10.0), Vector2(-7.0, 8.0), Vector2(7.0, 8.0),
+	])
+	var kinds: Dictionary = {}
+	for slot: Dictionary in bare.slots():
+		kinds[slot["kind"]] = int(kinds.get(slot["kind"], 0)) + 1
+	_expect(
+		int(kinds.get(HullData.SLOT_TORQUE, 0)) == HullData.TORQUE_SLOTS
+		and int(kinds.get(HullData.SLOT_STRAFE, 0)) == HullData.STRAFE_SLOTS
+		and int(kinds.get(HullData.SLOT_RETRO, 0)) == HullData.RETRO_SLOTS,
+		"a hull that declares nothing still offers every place (%s)" % [kinds],
+	)
+
+
 ## Przebudowa, która się nie uda, nie może niczego zdjąć.
 ##
 ## `apply` used to strip every engine and gun and then look for the hull,
@@ -8713,6 +8870,7 @@ func _check_fitout_presets() -> void:
 	_check_main_socket_takes_anything(ship)
 	_check_refit_is_safe()
 	_check_preset_fields()
+	_check_hull_places_its_engines()
 	_check_cloud_count()
 	_check_warning_policy()
 	_check_hold_alone()

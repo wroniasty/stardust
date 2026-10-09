@@ -13,3 +13,5 @@ drive_slots = Array[Vector2]([Vector2(0, 12), Vector2(-3.25, 12), Vector2(3.25, 
 front_slots = Array[Vector2]([Vector2(-2.5, -9.25), Vector2(2.5, -9.25)])
 side_slots = Array[Vector2]([Vector2(-4.5, -1), Vector2(4.5, -1), Vector2(6.75, 5.5)])
 rear_slots = Array[Vector2]([Vector2(0, 14)])
+strafe_slots = Array[Vector2]([Vector2(9, 1.75), Vector2(-9, 1.75)])
+retro_slots = Array[Vector2]([Vector2(0, -14)])

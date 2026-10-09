@@ -32,6 +32,24 @@ const WEAPONS: Dictionary = {
 
 const MOUNT_SCENE: String = "res://scenes/engine_mount.tscn"
 
+## How big a socket each small-engine role has.
+##
+## Facts about the role rather than about the ship, which is why they are
+## here once instead of repeated in every preset: every preset in the
+## game used 0.8 for a torque jet, 1.0 for a strafe thruster and 2.5 for
+## the nose reverse, because that is what those jobs take.
+const TORQUE_SOCKET: float = 0.8
+const STRAFE_SOCKET: float = 1.0
+const RETRO_SOCKET: float = 2.5
+
+## And which socket size goes with which kind of place the hull offers.
+const SOCKET_FOR: Dictionary = {
+	HullData.SLOT_TORQUE: TORQUE_SOCKET,
+	HullData.SLOT_STRAFE: STRAFE_SOCKET,
+	HullData.SLOT_RETRO: RETRO_SOCKET,
+	HullData.SLOT_DRIVE: MAIN_DRIVE_SOCKET,
+}
+
 ## What the "stronger jets" preset multiplies its engines by. Named
 ## because the blurb is computed from it as well as the engines.
 const STRONGER_JETS: float = 1.75
@@ -108,12 +126,12 @@ static func all() -> Array[Dictionary]:
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
 						"engine": "gimbal", "centered": true},
-				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(9, 1.75),
-					"turn": LEFT, "engine": "thruster"},
-				{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-9, 1.75),
-					"turn": RIGHT, "engine": "thruster"},
-				{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -14),
-					"turn": AFT, "engine": "retro"},
+				{"name": "StrafeLeftThruster",
+					"engine": "thruster"},
+				{"name": "StrafeRightThruster",
+					"engine": "thruster"},
+				{"name": "NoseReverseThruster",
+					"engine": "retro"},
 			],
 			"guns": ["beam"],
 		},
@@ -124,19 +142,19 @@ static func all() -> Array[Dictionary]:
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
 					"engine": "main", "scale": 0.8},
-				{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-6, -11), "turn": RIGHT,
+				{"name": "NoseLeftTorque",
 					"engine": "torque", "scale": 1.4},
-				{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(6, -11), "turn": LEFT,
+				{"name": "NoseRightTorque",
 					"engine": "torque", "scale": 1.4},
-				{"name": "TailLeftTorque", "size": 0.8, "at": Vector2(-6, 11), "turn": RIGHT,
+				{"name": "TailLeftTorque",
 					"engine": "torque", "scale": 1.4},
-				{"name": "TailRightTorque", "size": 0.8, "at": Vector2(6, 11), "turn": LEFT,
+				{"name": "TailRightTorque",
 					"engine": "torque", "scale": 1.4},
-				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(7, 0), "turn": LEFT,
+				{"name": "StrafeLeftThruster",
 					"engine": "thruster"},
-				{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-7, 0), "turn": RIGHT,
+				{"name": "StrafeRightThruster",
 					"engine": "thruster"},
-				{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -15), "turn": AFT,
+				{"name": "NoseReverseThruster",
 					"engine": "retro"},
 			],
 			"guns": [
@@ -151,19 +169,19 @@ static func all() -> Array[Dictionary]:
 			"mounts": [
 				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
 					"engine": "main", "scale": 1.4},
-				{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-12, -14), "turn": RIGHT,
+				{"name": "NoseLeftTorque",
 					"engine": "torque"},
-				{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(12, -14), "turn": LEFT,
+				{"name": "NoseRightTorque",
 					"engine": "torque"},
-				{"name": "TailLeftTorque", "size": 0.8, "at": Vector2(-15, 5), "turn": RIGHT,
+				{"name": "TailLeftTorque",
 					"engine": "torque"},
-				{"name": "TailRightTorque", "size": 0.8, "at": Vector2(15, 5), "turn": LEFT,
+				{"name": "TailRightTorque",
 					"engine": "torque"},
-				{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(15, -5), "turn": LEFT,
+				{"name": "StrafeLeftThruster",
 					"engine": "thruster"},
-				{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-15, -5), "turn": RIGHT,
+				{"name": "StrafeRightThruster",
 					"engine": "thruster"},
-				{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -16), "turn": AFT,
+				{"name": "NoseReverseThruster",
 					"engine": "retro"},
 			],
 			"guns": ["rocket"],
@@ -185,19 +203,19 @@ static func _stock_mounts() -> Array[Dictionary]:
 	return [
 		{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
 			"engine": "main"},
-		{"name": "NoseLeftTorque", "size": 0.8, "at": Vector2(-8, -10), "turn": RIGHT,
+		{"name": "NoseLeftTorque",
 			"engine": "torque"},
-		{"name": "NoseRightTorque", "size": 0.8, "at": Vector2(8, -10), "turn": LEFT,
+		{"name": "NoseRightTorque",
 			"engine": "torque"},
-		{"name": "TailLeftTorque", "size": 0.8, "at": Vector2(-8, 13.5), "turn": RIGHT,
+		{"name": "TailLeftTorque",
 			"engine": "torque"},
-		{"name": "TailRightTorque", "size": 0.8, "at": Vector2(8, 13.5), "turn": LEFT,
+		{"name": "TailRightTorque",
 			"engine": "torque"},
-		{"name": "StrafeLeftThruster", "size": 1.0, "at": Vector2(9, 1.75), "turn": LEFT,
+		{"name": "StrafeLeftThruster",
 			"engine": "thruster"},
-		{"name": "StrafeRightThruster", "size": 1.0, "at": Vector2(-9, 1.75), "turn": RIGHT,
+		{"name": "StrafeRightThruster",
 			"engine": "thruster"},
-		{"name": "NoseReverseThruster", "size": 2.5, "at": Vector2(0, -12), "turn": AFT,
+		{"name": "NoseReverseThruster",
 			"engine": "retro"},
 	]
 
@@ -277,15 +295,33 @@ static func apply(ship: Ship, wanted: Dictionary) -> bool:
 			ship.remove_child(child)
 			child.queue_free()
 
+	# Where the hull says each of its places is, by name. A preset names a
+	# role -- NoseLeftTorque, StrafeRightThruster -- and the hull decides
+	# where that lands, exactly as it already did for drives and guns.
+	# Torque and strafe positions used to be literals in the table below,
+	# which meant a hull could not be reshaped without editing GDScript.
+	var places: Dictionary = {}
+	for slot: Dictionary in hull.slots():
+		places[String(slot["name"])] = slot
+
 	for entry: Dictionary in wanted["mounts"]:
 		if entry["name"] == "MainDrive":
 			_add_main_drives(ship, scene, hull, entry)
 			continue
 		var mount: EngineMount = scene.instantiate() as EngineMount
 		mount.name = String(entry["name"])
-		mount.size = float(entry["size"])
-		mount.position = entry["at"]
-		mount.rotation = float(entry.get("turn", 0.0))
+		var place: Dictionary = places.get(mount.name, {})
+		mount.size = float(entry.get("size", SOCKET_FOR.get(
+			place.get("kind", &""), 1.0
+		)))
+		# The hull first, and the preset's own only for a mount the hull
+		# has no place for -- the forward-facing nozzle on the twin-gimbal
+		# ship is one, and until a hull can describe that it stays here.
+		mount.position = place["at"] if not place.is_empty() else entry["at"]
+		mount.rotation = (
+			float(place["turn"]) if not place.is_empty()
+			else float(entry.get("turn", 0.0))
+		)
 		mount.thrust_direction = Vector2.UP
 		mount.installed = _engine(String(entry["engine"]), float(entry.get("scale", 1.0)))
 		ship.add_child(mount)
@@ -303,7 +339,13 @@ static func apply(ship: Ship, wanted: Dictionary) -> bool:
 		weapons.append(load(WEAPONS[String(gun)]) as WeaponData)
 	var next_weapon: int = 0
 	for slot: Dictionary in hull.slots():
-		if slot["kind"] == HullData.SLOT_DRIVE:
+		# Every place that takes an **engine** is skipped, not just the
+		# drives: this read `== SLOT_DRIVE` until the hull learned about
+		# torque jets, strafe thrusters and the nose reverse, and then
+		# quietly fitted a gun to each of the seven. `SOCKET_FOR` is the
+		# same predicate `add_hull_slots` uses, so the two loops cannot
+		# come to different conclusions about what a place is for.
+		if SOCKET_FOR.has(slot["kind"]):
 			continue
 		var gun: Hardpoint = _hardpoint(slot)
 		if next_weapon < weapons.size():
@@ -365,21 +407,34 @@ static func fault_in(wanted: Dictionary) -> String:
 		return "%s names no hull" % title
 	if not (wanted.get("mounts") is Array):
 		return "%s has no mounts" % title
+	# What the hull offers, by name, so a mount can be checked against it
+	# rather than against a rule written out twice.
+	var offered: Dictionary = {}
+	for slot: Dictionary in hull_of(wanted).slots():
+		offered[String(slot["name"])] = slot
 	for entry: Variant in wanted["mounts"]:
 		if not (entry is Dictionary):
 			return "%s has a mount that is not an entry" % title
 		var mount: Dictionary = entry
-		for needed: String in ["name", "size", "engine"]:
+		for needed: String in ["name", "engine"]:
 			if not mount.has(needed):
 				return "%s has a mount with no %s" % [title, needed]
 		if not ENGINES.has(String(mount["engine"])):
 			return "%s wants engine %s, which there is none of" % [
 				title, mount["engine"],
 			]
-		# Main drives go where the hull says, so they carry no position of
-		# their own. Everything else has to say where it is.
-		if String(mount["name"]) != "MainDrive" and not mount.has("at"):
-			return "%s has a mount %s with nowhere to be" % [title, mount["name"]]
+		# A mount needs a position of its own only where the hull has no
+		# place by that name. Drives, torque jets, strafe thrusters and
+		# the nose reverse all come off the hull now; what is left in the
+		# table is the odd one the hull cannot describe yet, such as the
+		# forward-facing nozzle on the twin-gimbal ship.
+		var named: String = String(mount["name"])
+		if named != "MainDrive" and not offered.has(named) and not mount.has("at"):
+			return "%s has a mount %s with nowhere to be" % [title, named]
+		if not mount.has("size") and not SOCKET_FOR.has(
+			(offered.get(named, {}) as Dictionary).get("kind", &"")
+		):
+			return "%s has a mount %s with no socket size" % [title, named]
 	if not (wanted.get("guns") is Array):
 		return "%s has no gun list" % title
 	for gun: Variant in wanted["guns"]:
@@ -438,10 +493,13 @@ static func add_hull_slots(ship: Ship, hull: HullData) -> void:
 	for slot: Dictionary in hull.slots():
 		if ship.has_node(NodePath(String(slot["name"]))):
 			continue
-		if slot["kind"] == HullData.SLOT_DRIVE:
+		if SOCKET_FOR.has(slot["kind"]):
+			# Every engine place the hull offers and the preset left
+			# empty, drives included: a socket with nothing in it is the
+			# ship telling the pilot where something could go.
 			var mount: EngineMount = scene.instantiate() as EngineMount
 			mount.name = String(slot["name"])
-			mount.size = MAIN_DRIVE_SOCKET
+			mount.size = float(SOCKET_FOR[slot["kind"]])
 			mount.position = slot["at"]
 			mount.rotation = float(slot["turn"])
 			mount.thrust_direction = Vector2.UP
