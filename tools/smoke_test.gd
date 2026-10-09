@@ -8604,6 +8604,207 @@ func _check_slot_names_follow_position() -> void:
 	)
 
 
+## Narzedzie do kadlubow: to, co moze zgnic po cichu (DEVTOOLS.md, zasada 6).
+##
+## A GUI tool is mostly pixels, and pixels are not what rots. What rots is
+## the model underneath: a slot kind added to `HullData` that the editor
+## has no colour for, a typed array written back untyped so the saved
+## .tres no longer parses, a label worked out a second time in the tool
+## and drifting away from the one the ship is built with. None of that
+## needs a window to check.
+func _check_hull_editor() -> void:
+	# Every editable array has a row and a colour. The panel builds one row
+	# per entry in FIELDS and looks the colour up by name, so a kind added
+	# to one table and not the other takes the dock down on open.
+	var uncoloured: int = 0
+	for entry: Dictionary in HullHandles.FIELDS:
+		if not HullCanvas.PAINT.has(entry["field"]):
+			uncoloured += 1
+	var unlisted: int = 0
+	for named: Variant in HullCanvas.PAINT:
+		if HullHandles.spec_for(named).is_empty():
+			unlisted += 1
+	_expect(
+		uncoloured == 0 and unlisted == 0,
+		"every editable array has a row and a colour (%d bez koloru, %d bez wiersza)" % [
+			uncoloured, unlisted,
+		],
+	)
+
+	# And the dock builds and opens a file. This is the rule-6 half: it
+	# touches every Button, Label and row, lists the hull directory and
+	# frames a real hull, so an editor API it leans on cannot go missing
+	# without the gate noticing.
+	var panel: HullEditor = HullEditor.new()
+	root.add_child(panel)
+	_expect(
+		panel._canvas != null and panel._canvas.hull == null,
+		"the hull dock builds with nothing open",
+	)
+	panel._canvas.size = Vector2(400.0, 300.0)
+	panel._open(0)
+	_expect(
+		panel._editing != null and panel._canvas.hull == panel._editing,
+		"and opens a hull onto its own copy, not onto the resource",
+	)
+	_expect(
+		panel._editing != panel._on_disk and HullHandles.same(panel._editing, panel._on_disk),
+		"which starts out saying the same thing as the file",
+	)
+	_discard(panel)
+
+	_check_dragging_writes_the_frame_down()
+	_check_the_label_is_what_gets_built()
+	_check_a_saved_hull_loads_again()
+	_check_the_counter_says_what_is_wrong()
+
+
+## Przeciagniecie punktu "z wyliczenia" zapisuje caly komplet.
+##
+## `HullData.slots()` takes the resource's list **or** the derived frame,
+## never a mix. So moving one jet on a hull that declared none has to
+## write all four down -- otherwise the other three would snap back to
+## the frame the moment the file was saved, and the shape on screen would
+## not be the shape that flies. The rhombus declares no small engines at
+## all, which is what makes it the hull to test on.
+func _check_dragging_writes_the_frame_down() -> void:
+	var hull: HullData = HullHandles.copy_of(HullData.of(&"rhombus"))
+	_expect(
+		not HullHandles.declares(hull, &"torque_slots"),
+		"the rhombus flies on a derived torque frame",
+	)
+	var frame: Array[Vector2] = HullHandles.shown(hull, &"torque_slots")
+	var moved: Vector2 = frame[0] + Vector2(2.0, 0.0)
+	_expect(HullHandles.move(hull, &"torque_slots", 0, moved), "a derived jet can be dragged")
+
+	var now: Array[Vector2] = HullHandles.read(hull, &"torque_slots")
+	_expect(
+		now.size() == HullData.TORQUE_SLOTS,
+		"and that writes all %d down (%d)" % [HullData.TORQUE_SLOTS, now.size()],
+	)
+	var kept: bool = now.size() == frame.size()
+	for i: int in range(1, mini(now.size(), frame.size())):
+		if not now[i].is_equal_approx(frame[i]):
+			kept = false
+	_expect(kept, "with the three nobody touched still where the frame had them")
+	_expect(
+		not now.is_empty() and now[0].is_equal_approx(moved),
+		"and the dragged one where it was dropped",
+	)
+
+
+## Etykieta pod kursorem to nazwa, ktora dostanie zbudowany statek.
+##
+## The tool prints `NoseLeftTorque` because `HullData.slots()` says so,
+## and the game names a jet by which side of the bounding box's middle it
+## sits on. Dragging a nose jet past that line therefore has to rename it
+## under the cursor. A second copy of the naming rule inside the editor
+## would pass on the day it was written and lie quietly ever after, so
+## what this really pins is that there is only one copy.
+func _check_the_label_is_what_gets_built() -> void:
+	var hull: HullData = HullHandles.copy_of(HullData.of(&"dart"))
+	var middle: float = hull.bounds().get_center().y
+	var jets: Array[Vector2] = HullHandles.shown(hull, &"torque_slots")
+	var which: int = -1
+	for i: int in range(jets.size()):
+		if jets[i].y < middle:
+			which = i
+			break
+	_expect(which >= 0, "the dart has a jet forward of the middle")
+	if which < 0:
+		return
+
+	var before: String = HullHandles.labels(hull, &"torque_slots")[which]
+	_expect(before.begins_with("Nose"), "and the editor calls it a nose jet (%s)" % before)
+	HullHandles.move(hull, &"torque_slots", which, Vector2(jets[which].x, middle + 4.0))
+	var after: String = HullHandles.labels(hull, &"torque_slots")[which]
+	_expect(
+		after.begins_with("Tail"),
+		"dragged past the middle the label follows, live (%s -> %s)" % [before, after],
+	)
+	var built: Dictionary = {}
+	for slot: Dictionary in hull.slots():
+		built[String(slot["name"])] = true
+	_expect(built.has(after), "and that is the name the ship is built with")
+
+
+## Zapisany .tres wczytuje sie z powrotem jako dokladnie to samo.
+##
+## The one thing a save button can get silently wrong. `outline` is a
+## PackedVector2Array and the seven slot lists are `Array[Vector2]`;
+## handing either a plain untyped Array writes a file that still looks
+## right in a text editor and comes back as something `HullData` cannot
+## use. A round trip through disk is the only honest check, and the load
+## ignores the cache on purpose -- reusing it would compare the resource
+## with itself and pass whatever was written.
+func _check_a_saved_hull_loads_again() -> void:
+	var hull: HullData = HullHandles.copy_of(HullData.of(&"rhombus"))
+	HullHandles.move(hull, &"torque_slots", 0, Vector2(-11.25, -3.5))
+	HullHandles.add(hull, &"legs", Vector2(0.0, 14.0))
+	HullHandles.insert(hull, &"outline", 1, Vector2(-6.0, -7.0))
+
+	var temp: String = "user://hull_editor_roundtrip.tres"
+	var failed: Error = ResourceSaver.save(hull, temp)
+	_expect(failed == OK, "a hull the editor touched saves (%d)" % failed)
+	var back: HullData = ResourceLoader.load(
+		temp, "", ResourceLoader.CACHE_MODE_IGNORE,
+	) as HullData
+	_expect(back != null, "and parses again as a HullData")
+	if back != null:
+		_expect(HullHandles.same(back, hull), "saying exactly what it said before the trip")
+		_expect(
+			back.slots().size() == hull.slots().size(),
+			"with every place still a place (%d)" % back.slots().size(),
+		)
+		_expect(
+			back.torque_slots.size() == HullData.TORQUE_SLOTS,
+			"the frame it was flying on now written in the file (%d)" % back.torque_slots.size(),
+		)
+		var written: Array = back.get(&"torque_slots")
+		_expect(
+			written.get_typed_builtin() == TYPE_VECTOR2,
+			"and the array came back typed rather than a bare list",
+		)
+	DirAccess.remove_absolute(temp)
+
+
+## Licznik mowi, czego brakuje, zanim powie to smoke test.
+##
+## Every hull offers the same number of each kind and the rest of the game
+## counts on it: a preset names `FrontHardpoint2`, and a hull with one
+## front slot leaves that mount homeless. The editor does not forbid the
+## edit -- a hull nobody can reshape is the problem it exists to fix --
+## but it has to say so while the mouse is still down. The outline is the
+## one thing it does refuse, because everything physical is computed from
+## it and three corners is the least that is a shape.
+func _check_the_counter_says_what_is_wrong() -> void:
+	var hull: HullData = HullHandles.copy_of(HullData.of(&"dart"))
+	_expect(_hull_note(hull, &"front_slots") == "", "a stock dart draws no complaint")
+	_expect(HullHandles.erase(hull, &"front_slots", 0), "a gun place can be removed")
+	_expect(
+		_hull_note(hull, &"front_slots") != "",
+		"and one short, the counter says so: %s" % _hull_note(hull, &"front_slots"),
+	)
+	HullHandles.add(hull, &"front_slots", Vector2(0.0, -6.0))
+	HullHandles.add(hull, &"front_slots", Vector2(1.0, -6.0))
+	_expect(
+		_hull_note(hull, &"front_slots") != "",
+		"one over the plan and it says that too: %s" % _hull_note(hull, &"front_slots"),
+	)
+
+	HullHandles.add(hull, &"outline", Vector2.ZERO)
+	_expect(HullHandles.erase(hull, &"outline", 3), "a fourth corner can go")
+	_expect(not HullHandles.erase(hull, &"outline", 0), "a triangle cannot give up a third")
+	_expect(HullHandles.shown(hull, &"outline").size() == 3, "so the hull stays a shape")
+
+
+func _hull_note(hull: HullData, field: StringName) -> String:
+	for entry: Dictionary in HullHandles.tally(hull):
+		if entry["field"] == field:
+			return entry["note"]
+	return ""
+
+
 ## Przebudowa, która się nie uda, nie może niczego zdjąć.
 ##
 ## `apply` used to strip every engine and gun and then look for the hull,
@@ -8871,6 +9072,7 @@ func _check_fitout_presets() -> void:
 	_check_refit_is_safe()
 	_check_preset_fields()
 	_check_hull_places_its_engines()
+	_check_hull_editor()
 	_check_cloud_count()
 	_check_warning_policy()
 	_check_hold_alone()

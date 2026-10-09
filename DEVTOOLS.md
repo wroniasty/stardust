@@ -124,7 +124,7 @@ Gotowe, gdy: nie trzeba już odpalać `soundcheck.tscn` ani `art_gallery.tscn` o
 
 ### D5: Auto-formularz zasobu i edycja na żywo
 
-- [x] `bench_resource_form.gd`: formularz z `get_property_list()` dla `HullData`, `EngineData`, `WeaponData`, tabel i pasków. Obsługa `float` / `int` / `bool` / `String` / `Color` / `Vector2` / enum / zakresy / zagnieżdżone zasoby ze skryptem. Tablice i słowniki pokazane jako licznik; edycja obrysu kadłuba (`PackedVector2Array`) jeszcze nie.
+- [x] `bench_resource_form.gd`: formularz z `get_property_list()` dla `HullData`, `EngineData`, `WeaponData`, tabel i pasków. Obsługa `float` / `int` / `bool` / `String` / `Color` / `Vector2` / enum / zakresy / zagnieżdżone zasoby ze skryptem. Tablice i słowniki pokazane jako licznik; obrysu kadłuba formularz nie edytuje i nie będzie — od tego jest dock „Kadłuby" (D8).
 - [x] Zmiana w formularzu działa **od razu** na działającym statku (odświeżenie przez `emit_changed()` + przebudowa tylko tego, czego dotyczy).
 - [x] Zapis do `.tres` jawnym przyciskiem; pole „brudne" oznaczone, „cofnij do pliku" dostępne.
 - [ ] Debounce przy procedurach z seeda, żeby przeciągnięcie suwaka nie przebudowywało dźwięku sto razy na sekundę.
@@ -138,7 +138,8 @@ Gotowe, gdy: zmiana `rounds_per_second` albo `max_thrust` suwakiem jest widoczna
 - [x] Przycisk „Uruchom Workbench" (`EditorInterface.play_custom_scene`).
 - [x] Kanał edytor → gra (kod i test strony gry; **nie sprawdzony na żywo** w edytorze z oknem gry): `EditorDebuggerPlugin` wysyła zmianę właściwości zasobu, gra stosuje ją przez `bridge_game.gd`. Zweryfikować w dokumentacji (`godot-docs`), czy działa też z osadzonym oknem gry.
 - [ ] Kanał gra → edytor: odczyt stanu statku (przypięcia, zdrowie) w docku.
-- [ ] Undo/redo przez `EditorUndoRedoManager`; zapis przez `ResourceSaver` z zachowaniem UID.
+- [x] Dock „Kadłuby" w panelu dolnym (`add_dock` + `EditorDock`), patrz D8.
+- [ ] Undo/redo przez `EditorUndoRedoManager` **dla inspektora**; dock kadłubów ma własny stos migawek, bo gest przeciągnięcia to nie jest zmiana jednej właściwości jednego obiektu.
 
 Gotowe, gdy: zmiana wartości w inspektorze Godota jest od razu słyszalna lub widoczna w uruchomionym Workbenchu.
 
@@ -149,12 +150,49 @@ Gotowe, gdy: zmiana wartości w inspektorze Godota jest od razu słyszalna lub w
 - [ ] Wyjątek w filtrze eksportu dla `tools/` i `addons/stardust_devtools/`.
 - [ ] Sekcja w README: jak uruchomić.
 
+### D8: Dock „Kadłuby" — graficzna edycja `.tres`
+
+Inspektor pokazuje kadłub jako kolumnę liczb: `torque_slots` to cztery
+`Vector2` w rozwijanej liście, a ustalenie, że trzeci z nich to dysza wisząca
+po lewej stronie rufy, wymaga przeczytania `HullData.slots()` i wykonania
+porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
+
+- [x] `hull_handles.gd`: model uchwytów jako czyste funkcje `HullData`
+  (`of`, `move`, `add`, `erase`, `insert`, `tally`, `snapshot`). Bez API
+  edytora i bez rysowania, więc smoke test sprawdza go wprost.
+- [x] `hull_canvas.gd`: siatka w jednostkach kadłuba, obrys jako wielokąt,
+  nogi, siedem rodzajów slotów w osobnych kolorach, kreska pokazująca `turn`
+  (czyli w którą stronę mount patrzy — stąd widać skrzyżowane strafe'y).
+- [x] Mysz: LPM ciągnij, PPM usuń, 2× LPM na krawędzi wstawia wierzchołek,
+  środkowy przycisk przesuwa widok, kółko zoom, Alt wyłącza siatkę (0.25).
+- [x] Punkty „z wyliczenia" (`default_positions()`) rysowane na blado;
+  przeciągnięcie jednego zapisuje **cały** komplet, bo `slots()` bierze listę
+  z zasobu albo ramkę, nigdy mieszankę.
+- [x] Etykieta pod kursorem to nazwa z `HullData.slots()`, nie druga kopia
+  reguły — dlatego dysza przeciągnięta przez środek bounding boxa zmienia
+  nazwę z `Nose…` na `Tail…` na żywo. Linia środka jest narysowana.
+- [x] Licznik `ile/ile` na każdy rodzaj: poniżej planu mount zostaje bez
+  miejsca (`ShipFitout.fault_in`), powyżej — nadmiar jest nieużywany. Edycja
+  nie jest blokowana, tylko nazwana.
+- [x] Edytowana jest **luźna kopia**. „Zapisz .tres" przepisuje ją na zasób,
+  który edytor ma załadowany, i woła `ResourceSaver`; „Przywróć z dysku"
+  i „Cofnij" (stos migawek na gest) działają bez dotykania pliku.
+- [x] Smoke test: `_check_hull_editor` — kolory kontra `FIELDS`, budowa docka,
+  zapis i ponowne wczytanie z `CACHE_MODE_IGNORE` (typowane tablice przeżywają
+  podróż), przemianowanie dyszy, licznik braków.
+- [ ] Środek masy i krzyż momentu na podglądzie. Wymaga wyposażenia, nie
+  samego kadłuba: `ShipFitout` zna masy silników, `HullData` nie.
+- [ ] Ten sam dock dla broni i silników (`FIELDS` jest tabelą, nie kodem).
+
+Gotowe, gdy: dyszę da się przesunąć myszą, licznik od razu mówi, co z tego
+wynika, a zapisany `.tres` wczytuje grę bez niespodzianek.
+
 ---
 
 ## 3. Otwarte pytania
 
 - Czy żywa edycja z edytora ma iść kanałem debuggera, czy wystarczy przeładowanie `.tres` po zapisie? Kanał jest dokładniejszy, zapis prostszy. Rozstrzygnąć w D6 po sprawdzeniu osadzonego okna gry.
-- Jak edytować obrys kadłuba (`PackedVector2Array`) w formularzu: lista punktów czy rysowanie myszą na podglądzie? Zacząć od listy.
+- ~~Jak edytować obrys kadłuba (`PackedVector2Array`): lista punktów czy rysowanie myszą?~~ Rozstrzygnięte w D8: **myszą, w osobnym docku**. Lista punktów w formularzu obok innych pól byłaby trzecią reprezentacją tego samego kształtu (po inspektorze i po samej grze), a żadna z nich nie odpowiada na pytanie, które się naprawdę zadaje przy kadłubie: „gdzie to jest względem reszty".
 - Czy przypięcia mają się zapisywać między uruchomieniami (plik w `user://`)? Prawdopodobnie tak, żeby po restarcie wracać do tej samej konfiguracji testowej.
 
 ## 4. Czego ten plan świadomie nie robi

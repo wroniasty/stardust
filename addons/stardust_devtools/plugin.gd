@@ -2,11 +2,13 @@
 extends EditorPlugin
 ## Stardust devtools: a dock beside the inspector. DEVTOOLS.md, D6.
 ##
-## Three jobs. List the game's resources by kind and open one in the
+## Four jobs. List the game's resources by kind and open one in the
 ## editor's own inspector (undo, redo and saving come for free). Run the
-## workbench scene. And, while a bench is running, forward every property
+## workbench scene. While a bench is running, forward every property
 ## edited in the inspector to it, so the change is heard and seen on the
-## ship at once instead of after a save and a restart.
+## ship at once instead of after a save and a restart. And give hulls a
+## dock of their own, because a hull is a shape and the inspector shows
+## it as a column of numbers (see `hull_editor.gd`).
 
 const WORKBENCH_SCENE: String = "res://tools/workbench/workbench.tscn"
 
@@ -28,6 +30,14 @@ const CATEGORIES: Dictionary = {
 const WATCHED_ROOT: String = "res://resources/"
 
 var _dock: VBoxContainer = null
+## The hull editor's dock, in the bottom panel where a wide canvas fits.
+##
+## `add_dock` rather than the one-line `add_control_to_bottom_panel`,
+## which 4.7 deprecates in favour of exactly this. `EditorDock` is marked
+## experimental in return, which is a trade a dev tool can make and the
+## game cannot: if a later Godot moves it, this file breaks and nothing
+## that ships does.
+var _hulls: EditorDock = null
 var _debugger: StardustBenchDebugger = null
 var _category: OptionButton = null
 var _files: ItemList = null
@@ -45,12 +55,24 @@ func _enter_tree() -> void:
 	EditorInterface.get_inspector().property_edited.connect(_on_property_edited)
 	_fill_files()
 
+	_hulls = EditorDock.new()
+	_hulls.title = "Kadluby"
+	_hulls.icon_name = &"Polygon2D"
+	_hulls.default_slot = EditorDock.DOCK_SLOT_BOTTOM
+	_hulls.available_layouts = EditorDock.DOCK_LAYOUT_ALL
+	_hulls.add_child(HullEditor.new())
+	add_dock(_hulls)
+
 
 func _exit_tree() -> void:
 	var inspector: EditorInspector = EditorInterface.get_inspector()
 	if inspector.property_edited.is_connected(_on_property_edited):
 		inspector.property_edited.disconnect(_on_property_edited)
 	remove_debugger_plugin(_debugger)
+	if _hulls != null:
+		remove_dock(_hulls)
+		_hulls.queue_free()
+		_hulls = null
 	if _dock != null:
 		remove_control_from_docks(_dock)
 		_dock.queue_free()
