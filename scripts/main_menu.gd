@@ -57,11 +57,11 @@ func _build() -> void:
 	_ships = ItemList.new()
 	_ships.auto_height = true
 	_ships.select_mode = ItemList.SELECT_SINGLE
-	var presets: Array[Dictionary] = ShipFitout.all()
+	var presets: Array[ShipPreset] = ShipFitout.all()
 	var picked: int = 0
 	for i: int in range(presets.size()):
-		_ships.add_item(String(presets[i]["name"]))
-		if presets[i]["name"] == GameSettings.fitout_name:
+		_ships.add_item(presets[i].display_name)
+		if presets[i].display_name == GameSettings.fitout_name:
 			picked = i
 	_ships.select(picked)
 	_ships.item_selected.connect(_on_ship_selected)
@@ -107,10 +107,12 @@ func _heading(text: String) -> Label:
 
 
 func _on_ship_selected(index: int) -> void:
-	var presets: Array[Dictionary] = ShipFitout.all()
+	var presets: Array[ShipPreset] = ShipFitout.all()
 	if index < 0 or index >= presets.size():
 		return
-	_blurb.text = String(presets[index]["blurb"])
+	# `caption`, not `blurb`: the scaled preset's sentence is computed
+	# from the figure its engines are actually built with.
+	_blurb.text = presets[index].caption()
 
 
 ## Keeps the field a number. Filtering on the way in rather than refusing at

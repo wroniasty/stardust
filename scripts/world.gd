@@ -123,8 +123,8 @@ func _apply_menu_choices() -> void:
 		return
 	world_seed = GameSettings.galaxy_seed
 	var ship: Ship = (player as Player).ship
-	var preset: Dictionary = ShipFitout.preset(GameSettings.fitout_name)
-	if ship != null and not preset.is_empty():
+	var preset: ShipPreset = ShipFitout.preset(GameSettings.fitout_name)
+	if ship != null and preset != null:
 		ShipFitout.apply(ship, preset)
 
 

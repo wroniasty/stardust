@@ -39,8 +39,8 @@ func bind(bench: Workbench, ship: Ship) -> void:
 func _build() -> void:
 	add_child(BenchForm.heading("preset"))
 	_presets = OptionButton.new()
-	for preset: Dictionary in ShipFitout.all():
-		_presets.add_item(String(preset["name"]))
+	for preset: ShipPreset in ShipFitout.all():
+		_presets.add_item(preset.display_name)
 	add_child(_presets)
 	add_child(BenchForm.button("fit a preset", _on_preset))
 

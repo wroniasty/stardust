@@ -8544,8 +8544,8 @@ func _check_moving_a_slot_moves_the_mount() -> void:
 	moved.strafe_slots = [Vector2(13.0, 4.0), Vector2(-13.0, 4.0)]
 
 	var ship: Ship = _spawn_ship()
-	var preset: Dictionary = ShipFitout.preset("dart (stock)").duplicate()
-	preset["hull"] = moved
+	var preset: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	preset.hull = moved
 	_expect(ShipFitout.apply(ship, preset), "a hull handed over directly still refits")
 
 	var strafe: Node2D = ship.get_node_or_null("StrafeLeftThruster") as Node2D
@@ -8842,27 +8842,64 @@ func _check_refit_is_safe() -> void:
 	# first thing comes off. Built rather than rolled: a preset table
 	# cannot be relied on to contain a broken entry, and if it ever did
 	# that would be the bug rather than the fixture.
-	var good: Dictionary = ShipFitout.preset("dart (stock)")
+	var good: ShipPreset = ShipFitout.preset("dart (stock)")
 	_expect(ShipFitout.fault_in(good).is_empty(), "the stock preset is sound")
-	var broken: Array[Dictionary] = [
-		{"name": "no hull", "hull": &"no-such-hull", "mounts": [], "guns": []},
-		{"name": "no mounts", "hull": &"dart", "guns": []},
-		{
-			"name": "bad engine", "hull": &"dart", "guns": [],
-			"mounts": [{"name": "Nose", "size": 1.0, "at": Vector2.ZERO,
-				"engine": "no-such-engine"}],
-		},
-		{"name": "bad gun", "hull": &"dart", "mounts": [], "guns": ["no-such-gun"]},
-		{
-			"name": "homeless mount", "hull": &"dart", "guns": [],
-			"mounts": [{"name": "Nose", "size": 1.0, "engine": "torque"}],
-		},
-	]
-	for preset: Dictionary in broken:
+
+	# Two of the old five are gone and that is the migration showing: a
+	# preset used to name its engine and its weapon with a string looked
+	# up in a table, so "an engine there is none of" was a thing a preset
+	# could be. It holds the resource now, so it cannot. What is left are
+	# the faults a type system cannot catch -- and two new ones, because a
+	# preset now describes module bays as well.
+	var broken: Array[ShipPreset] = []
+
+	var no_hull: ShipPreset = _bad_preset("no hull")
+	no_hull.hull = null
+	broken.append(no_hull)
+
+	var no_engine: ShipPreset = _bad_preset("a socket with nothing in it")
+	var hollow: MountFit = MountFit.new()
+	hollow.place = &"NoseLeftTorque"
+	no_engine.mounts.append(hollow)
+	broken.append(no_engine)
+
+	var homeless: ShipPreset = _bad_preset("homeless mount")
+	var nowhere: MountFit = MountFit.new()
+	nowhere.place = &"Nose"
+	nowhere.engine = _stock_main_drive()
+	homeless.mounts.append(nowhere)
+	broken.append(homeless)
+
+	var no_gun: ShipPreset = _bad_preset("a gun that is not there")
+	no_gun.guns.append(null)
+	broken.append(no_gun)
+
+	# A module the bay cannot hold, and a module that has no business in a
+	# bay at all. Both are checked against `ModuleBay`'s own rule rather
+	# than against a copy of it here.
+	var overstuffed: ShipPreset = _bad_preset("a cell too big for its bay")
+	var cramped: BayFit = BayFit.new()
+	cramped.size = 0.5
+	var swollen: GeneratorData = (
+		load("res://resources/generators/standard_cell.tres") as GeneratorData
+	).duplicate() as GeneratorData
+	swollen.bulk = 2.0
+	cramped.installed = swollen
+	overstuffed.bays.append(cramped)
+	broken.append(overstuffed)
+
+	var gun_in_a_bay: ShipPreset = _bad_preset("a gun in a module bay")
+	var roomy: BayFit = BayFit.new()
+	roomy.size = 50.0
+	roomy.installed = good.guns[0]
+	gun_in_a_bay.bays.append(roomy)
+	broken.append(gun_in_a_bay)
+
+	for preset: ShipPreset in broken:
 		_expect(
 			not ShipFitout.fault_in(preset).is_empty(),
 			"%s is refused, and says why (%s)" % [
-				preset["name"], ShipFitout.fault_in(preset),
+				preset.display_name, ShipFitout.fault_in(preset),
 			],
 		)
 		_expect(
@@ -8901,25 +8938,33 @@ func _check_preset_fields() -> void:
 	# Every preset the game ships has to be sound. This is the guard that
 	# replaced a runtime `push_error`: a malformed preset now fails a
 	# build instead of printing a line into a log nobody reads.
-	for preset: Dictionary in ShipFitout.all():
+	for preset: ShipPreset in ShipFitout.all():
 		_expect(
 			ShipFitout.fault_in(preset).is_empty(),
 			"%s is a preset that can actually be flown (%s)" % [
-				preset.get("name", "<unnamed>"), ShipFitout.fault_in(preset),
+				preset.display_name, ShipFitout.fault_in(preset),
 			],
 		)
-	for preset: Dictionary in ShipFitout.all():
-		for gun: Variant in preset["guns"]:
-			_expect(
-				gun is String,
-				"%s lists its guns as weapon names (%s)" % [preset["name"], gun],
-			)
-		for entry: Dictionary in preset["mounts"]:
-			if String(entry["name"]) != "MainDrive":
+	for preset: ShipPreset in ShipFitout.all():
+		# Guns are weapons, which is now a type rather than a claim. What
+		# is still worth asking is whether the hull has room for them:
+		# `apply` warns about the surplus, and a warning in a log is not
+		# a thing anyone reads.
+		_expect(
+			preset.guns.size() <= (
+				HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS
+				+ HullData.REAR_HARDPOINTS
+			),
+			"%s carries no more guns than a hull has hardpoints (%d)" % [
+				preset.display_name, preset.guns.size(),
+			],
+		)
+		for fit: MountFit in preset.mounts:
+			if fit.place != ShipFitout.MAIN_DRIVE:
 				continue
 			_expect(
-				not entry.has("at"),
-				"%s does not pretend to place its main drive" % preset["name"],
+				fit.at.is_zero_approx(),
+				"%s does not pretend to place its main drive" % preset.display_name,
 			)
 
 	# And the blurb is computed off the same expression the engines are,
@@ -8927,7 +8972,9 @@ func _check_preset_fields() -> void:
 	# preset advertised as "50% heavier" at a thrust factor of 1.75 is
 	# 52.5% heavier, because the share lands on the increase and not on
 	# the whole.
-	var scale: float = ShipFitout.STRONGER_JETS
+	# Read off the preset rather than a constant beside it, so this
+	# measures the figure the shipped ship is actually built with.
+	var scale: float = _preset_named("stronger jets").engine_scale
 	var heavier: float = (ShipFitout.bulk_factor(scale) - 1.0) * 100.0
 	_expect(
 		absf(heavier - 52.5) < 0.01,
@@ -8976,15 +9023,21 @@ func _drive_bulk(ship: Ship) -> float:
 ## sockets alone would bring the dead loot straight back.
 func _check_main_socket_takes_anything(ship: Ship) -> void:
 	var ceiling: float = float((LOOT_SCRIPT.LIMITS["bulk"] as Vector2).y)
-	for preset: Dictionary in ShipFitout.all():
-		for entry: Dictionary in preset["mounts"]:
-			var slot: String = String(entry["name"])
+	for preset: ShipPreset in ShipFitout.all():
+		for fit: MountFit in preset.mounts:
+			var slot: String = String(fit.place)
 			if not (slot == "MainDrive" or slot == "NoseDrive"):
 				continue
+			# Asked of the same function `apply` sizes the socket with.
+			# A preset leaving `socket` at zero is asking for the figure
+			# its role implies, so the raw field would read 0.0 here.
+			var socket: float = ShipFitout.socket_for(
+				ShipFitout.places_of(preset.hull), fit
+			)
 			_expect(
-				float(entry["size"]) >= ceiling,
+				socket >= ceiling,
 				"%s's %s holds anything the generator rolls (%.1f of %.1f)" % [
-					preset["name"], slot, float(entry["size"]), ceiling,
+					preset.display_name, slot, socket, ceiling,
 				],
 			)
 
@@ -9034,9 +9087,9 @@ func _check_fitout_presets() -> void:
 		],
 	)
 	var seen: Array[String] = []
-	for preset: Dictionary in ShipFitout.all():
+	for preset: ShipPreset in ShipFitout.all():
 		ShipFitout.apply(ship, preset)
-		seen.append(String(preset["name"]))
+		seen.append(preset.display_name)
 		var fitted_mounts: int = 0
 		var drive_slots: int = 0
 		for mount: EngineMount in ship.engine_mounts():
@@ -9051,13 +9104,12 @@ func _check_fitout_presets() -> void:
 		# The preset's main drive is one entry and two engines: it is split over
 		# the hull's side drive slots.
 		var declared: int = 0
-		for entry: Dictionary in preset["mounts"]:
-			declared += 2 if entry["name"] == "MainDrive" and not entry.get("centered", false) else 1
+		for fit: MountFit in preset.mounts:
+			declared += 2 if fit.place == ShipFitout.MAIN_DRIVE and not fit.centered else 1
 		_expect(
-			fitted_mounts == declared
-			and armed == (preset["guns"] as Array).size(),
+			fitted_mounts == declared and armed == preset.guns.size(),
 			"%s is built with what it declares (%d engines, %d guns)" % [
-				preset["name"], fitted_mounts, armed,
+				preset.display_name, fitted_mounts, armed,
 			],
 		)
 		# And with every place the hull offers, filled or not.
@@ -9067,7 +9119,7 @@ func _check_fitout_presets() -> void:
 				HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS + HullData.REAR_HARDPOINTS
 			),
 			"%s has the hull's slots (%d drive, %d hardpoints)" % [
-				preset["name"], drive_slots, ship.hardpoints.size(),
+				preset.display_name, drive_slots, ship.hardpoints.size(),
 			],
 		)
 		_expect(
@@ -9075,7 +9127,7 @@ func _check_fitout_presets() -> void:
 			"and can go forward",
 		)
 		_expect(
-			absf(ship.hull_extent() - HullData.of(preset["hull"]).extent()) < 0.01,
+			absf(ship.hull_extent() - preset.hull.extent()) < 0.01,
 			"with the hull it names, not the one left over from the last refit",
 		)
 
@@ -9217,7 +9269,7 @@ func _check_fitout_presets() -> void:
 	# A bigger engine is a heavier one. A table that scaled only the thrust
 	# would be handing out free power, which is the one thing a sandbox must
 	# not do quietly.
-	var plain: EngineData = load(ShipFitout.ENGINES["main"]) as EngineData
+	var plain: EngineData = _stock_main_drive()
 	var was_thrust: float = plain.max_thrust
 	var was_bulk: float = plain.bulk
 	ShipFitout.apply(ship, _preset_named("stronger"))
@@ -9258,11 +9310,28 @@ func _turn_residual(ship: Ship) -> float:
 	return 0.0
 
 
-func _preset_named(fragment: String) -> Dictionary:
-	for preset: Dictionary in ShipFitout.all():
-		if String(preset["name"]).contains(fragment):
+func _preset_named(fragment: String) -> ShipPreset:
+	for preset: ShipPreset in ShipFitout.all():
+		if preset.display_name.contains(fragment):
 			return preset
-	return {}
+	return null
+
+
+## A sound preset to spoil one field of, for `fault_in` to catch.
+func _bad_preset(title: String) -> ShipPreset:
+	var out: ShipPreset = ShipPreset.new()
+	out.display_name = title
+	out.hull = HullData.of(&"dart")
+	return out
+
+
+## The engine the stock preset puts in its main drive, whole rather than
+## the half each of the pair either side of the centre line gets.
+func _stock_main_drive() -> EngineData:
+	for fit: MountFit in ShipFitout.preset("dart (stock)").mounts:
+		if fit.place == ShipFitout.MAIN_DRIVE:
+			return fit.engine
+	return null
 
 
 ## A planet built as the body a system says it is.
@@ -11102,7 +11171,7 @@ func _centreline_ship() -> Ship:
 	var whole: EngineData = null
 	for mount: EngineMount in ship.engine_mounts():
 		if String(mount.name).begins_with("MainDrive") and mount.installed != null:
-			whole = ShipFitout._engine("main", 1.0)
+			whole = _stock_main_drive()
 			mount.installed = null
 	for mount: EngineMount in ship.engine_mounts():
 		if mount.name == "MainDriveCenter":
@@ -11222,20 +11291,18 @@ func _check_art() -> void:
 	# not a fix -- what it guards now is that a preset cannot name a hull
 	# that is not there.
 	var orphaned: int = 0
-	for preset: Dictionary in ShipFitout.all():
-		if HullData.of(preset["hull"]) == null:
+	for preset: ShipPreset in ShipFitout.all():
+		if preset.hull == null:
 			orphaned += 1
-			print("    preset %s names hull %s, which does not exist" % [
-				preset["name"], preset["hull"],
-			])
+			print("    preset %s names no hull at all" % preset.display_name)
 	_expect(orphaned == 0, "every preset names a hull that is in the catalogue")
 	# And what the hull states is what the ship gets. The hold and the feet
 	# moved onto the resource, so three presets flying the same dart can no
 	# longer disagree about either by hand.
 	var dressed: Ship = _spawn_ship()
-	var heavy: Dictionary = {}
-	for preset: Dictionary in ShipFitout.all():
-		if preset["hull"] == &"freighter":
+	var heavy: ShipPreset = null
+	for preset: ShipPreset in ShipFitout.all():
+		if preset.hull != null and preset.hull.id == &"freighter":
 			heavy = preset
 	ShipFitout.apply(dressed, heavy)
 	var hold: HullData = HullData.of(&"freighter")
@@ -16615,9 +16682,9 @@ func _check_skin() -> void:
 	# there are, which is what the first version of this did -- and the
 	# freighter happens to have the same part count as the dart, so it
 	# passed while proving nothing.
-	var interceptor: Dictionary = {}
-	for preset: Dictionary in ShipFitout.all():
-		if String(preset["name"]) == "interceptor":
+	var interceptor: ShipPreset = null
+	for preset: ShipPreset in ShipFitout.all():
+		if preset.display_name == "interceptor":
 			interceptor = preset
 	ShipFitout.apply(ship, interceptor)
 	_expect(

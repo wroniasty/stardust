@@ -595,6 +595,39 @@ osadzonym oknie, czy w osobnym.
 Awarie silników pochodzą ze zderzeń, zużycia i ataków. Awaria to zmiana `health`,
 nic specjalnego w silniku fizycznym.
 
+### Statek jako preset, zatoki bez rodzaju
+
+Cały statek jest zasobem: `resources/presets/*.tres` przez `ShipPreset` —
+kadłub, które silniki w których miejscach kadłuba, jakie działa, ile zatok na
+moduły i jak dużych. Wcześniej presety były tablicą słowników w GDScript, a
+zatoki pięcioma węzłami wstawionymi ręcznie w `ship.tscn`, więc każdy statek w
+grze miał identyczną pojemność modułów — interceptor opisany jako „a hold worth
+nothing" nosił dokładnie generator, skaner, napęd i zbiornik frachtowca.
+
+**Zatoka na moduł nie ma rodzaju.** Nie ma „zatoki generatora" i „zatoki
+zbiornika": jest dziura o pewnym rozmiarze, a co w niej wisi, decyduje pilot.
+Rodzaj zatoki kodował założenie, że statek rodzi się z jednym gniazdem na
+generator i jednym na zbiornik i żaden refit nie zrobi z niego statku z dwoma
+zbiornikami — a ile gniazd statek ma, jest cechą statku.
+
+Zatoka odrzuca tylko to, co **ma własne gniazdo**: działo (hardpoint), silnik
+(mount), nogi (`LandingGear`). Wszystkie trzy dziedziczą po `ModuleData`, więc
+bez tej reguły uniwersalna zatoka przyjęłaby główny napęd. Reguła jest zapisana
+jako wykluczenie, nie jako lista pięciu rodzajów, które pasują — po to, żeby
+szósty rodzaj modułu działał bez dopisywania go do tabeli.
+
+Z braku rodzaju wynika pytanie, którego wcześniej nie było: co robi **drugi**
+generator. Odpowiedź: pierwszy jest podłączony, drugi jest balastem, który i tak
+waży swoją masę (`Ship.bay_holding`). Pierwszy, nie najlepszy — bo alternatywą
+jest ciche sumowanie, w którym dwa pół-generatory biją jeden dobry. Montaż
+podmienia (`Ship.bay_for` najpierw szuka zatoki trzymającej ten rodzaj), więc
+statek nie kończy po cichu z dwoma generatorami, kiedy jeden jest podłączony.
+
+Rozmiar gniazda silnika ma jedną odpowiedź: `ShipFitout.socket_for`. `MainDrive`
+to **rola**, nie miejsce, które kadłub nazywa po imieniu (jego miejsca to
+MainDriveCenter, Left, Right), więc wyszukanie rozmiaru po nazwie zwraca zero.
+Stara tablica ukrywała to, wypisując rozmiar w każdym presecie.
+
 ## 4. Broń i loot
 
 Broń montowana w hardpointach statku (pozycja, kąt, dopuszczalne typy).

@@ -792,12 +792,16 @@ func _ready() -> void:
 ## out from its outline.
 func _build_from_resources() -> void:
 	if hull != null and not fitout_name.is_empty():
-		var preset: Dictionary = ShipFitout.preset(fitout_name)
-		if preset.is_empty():
+		var preset: ShipPreset = ShipFitout.preset(fitout_name)
+		if preset == null:
 			push_error("ship names no fitout called %s" % fitout_name)
 		else:
-			preset = preset.duplicate()
-			preset["hull"] = hull
+			# Duplicated and re-hulled: a ship that was given a shape of
+			# its own -- a test's bare scene, a shape the creative tool
+			# invented -- keeps it, and the catalogue must not be edited
+			# to say so.
+			preset = preset.duplicate() as ShipPreset
+			preset.hull = hull
 			ShipFitout.apply(self, preset)
 			return
 	if hull == null and hull_outline.size() >= 3:

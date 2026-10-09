@@ -1,0 +1,76 @@
+[gd_resource type="Resource" script_class="ShipPreset" format=3]
+
+[ext_resource type="Script" path="res://scripts/bay_fit.gd" id="1_36ccl"]
+[ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="2_kxbgq"]
+[ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_s8aen"]
+[ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_eb3fv"]
+[ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_5ouwu"]
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_bdol4"]
+[ext_resource type="Resource" path="res://resources/weapons/beam_lance.tres" id="7_owynd"]
+[ext_resource type="Resource" path="res://resources/hulls/broad_dart.tres" id="8_uisfy"]
+[ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_beyy2"]
+[ext_resource type="Resource" path="res://resources/engines/gimballed_drive.tres" id="10_smkly"]
+[ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="11_fi5bf"]
+[ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="12_gyfhg"]
+[ext_resource type="Script" path="res://scripts/ship_preset.gd" id="13_x1crx"]
+
+[sub_resource type="Resource" id="Resource_bt2tf"]
+script = ExtResource("1_36ccl")
+size = 1.5
+at = Vector2(0, -2)
+
+[sub_resource type="Resource" id="Resource_jr4id"]
+script = ExtResource("1_36ccl")
+size = 3.0
+installed = ExtResource("2_kxbgq")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_rb642"]
+script = ExtResource("1_36ccl")
+size = 1.6
+installed = ExtResource("3_s8aen")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_ciw5k"]
+script = ExtResource("1_36ccl")
+size = 2.6
+installed = ExtResource("4_eb3fv")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_28gbm"]
+script = ExtResource("1_36ccl")
+size = 2.4
+installed = ExtResource("5_5ouwu")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_gatpx"]
+script = ExtResource("9_beyy2")
+place = &"MainDrive"
+engine = ExtResource("10_smkly")
+centered = true
+
+[sub_resource type="Resource" id="Resource_vrp4l"]
+script = ExtResource("9_beyy2")
+place = &"StrafeLeftThruster"
+engine = ExtResource("11_fi5bf")
+
+[sub_resource type="Resource" id="Resource_pu0q4"]
+script = ExtResource("9_beyy2")
+place = &"StrafeRightThruster"
+engine = ExtResource("11_fi5bf")
+
+[sub_resource type="Resource" id="Resource_js3ef"]
+script = ExtResource("9_beyy2")
+place = &"NoseReverseThruster"
+engine = ExtResource("12_gyfhg")
+
+[resource]
+script = ExtResource("13_x1crx")
+id = &"single_gimbal"
+display_name = "single gimbal (drifts)"
+blurb = "rotation out of the gimballed main drive, and nothing else turns it"
+hull = ExtResource("8_uisfy")
+mounts = Array[ExtResource("9_beyy2")]([SubResource("Resource_gatpx"), SubResource("Resource_vrp4l"), SubResource("Resource_pu0q4"), SubResource("Resource_js3ef")])
+guns = Array[ExtResource("6_bdol4")]([ExtResource("7_owynd")])
+bays = Array[ExtResource("1_36ccl")]([SubResource("Resource_bt2tf"), SubResource("Resource_jr4id"), SubResource("Resource_rb642"), SubResource("Resource_ciw5k"), SubResource("Resource_28gbm")])
+order = 3

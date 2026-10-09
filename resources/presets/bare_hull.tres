@@ -1,0 +1,56 @@
+[gd_resource type="Resource" script_class="ShipPreset" format=3]
+
+[ext_resource type="Script" path="res://scripts/bay_fit.gd" id="1_ir78u"]
+[ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="2_6dth5"]
+[ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_30sbo"]
+[ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_isp56"]
+[ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_l8f88"]
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_cqyor"]
+[ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="7_t8bgr"]
+[ext_resource type="Script" path="res://scripts/mount_fit.gd" id="8_oww2e"]
+[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="9_8gwvw"]
+[ext_resource type="Script" path="res://scripts/ship_preset.gd" id="10_tab11"]
+
+[sub_resource type="Resource" id="Resource_08iaw"]
+script = ExtResource("1_ir78u")
+size = 1.5
+at = Vector2(0, -2)
+
+[sub_resource type="Resource" id="Resource_auf6e"]
+script = ExtResource("1_ir78u")
+size = 3.0
+installed = ExtResource("2_6dth5")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_m7d2t"]
+script = ExtResource("1_ir78u")
+size = 1.6
+installed = ExtResource("3_30sbo")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_d6jpf"]
+script = ExtResource("1_ir78u")
+size = 2.6
+installed = ExtResource("4_isp56")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_o7t2j"]
+script = ExtResource("1_ir78u")
+size = 2.4
+installed = ExtResource("5_l8f88")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_6k77h"]
+script = ExtResource("8_oww2e")
+place = &"MainDrive"
+engine = ExtResource("9_8gwvw")
+
+[resource]
+script = ExtResource("10_tab11")
+id = &"bare_hull"
+display_name = "bare hull"
+blurb = "the main drive and nothing else -- the configuration report has plenty to say"
+hull = ExtResource("7_t8bgr")
+mounts = Array[ExtResource("8_oww2e")]([SubResource("Resource_6k77h")])
+bays = Array[ExtResource("1_ir78u")]([SubResource("Resource_08iaw"), SubResource("Resource_auf6e"), SubResource("Resource_m7d2t"), SubResource("Resource_d6jpf"), SubResource("Resource_o7t2j")])
+order = 6

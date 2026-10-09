@@ -1,12 +1,7 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/ship.gd" id="1_ship"]
 [ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="2_hull"]
-[ext_resource type="Script" path="res://scripts/module_bay.gd" id="13_module_bay"]
-[ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="23_short_hop"]
-[ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="24_tank"]
-[ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="25_survey"]
-[ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="14_cell"]
 [ext_resource type="Script" path="res://scripts/contrail.gd" id="5_contrail"]
 [ext_resource type="Script" path="res://scripts/engine_debug_draw.gd" id="6_engine_draw"]
 [ext_resource type="Script" path="res://scripts/landing_gear.gd" id="11_gear"]
@@ -33,35 +28,6 @@ polygon = PackedVector2Array(0, -12, -8, 10, 8, 10)
 
 [node name="HullShape" type="CollisionShape2D" parent="."]
 shape = SubResource("ConvexPolygonShape2D_hull")
-
-[node name="ComputerBay" type="Node2D" parent="."]
-position = Vector2(0, -2)
-script = ExtResource("13_module_bay")
-size = 1.5
-
-[node name="GeneratorBay" type="Node2D" parent="."]
-position = Vector2(0, 1.75)
-script = ExtResource("13_module_bay")
-size = 3.0
-installed = ExtResource("14_cell")
-
-[node name="ScannerBay" type="Node2D" parent="."]
-position = Vector2(0, 1.75)
-script = ExtResource("13_module_bay")
-size = 1.6
-installed = ExtResource("25_survey")
-
-[node name="JumpDriveBay" type="Node2D" parent="."]
-position = Vector2(0, 1.75)
-script = ExtResource("13_module_bay")
-size = 2.6
-installed = ExtResource("23_short_hop")
-
-[node name="TankBay" type="Node2D" parent="."]
-position = Vector2(0, 1.75)
-script = ExtResource("13_module_bay")
-size = 2.4
-installed = ExtResource("24_tank")
 
 [node name="LeftContrail" type="Line2D" parent="."]
 top_level = true

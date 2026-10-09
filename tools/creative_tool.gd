@@ -167,8 +167,8 @@ func _build_ui() -> void:
 
 	rows.add_child(_heading("CONFIGURATION"))
 	_fitout = OptionButton.new()
-	for preset: Dictionary in ShipFitout.all():
-		_fitout.add_item(preset["name"])
+	for preset: ShipPreset in ShipFitout.all():
+		_fitout.add_item(preset.display_name)
 	rows.add_child(_labelled("ship", _fitout))
 	rows.add_child(_button("rebuild the ship", _on_refit))
 
@@ -334,17 +334,17 @@ func _on_empty() -> void:
 func _on_refit() -> void:
 	if _ship == null:
 		return
-	var preset: Dictionary = ShipFitout.all()[_fitout.selected]
+	var preset: ShipPreset = ShipFitout.all()[_fitout.selected]
 	ShipFitout.apply(_ship, preset)
 	_scale.value = 1.0
 	# The shape picker follows, so the two controls do not disagree about
 	# what the ship currently is.
 	var catalogue: Array[HullData] = HullData.catalogue()
 	for i: int in range(catalogue.size()):
-		if catalogue[i].id == preset["hull"]:
+		if preset.hull != null and catalogue[i].id == preset.hull.id:
 			_shape.selected = i
 	_say("%s - %s. %d engines, %d guns, hold %.0f" % [
-		preset["name"], preset["blurb"], _ship.engines.size(),
+		preset.display_name, preset.caption(), _ship.engines.size(),
 		_ship.hardpoints.size(), _ship.cargo_capacity(),
 	])
 	_refresh()

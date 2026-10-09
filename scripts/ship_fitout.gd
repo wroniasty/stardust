@@ -1,58 +1,36 @@
 class_name ShipFitout
 extends RefCounted
-## Whole ships, as data: which hull, where the mounts are, and what is
-## bolted into them.
+## Zbudowanie statku z presetu: czyta `ShipPreset`, stawia mounty, dziala
+## i zatoki.
 ##
-## The creative tool could already change a hull's shape, which is half of
-## what a ship is. The other half is the fitout, and until now there was
-## exactly one of those -- the layout in `ship.tscn` -- so every question
-## about flying something different had to be answered by editing a scene.
+## The verb, now that the nouns are resources. `ShipPreset` says what a
+## ship is -- hull, engines, guns, module bays -- and this is the one
+## function that turns one into nodes on a live `Ship`.
 ##
-## These are sandbox presets, not a catalogue the game draws from. What
-## they are for is finding out what the control model does with a shape it
-## was not tuned on: the gimbal-only ship below is the one that found the
-## control groups could not count a gimbal at all.
-
-## Engine resources the presets are built from, by short name so a table
-## entry reads as a sentence rather than as a path.
-const ENGINES: Dictionary = {
-	"main": "res://resources/engines/main_drive.tres",
-	"torque": "res://resources/engines/torque_jet.tres",
-	"thruster": "res://resources/engines/maneuver_thruster.tres",
-	"retro": "res://resources/engines/retro_thruster.tres",
-	"gimbal": "res://resources/engines/gimballed_drive.tres",
-}
-
-const WEAPONS: Dictionary = {
-	"autocannon": "res://resources/weapons/autocannon.tres",
-	"pulse": "res://resources/weapons/pulse_repeater.tres",
-	"beam": "res://resources/weapons/beam_lance.tres",
-	"rocket": "res://resources/weapons/dumb_rocket.tres",
-}
+## There used to be a table here as well: seven dictionaries of
+## dictionaries, with engines and weapons named by short strings resolved
+## through two more tables beside them. It was the last thing about a
+## ship that could only be changed by editing GDScript, which is the same
+## complaint that moved hulls into `resources/hulls` and the torque jets
+## into the hulls themselves. The table is now `resources/presets/*.tres`
+## and nothing in this file knows how many ships there are.
 
 const MOUNT_SCENE: String = "res://scenes/engine_mount.tscn"
+
+## Every preset, as files. A directory listing rather than a const list,
+## because a const list of paths is a second copy of the catalogue.
+const DIRECTORY: String = "res://resources/presets"
 
 ## How big a socket each small-engine role has.
 ##
 ## Facts about the role rather than about the ship, which is why they are
 ## here once instead of repeated in every preset: every preset in the
 ## game used 0.8 for a torque jet, 1.0 for a strafe thruster and 2.5 for
-## the nose reverse, because that is what those jobs take.
+## the nose reverse, because that is what those jobs take. A `MountFit`
+## leaving `socket` at zero is asking for the figure below.
 const TORQUE_SOCKET: float = 0.8
 const STRAFE_SOCKET: float = 1.0
 const RETRO_SOCKET: float = 2.5
-
-## And which socket size goes with which kind of place the hull offers.
-const SOCKET_FOR: Dictionary = {
-	HullData.SLOT_TORQUE: TORQUE_SOCKET,
-	HullData.SLOT_STRAFE: STRAFE_SOCKET,
-	HullData.SLOT_RETRO: RETRO_SOCKET,
-	HullData.SLOT_DRIVE: MAIN_DRIVE_SOCKET,
-}
-
-## What the "stronger jets" preset multiplies its engines by. Named
-## because the blurb is computed from it as well as the engines.
-const STRONGER_JETS: float = 1.75
 
 ## How much room a main drive socket has.
 ##
@@ -73,152 +51,20 @@ const STRONGER_JETS: float = 1.75
 ## has somewhere to matter.
 const MAIN_DRIVE_SOCKET: float = 8.0
 
-## A right angle, written once: every side-facing mount is one of these.
-const LEFT: float = -PI * 0.5
-const RIGHT: float = PI * 0.5
-const AFT: float = PI
+## And which socket size goes with which kind of place the hull offers.
+## Also the predicate for "this place takes an engine": both the mount
+## loop and the gun loop ask it, so the two cannot come to different
+## conclusions about what a place is for.
+const SOCKET_FOR: Dictionary = {
+	HullData.SLOT_TORQUE: TORQUE_SOCKET,
+	HullData.SLOT_STRAFE: STRAFE_SOCKET,
+	HullData.SLOT_RETRO: RETRO_SOCKET,
+	HullData.SLOT_DRIVE: MAIN_DRIVE_SOCKET,
+}
 
-
-## Every preset, in the order the tool offers them.
-##
-## `scale` on a mount multiplies the engine's thrust **and** its bulk, so
-## a bigger engine is a heavier one: a table that scaled only the thrust
-## would be offering free power, which is the one thing a sandbox must not
-## quietly do (IDEAS.md section 14).
-static func all() -> Array[Dictionary]:
-	return [
-		{
-			"name": "dart (stock)",
-			"blurb": "four torque jets, a main drive, a retro and two strafe",
-			"hull": &"dart",
-			"mounts": _stock_mounts(),
-			"guns": ["autocannon"],
-		},
-		{
-			"name": "dart, stronger jets",
-			"blurb": scaled_blurb(STRONGER_JETS),
-			"hull": &"dart",
-			"mounts": _scaled(_stock_mounts(), STRONGER_JETS),
-			"guns": ["autocannon"],
-		},
-		{
-			"name": "twin gimbal (force couple)",
-			"blurb": "two steerable nozzles, nose and tail: the moments add, the thrusts cancel",
-			# A symmetric hull on purpose. The two nozzles only cancel
-			# while their arms about the centre of mass are equal, and the
-			# centre of mass follows the hull: on a triangle it sits aft
-			# of the middle and the pair stops being a pair.
-			"hull": &"rhombus",
-			"mounts": [
-				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-						"engine": "gimbal", "centered": true},
-				# Nose nozzle, pointing the other way: it is the retro and
-				# the other half of the couple at the same time.
-				{"name": "NoseDrive", "size": MAIN_DRIVE_SOCKET,
-					"at": Vector2(0, -13), "turn": AFT, "engine": "gimbal"},
-			],
-			"guns": ["pulse"],
-		},
-		{
-			"name": "single gimbal (drifts)",
-			"blurb": "rotation out of the gimballed main drive, and nothing else turns it",
-			"hull": &"broad_dart",
-			"mounts": [
-				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-						"engine": "gimbal", "centered": true},
-				{"name": "StrafeLeftThruster",
-					"engine": "thruster"},
-				{"name": "StrafeRightThruster",
-					"engine": "thruster"},
-				{"name": "NoseReverseThruster",
-					"engine": "retro"},
-			],
-			"guns": ["beam"],
-		},
-		{
-			"name": "interceptor",
-			"blurb": "light and nimble, two cannon, a hold worth nothing",
-			"hull": &"interceptor",
-			"mounts": [
-				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-					"engine": "main", "scale": 0.8},
-				{"name": "NoseLeftTorque",
-					"engine": "torque", "scale": 1.4},
-				{"name": "NoseRightTorque",
-					"engine": "torque", "scale": 1.4},
-				{"name": "TailLeftTorque",
-					"engine": "torque", "scale": 1.4},
-				{"name": "TailRightTorque",
-					"engine": "torque", "scale": 1.4},
-				{"name": "StrafeLeftThruster",
-					"engine": "thruster"},
-				{"name": "StrafeRightThruster",
-					"engine": "thruster"},
-				{"name": "NoseReverseThruster",
-					"engine": "retro"},
-			],
-			"guns": [
-				"pulse",
-				"pulse",
-			],
-		},
-		{
-			"name": "freighter",
-			"blurb": "a big hold, a heavy hull, wide legs and little power per kilo",
-			"hull": &"freighter",
-			"mounts": [
-				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-					"engine": "main", "scale": 1.4},
-				{"name": "NoseLeftTorque",
-					"engine": "torque"},
-				{"name": "NoseRightTorque",
-					"engine": "torque"},
-				{"name": "TailLeftTorque",
-					"engine": "torque"},
-				{"name": "TailRightTorque",
-					"engine": "torque"},
-				{"name": "StrafeLeftThruster",
-					"engine": "thruster"},
-				{"name": "StrafeRightThruster",
-					"engine": "thruster"},
-				{"name": "NoseReverseThruster",
-					"engine": "retro"},
-			],
-			"guns": ["rocket"],
-		},
-		{
-			"name": "bare hull",
-			"blurb": "the main drive and nothing else -- the configuration report has plenty to say",
-			"hull": &"dart",
-			"mounts": [
-				{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-					"engine": "main"},
-			],
-			"guns": [],
-		},
-	]
-
-
-static func _stock_mounts() -> Array[Dictionary]:
-	return [
-		{"name": "MainDrive", "size": MAIN_DRIVE_SOCKET,
-			"engine": "main"},
-		{"name": "NoseLeftTorque",
-			"engine": "torque"},
-		{"name": "NoseRightTorque",
-			"engine": "torque"},
-		{"name": "TailLeftTorque",
-			"engine": "torque"},
-		{"name": "TailRightTorque",
-			"engine": "torque"},
-		{"name": "StrafeLeftThruster",
-			"engine": "thruster"},
-		{"name": "StrafeRightThruster",
-			"engine": "thruster"},
-		{"name": "NoseReverseThruster",
-			"engine": "retro"},
-	]
-
+## The place name that means "the hull's main drive", wherever the hull
+## puts it. The one role whose mount is split across several places.
+const MAIN_DRIVE: StringName = &"MainDrive"
 
 ## How much of a thrust increase is paid for in bulk.
 ##
@@ -226,6 +72,82 @@ static func _stock_mounts() -> Array[Dictionary]:
 ## in proportion, or there would be no reason to want one. Seven tenths,
 ## which is a decision and the only reason this number exists.
 const BULK_SHARE: float = 0.7
+
+
+## Where each of a hull's places is, by name. What a preset's `place`
+## is looked up in.
+static func places_of(hull: HullData) -> Dictionary:
+	var out: Dictionary = {}
+	if hull == null:
+		return out
+	for slot: Dictionary in hull.slots():
+		out[String(slot["name"])] = slot
+	return out
+
+
+## How big a mount's socket actually is: its own figure, or the one its
+## role implies.
+##
+## One function because three callers ask and they must not disagree.
+## `apply` sizes the socket with it, `_add_main_drives` sizes the pair,
+## and `fault_in` uses it to refuse a mount that would end up with no
+## socket at all -- which is exactly what they did disagree about when
+## the presets became resources: `MainDrive` is a **role**, not a place
+## the hull names (its places are MainDriveCenter, Left and Right), so a
+## lookup by name found nothing and called the stock dart malformed. The
+## old table hid it by writing the drive socket out in every preset.
+static func socket_for(places: Dictionary, fit: MountFit) -> float:
+	if fit.socket > 0.0:
+		return fit.socket
+	if fit.place == MAIN_DRIVE:
+		return MAIN_DRIVE_SOCKET
+	return float(SOCKET_FOR.get(
+		(places.get(String(fit.place), {}) as Dictionary).get("kind", &""), 0.0
+	))
+
+
+## Every preset on disk, in the order they should be offered.
+##
+## Cached, because the menu and the refit list both walk it and the
+## alternative is a directory scan plus seven loads each time. Cleared by
+## nothing: the catalogue is files on disk, and those do not change while
+## the game runs.
+static var _catalogue: Array[ShipPreset] = []
+
+
+static func all() -> Array[ShipPreset]:
+	if not _catalogue.is_empty():
+		return _catalogue
+	var found: Array[ShipPreset] = []
+	var names: Array = Array(ResourceLoader.list_directory(DIRECTORY))
+	names.sort()
+	for file_name: String in names:
+		if not file_name.ends_with(".tres"):
+			continue
+		var one: ShipPreset = load("%s/%s" % [DIRECTORY, file_name]) as ShipPreset
+		if one != null:
+			found.append(one)
+	# Authored order, not the directory's. See `ShipPreset.order`.
+	found.sort_custom(
+		func(a: ShipPreset, b: ShipPreset) -> bool:
+			if a.order != b.order:
+				return a.order < b.order
+			return a.display_name < b.display_name
+	)
+	_catalogue = found
+	return _catalogue
+
+
+## The preset with this display name or this id, or null.
+##
+## Both, because a setting written before the migration says
+## `dart (stock)` and a file is called `dart_stock`. The id is what
+## anything new should store.
+static func preset(named: String) -> ShipPreset:
+	for one: ShipPreset in all():
+		if one.display_name == named or String(one.id) == named:
+			return one
+	return null
 
 
 ## What scaling an engine by `factor` does to its bulk.
@@ -240,28 +162,11 @@ static func bulk_factor(scale: float) -> float:
 
 
 ## The sentence that goes with a scaled preset, in the figures it will
-## actually fly with.
+## actually fly with. Called by `ShipPreset.caption`.
 static func scaled_blurb(factor: float) -> String:
 	return "the same layout, every engine %.0f%% stronger and %.1f%% heavier" % [
 		(factor - 1.0) * 100.0, (bulk_factor(factor) - 1.0) * 100.0,
 	]
-
-
-static func _scaled(mounts: Array[Dictionary], factor: float) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	for mount: Dictionary in mounts:
-		var copy: Dictionary = mount.duplicate()
-		copy["scale"] = float(copy.get("scale", 1.0)) * factor
-		out.append(copy)
-	return out
-
-
-## The preset with this name, or an empty dictionary.
-static func preset(preset_name: String) -> Dictionary:
-	for entry: Dictionary in all():
-		if entry["name"] == preset_name:
-			return entry
-	return {}
 
 
 ## Rebuilds a ship as one of these, in place.
@@ -270,7 +175,7 @@ static func preset(preset_name: String) -> Dictionary:
 ## pointing at this ship -- the camera, the HUDs, the editor, the streaming
 ## manager -- would have to be told, and a sandbox that invalidates half
 ## the game's references is a sandbox that crashes instead of teaching.
-static func apply(ship: Ship, wanted: Dictionary) -> bool:
+static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	# **Checked before anything comes off.** This used to strip the engines
 	# and the guns and then look for the hull, so a preset naming a hull
 	# that does not exist left the pilot with a bare fuselage and an error
@@ -288,74 +193,59 @@ static func apply(ship: Ship, wanted: Dictionary) -> bool:
 		return false
 
 	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
-	var hull: HullData = hull_of(wanted)
+	var hull: HullData = wanted.hull
 
 	for child: Node in ship.get_children():
-		if child is EngineMount or child is Hardpoint:
+		if child is EngineMount or child is Hardpoint or child is ModuleBay:
 			ship.remove_child(child)
 			child.queue_free()
 
 	# Where the hull says each of its places is, by name. A preset names a
 	# role -- NoseLeftTorque, StrafeRightThruster -- and the hull decides
 	# where that lands, exactly as it already did for drives and guns.
-	# Torque and strafe positions used to be literals in the table below,
-	# which meant a hull could not be reshaped without editing GDScript.
-	var places: Dictionary = {}
-	for slot: Dictionary in hull.slots():
-		places[String(slot["name"])] = slot
+	var places: Dictionary = places_of(hull)
 
-	for entry: Dictionary in wanted["mounts"]:
-		if entry["name"] == "MainDrive":
-			_add_main_drives(ship, scene, hull, entry)
+	for fit: MountFit in wanted.mounts:
+		if fit.place == MAIN_DRIVE:
+			_add_main_drives(ship, scene, hull, wanted, fit, places)
 			continue
 		var mount: EngineMount = scene.instantiate() as EngineMount
-		mount.name = String(entry["name"])
+		mount.name = String(fit.place)
 		var place: Dictionary = places.get(mount.name, {})
-		mount.size = float(entry.get("size", SOCKET_FOR.get(
-			place.get("kind", &""), 1.0
-		)))
+		mount.size = socket_for(places, fit)
 		# The hull first, and the preset's own only for a mount the hull
 		# has no place for -- the forward-facing nozzle on the twin-gimbal
-		# ship is one, and until a hull can describe that it stays here.
-		mount.position = place["at"] if not place.is_empty() else entry["at"]
-		mount.rotation = (
-			float(place["turn"]) if not place.is_empty()
-			else float(entry.get("turn", 0.0))
-		)
+		# ship is the one, and until a hull can describe that it stays in
+		# the preset.
+		mount.position = place["at"] if not place.is_empty() else fit.at
+		mount.rotation = float(place["turn"]) if not place.is_empty() else fit.turn
 		mount.thrust_direction = Vector2.UP
-		mount.installed = _engine(String(entry["engine"]), float(entry.get("scale", 1.0)))
+		mount.installed = _engine(fit.engine, wanted.scale_of(fit))
 		ship.add_child(mount)
 
-	# Guns go in the hull's hardpoints and nowhere else. The preset says which
-	# weapons it carries, in order; the hull says where the places are, and the
-	# weapons fill them front first, then the sides, then astern.
-	#
-	# So the list is **weapon names and nothing else**. It used to be a list
-	# of entries carrying a hardpoint name and a position as well, neither
-	# of which was ever read: two fields that looked like they placed a gun
-	# and did not, which is worse than no fields at all.
-	var weapons: Array[WeaponData] = []
-	for gun: Variant in wanted["guns"]:
-		weapons.append(load(WEAPONS[String(gun)]) as WeaponData)
+	# Guns go in the hull's hardpoints and nowhere else. The preset says
+	# which weapons it carries, in order; the hull says where the places
+	# are, and the weapons fill them front first, then the sides, then
+	# astern.
 	var next_weapon: int = 0
 	for slot: Dictionary in hull.slots():
 		# Every place that takes an **engine** is skipped, not just the
 		# drives: this read `== SLOT_DRIVE` until the hull learned about
 		# torque jets, strafe thrusters and the nose reverse, and then
-		# quietly fitted a gun to each of the seven. `SOCKET_FOR` is the
-		# same predicate `add_hull_slots` uses, so the two loops cannot
-		# come to different conclusions about what a place is for.
+		# quietly fitted a gun to each of the seven.
 		if SOCKET_FOR.has(slot["kind"]):
 			continue
 		var gun: Hardpoint = _hardpoint(slot)
-		if next_weapon < weapons.size():
-			gun.weapon = weapons[next_weapon]
+		if next_weapon < wanted.guns.size():
+			gun.weapon = wanted.guns[next_weapon]
 			next_weapon += 1
 		ship.add_child(gun)
-	if next_weapon < weapons.size():
+	if next_weapon < wanted.guns.size():
 		push_warning("preset %s has %d more guns than the hull has hardpoints" % [
-			wanted["name"], weapons.size() - next_weapon,
+			wanted.display_name, wanted.guns.size() - next_weapon,
 		])
+
+	_add_bays(ship, wanted)
 
 	# The hull is named, not described. It used to be an outline, a hold
 	# and a pair of feet written out in every preset -- three of which flew
@@ -382,14 +272,32 @@ static func apply(ship: Ship, wanted: Dictionary) -> bool:
 	return true
 
 
-## The hull a preset names, resolved. Either a `HullData` outright -- which
-## is what the creative tool hands over for a shape that exists only in
-## memory -- or a name out of the catalogue.
-static func hull_of(wanted: Dictionary) -> HullData:
-	var named: Variant = wanted.get("hull")
-	if named is HullData:
-		return named as HullData
-	return HullData.of(named) if named != null else null
+## The module bays this ship has, built from the preset.
+##
+## These were five hand-placed nodes in `ship.tscn`, which meant every
+## ship in the game had identical module capacity and no way to say
+## otherwise -- the interceptor described as "a hold worth nothing"
+## carried exactly the freighter's generator, scanner, drive and tank.
+##
+## Numbered rather than named by kind, because a bay has no kind (see
+## `ModuleBay`): what distinguishes `Bay2` from `Bay3` is how big it is.
+## The numbering is the preset's order, so it is stable for a given ship,
+## which is what `SaveGame` keys the fitted modules on.
+##
+## What goes in is a **copy**. The preset's own `installed` resources are
+## shared by every ship built from it, and a module that takes damage or
+## gets an affix rolled onto it would otherwise write through into the
+## catalogue for the rest of the session.
+static func _add_bays(ship: Ship, wanted: ShipPreset) -> void:
+	for i: int in range(wanted.bays.size()):
+		var fit: BayFit = wanted.bays[i]
+		var bay: ModuleBay = ModuleBay.new()
+		bay.name = "Bay%d" % (i + 1)
+		bay.size = fit.size
+		bay.position = fit.at
+		if fit.installed != null:
+			bay.installed = fit.installed.duplicate() as ModuleData
+		ship.add_child(bay)
 
 
 ## What is wrong with this preset, or "" when nothing is.
@@ -397,86 +305,98 @@ static func hull_of(wanted: Dictionary) -> HullData:
 ## One function, so `apply` and anything that wants to offer a preset
 ## cannot come to different conclusions about whether it is usable -- the
 ## same shape as `JumpController.blocked_by`. It checks everything `apply`
-## is about to read and nothing else: a field no longer read is a field
-## that should not be here to check (see `guns`).
-static func fault_in(wanted: Dictionary) -> String:
-	var title: String = String(wanted.get("name", "<unnamed>"))
-	if not wanted.has("name"):
+## is about to read and nothing else.
+##
+## Shorter than it was, because most of what it used to check is now the
+## resource system's job: a preset cannot name an engine or a weapon that
+## does not exist, since it holds the resource rather than a key into a
+## table.
+static func fault_in(wanted: ShipPreset) -> String:
+	if wanted == null:
+		return "no preset at all"
+	var title: String = wanted.display_name
+	if title.is_empty():
 		return "a preset with no name"
-	if hull_of(wanted) == null:
+	if wanted.hull == null:
 		return "%s names no hull" % title
-	if not (wanted.get("mounts") is Array):
-		return "%s has no mounts" % title
 	# What the hull offers, by name, so a mount can be checked against it
 	# rather than against a rule written out twice.
-	var offered: Dictionary = {}
-	for slot: Dictionary in hull_of(wanted).slots():
-		offered[String(slot["name"])] = slot
-	for entry: Variant in wanted["mounts"]:
-		if not (entry is Dictionary):
-			return "%s has a mount that is not an entry" % title
-		var mount: Dictionary = entry
-		for needed: String in ["name", "engine"]:
-			if not mount.has(needed):
-				return "%s has a mount with no %s" % [title, needed]
-		if not ENGINES.has(String(mount["engine"])):
-			return "%s wants engine %s, which there is none of" % [
-				title, mount["engine"],
-			]
+	var offered: Dictionary = places_of(wanted.hull)
+	for fit: MountFit in wanted.mounts:
+		if fit == null:
+			return "%s has a mount that is not there" % title
+		var named: String = String(fit.place)
+		if named.is_empty():
+			return "%s has a mount with no place on the hull" % title
+		if fit.engine == null:
+			return "%s has nothing to put in %s" % [title, named]
 		# A mount needs a position of its own only where the hull has no
-		# place by that name. Drives, torque jets, strafe thrusters and
-		# the nose reverse all come off the hull now; what is left in the
-		# table is the odd one the hull cannot describe yet, such as the
-		# forward-facing nozzle on the twin-gimbal ship.
-		var named: String = String(mount["name"])
-		if named != "MainDrive" and not offered.has(named) and not mount.has("at"):
+		# place by that name: the forward-facing nozzle on the twin-gimbal
+		# ship, which no hull can describe yet.
+		if named != MAIN_DRIVE and not offered.has(named) and fit.at.is_zero_approx():
 			return "%s has a mount %s with nowhere to be" % [title, named]
-		if not mount.has("size") and not SOCKET_FOR.has(
-			(offered.get(named, {}) as Dictionary).get("kind", &"")
-		):
+		if socket_for(offered, fit) <= 0.0:
 			return "%s has a mount %s with no socket size" % [title, named]
-	if not (wanted.get("guns") is Array):
-		return "%s has no gun list" % title
-	for gun: Variant in wanted["guns"]:
-		if not WEAPONS.has(String(gun)):
-			return "%s wants weapon %s, which there is none of" % [title, gun]
+	for gun: WeaponData in wanted.guns:
+		if gun == null:
+			return "%s carries a gun that is not there" % title
+	for fit: BayFit in wanted.bays:
+		if fit == null:
+			return "%s has a bay that is not there" % title
+		if fit.size <= 0.0:
+			return "%s has a bay with no room in it" % title
+		if fit.installed == null:
+			continue
+		# Asked of the bay's own rule rather than repeated here, so the
+		# preset and the socket cannot disagree about what fits.
+		if not ModuleBay.is_bay_module(fit.installed):
+			return "%s puts a %s in a module bay, and that has its own socket" % [
+				title, fit.installed.display_name,
+			]
+		if fit.installed.bulk > fit.size:
+			return "%s puts a %s of %.2f into a bay of %.2f" % [
+				title, fit.installed.display_name, fit.installed.bulk, fit.size,
+			]
 	return ""
 
 
 ## The preset's main drive, put into the hull's side drive slots -- or into the
-## centre one, whole, when the entry says `centered`: a nozzle that steers by
+## centre one, whole, when the fit says `centered`: a nozzle that steers by
 ## swinging on the centre line is a different ship from a pair.
 ##
-## Engines go in slots and nowhere else, so the position in the preset's table
-## is ignored: the hull says where the places are. The centre slot stays empty
+## Engines go in slots and nowhere else, so the position in the preset is
+## ignored: the hull says where the places are. The centre slot stays empty
 ## and the drive is split across the pair either side of it, each taking half
 ## the thrust and half the bulk, so the total is what the preset declared and
 ## the pair pushes straight along the ship.
-static func _add_main_drives(ship: Ship, scene: PackedScene, hull: HullData, entry: Dictionary) -> void:
-	var centered: bool = bool(entry.get("centered", false))
+static func _add_main_drives(
+	ship: Ship, scene: PackedScene, hull: HullData, wanted: ShipPreset,
+	fit: MountFit, places: Dictionary
+) -> void:
 	var sides: Array[Dictionary] = []
 	for slot: Dictionary in hull.slots_of(HullData.SLOT_DRIVE):
-		if is_zero_approx((slot["at"] as Vector2).x) == centered:
+		if is_zero_approx((slot["at"] as Vector2).x) == fit.centered:
 			sides.append(slot)
 	if sides.is_empty():
 		return
 	var share: float = 1.0 / float(sides.size())
+	var socket: float = socket_for(places, fit)
 	for slot: Dictionary in sides:
 		var mount: EngineMount = scene.instantiate() as EngineMount
 		mount.name = String(slot["name"])
-		mount.size = float(entry["size"])
+		mount.size = socket
 		mount.position = slot["at"]
 		mount.rotation = float(slot["turn"])
 		mount.thrust_direction = Vector2.UP
-		mount.installed = _engine_share(
-			String(entry["engine"]), float(entry.get("scale", 1.0)), share
-		)
+		mount.installed = _engine_share(fit.engine, wanted.scale_of(fit), share)
 		ship.add_child(mount)
 
 
 ## One part of an engine, for a drive that is split over several mounts.
-static func _engine_share(key: String, scale: float, share: float) -> EngineData:
-	var whole: EngineData = _engine(key, scale)
+static func _engine_share(base: EngineData, scale: float, share: float) -> EngineData:
+	var whole: EngineData = _engine(base, scale)
+	if whole == null:
+		return null
 	var part: EngineData = whole.duplicate() as EngineData
 	part.max_thrust *= share
 	part.bulk *= share
@@ -517,13 +437,14 @@ static func _hardpoint(slot: Dictionary) -> Hardpoint:
 	return gun
 
 
-## An engine from the table, scaled if the preset asked for a bigger one.
+## An engine, scaled if the preset asked for a bigger one.
 ##
-## Duplicated before scaling: the resources are shared, and a preset that
-## scaled the original would make every later ship in the session inherit
-## the change.
-static func _engine(key: String, scale: float) -> EngineData:
-	var base: EngineData = load(ENGINES[key]) as EngineData
+## Duplicated before scaling: the resources are shared by every preset
+## that names them, and scaling the original would make every later ship
+## in the session inherit the change.
+static func _engine(base: EngineData, scale: float) -> EngineData:
+	if base == null:
+		return null
 	if is_equal_approx(scale, 1.0):
 		return base
 	var copy: EngineData = base.duplicate() as EngineData

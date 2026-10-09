@@ -422,7 +422,7 @@ func _refusal(slot: Node, item: Resource) -> String:
 		var module: ModuleData = item as ModuleData
 		if bay.fits(module):
 			return ""
-		if not bay.takes(module):
+		if not ModuleBay.is_bay_module(module):
 			# A bay has no kind, so the only wrong kind left is a machine
 			# with a socket of its own: a gun, an engine, a leg.
 			return "%s is a module bay, not a mount" % bay.name

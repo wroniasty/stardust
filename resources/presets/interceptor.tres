@@ -1,0 +1,101 @@
+[gd_resource type="Resource" script_class="ShipPreset" format=3]
+
+[ext_resource type="Script" path="res://scripts/bay_fit.gd" id="1_5fdqe"]
+[ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="2_14hvh"]
+[ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_aypsi"]
+[ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_3ejgo"]
+[ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_f6ffi"]
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_fk6s7"]
+[ext_resource type="Resource" path="res://resources/weapons/pulse_repeater.tres" id="7_4cxxj"]
+[ext_resource type="Resource" path="res://resources/hulls/interceptor.tres" id="8_tsjjq"]
+[ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_ufuax"]
+[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="10_tc6v8"]
+[ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="11_4hg3s"]
+[ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="12_em234"]
+[ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="13_68lfx"]
+[ext_resource type="Script" path="res://scripts/ship_preset.gd" id="14_lk0h6"]
+
+[sub_resource type="Resource" id="Resource_podpr"]
+script = ExtResource("1_5fdqe")
+size = 1.5
+at = Vector2(0, -2)
+
+[sub_resource type="Resource" id="Resource_645s5"]
+script = ExtResource("1_5fdqe")
+size = 3.0
+installed = ExtResource("2_14hvh")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_76mlj"]
+script = ExtResource("1_5fdqe")
+size = 1.6
+installed = ExtResource("3_aypsi")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_nmkp0"]
+script = ExtResource("1_5fdqe")
+size = 2.6
+installed = ExtResource("4_3ejgo")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_1w4q3"]
+script = ExtResource("1_5fdqe")
+size = 2.4
+installed = ExtResource("5_f6ffi")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_scnnb"]
+script = ExtResource("9_ufuax")
+place = &"MainDrive"
+engine = ExtResource("10_tc6v8")
+scale = 0.8
+
+[sub_resource type="Resource" id="Resource_di6v4"]
+script = ExtResource("9_ufuax")
+place = &"NoseLeftTorque"
+engine = ExtResource("11_4hg3s")
+scale = 1.4
+
+[sub_resource type="Resource" id="Resource_lw66n"]
+script = ExtResource("9_ufuax")
+place = &"NoseRightTorque"
+engine = ExtResource("11_4hg3s")
+scale = 1.4
+
+[sub_resource type="Resource" id="Resource_qtgqx"]
+script = ExtResource("9_ufuax")
+place = &"TailLeftTorque"
+engine = ExtResource("11_4hg3s")
+scale = 1.4
+
+[sub_resource type="Resource" id="Resource_67jj4"]
+script = ExtResource("9_ufuax")
+place = &"TailRightTorque"
+engine = ExtResource("11_4hg3s")
+scale = 1.4
+
+[sub_resource type="Resource" id="Resource_o1w46"]
+script = ExtResource("9_ufuax")
+place = &"StrafeLeftThruster"
+engine = ExtResource("12_em234")
+
+[sub_resource type="Resource" id="Resource_8oqg2"]
+script = ExtResource("9_ufuax")
+place = &"StrafeRightThruster"
+engine = ExtResource("12_em234")
+
+[sub_resource type="Resource" id="Resource_xmgl3"]
+script = ExtResource("9_ufuax")
+place = &"NoseReverseThruster"
+engine = ExtResource("13_68lfx")
+
+[resource]
+script = ExtResource("14_lk0h6")
+id = &"interceptor"
+display_name = "interceptor"
+blurb = "light and nimble, two cannon, a hold worth nothing"
+hull = ExtResource("8_tsjjq")
+mounts = Array[ExtResource("9_ufuax")]([SubResource("Resource_scnnb"), SubResource("Resource_di6v4"), SubResource("Resource_lw66n"), SubResource("Resource_qtgqx"), SubResource("Resource_67jj4"), SubResource("Resource_o1w46"), SubResource("Resource_8oqg2"), SubResource("Resource_xmgl3")])
+guns = Array[ExtResource("6_fk6s7")]([ExtResource("7_4cxxj"), ExtResource("7_4cxxj")])
+bays = Array[ExtResource("1_5fdqe")]([SubResource("Resource_podpr"), SubResource("Resource_645s5"), SubResource("Resource_76mlj"), SubResource("Resource_nmkp0"), SubResource("Resource_1w4q3")])
+order = 4

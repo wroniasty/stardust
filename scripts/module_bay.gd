@@ -37,7 +37,10 @@ extends Node2D
 ## module works without being added to a table here. The three that are
 ## excluded are excluded for a reason that will not change: they already
 ## have somewhere to go.
-func takes(data: ModuleData) -> bool:
+##
+## Static, because `ShipFitout.fault_in` asks it of a preset's bay before
+## any node exists to ask.
+static func is_bay_module(data: ModuleData) -> bool:
 	return data != null and not (
 		data is WeaponData or data is EngineData or data is GearData
 	)
@@ -46,7 +49,7 @@ func takes(data: ModuleData) -> bool:
 ## Whether this module could go in: somewhere it belongs, and small
 ## enough for the hole.
 func fits(data: ModuleData) -> bool:
-	return takes(data) and data.bulk <= size
+	return is_bay_module(data) and data.bulk <= size
 
 
 ## Mass the slot contributes: the module's own bulk, nothing when empty.

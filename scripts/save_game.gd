@@ -24,7 +24,7 @@ const PATH: String = "user://stardust.save"
 ## declined rather than half-read -- a half-read save is a corrupt
 ## universe that looks fine until the pilot lands somewhere that is not
 ## there any more.
-const VERSION: int = 1
+const VERSION: int = 2
 
 
 ## Everything that cannot be worked out from the seed.

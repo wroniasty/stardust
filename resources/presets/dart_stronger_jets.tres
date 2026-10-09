@@ -1,0 +1,96 @@
+[gd_resource type="Resource" script_class="ShipPreset" format=3]
+
+[ext_resource type="Script" path="res://scripts/bay_fit.gd" id="1_oh1y0"]
+[ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="2_bgnui"]
+[ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_0avyb"]
+[ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_m5bt4"]
+[ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_rvo70"]
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_us1ag"]
+[ext_resource type="Resource" path="res://resources/weapons/autocannon.tres" id="7_ncypg"]
+[ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="8_8vrka"]
+[ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_1ymbm"]
+[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="10_6mfjq"]
+[ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="11_aqfde"]
+[ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="12_7b8qe"]
+[ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="13_lrh4g"]
+[ext_resource type="Script" path="res://scripts/ship_preset.gd" id="14_jvk5m"]
+
+[sub_resource type="Resource" id="Resource_fbbnf"]
+script = ExtResource("1_oh1y0")
+size = 1.5
+at = Vector2(0, -2)
+
+[sub_resource type="Resource" id="Resource_lfftb"]
+script = ExtResource("1_oh1y0")
+size = 3.0
+installed = ExtResource("2_bgnui")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_qwpdq"]
+script = ExtResource("1_oh1y0")
+size = 1.6
+installed = ExtResource("3_0avyb")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_cymcj"]
+script = ExtResource("1_oh1y0")
+size = 2.6
+installed = ExtResource("4_m5bt4")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_r2p0u"]
+script = ExtResource("1_oh1y0")
+size = 2.4
+installed = ExtResource("5_rvo70")
+at = Vector2(0, 1.75)
+
+[sub_resource type="Resource" id="Resource_ggyt6"]
+script = ExtResource("9_1ymbm")
+place = &"MainDrive"
+engine = ExtResource("10_6mfjq")
+
+[sub_resource type="Resource" id="Resource_2fw0v"]
+script = ExtResource("9_1ymbm")
+place = &"NoseLeftTorque"
+engine = ExtResource("11_aqfde")
+
+[sub_resource type="Resource" id="Resource_bav3y"]
+script = ExtResource("9_1ymbm")
+place = &"NoseRightTorque"
+engine = ExtResource("11_aqfde")
+
+[sub_resource type="Resource" id="Resource_v5ulv"]
+script = ExtResource("9_1ymbm")
+place = &"TailLeftTorque"
+engine = ExtResource("11_aqfde")
+
+[sub_resource type="Resource" id="Resource_l3h42"]
+script = ExtResource("9_1ymbm")
+place = &"TailRightTorque"
+engine = ExtResource("11_aqfde")
+
+[sub_resource type="Resource" id="Resource_slp1g"]
+script = ExtResource("9_1ymbm")
+place = &"StrafeLeftThruster"
+engine = ExtResource("12_7b8qe")
+
+[sub_resource type="Resource" id="Resource_r7u5n"]
+script = ExtResource("9_1ymbm")
+place = &"StrafeRightThruster"
+engine = ExtResource("12_7b8qe")
+
+[sub_resource type="Resource" id="Resource_x32mq"]
+script = ExtResource("9_1ymbm")
+place = &"NoseReverseThruster"
+engine = ExtResource("13_lrh4g")
+
+[resource]
+script = ExtResource("14_jvk5m")
+id = &"dart_stronger_jets"
+display_name = "dart, stronger jets"
+hull = ExtResource("8_8vrka")
+mounts = Array[ExtResource("9_1ymbm")]([SubResource("Resource_ggyt6"), SubResource("Resource_2fw0v"), SubResource("Resource_bav3y"), SubResource("Resource_v5ulv"), SubResource("Resource_l3h42"), SubResource("Resource_slp1g"), SubResource("Resource_r7u5n"), SubResource("Resource_x32mq")])
+guns = Array[ExtResource("6_us1ag")]([ExtResource("7_ncypg")])
+bays = Array[ExtResource("1_oh1y0")]([SubResource("Resource_fbbnf"), SubResource("Resource_lfftb"), SubResource("Resource_qwpdq"), SubResource("Resource_cymcj"), SubResource("Resource_r2p0u")])
+order = 1
+engine_scale = 1.75
