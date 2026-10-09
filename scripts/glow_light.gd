@@ -52,12 +52,12 @@ static func blob() -> Texture2D:
 
 ## Makes a light of `reach` pixels in `colour`, ready to be added as a
 ## child of whatever is doing the glowing.
-static func make(colour: Color, reach: float, strength: float = 1.0) -> GlowLight:
+static func make(colour: Color, span: float, strength: float = 1.0) -> GlowLight:
 	var light: GlowLight = GlowLight.new()
 	light.texture = blob()
 	light.color = colour
 	light.energy = strength
-	light.reach(reach)
+	light.reach(span)
 	# Added, not mixed: a light in space is something arriving on top of
 	# what is already there, and mixing would wash the colour out of
 	# whatever it falls on instead of brightening it.

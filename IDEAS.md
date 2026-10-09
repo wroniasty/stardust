@@ -4309,6 +4309,50 @@ jednocześnie.
 - Stacje: handel, naprawa, tankowanie, misje.
 - Eventy w deep space i przy misjumpach: wraki, zasadzki, anomalie.
 
+### Ostrzeżenia GDScript: cztery klasy wyciszone decyzją
+
+Ostrzeżenie, które pojawia się trzysta razy na poprawnym kodzie, nie jest
+ostrzeżeniem — jest tłem, a tło uczy ludzi nie patrzeć. Więc zamiast
+normalizować je jako szum albo przepisywać pół projektu, zostały **policzone,
+rozdzielone i rozstrzygnięte**.
+
+Policzone na dziesięciu najgorszych plikach (klasy podniesione na chwilę do
+poziomu błędu, żeby `--check-only` je wypisał — edytor drukuje je, CLI nie):
+
+| ile | klasa |
+|---|---|
+| 177 | `Variant` do konstruktora `float()` / `int()` |
+| 46 | niebezpieczny `as` z `Variant` |
+| 38 | metoda albo właściwość nieobecna na `Variant` |
+| 27 | `Variant` do typowanego parametru funkcji |
+| 19 | cieniowanie nazw |
+
+Pierwsze cztery grupy, łącznie ok. 288, mają **jedną przyczynę**: ten projekt
+używa słownika jako rekordu (`Garrison.at`, `Deposits.on`, preset w
+`ShipFitout`, `orbit_shape`, roster garnizonu) i kaczego typowania dla
+współpracowników (`has_method`, `"pole" in node`). Oba są zapisanymi decyzjami,
+a nie niedopatrzeniem — model jako czysta dana, którą da się testować bez
+sceny, jest tego wart. Pod tymi idiomami **każdy** odczyt pola rekordu jest
+`Variant`, więc te cztery klasy zapalają się na kodzie, który robi dokładnie
+to, co ma robić.
+
+Wyciszenie ich jest więc decyzją podjętą raz i zapisaną, a nie zamiataniem:
+`unsafe_call_argument`, `unsafe_cast`, `unsafe_method_access` i
+`unsafe_property_access` stoją na `0` w `project.godot`. Cena jest realna i
+warto ją znać — literówka w kluczu słownika nie zapali się teraz przy
+parsowaniu, tylko przy uruchomieniu. Płaci za to smoke test, który te modele
+przechodzi.
+
+Dziewiętnaście cieniowań to co innego i zostały **naprawione**: lokalna
+przesłaniająca metodę, którą właśnie woła (`var mu: float = mu()`), albo
+`scale` przesłaniający właściwość `Node2D` — to są pułapki czekające na
+kogoś, kto doda jedną linijkę i trafi w złą nazwę, a nie koszt idiomu.
+
+Uzasadnienie stoi tutaj, a nie w `project.godot`, bo Godot przepisuje ten plik
+przy każdej zmianie ustawień w edytorze i nie obiecuje zachować komentarzy.
+Pilnuje tego test, który czyta `ProjectSettings` — cicha zmiana tych czterech
+wartości albo podniesienie cieniowania z powrotem pęknie na bramce.
+
 ## 13. Struktura projektu (Godot)
 
 Autoloady:

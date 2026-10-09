@@ -252,13 +252,13 @@ static func preset(preset_name: String) -> Dictionary:
 ## pointing at this ship -- the camera, the HUDs, the editor, the streaming
 ## manager -- would have to be told, and a sandbox that invalidates half
 ## the game's references is a sandbox that crashes instead of teaching.
-static func apply(ship: Ship, preset: Dictionary) -> bool:
+static func apply(ship: Ship, wanted: Dictionary) -> bool:
 	# **Checked before anything comes off.** This used to strip the engines
 	# and the guns and then look for the hull, so a preset naming a hull
 	# that does not exist left the pilot with a bare fuselage and an error
 	# in the log -- a refit that fails has to fail having changed nothing,
 	# because the ship it was refitting is the one the player is flying.
-	var fault: String = fault_in(preset)
+	var fault: String = fault_in(wanted)
 	if not fault.is_empty():
 		# Reported and returned, not pushed as an engine error. A refused
 		# refit is a refused operation carrying its reason -- the same
@@ -270,14 +270,14 @@ static func apply(ship: Ship, preset: Dictionary) -> bool:
 		return false
 
 	var scene: PackedScene = load(MOUNT_SCENE) as PackedScene
-	var hull: HullData = hull_of(preset)
+	var hull: HullData = hull_of(wanted)
 
 	for child: Node in ship.get_children():
 		if child is EngineMount or child is Hardpoint:
 			ship.remove_child(child)
 			child.queue_free()
 
-	for entry: Dictionary in preset["mounts"]:
+	for entry: Dictionary in wanted["mounts"]:
 		if entry["name"] == "MainDrive":
 			_add_main_drives(ship, scene, hull, entry)
 			continue
@@ -299,7 +299,7 @@ static func apply(ship: Ship, preset: Dictionary) -> bool:
 	# of which was ever read: two fields that looked like they placed a gun
 	# and did not, which is worse than no fields at all.
 	var weapons: Array[WeaponData] = []
-	for gun: Variant in preset["guns"]:
+	for gun: Variant in wanted["guns"]:
 		weapons.append(load(WEAPONS[String(gun)]) as WeaponData)
 	var next_weapon: int = 0
 	for slot: Dictionary in hull.slots():
@@ -312,7 +312,7 @@ static func apply(ship: Ship, preset: Dictionary) -> bool:
 		ship.add_child(gun)
 	if next_weapon < weapons.size():
 		push_warning("preset %s has %d more guns than the hull has hardpoints" % [
-			preset["name"], weapons.size() - next_weapon,
+			wanted["name"], weapons.size() - next_weapon,
 		])
 
 	# The hull is named, not described. It used to be an outline, a hold
@@ -343,8 +343,8 @@ static func apply(ship: Ship, preset: Dictionary) -> bool:
 ## The hull a preset names, resolved. Either a `HullData` outright -- which
 ## is what the creative tool hands over for a shape that exists only in
 ## memory -- or a name out of the catalogue.
-static func hull_of(preset: Dictionary) -> HullData:
-	var named: Variant = preset.get("hull")
+static func hull_of(wanted: Dictionary) -> HullData:
+	var named: Variant = wanted.get("hull")
 	if named is HullData:
 		return named as HullData
 	return HullData.of(named) if named != null else null
@@ -357,15 +357,15 @@ static func hull_of(preset: Dictionary) -> HullData:
 ## same shape as `JumpController.blocked_by`. It checks everything `apply`
 ## is about to read and nothing else: a field no longer read is a field
 ## that should not be here to check (see `guns`).
-static func fault_in(preset: Dictionary) -> String:
-	var title: String = String(preset.get("name", "<unnamed>"))
-	if not preset.has("name"):
+static func fault_in(wanted: Dictionary) -> String:
+	var title: String = String(wanted.get("name", "<unnamed>"))
+	if not wanted.has("name"):
 		return "a preset with no name"
-	if hull_of(preset) == null:
+	if hull_of(wanted) == null:
 		return "%s names no hull" % title
-	if not (preset.get("mounts") is Array):
+	if not (wanted.get("mounts") is Array):
 		return "%s has no mounts" % title
-	for entry: Variant in preset["mounts"]:
+	for entry: Variant in wanted["mounts"]:
 		if not (entry is Dictionary):
 			return "%s has a mount that is not an entry" % title
 		var mount: Dictionary = entry
@@ -380,9 +380,9 @@ static func fault_in(preset: Dictionary) -> String:
 		# their own. Everything else has to say where it is.
 		if String(mount["name"]) != "MainDrive" and not mount.has("at"):
 			return "%s has a mount %s with nowhere to be" % [title, mount["name"]]
-	if not (preset.get("guns") is Array):
+	if not (wanted.get("guns") is Array):
 		return "%s has no gun list" % title
-	for gun: Variant in preset["guns"]:
+	for gun: Variant in wanted["guns"]:
 		if not WEAPONS.has(String(gun)):
 			return "%s wants weapon %s, which there is none of" % [title, gun]
 	return ""

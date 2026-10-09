@@ -48,8 +48,8 @@ var _started: bool = false
 
 ## `quantum` is the step the printed figure moves in: 1 for an altitude
 ## in pixels, 0.1 for a rate of climb.
-func _init(quantum: float = 1.0) -> void:
-	_quantum = maxf(quantum, 0.000001)
+func _init(step: float = 1.0) -> void:
+	_quantum = maxf(step, 0.000001)
 
 
 ## Hands the instrument what is true now. Both readings are taken off it

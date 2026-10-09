@@ -78,14 +78,14 @@ func build(
 		# randomness clumps, and a clumped deck leaves half the planet bare.
 		var angle: float = TAU * (float(i) + rng.randf_range(-0.4, 0.4)) / float(count)
 		var radius: float = base_radius + rng.randf() * thickness
-		var scale: Vector2 = size * rng.randf_range(0.7, 1.3)
+		var drawn: Vector2 = size * rng.randf_range(0.7, 1.3)
 		# The flat base has to face the ground. A QuadMesh puts UV v = 0 along
 		# its local +y, and canvas +y points down, so the quad has to be turned
 		# so that its local +y points AWAY from the planet -- measured, not
 		# reasoned: the first guess drew every cloud upside down.
 		batch.set_instance_transform_2d(i, Transform2D(
 			angle - PI * 0.5,
-			scale,
+			drawn,
 			0.0,
 			Vector2.from_angle(angle) * radius,
 		))
@@ -101,7 +101,7 @@ func build(
 			rng.randf_range(0.80, 1.0),
 			# The shader measures its lobes in units of the cloud's height, so
 			# it has to be told how much wider than tall this quad is.
-			scale.x / maxf(scale.y, 1.0),
+			drawn.x / maxf(drawn.y, 1.0),
 		))
 
 	multimesh = batch

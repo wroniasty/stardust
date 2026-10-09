@@ -180,8 +180,8 @@ func _process(delta: float) -> void:
 ## the frame begins a pivot's worth up and to the left of it.
 func _corner_of(entry: Dictionary) -> Vector2:
 	var strip: SpriteStrip = entry["strip"]
-	var scale: float = Art.WORLD_SCALE if strip.in_world else 1.0
-	return Vector2(entry["at"]) - strip.pivot * scale
+	var magnify: float = Art.WORLD_SCALE if strip.in_world else 1.0
+	return Vector2(entry["at"]) - strip.pivot * magnify
 
 
 func _draw() -> void:

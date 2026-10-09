@@ -1161,16 +1161,16 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 	# Carried by mount, and only while the same engine is still in it. An
 	# engine moved to another socket comes up fresh, which is the one case
 	# this gets wrong; call it bench time.
-	var carried: Dictionary = {}
+	var aboard: Dictionary = {}
 	for engine: EngineInstance in engines:
-		carried[engine.mount.name] = {"data": engine.data, "health": engine.health}
+		aboard[engine.mount.name] = {"data": engine.data, "health": engine.health}
 
 	engines.clear()
 	for child: Node in get_children():
 		var mount: EngineMount = child as EngineMount
 		if mount != null and mount.installed != null:
 			var instance: EngineInstance = EngineInstance.new(mount.installed, mount)
-			var previous: Dictionary = carried.get(mount.name, {})
+			var previous: Dictionary = aboard.get(mount.name, {})
 			if previous.get("data") == mount.installed:
 				instance.health = float(previous["health"])
 			engines.append(instance)
@@ -2661,10 +2661,10 @@ func gravity_acceleration_at(point: Vector2) -> Vector2:
 ## generous zoomed right in -- which is where the pilot has the most
 ## precision and needs the help least.
 func lock_reach() -> float:
-	var scale: float = 1.0
+	var factor: float = 1.0
 	if is_inside_tree():
-		scale = get_viewport().get_canvas_transform().get_scale().x
-	return LOCK_RADIUS / maxf(scale, 0.001)
+		factor = get_viewport().get_canvas_transform().get_scale().x
+	return LOCK_RADIUS / maxf(factor, 0.001)
 
 
 ## Total force applied by the engines last tick, in global coordinates.

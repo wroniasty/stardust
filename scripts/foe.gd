@@ -530,10 +530,10 @@ func _steer(delta: float, target: Node2D) -> void:
 	# is left, which is a defender turning along its own perimeter
 	# rather than one bouncing off an invisible wall.
 	var away: Vector2 = global_position - anchor
-	var reach: float = line()
-	if away.length() > reach and reach > 0.0:
+	var bound: float = line()
+	if away.length() > bound and bound > 0.0:
 		var outward: Vector2 = away.normalized()
-		global_position = anchor + outward * reach
+		global_position = anchor + outward * bound
 		velocity = velocity.slide(outward)
 
 
@@ -577,10 +577,10 @@ func runs_away() -> bool:
 ## The same point, brought inside the line.
 func _inside(goal: Vector2) -> Vector2:
 	var out: Vector2 = goal - anchor
-	var reach: float = line()
-	if out.length() <= reach or reach <= 0.0:
+	var bound: float = line()
+	if out.length() <= bound or bound <= 0.0:
 		return goal
-	return anchor + out.normalized() * reach
+	return anchor + out.normalized() * bound
 
 
 ## Where to aim to hit something that is going somewhere.

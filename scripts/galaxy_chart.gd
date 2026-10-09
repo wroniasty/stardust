@@ -538,13 +538,13 @@ func _draw_chart() -> void:
 ## screen can give without a word of text.
 func _draw_bands(plan: Dictionary) -> void:
 	var middle: Vector2 = to_chart(Vector2.ZERO, plan)
-	var scale: float = float(plan["scale"])
+	var magnify: float = float(plan["scale"])
 	for band: int in range(1, GalaxyMap.TIERS + 1):
-		var ring: float = _map.tier_span() * float(band) / float(GalaxyMap.TIERS) * scale
+		var ring: float = _map.tier_span() * float(band) / float(GalaxyMap.TIERS) * magnify
 		if ring < 6.0:
 			continue
 		_canvas.draw_arc(middle, ring, 0.0, TAU, 96, _ink.over(_ink.grid, 0.30), 1.0)
-	_canvas.draw_arc(middle, GalaxyMap.RADIUS * scale, 0.0, TAU, 128, _ink.edge, 1.0)
+	_canvas.draw_arc(middle, GalaxyMap.RADIUS * magnify, 0.0, TAU, 128, _ink.edge, 1.0)
 
 
 ## How far one jump goes from where the ship stands, dashed.

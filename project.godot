@@ -26,6 +26,13 @@ StreamingManager="*res://scripts/autoload/streaming_manager.gd"
 LootGenerator="*res://scripts/autoload/loot_generator.gd"
 GameSettings="*res://scripts/autoload/game_settings.gd"
 
+[debug]
+
+gdscript/warnings/unsafe_call_argument=0
+gdscript/warnings/unsafe_cast=0
+gdscript/warnings/unsafe_method_access=0
+gdscript/warnings/unsafe_property_access=0
+
 [display]
 
 window/size/viewport_width=640

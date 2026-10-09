@@ -28,8 +28,8 @@ func _ready() -> void:
 
 	print("sound check: '+' played, '.' silenced by the air")
 	print("%-8s %-10s %s" % ["sample", "path", "  ".join(_air_heads())])
-	for name: String in SAMPLES:
-		var stream: AudioStream = load("res://resources/audio/%s.tres" % name)
+	for cue: String in SAMPLES:
+		var stream: AudioStream = load("res://resources/audio/%s.tres" % cue)
 		for path: Soundscape.Path in [
 			Soundscape.Path.CONDUCTED,
 			Soundscape.Path.AIRBORNE,
@@ -42,7 +42,7 @@ func _ready() -> void:
 					stream, Vector2.ZERO, path
 				) else "."))
 			print("%-8s %-10s %s" % [
-				name, Soundscape.Path.keys()[int(path)].to_lower(), "".join(row),
+				cue, Soundscape.Path.keys()[int(path)].to_lower(), "".join(row),
 			])
 
 	print("")
@@ -76,16 +76,16 @@ func _path_table() -> void:
 	print("")
 	print("sound tables: which way each one reaches the ear")
 	print("%-14s %-10s %-11s %6s  %s" % ["table", "entry", "path", "vol", "pitch"])
-	for name: String in [
+	for cue: String in [
 		"engine_loop", "engine_event", "hull", "weapon_shot", "terrain", "missile",
 	]:
-		var table: SoundTable = load("res://resources/fx/sounds/%s.tres" % name)
+		var table: SoundTable = load("res://resources/fx/sounds/%s.tres" % cue)
 		if table == null:
 			continue
 		for entry: Array in _entries_of(table):
 			var strip: SoundStrip = entry[1]
 			print("%-14s %-10s %-11s %6.2f  %.2f..%.2f" % [
-				name, entry[0],
+				cue, entry[0],
 				Soundscape.Path.keys()[int(strip.path)].to_lower(),
 				strip.volume, strip.pitch.x, strip.pitch.y,
 			])

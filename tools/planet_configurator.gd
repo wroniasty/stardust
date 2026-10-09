@@ -267,8 +267,8 @@ func _refresh() -> void:
 		return
 	_seed_spin.value = float(_planet.planet_seed)
 	for field: Dictionary in FIELDS:
-		var name: String = String(field["name"])
-		(_spins[name] as SpinBox).value = float(_planet.get(name))
+		var titled: String = String(field["name"])
+		(_spins[titled] as SpinBox).value = float(_planet.get(titled))
 	_clouds_check.button_pressed = _planet.has_clouds
 	_cloud_type.selected = int(_planet.cloud_type)
 	_surface_picker.color = _planet.surface_color
@@ -281,14 +281,14 @@ func _apply() -> void:
 	if _planet == null:
 		return
 	for field: Dictionary in FIELDS:
-		var name: String = String(field["name"])
-		var value: float = (_spins[name] as SpinBox).value
+		var titled: String = String(field["name"])
+		var value: float = (_spins[titled] as SpinBox).value
 		# A SpinBox hands out floats, and assigning one to a statically typed
 		# int field through set() is an error rather than a rounding.
 		if field.get("int", false):
-			_planet.set(name, int(round(value)))
+			_planet.set(titled, int(round(value)))
 		else:
-			_planet.set(name, value)
+			_planet.set(titled, value)
 	_planet.has_clouds = _clouds_check.button_pressed
 	_planet.cloud_type = _cloud_type.selected as Planet.CloudType
 	_planet.surface_color = _surface_picker.color

@@ -172,11 +172,11 @@ func card_lines(against: ModuleData = null) -> PackedStringArray:
 
 	var other: Dictionary = {}
 	if against != null:
-		for row: Dictionary in against.stat_rows():
-			other[row["label"]] = row
+		for line: Dictionary in against.stat_rows():
+			other[line["label"]] = line
 
-	for row: Dictionary in stat_rows():
-		out.append(_stat_line(row, other.get(row["label"], {})))
+	for line: Dictionary in stat_rows():
+		out.append(_stat_line(line, other.get(line["label"], {})))
 	return out
 
 
@@ -199,17 +199,17 @@ static func card_font() -> Font:
 
 
 ## A row, and how it differs from the same row on the module it replaces.
-func _stat_line(row: Dictionary, was: Dictionary) -> String:
-	var digits: int = int(row["digits"])
-	var text: String = "%-13s %8.*f%s" % [row["label"], digits, float(row["value"]), row["suffix"]]
+func _stat_line(line: Dictionary, was: Dictionary) -> String:
+	var digits: int = int(line["digits"])
+	var text: String = "%-13s %8.*f%s" % [line["label"], digits, float(line["value"]), line["suffix"]]
 	if was.is_empty():
 		return text
-	var change: float = float(row["value"]) - float(was["value"])
+	var change: float = float(line["value"]) - float(was["value"])
 	if absf(change) < pow(10.0, -float(digits)) * 0.5:
 		return text + "   ="
 	# Marked by whether it is an improvement, not by whether it went up:
 	# less spread and less bulk are both wins with a minus in front.
-	var good: bool = change * float(row["better"]) > 0.0
+	var good: bool = change * float(line["better"]) > 0.0
 	return "%s  %s%.*f %s" % [
 		text, "+" if change > 0.0 else "", digits, change, "better" if good else "worse",
 	]

@@ -150,8 +150,8 @@ func _build_ui() -> void:
 
 	_rarity = OptionButton.new()
 	_rarity.add_item("z losowania")
-	for name: String in LOOT.RARITY_NAMES:
-		_rarity.add_item(name)
+	for grade: String in LOOT.RARITY_NAMES:
+		_rarity.add_item(grade)
 	rows.add_child(_labelled("rarity", _rarity))
 
 	_seed_spin = SpinBox.new()

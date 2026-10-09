@@ -185,7 +185,7 @@ func _save() -> void:
 		await RenderingServer.frame_post_draw
 		await RenderingServer.frame_post_draw
 		var image: Image = get_viewport().get_texture().get_image()
-		var name: String = "widgets_alarm.png" if alarm else "widgets.png"
-		image.save_png("%s/%s" % [_output_dir, name])
-		print("gallery: %s/%s" % [_output_dir, name])
+		var file_name: String = "widgets_alarm.png" if alarm else "widgets.png"
+		image.save_png("%s/%s" % [_output_dir, file_name])
+		print("gallery: %s/%s" % [_output_dir, file_name])
 	get_tree().quit()

@@ -175,18 +175,18 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 			continue
 
 		var screen_point: Vector2 = to_screen * body.global_position
-		var offset: Vector2 = screen_point - centre
+		var from_centre: Vector2 = screen_point - centre
 		# A body whose centre is on screen is one the pilot can already see;
 		# an edge marker for it would point at nothing they need.
-		if absf(offset.x) < extent.x and absf(offset.y) < extent.y:
+		if absf(from_centre.x) < extent.x and absf(from_centre.y) < extent.y:
 			continue
-		if offset.is_zero_approx():
+		if from_centre.is_zero_approx():
 			continue
 
 		found.append({
 			"body": body,
-			"at": centre + _on_ring(offset, extent),
-			"direction": offset.normalized(),
+			"at": centre + _on_ring(from_centre, extent),
+			"direction": from_centre.normalized(),
 			# To the surface, not to the centre: it is the number the pilot
 			# acts on, and on a 1000 px planet the two are nothing alike.
 			"distance": to_centre - body.surface_radius,
@@ -208,10 +208,10 @@ func contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 ## Where a direction from the centre meets the ring, as an offset from the
 ## centre. The ring is a rectangle rather than a circle because the screen is
 ## one: a circle would leave the corners empty while crowding the short edges.
-func _on_ring(offset: Vector2, extent: Vector2) -> Vector2:
-	var scale_x: float = extent.x / absf(offset.x) if absf(offset.x) > 0.0001 else INF
-	var scale_y: float = extent.y / absf(offset.y) if absf(offset.y) > 0.0001 else INF
-	return offset * minf(scale_x, scale_y)
+func _on_ring(from_centre: Vector2, extent: Vector2) -> Vector2:
+	var scale_x: float = extent.x / absf(from_centre.x) if absf(from_centre.x) > 0.0001 else INF
+	var scale_y: float = extent.y / absf(from_centre.y) if absf(from_centre.y) > 0.0001 else INF
+	return from_centre * minf(scale_x, scale_y)
 
 
 ## Nearby defenders, nearest first.
@@ -238,15 +238,15 @@ func foe_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 		var distance: float = _ship.global_position.distance_to(foe.global_position)
 		if distance > foe_range:
 			continue
-		var offset: Vector2 = to_screen * foe.global_position - centre
-		if absf(offset.x) < extent.x and absf(offset.y) < extent.y:
+		var from_centre: Vector2 = to_screen * foe.global_position - centre
+		if absf(from_centre.x) < extent.x and absf(from_centre.y) < extent.y:
 			continue
-		if offset.is_zero_approx():
+		if from_centre.is_zero_approx():
 			continue
 		found.append({
 			"foe": foe,
-			"at": centre + _on_ring(offset, extent),
-			"direction": offset.normalized(),
+			"at": centre + _on_ring(from_centre, extent),
+			"direction": from_centre.normalized(),
 			"distance": distance,
 			"awake": foe.awake,
 			"size": FOE_SIZE_MAJOR if foe.is_major() else FOE_SIZE,
@@ -281,16 +281,16 @@ func loot_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 			continue
 
 		var screen_point: Vector2 = to_screen * crate.global_position
-		var offset: Vector2 = screen_point - centre
+		var from_centre: Vector2 = screen_point - centre
 		# Unlike a planet, a crate on screen still earns a marker. It is eight
 		# pixels of box against a whole planet of terrain, and an indicator
 		# that vanishes the moment you turn towards the thing it was pointing
 		# at is an indicator that fails exactly when it is being used.
-		var off_screen: bool = absf(offset.x) >= extent.x or absf(offset.y) >= extent.y
+		var off_screen: bool = absf(from_centre.x) >= extent.x or absf(from_centre.y) >= extent.y
 		found.append({
 			"crate": crate,
-			"at": centre + _on_ring(offset, extent) if off_screen else screen_point,
-			"direction": offset.normalized() if off_screen else Vector2.ZERO,
+			"at": centre + _on_ring(from_centre, extent) if off_screen else screen_point,
+			"direction": from_centre.normalized() if off_screen else Vector2.ZERO,
 			"distance": distance,
 			"rarity": crate.rarity(),
 			"on_ring": off_screen,
@@ -324,11 +324,11 @@ func marker_contact(to_screen: Transform2D, view: Vector2) -> Dictionary:
 		return {}
 
 	var point: Vector2 = NavMarker.marked
-	var offset: Vector2 = to_screen * point - centre
-	var off_screen: bool = absf(offset.x) >= extent.x or absf(offset.y) >= extent.y
+	var from_centre: Vector2 = to_screen * point - centre
+	var off_screen: bool = absf(from_centre.x) >= extent.x or absf(from_centre.y) >= extent.y
 	return {
-		"at": centre + _on_ring(offset, extent) if off_screen else centre + offset,
-		"direction": offset.normalized() if off_screen else Vector2.DOWN,
+		"at": centre + _on_ring(from_centre, extent) if off_screen else centre + from_centre,
+		"direction": from_centre.normalized() if off_screen else Vector2.DOWN,
 		"distance": _ship.global_position.distance_to(point),
 		"on_ring": off_screen,
 	}

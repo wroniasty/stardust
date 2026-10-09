@@ -81,7 +81,7 @@ func get_impact_point() -> Vector2:
 ##
 ## Drag and thrust are left out on purpose. The question being asked is
 ## "if I let go now, what happens".
-static func coast(ship: Ship, count: int, scale: float) -> Dictionary:
+static func coast(ship: Ship, count: int, stride: float) -> Dictionary:
 	var result: Dictionary = {"path": PackedVector2Array(), "impact": Vector2.INF}
 	if ship == null or not is_instance_valid(ship) or not ship.is_inside_tree():
 		return result
@@ -96,7 +96,7 @@ static func coast(ship: Ship, count: int, scale: float) -> Dictionary:
 		if planet != null:
 			planets.append(planet)
 
-	var step: float = (1.0 / float(Engine.physics_ticks_per_second)) * scale
+	var step: float = (1.0 / float(Engine.physics_ticks_per_second)) * stride
 	var at: Vector2 = ship.global_position
 	var velocity: Vector2 = ship.linear_velocity
 	var path: PackedVector2Array = PackedVector2Array()

@@ -8019,6 +8019,59 @@ func _check_flight_hud(planet: Planet) -> void:
 	ship.queue_free()
 
 
+## Decyzja o ostrzeżeniach jest decyzją, nie przypadkiem.
+##
+## Four warning classes are off, and that is a judgement recorded in
+## IDEAS.md: this project uses dictionaries as records and duck types its
+## collaborators, both on purpose, and under those idioms every read of a
+## record field is a `Variant`. Roughly 288 of the ~310 warnings in the
+## ten noisiest files came from that one cause, and an instrument that
+## cries three hundred times on correct code is background rather than a
+## warning.
+##
+## **Shadowing is the other half and stays on.** Those were real traps --
+## a local shadowing the method it is calling, a `scale` shadowing
+## `Node2D.scale` -- and all forty-five were fixed rather than silenced.
+##
+## This is here because `project.godot` cannot argue for itself: Godot
+## rewrites it whenever a setting changes in the editor and makes no
+## promise about comments. So the file carries the values and the test
+## carries the intent -- turning one of these back on by accident, or
+## turning shadowing off to make a new one quiet, fails a build.
+func _check_warning_policy() -> void:
+	for accepted: String in [
+		"unsafe_call_argument",
+		"unsafe_cast",
+		"unsafe_method_access",
+		"unsafe_property_access",
+	]:
+		var key: String = "debug/gdscript/warnings/%s" % accepted
+		_expect(
+			int(ProjectSettings.get_setting(key, 1)) == 0,
+			"%s is off by decision, not by accident (%s)" % [
+				accepted, ProjectSettings.get_setting(key, "unset"),
+			],
+		)
+
+	# And the ones that found real bugs are not off. Only classes Godot
+	# itself defaults to **on** are listed: the first version of this also
+	# asked for `return_value_discarded`, which Godot ships off, so the
+	# check failed on a stock project and would have been read as a
+	# project fault rather than as a wrong expectation.
+	for kept: String in [
+		"shadowed_variable",
+		"shadowed_variable_base_class",
+		"shadowed_global_identifier",
+		"narrowing_conversion",
+		"incompatible_ternary",
+	]:
+		var key: String = "debug/gdscript/warnings/%s" % kept
+		_expect(
+			int(ProjectSettings.get_setting(key, 1)) >= 1,
+			"%s is still watched (%s)" % [kept, ProjectSettings.get_setting(key, "unset")],
+		)
+
+
 ## Każda chmura, którą pokrycie wylosowało, zostaje zbudowana.
 ##
 ## `total / CLOUD_LAYERS` is integer division, so the remainder was going
@@ -8395,6 +8448,7 @@ func _check_fitout_presets() -> void:
 	_check_refit_is_safe()
 	_check_preset_fields()
 	_check_cloud_count()
+	_check_warning_policy()
 
 	# A refit is in place, so everything pointing at this ship has to still
 	# be pointing at something: a cached hardpoint list naming nodes the

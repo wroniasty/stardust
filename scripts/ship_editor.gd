@@ -819,11 +819,11 @@ func _plan_placement(plan: Rect2) -> Callable:
 	var room: Vector2 = plan.size - Vector2(
 		plan.size.x * 0.18 + SLOT_RING * 2.0, PAD * 4.0 + float(FONT_SIZE) + SLOT_RING
 	)
-	var scale: float = minf(room.x / bounds.size.x, room.y / bounds.size.y)
+	var to_plan: float = minf(room.x / bounds.size.x, room.y / bounds.size.y)
 	var origin: Vector2 = plan.position + Vector2(plan.size.x * 0.5, plan.size.y * 0.55)
 	var centre: Vector2 = bounds.get_center()
 	return func(p: Vector2) -> Vector2:
-		return origin + (p - centre) * scale
+		return origin + (p - centre) * to_plan
 
 
 func _draw_editor() -> void:
@@ -1191,7 +1191,7 @@ func _scrap_picked() -> void:
 		_notice = "nothing picked to break down"
 		return
 	var item: Resource = picked["item"]
-	var name: String = _label(item)
+	var named: String = _label(item)
 	var worth: int = Refinery.parts_from(item, Refinery.place_of(_ship))
 	var kept: int = 0
 	if bool(picked["held"]):
@@ -1205,9 +1205,9 @@ func _scrap_picked() -> void:
 	_pick = maxi(_pick - 1, 0)
 	_inspecting = null
 	if kept < worth:
-		_notice = "%s: %d parts, %d lost for want of room" % [name, kept, worth - kept]
+		_notice = "%s: %d parts, %d lost for want of room" % [named, kept, worth - kept]
 	else:
-		_notice = "%s: %d parts" % [name, kept]
+		_notice = "%s: %d parts" % [named, kept]
 
 
 ## What a press does. Public so the behaviour can be driven without a

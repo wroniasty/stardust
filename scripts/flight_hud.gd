@@ -567,7 +567,7 @@ func _draw_conic(
 	var reach: float = maxf(
 		minf(apoapsis, planet.influence_radius), maxf(arm.length(), planet.surface_radius)
 	)
-	var scale: float = (DIAL * 0.5 - 3.0) / maxf(reach, 1.0)
+	var to_dial: float = (DIAL * 0.5 - 3.0) / maxf(reach, 1.0)
 
 	# Turned with the view, like the map: a direction on the dial is the
 	# direction you would fly if you pointed the nose that way.
@@ -583,7 +583,7 @@ func _draw_conic(
 	# the same thing about scale and leaves the inside visible, which is
 	# where a suborbital conic lives.
 	_canvas.draw_circle(focus, PLANET_DOT, _ink.nav)
-	var ground_ring: float = planet.surface_radius * scale
+	var ground_ring: float = planet.surface_radius * to_dial
 	if ground_ring > PLANET_DOT + 1.0:
 		_canvas.draw_arc(focus, ground_ring, 0.0, TAU, 48, _ink.nav, 1.0)
 
@@ -601,7 +601,7 @@ func _draw_conic(
 				_canvas.draw_polyline(track, colour, width)
 			track = PackedVector2Array()
 			continue
-		track.append(focus + Vector2.from_angle(theta + periapsis_angle + turn) * r * scale)
+		track.append(focus + Vector2.from_angle(theta + periapsis_angle + turn) * r * to_dial)
 	if track.size() > 1:
 		_canvas.draw_polyline(track, colour, width)
 
@@ -614,23 +614,23 @@ func _draw_conic(
 	# it, so the dots were the only thing that could be seen doing it.
 	# Two dots a pixel apart would carry nothing anyway: the ring already
 	# says the height is the same all the way round.
-	var spread: float = (apoapsis - periapsis) * scale
+	var spread: float = (apoapsis - periapsis) * to_dial
 	var shown: float = clampf((spread - APSIS_SPREAD) / APSIS_SPREAD, 0.0, 1.0)
 	if shown > 0.0:
 		_dot(
-			focus + Vector2.from_angle(periapsis_angle + turn) * periapsis * scale,
+			focus + Vector2.from_angle(periapsis_angle + turn) * periapsis * to_dial,
 			Color(colour, colour.a * shown),
 		)
 		if not is_inf(apoapsis):
 			_dot(
-				focus + Vector2.from_angle(periapsis_angle + turn + PI) * apoapsis * scale,
+				focus + Vector2.from_angle(periapsis_angle + turn + PI) * apoapsis * to_dial,
 				Color(_ink.ok, _ink.ok.a * shown),
 			)
 	# Where the ship is on it, which is what turns a shape into a
 	# position. A square in the brightest ink: it used to be a circle in
 	# the apoapsis green, which is how a pilot ended up with three dots
 	# and no way of telling which was which.
-	var here: Vector2 = (focus + arm.rotated(turn) * scale).round()
+	var here: Vector2 = (focus + arm.rotated(turn) * to_dial).round()
 	_canvas.draw_rect(
 		Rect2(here - Vector2(SHIP_MARK, SHIP_MARK), Vector2(SHIP_MARK, SHIP_MARK) * 2.0),
 		_ink.value,

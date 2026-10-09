@@ -50,7 +50,7 @@ func _physics_process(delta: float) -> void:
 ## chase flies straight. That is not a special case to be papered over with
 ## a fallback -- flying straight at the point you indicated is exactly what
 ## pointing at empty space asked for.
-static func find_target(at: Vector2, shooter: Node, tree: SceneTree, reach: float) -> Node2D:
+static func find_target(at: Vector2, fired_by: Node, tree: SceneTree, reach: float) -> Node2D:
 	var best: Node2D = null
 	var nearest: float = INF
 	for node: Node in tree.get_nodes_in_group(Ship.SHIP_GROUP):
@@ -58,7 +58,7 @@ static func find_target(at: Vector2, shooter: Node, tree: SceneTree, reach: floa
 		# Not the one that fired, and not a wreck: a missile spent on
 		# something already dead is a missile wasted, and whatever killed it
 		# is still right there.
-		if ship == null or ship == shooter or ship.is_destroyed():
+		if ship == null or ship == fired_by or ship.is_destroyed():
 			continue
 		var distance: float = ship.global_position.distance_to(at)
 		if distance > reach + ship.hull_extent() or distance >= nearest:

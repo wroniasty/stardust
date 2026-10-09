@@ -53,10 +53,10 @@ static func solve(columns: Array[Vector3], target: Vector3) -> PackedFloat32Arra
 
 	for pass_index: int in range(ITERATIONS):
 		# Where the ship is actually going with the current throttles.
-		var produced: Vector3 = Vector3.ZERO
+		var made: Vector3 = Vector3.ZERO
 		for i: int in range(columns.size()):
-			produced += columns[i] * throttles[i]
-		var error: Vector3 = produced - target
+			made += columns[i] * throttles[i]
+		var error: Vector3 = made - target
 
 		for i: int in range(columns.size()):
 			# d/dt |A t - b|^2 for one engine, halved -- the factor is

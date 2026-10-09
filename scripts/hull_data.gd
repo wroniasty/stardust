@@ -139,12 +139,12 @@ static func all() -> Dictionary:
 ## shape that would need a different picture, so it matches nothing and
 ## falls back to being drawn as a polygon -- which is what a sandbox should
 ## show for a shape it invented.
-static func matching(outline: PackedVector2Array) -> HullData:
-	if outline.is_empty():
+static func matching(shape: PackedVector2Array) -> HullData:
+	if shape.is_empty():
 		return null
-	for id: Variant in all():
-		var hull: HullData = all()[id]
-		if hull.outline == outline:
+	for named: Variant in all():
+		var hull: HullData = all()[named]
+		if hull.outline == shape:
 			return hull
 	return null
 
@@ -158,14 +158,14 @@ static func catalogue() -> Array[HullData]:
 	var ids: Array = all().keys()
 	ids.sort()
 	var out: Array[HullData] = []
-	for id: Variant in ids:
-		out.append(all()[id])
+	for named: Variant in ids:
+		out.append(all()[named])
 	return out
 
 
 ## The hull with this id, or null.
-static func of(id: StringName) -> HullData:
-	return all().get(id)
+static func of(named: StringName) -> HullData:
+	return all().get(named)
 
 
 ## Half the longest span of the outline, matching Ship.hull_extent().

@@ -179,9 +179,9 @@ func bind(
 	ship: Ship,
 	system: StarSystem,
 	map: GalaxyMap,
-	here: int,
+	from_index: int,
 	galaxy: Node = null,
-	at: Vector2 = Vector2.INF,
+	from_point: Vector2 = Vector2.INF,
 	clock: float = 0.0,
 ) -> void:
 	if _ship != null and is_instance_valid(_ship) and _ship.hull_impact.is_connected(_on_hit):
@@ -189,17 +189,17 @@ func bind(
 	_ship = ship
 	_system = system
 	_map = map
-	_here = here
+	_here = from_index
 	_galaxy = galaxy
 	# The moment the bodies in this scene were placed at, frozen on
 	# arrival (`StreamingManager.visit_time`). Handed in rather than read,
 	# so the clearance rules ask about the planets the pilot can see
 	# rather than about where they would be if the clock had run on.
 	_visit_time = clock
-	if at != Vector2.INF:
-		_at = at
-	elif map != null and here >= 0 and here < map.count():
-		_at = map.positions[here]
+	if from_point != Vector2.INF:
+		_at = from_point
+	elif map != null and from_index >= 0 and from_index < map.count():
+		_at = map.positions[from_index]
 	if _ship != null:
 		_ship.hull_impact.connect(_on_hit)
 
@@ -245,11 +245,11 @@ func blocked_by(index: int) -> String:
 		return "no ship"
 	if index < 0 or _map == null or index >= _map.count() or index == _here:
 		return "no target"
-	var holding: SystemBody = (
+	var blocker: SystemBody = (
 		null if _system == null else _system.holding(_ship.global_position, _visit_time)
 	)
-	if holding != null:
-		return "too close to %s" % holding.display_name
+	if blocker != null:
+		return "too close to %s" % blocker.display_name
 	var drive: JumpDriveData = _ship.jump_drive()
 	if drive == null:
 		return "no drive"
@@ -353,8 +353,8 @@ func arrival_point(index: int) -> Vector2:
 	var out: Vector2 = (_at - _map.positions[index]).normalized()
 	if out.is_zero_approx():
 		out = Vector2.UP
-	var target: StarSystem = _system_at(index)
-	var reach: float = target.outer_radius() if target != null else 100000.0
+	var destination: StarSystem = _system_at(index)
+	var reach: float = destination.outer_radius() if destination != null else 100000.0
 	return out * reach
 
 

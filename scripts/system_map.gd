@@ -372,8 +372,8 @@ func _forecast() -> void:
 		TRACK_SECONDS.x,
 		TRACK_SECONDS.y,
 	)
-	var scale: float = seconds * float(Engine.physics_ticks_per_second) / float(TRACK_STEPS)
-	var flight: Dictionary = TrajectoryPredictor.coast(ship, TRACK_STEPS, scale)
+	var steps: float = seconds * float(Engine.physics_ticks_per_second) / float(TRACK_STEPS)
+	var flight: Dictionary = TrajectoryPredictor.coast(ship, TRACK_STEPS, steps)
 	_track = flight["path"]
 	_impact = flight["impact"]
 
@@ -452,8 +452,8 @@ func to_map(point: Vector2, plan: Dictionary) -> Vector2:
 ## test checks it.
 func from_map(at: Vector2, plan: Dictionary) -> Vector2:
 	var from_centre: Vector2 = at - Vector2(plan["centre"])
-	var scale: float = maxf(float(plan["scale"]), 0.000001)
-	return Vector2(plan["focus"]) + from_centre.rotated(-float(plan["turn"])) / scale
+	var magnify: float = maxf(float(plan["scale"]), 0.000001)
+	return Vector2(plan["focus"]) + from_centre.rotated(-float(plan["turn"])) / magnify
 
 
 func _process(_delta: float) -> void:
@@ -572,7 +572,7 @@ func _is_live(body: SystemBody) -> bool:
 	return _manager.node_for(body) != null
 
 
-func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
+func _draw_body(body: SystemBody, at: Vector2, magnify: float) -> void:
 	var colour: Color = LIVE if _is_live(body) else MODELLED
 	if body == _picked:
 		colour = PICK
@@ -587,10 +587,10 @@ func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
 	# the body, which at system scale is never -- a well is a few thousand
 	# pixels against a system of hundreds of thousands. Zoom to a planet
 	# and they are the two circles the approach is about.
-	var well: float = body.well_radius * scale
+	var well: float = body.well_radius * magnify
 	if well > PLANET_SIZE + 2.0:
 		_dotted_ring(at, well, Color(colour, 0.35))
-	var air: float = (body.radius + maxf(body.atmosphere_height, 0.0)) * scale
+	var air: float = (body.radius + maxf(body.atmosphere_height, 0.0)) * magnify
 	if body.atmosphere_height > 0.0 and air > PLANET_SIZE + 1.5:
 		_canvas.draw_arc(at, air, 0.0, TAU, 48, Color(AIR, colour.a), 1.0)
 
@@ -598,7 +598,7 @@ func _draw_body(body: SystemBody, at: Vector2, scale: float) -> void:
 	# bigger than the marker standing in for it. At system scale a planet
 	# is a tenth of a pixel and the marker is all there is; zoomed to a
 	# planet and its moons it is the thing you are looking at.
-	var surface: float = body.radius * scale
+	var surface: float = body.radius * magnify
 	if surface > PLANET_SIZE + 1.0:
 		_canvas.draw_arc(at, surface, 0.0, TAU, 32, colour, 1.0)
 

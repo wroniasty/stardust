@@ -99,14 +99,14 @@ func wind() -> Dictionary:
 	var away: float = _ship.global_position.distance_to(_star.global_position)
 	var thick: float = Corona.density_at(away, burn)
 	var rate: float = Corona.units_per_second(scoop, away, burn)
-	var snag: Snag = Snag.NONE
+	var trouble: Snag = Snag.NONE
 	if rate <= 0.0:
-		snag = Snag.THIN
+		trouble = Snag.THIN
 	elif Stores.fits_in(Stores.Kind.STARDUST, _ship.cargo_free()) <= 0:
-		snag = Snag.HOLD_FULL
+		trouble = Snag.HOLD_FULL
 	return {
 		"rate": rate,
-		"snag": snag,
+		"snag": trouble,
 		"density": thick,
 		"best": Corona.best_radius(burn),
 		"away": away,
@@ -264,5 +264,5 @@ func _deltas() -> Dictionary:
 	return {}
 
 
-static func snag_name(snag: int) -> String:
-	return SNAG_NAMES[clampi(snag, 0, SNAG_NAMES.size() - 1)]
+static func snag_name(which: int) -> String:
+	return SNAG_NAMES[clampi(which, 0, SNAG_NAMES.size() - 1)]
