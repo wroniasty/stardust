@@ -215,6 +215,16 @@ porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
   W pierwszej wersji była jedyną poziomą linią na płótnie i rysowana grubo —
   i pierwsze, co się stało, to wyrównanie do niej pary strafe, czyli do
   jedynej linii, do której te pozycje nie mają być wyrównane.
+- [x] Edytor atrybutów kadłuba: `id`, `display_name`, `cargo_capacity` z
+  `get_property_list()`, **bez kolekcji** — obrys i siedem list slotów należą
+  do płótna i do liczników, a dziewięć wierszy „4 items" przed trzema
+  edytowalnymi polami to szum. Wpisana liczba jest gestem jak przeciągnięcie,
+  więc trafia na stos cofania, a płótno się odświeża, bo `cargo_capacity` to
+  masa, a masa przesuwa środek masy.
+- [x] Kolumny doku na `HSplitContainer`: linie między panelami można
+  przeciągać, prawa startuje mniej więcej dwa razy szersza. Podłoga 240 px
+  jest niska celowo — minimum wygodne to minimum, którego nie da się usunąć
+  z drogi.
 - [ ] Ten sam dock dla broni i silników (`FIELDS` jest tabelą, nie kodem).
 
 Gotowe, gdy: dyszę da się przesunąć myszą, licznik od razu mówi, co z tego
