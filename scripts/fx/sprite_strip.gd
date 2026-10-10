@@ -4,17 +4,35 @@ extends Resource
 ## Jeden obrazek -- albo kilka klatek jednego -- i miejsce, w ktorym siedzi
 ## jego punkt zaczepienia.
 ##
-## The frames are columns of one file, which is the whole format: a strip,
-## not a folder of numbered PNGs and not a SpriteFrames per animation. One
-## file per animation means the import rule is a rule rather than a decision
-## per asset, and it means a still picture and a six-frame flame are the same
-## kind of thing with `frames` set to one or six.
+## Columns are frames and rows are animations, which is the whole format:
+## a sheet, not a folder of numbered PNGs and not a SpriteFrames per
+## animation. One file per **part** means the import rule is a rule rather
+## than a decision per asset, and it means a still picture and a six-frame
+## flame are the same kind of thing with `frames` set to one or six.
+##
+## It was one file per animation until a part needed two of them -- a gun
+## that is idle and firing, a leg that is stowed and cycling. Rows extend
+## the format in the direction it already pointed rather than adding a
+## second kind of thing beside it, and a file with one row is exactly what
+## it was: `rows` at one and no clips is today's behaviour, number for
+## number.
 
 ## The strip. Width must divide evenly by `frames`.
 @export var texture: Texture2D = null
 
-## How many columns the file holds.
+## How many columns the file holds, which is the length of a row.
 @export var frames: int = 1
+
+## How many rows, which is how many animations.
+@export var rows: int = 1
+
+## The animations, by name. Empty means the whole sheet is one
+## animation, which is what every file that predates this has.
+##
+## A clip that names no row and no length gets row zero and the full
+## width, so adding a second animation to a part costs one entry rather
+## than two.
+@export var clips: Array[StripClip] = []
 
 ## Where the thing's own origin sits inside a frame, in texels from the
 ## frame's top-left corner.
@@ -57,14 +75,50 @@ extends Resource
 
 
 func is_valid() -> bool:
-	return texture != null and frames >= 1
+	return texture != null and frames >= 1 and rows >= 1
+
+
+## The named animation, or the whole sheet when there is none.
+##
+## Never null: a caller that asks for a clip a part does not have gets
+## the part's default rather than a crash, because a look table and a
+## driver are written by different people and a missing name should
+## show as "it did not animate" and not as a stopped game.
+func clip(named: StringName = &"") -> StripClip:
+	for one: StripClip in clips:
+		if one != null and (named == &"" or one.name == named):
+			return one
+	return StripClip.new()
+
+
+## Whether this part actually has the named animation, which is the
+## question `clip` deliberately does not answer.
+func has_clip(named: StringName) -> bool:
+	for one: StripClip in clips:
+		if one != null and one.name == named:
+			return true
+	return false
+
+
+## How many frames that clip runs for: its own length, or the row's.
+func frames_of(one: StripClip) -> int:
+	if one == null or one.frames <= 0:
+		return frames
+	return mini(one.frames, frames)
+
+
+## And how fast at full drive: the clip's figure, or the part's.
+func rate_of(one: StripClip) -> float:
+	if one == null or one.rate <= 0.0:
+		return full_rate
+	return one.rate
 
 
 ## Size of one frame, in texels.
 func frame_size() -> Vector2i:
 	if not is_valid():
 		return Vector2i.ZERO
-	return Vector2i(texture.get_width() / frames, texture.get_height())
+	return Vector2i(texture.get_width() / frames, texture.get_height() / rows)
 
 
 ## Size of one frame in design pixels, which is what it will measure on the

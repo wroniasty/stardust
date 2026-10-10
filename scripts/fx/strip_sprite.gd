@@ -13,11 +13,21 @@ extends Sprite2D
 
 var strip: SpriteStrip = null
 
+## Which animation of the strip is running. Never null while a strip is
+## shown: `SpriteStrip.clip` hands back the whole sheet when a part has
+## no clips, which is what every file had before rows existed.
+var clip: StripClip = null
+
 ## Frames per second right now. Zero holds the current frame, which is what a
 ## still picture and a shut-down engine have in common.
 var rate: float = 0.0
 
 var _phase: float = 0.0
+
+## Whether a one-shot clip has run out. Held rather than acted on: the
+## driver decides what an ended animation looks like, the same way it
+## decides how fast a running one goes.
+var _spent: bool = false
 
 
 ## Shows `new_strip`, setting the scale, the filter and the pivot from it.
@@ -34,8 +44,8 @@ func show_strip(new_strip: SpriteStrip) -> void:
 		return
 	texture = new_strip.texture
 	hframes = maxi(new_strip.frames, 1)
-	frame = 0
-	_phase = 0.0
+	vframes = maxi(new_strip.rows, 1)
+	play(&"")
 	centered = false
 	offset = -new_strip.pivot
 	scale = Vector2.ONE * (Art.WORLD_SCALE if new_strip.in_world else 1.0)
@@ -52,15 +62,45 @@ func show_strip(new_strip: SpriteStrip) -> void:
 	visible = true
 
 
+## Starts an animation from its first frame.
+##
+## An empty name is the part's default, which on a file with no clips is
+## the whole sheet -- so every caller that never heard of clips keeps
+## working unchanged.
+func play(named: StringName = &"") -> void:
+	if strip == null:
+		return
+	clip = strip.clip(named)
+	_phase = 0.0
+	_spent = false
+	frame = clip.row * hframes
+
+
+## Whether a one-shot clip has reached its end. Always false while a
+## looping one is running.
+func spent() -> bool:
+	return _spent
+
+
 ## Runs the animation on for `delta` at the rate that was last set.
 ##
-## Called by the driver, not by the engine. A one-frame strip costs the
+## Called by the driver, not by the engine. A one-frame clip costs the
 ## branch and nothing else.
 func advance(delta: float) -> void:
-	if strip == null or strip.frames <= 1 or rate <= 0.0:
+	if strip == null or clip == null or rate <= 0.0 or _spent:
 		return
-	_phase = fposmod(_phase + rate * delta, float(strip.frames))
-	frame = int(_phase)
+	var count: int = strip.frames_of(clip)
+	if count <= 1:
+		return
+	_phase += rate * delta
+	if clip.loop:
+		_phase = fposmod(_phase, float(count))
+	elif _phase >= float(count):
+		# An event ends rather than wrapping, and holds its last frame
+		# until the driver does something about it.
+		_phase = float(count) - 1.0
+		_spent = true
+	frame = clip.row * hframes + mini(int(_phase), count - 1)
 
 
 ## Points the animation at `fraction` of whatever drives it.
@@ -75,4 +115,4 @@ func advance(delta: float) -> void:
 func drive(fraction: float) -> void:
 	if strip == null:
 		return
-	rate = strip.full_rate * maxf(fraction, 0.0)
+	rate = strip.rate_of(clip) * maxf(fraction, 0.0)

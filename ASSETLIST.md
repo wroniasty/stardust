@@ -83,10 +83,17 @@ skali 1:1, ręcznie postawiony piksel dalej wygrywa z każdą procedurą.
 Każdy sprite wolno animować i część z nich powinna być animowana. Format
 jednolity, żeby import był jedną regułą, a nie decyzją per plik:
 
-- **Poziomy pasek klatek** w jednym pliku (`nazwa_strip6.png`), kwadratowe
-  klatki, liczba klatek w nazwie. Godot czyta to jako `hframes` na
-  `Sprite2D` albo `SpriteFrames` na `AnimatedSprite2D`; w obu wypadkach
-  jeden plik na animację, nie katalog po klatce.
+- **Arkusz: kolumny to klatki, wiersze to animacje**, w jednym pliku
+  (`nazwa_strip6.png`), kwadratowe klatki, liczba klatek w nazwie. Godot
+  czyta to jako `hframes` i `vframes` na `Sprite2D`. Jeden plik na
+  **część**, nie katalog po klatce i nie `SpriteFrames` per animacja.
+  Plik jednowierszowy to dokładnie to, czym był: `rows = 1` i brak klipów
+  znaczy dzisiejsze zachowanie, liczba w liczbę.
+- **Animacje nazywa `SpriteStrip.clips`** (`StripClip`: wiersz, długość,
+  tempo, pętla). Pusta lista znaczy „cały arkusz to jedna animacja", czyli
+  każdy plik sprzed tej zmiany. Klip **bez pętli** jest tym, czego ciągły
+  sterujący nie umie powiedzieć: wystrzał ma początek i koniec i nie ma
+  „czterdziestu procent wystrzelenia".
 - **Klatki na sekundę są daną, nie cechą pliku.** Pióropusz przy pełnej
   przepustnicy biegnie szybciej niż na jednej czwartej — więc tempo jest
   wyliczane z tego samego ułamka, którym skaluje się jasność i światło,

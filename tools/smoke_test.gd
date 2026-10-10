@@ -11887,6 +11887,8 @@ func _check_art() -> void:
 			counted += 1
 			if strip.texture.get_width() % strip.frames != 0:
 				broken += 1
+			if strip.rows < 1 or strip.texture.get_height() % strip.rows != 0:
+				broken += 1
 			if not strip.pivot_is_sane():
 				astray += 1
 				print("    pivot %s outside %s" % [strip.pivot, strip.frame_size()])
@@ -11897,6 +11899,7 @@ func _check_art() -> void:
 					strip.texture.resource_path, strip.in_world,
 				])
 	_expect(counted > 0, "the look tables hand out sprites (%d)" % counted)
+	_check_a_sheet_holds_several_animations()
 	_expect(broken == 0, "every sprite has a texture that divides into its frames")
 	_expect(astray == 0, "and a pivot inside its own frame")
 	_expect(mislabelled == 0, "and the scale flag agrees with which folder the file is in")
@@ -12149,6 +12152,98 @@ func _check_soundscape() -> void:
 	for voice: Node in sound.get_children():
 		(voice as AudioStreamPlayer2D).stream = null
 	sound.free()
+
+
+## Arkusz trzyma kilka animacji, a stary plik znaczy to, co znaczyl.
+##
+## Columns were frames and the file was the animation. Rows are
+## animations now, which a part needs the moment it has two of them --
+## a gun that is idle and firing, a leg that is stowed and cycling --
+## and the whole claim of the change is that it costs the files that
+## came before it nothing. So the first half of this is that a sheet of
+## one row with no clips answers exactly as it did, and the second is
+## what the rows are actually for.
+func _check_a_sheet_holds_several_animations() -> void:
+	# A strip as every shipped file is one: one row, no clips.
+	var plain: SpriteStrip = SpriteStrip.new()
+	plain.texture = PlaceholderTexture2D.new()
+	(plain.texture as PlaceholderTexture2D).size = Vector2(24.0, 8.0)
+	plain.frames = 3
+	plain.full_rate = 12.0
+	_expect(
+		plain.frame_size() == Vector2i(8, 8),
+		"a one-row sheet measures its frame as it always did (%s)" % plain.frame_size(),
+	)
+	var whole: StripClip = plain.clip()
+	_expect(
+		plain.frames_of(whole) == 3 and is_equal_approx(plain.rate_of(whole), 12.0),
+		"and its default clip is the whole strip at the strip's rate",
+	)
+
+	# Two animations in one file: two rows of three.
+	var sheet: SpriteStrip = SpriteStrip.new()
+	sheet.texture = PlaceholderTexture2D.new()
+	(sheet.texture as PlaceholderTexture2D).size = Vector2(24.0, 16.0)
+	sheet.frames = 3
+	sheet.rows = 2
+	sheet.full_rate = 10.0
+	var idle: StripClip = StripClip.new()
+	idle.name = &"idle"
+	idle.frames = 1
+	var firing: StripClip = StripClip.new()
+	firing.name = &"firing"
+	firing.row = 1
+	firing.rate = 20.0
+	firing.loop = false
+	sheet.clips = [idle, firing]
+	_expect(
+		sheet.frame_size() == Vector2i(8, 8),
+		"a two-row sheet of the same frames measures the same (%s)" % sheet.frame_size(),
+	)
+	_expect(
+		sheet.has_clip(&"firing") and not sheet.has_clip(&"reloading"),
+		"a part says which animations it has",
+	)
+	_expect(
+		sheet.clip(&"nonesuch") != null,
+		"and asking for one it has not still answers, rather than crashing",
+	)
+	_expect(
+		is_equal_approx(sheet.rate_of(firing), 20.0)
+		and is_equal_approx(sheet.rate_of(idle), 10.0),
+		"a clip may run at its own rate, or at the part's",
+	)
+
+	# And on a sprite: the row decides which frames are reached.
+	var shown: StripSprite = StripSprite.new()
+	root.add_child(shown)
+	shown.show_strip(sheet)
+	_expect(
+		shown.hframes == 3 and shown.vframes == 2 and shown.frame == 0,
+		"a sheet shown starts on the first frame of the first row (%d)" % shown.frame,
+	)
+	shown.play(&"firing")
+	_expect(shown.frame == 3, "playing a clip jumps to its row (%d)" % shown.frame)
+
+	# A one-shot is the thing a continuous driver cannot say. It ends.
+	shown.drive(1.0)
+	for _tick: int in range(30):
+		shown.advance(0.1)
+	_expect(
+		shown.spent() and shown.frame == 5,
+		"a clip that does not loop ends on its last frame (%d, spent %s)" % [
+			shown.frame, shown.spent(),
+		],
+	)
+	shown.play(&"idle")
+	shown.drive(1.0)
+	for _tick: int in range(30):
+		shown.advance(0.1)
+	_expect(
+		not shown.spent() and shown.frame == 0,
+		"and a looping one of a single frame stays put (%d)" % shown.frame,
+	)
+	_discard(shown)
 
 
 ## What the low-pass on the world bus is set to.

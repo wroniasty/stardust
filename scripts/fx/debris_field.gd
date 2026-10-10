@@ -414,6 +414,6 @@ func _chip_sheet(strip: SpriteStrip) -> CanvasItemMaterial:
 	if strip != null and strip.frames > 1:
 		skin.particles_animation = true
 		skin.particles_anim_h_frames = strip.frames
-		skin.particles_anim_v_frames = 1
+		skin.particles_anim_v_frames = strip.rows
 		skin.particles_anim_loop = false
 	return skin
