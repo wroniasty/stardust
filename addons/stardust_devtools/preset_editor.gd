@@ -16,6 +16,15 @@ extends VBoxContainer
 ## that.
 
 const DIRECTORY: String = "res://resources/presets"
+
+## The narrowest the form column may be dragged, and how much wider
+## than that it starts.
+##
+## The same figures the hull dock uses, and a low floor for the same
+## reason: a minimum wide enough to be comfortable is a minimum nobody
+## can get out of the way.
+const SIDE_FLOOR: float = 240.0
+const SIDE_EXTRA: float = 280.0
 const HULL_LOOKS: String = "res://resources/fx/looks/hull.tres"
 
 ## Where the things a preset can name live. Scanned rather than listed,
@@ -110,7 +119,11 @@ func _skin_keys() -> Array[StringName]:
 
 
 func _build() -> void:
-	var columns: HBoxContainer = HBoxContainer.new()
+	# Split panes rather than a box, so the dividers can be dragged.
+	# The form column needs more room than the hull dock's -- a row
+	# carries two dropdowns, a spin box and two buttons -- and how much
+	# more is the pilot's to decide.
+	var columns: HSplitContainer = HSplitContainer.new()
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_child(columns)
 
@@ -125,6 +138,12 @@ func _build() -> void:
 	left.add_child(_files)
 	columns.add_child(left)
 
+	var rest: HSplitContainer = HSplitContainer.new()
+	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Negative moves the divider left, which is the form's gain.
+	rest.split_offset = -SIDE_EXTRA
+	columns.add_child(rest)
+
 	var middle: VBoxContainer = VBoxContainer.new()
 	middle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title = Label.new()
@@ -135,9 +154,9 @@ func _build() -> void:
 	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_canvas.hovered.connect(func(note: String) -> void: _status.text = note)
 	middle.add_child(_canvas)
-	columns.add_child(middle)
+	rest.add_child(middle)
 
-	columns.add_child(_build_form())
+	rest.add_child(_build_form())
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -147,10 +166,7 @@ func _build() -> void:
 
 func _build_form() -> Control:
 	var scroller: ScrollContainer = ScrollContainer.new()
-	# Wide enough for a stats panel: a caption column sized to
-	# `rounds_per_second`, a checkbox in front of it and a spin box
-	# after it do not fit in three hundred.
-	scroller.custom_minimum_size = Vector2(380.0, 0.0)
+	scroller.custom_minimum_size = Vector2(SIDE_FLOOR, 0.0)
 	scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
 	var column: VBoxContainer = VBoxContainer.new()

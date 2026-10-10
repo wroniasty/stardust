@@ -130,6 +130,7 @@ static func _labels_under(where: Node) -> Array[Label]:
 static func _hull_dock(dock: HullEditor) -> int:
 	var failures: int = 0
 	failures += _says(dock != null and dock._canvas != null, "the hull dock built")
+	failures += _says(_has_splitter(dock), "with dividers that can be dragged")
 	if dock == null or dock._canvas == null:
 		return failures
 	dock._canvas.size = Vector2(400.0, 300.0)
@@ -168,6 +169,7 @@ static func _hull_dock(dock: HullEditor) -> int:
 static func _preset_dock(dock: PresetEditor) -> int:
 	var failures: int = 0
 	failures += _says(dock != null and dock._canvas != null, "the preset dock built")
+	failures += _says(_has_splitter(dock), "with dividers that can be dragged")
 	if dock == null or dock._canvas == null:
 		return failures
 	dock._canvas.size = Vector2(400.0, 300.0)
@@ -252,6 +254,19 @@ static func _stats_toggle(where: Node) -> Button:
 		if deeper != null:
 			return deeper
 	return null
+
+
+## Whether this dock lays its columns out in something draggable.
+##
+## Both were `HBoxContainer`s, where the width of the side panel was a
+## number somebody had to pick for everybody.
+static func _has_splitter(where: Node) -> bool:
+	for child: Node in where.get_children():
+		if child is HSplitContainer:
+			return true
+		if _has_splitter(child):
+			return true
+	return false
 
 
 ## How many rows the first **shown** `ResourceForm` under here has.

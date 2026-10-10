@@ -277,6 +277,10 @@ zapis po prawej.
   inaczej środek masy rysowany w doku nie byłby tego statku. Literówka w
   nazwie pola jest odrzucana przez `fault_in`, bo `set()` na nieznanej nazwie
   nie robi nic i preset wyglądałby, jakby coś przypiął.
+- [x] Kolumny doku na `HSplitContainer`, jak w doku kadłubów: te same 240 px
+  podłogi i ten sam start. Wiersz presetu niesie dwie listy, spinbox i dwa
+  przyciski, więc potrzebuje więcej miejsca niż kadłubowy — ile dokładnie,
+  decyduje przeciągnięcie, nie stała w kodzie.
 - [ ] Przeciąganie zatok po podglądzie. Dziś ich `at` ustawia się tylko w
   inspektorze.
 - [ ] Podgląd skinu: dock pokazuje klucz, nie obrazek.
