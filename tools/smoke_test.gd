@@ -1826,12 +1826,16 @@ func _check_weapons() -> void:
 	var probe: Ship = _spawn_ship()
 	var mount: Hardpoint = probe.hardpoints[0]
 	_expect(mount.weapon != null, "the stock hull comes with a gun fitted")
+	# What the mount is actually holding, rather than the catalogue file
+	# it used to be assumed to hold: the suite flies its own fitout now,
+	# and this is about `fit` handing back whatever was there.
+	var was: WeaponData = mount.weapon
 
 	# An empty accepted-type list is a general purpose mount.
 	_expect(mount.can_fit(siege), "a general purpose mount takes any weapon")
 	var previous: WeaponData = mount.fit(siege)
 	_expect(
-		mount.weapon == siege and previous == stock,
+		mount.weapon == siege and previous == was,
 		"fitting hands the old weapon back",
 	)
 
@@ -8675,7 +8679,10 @@ func _check_a_gun_goes_where_it_is_told() -> void:
 ## damage at four" and follows the catalogue for the rest -- which is
 ## what this checks.
 func _check_a_preset_pins_fields() -> void:
-	var stock: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	# The suite's own fitout, not the shipped preset: that one is
+	# content and may already pin something, which would make "fits the
+	# object it names" false for a reason this test is not about.
+	var stock: ShipPreset = _reference_preset()
 	var catalogue: WeaponData = stock.guns[0].weapon
 	var was_damage: float = catalogue.damage
 	var was_rate: float = catalogue.rounds_per_second
@@ -8685,7 +8692,7 @@ func _check_a_preset_pins_fields() -> void:
 	var ship: Ship = _spawn_ship()
 	_expect(ShipFitout.apply(ship, stock), "a preset with nothing pinned refits")
 	var plain: WeaponData = _first_weapon(ship)
-	_expect(plain == catalogue, "and fits the catalogue weapon itself, not a copy")
+	_expect(plain == catalogue, "and fits the object the preset names, not a copy of it")
 
 	# One field pinned: a different object, that field changed, and the
 	# rest still the catalogue's.
@@ -8708,7 +8715,7 @@ func _check_a_preset_pins_fields() -> void:
 	)
 	_expect(
 		is_equal_approx(catalogue.damage, was_damage),
-		"while the catalogue weapon keeps its own figure (%.2f)" % catalogue.damage,
+		"while the named weapon keeps its own figure (%.2f)" % catalogue.damage,
 	)
 
 	# The point of pinning rather than copying: retune the catalogue and
@@ -8719,7 +8726,7 @@ func _check_a_preset_pins_fields() -> void:
 	_expect(
 		later != null and is_equal_approx(later.rounds_per_second, was_rate * 2.0)
 		and is_equal_approx(later.damage, was_damage * 0.5),
-		"a retuned catalogue reaches the unpinned fields and not the pinned one",
+		"retuning the named part reaches the unpinned fields and not the pinned one",
 	)
 	catalogue.rounds_per_second = was_rate
 	_discard(ship)
@@ -8727,7 +8734,7 @@ func _check_a_preset_pins_fields() -> void:
 	# Bulk is mass, so a pinned bulk has to reach the balance the dock
 	# draws. Off by this much and the centre of mass it shows is not the
 	# ship's.
-	var heavy: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	var heavy: ShipPreset = _reference_preset()
 	var drive: MountFit = null
 	for fit: MountFit in heavy.mounts:
 		if fit.kind == HullData.SLOT_DRIVE and drive == null:
@@ -8748,7 +8755,7 @@ func _check_a_preset_pins_fields() -> void:
 	# And a typo is refused rather than ignored: `set()` on a name the
 	# resource does not know does nothing at all, so the preset would
 	# read as though it pinned something and build a ship that did not.
-	var typo: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	var typo: ShipPreset = _reference_preset()
 	var wrong: GunFit = _copy_gun(typo.guns[0])
 	wrong.overrides = {"dammage": 1.0}
 	var only: Array[GunFit] = [wrong]
@@ -9123,7 +9130,7 @@ func _check_refit_is_safe() -> void:
 	var homeless: ShipPreset = _bad_preset("homeless mount")
 	var nowhere: MountFit = MountFit.new()
 	nowhere.place = &"Nose"
-	nowhere.engine = _stock_main_drive()
+	nowhere.engine = _reference_main_drive()
 	homeless.mounts.append(nowhere)
 	broken.append(homeless)
 
@@ -9549,7 +9556,7 @@ func _check_fitout_presets() -> void:
 	# A bigger engine is a heavier one. A table that scaled only the thrust
 	# would be handing out free power, which is the one thing a sandbox must
 	# not do quietly.
-	var plain: EngineData = _stock_main_drive()
+	var plain: EngineData = _reference_main_drive()
 	var was_thrust: float = plain.max_thrust
 	var was_bulk: float = plain.bulk
 	ShipFitout.apply(ship, _preset_named("stronger"))
@@ -9800,13 +9807,17 @@ func _check_feet_are_under_the_hull(hull: HullData) -> void:
 	)
 
 
-## The engine the stock preset puts in its main drive, whole rather than
-## the half each of the pair either side of the centre line gets.
-func _stock_main_drive() -> EngineData:
-	for fit: MountFit in ShipFitout.preset("dart (stock)").mounts:
-		if fit.kind == HullData.SLOT_DRIVE:
-			return fit.engine
-	return null
+## The main drive the suite flies on, whole rather than the half each
+## of the pair either side of the centre line gets.
+##
+## From the reference fitout, not from the shipped preset. It read the
+## shipped one until somebody bound its drive to a named place instead
+## of a kind -- a thing the preset dock now offers and a perfectly good
+## way to design a ship -- and the lookup for `kind == drive` came back
+## empty. Three flight tests failed on a content edit, which is the
+## whole thing `_reference_preset` exists to stop.
+func _reference_main_drive() -> EngineData:
+	return _reference_engine(&"drive")
 
 
 ## A planet built as the body a system says it is.
@@ -11646,7 +11657,7 @@ func _centreline_ship() -> Ship:
 	var whole: EngineData = null
 	for mount: EngineMount in ship.engine_mounts():
 		if String(mount.name).begins_with("MainDrive") and mount.installed != null:
-			whole = _stock_main_drive()
+			whole = _reference_main_drive()
 			mount.installed = null
 	for mount: EngineMount in ship.engine_mounts():
 		if mount.name == "MainDriveCenter":
@@ -11659,13 +11670,20 @@ func _spawn_ship() -> Ship:
 	var scene: PackedScene = load(SHIP_SCENE) as PackedScene
 	var ship: Ship = scene.instantiate() as Ship
 	ship.use_player_input = false
-	# The reference hull, not whatever resources/hulls/dart.tres says today:
-	# a flight test that fails because somebody is half way through nudging a
-	# jet is reporting on the content, not on the code under test. The stock
-	# fitout is still worn (Ship re-hulls it), so mounts, engines and guns
-	# are the real ones. Content gets its own checks, which only warn.
+	# The reference ship, not whatever `resources/` says today: a flight
+	# test that fails because somebody is half way through nudging a jet
+	# -- or raised the stock drive to 2000 N, which happened -- is
+	# reporting on the content, not on the code under test.
+	#
+	# The hull alone was not enough. It was pinned here first and the
+	# fitout was left real, so the geometry was ideal while the thrust
+	# and the rate of fire still came from files that are **supposed** to
+	# change; retuning the stock preset took nine flight tests with it.
+	# Both halves are the suite's own now, and the shipped files get
+	# their own checks, which only warn.
 	ship.hull = _reference_hull()
 	root.add_child(ship)
+	ShipFitout.apply(ship, _reference_preset())
 	# Quiet rebuild: the group dump is worth printing once at startup, not
 	# twenty times inside a test run.
 	ship.rebuild_control_groups(false)
@@ -17143,7 +17161,23 @@ func _check_skin() -> void:
 	# A plume starts at the nozzle's exit plane, not at the mount. Measured
 	# rather than trusted: the mount is inside the hull and a flame drawn
 	# there comes out of the middle of the ship.
-	var drive: EngineMount = ship.get_node_or_null("MainDriveLeft") as EngineMount
+	# Whichever drive this ship actually has an engine in, rather than a
+	# mount named here. The preset decides where its main drive goes --
+	# split across the pair or whole on the centre line, and the dock
+	# lets it be pinned to one named place -- so `MainDriveLeft` is a
+	# fact about one preset, not about the skin. What is being checked
+	# is that a plume starts at the bell's lip, which is true of any
+	# fitted engine.
+	var drive: EngineMount = null
+	for mount: EngineMount in ship.engine_mounts():
+		if drive == null and mount.installed != null and (
+			String(mount.name).begins_with("MainDrive")
+		):
+			drive = mount
+	_expect(drive != null, "the ship has a main drive to draw a flame on")
+	if drive == null:
+		ship.free()
+		return
 	var exhaust: Vector2 = -drive.force_direction()
 	var nozzle: SpriteStrip = (
 		load("res://resources/fx/looks/engine_nozzle.tres") as LookTable
@@ -17273,6 +17307,145 @@ func _expect_quiet(condition: bool, description: String) -> void:
 ## loaded, so the code under test never depends on a resource somebody is
 ## editing. These are the stock dart's numbers frozen at the time the flight
 ## checks were written; change them only on purpose.
+## Statek, ktorym lataja testy: kadlub i wyposazenie zbudowane tutaj.
+##
+## Every number below is the catalogue's as it stood when this was
+## written, so nothing the suite expects moved when it was introduced.
+## What changed is who owns them: an expectation like "a half-healthy
+## drive cannot lift off a 60 px/s2 world" is a claim about the solver
+## only if the drive is fixed, and a drive in `resources/engines` is
+## content. Tuning content is not breaking code.
+##
+## When a shipped file drifts from this, that is worth knowing and is
+## not a failure -- `_warn` says so, and `_check_fitout_presets` still
+## flies every real preset.
+func _reference_preset() -> ShipPreset:
+	var preset: ShipPreset = ShipPreset.new()
+	preset.id = &"reference"
+	preset.display_name = "dart (stock)"
+	preset.hull = _reference_hull()
+	preset.mounts = [
+		_reference_mount(HullData.SLOT_DRIVE, _reference_engine(&"drive")),
+		_reference_mount(HullData.SLOT_TORQUE, _reference_engine(&"torque")),
+		_reference_mount(HullData.SLOT_STRAFE, _reference_engine(&"thruster")),
+		_reference_mount(HullData.SLOT_RETRO, _reference_engine(&"retro")),
+	]
+	var gun: GunFit = GunFit.new()
+	gun.weapon = _reference_weapon()
+	preset.guns = [gun]
+	preset.bays = [
+		_reference_bay(1.5, Vector2(0, -2), null),
+		_reference_bay(3.0, Vector2(0, 1.75), _reference_module(&"cell")),
+		_reference_bay(1.6, Vector2(0, 1.75), _reference_module(&"scanner")),
+		_reference_bay(2.6, Vector2(0, 1.75), _reference_module(&"drive")),
+		_reference_bay(2.4, Vector2(0, 1.75), _reference_module(&"tank")),
+	]
+	return preset
+
+
+func _reference_mount(kind: StringName, engine: EngineData) -> MountFit:
+	var fit: MountFit = MountFit.new()
+	fit.kind = kind
+	fit.engine = engine
+	return fit
+
+
+func _reference_bay(size: float, at: Vector2, installed: ModuleData) -> BayFit:
+	var fit: BayFit = BayFit.new()
+	fit.size = size
+	fit.at = at
+	fit.installed = installed
+	return fit
+
+
+## The four engines the stock dart flies on, frozen.
+func _reference_engine(which: StringName) -> EngineData:
+	var engine: EngineData = EngineData.new()
+	match which:
+		&"drive":
+			engine.display_name = "main drive"
+			engine.type = 0
+			engine.max_thrust = 900.0
+			engine.bulk = 2.5
+			engine.spool_time = 0.6
+			engine.fuel_cost = 1.0
+			engine.boost_thrust = 3.0
+			engine.boost_draw = 12.0
+		&"torque":
+			engine.display_name = "torque jet"
+			engine.type = 1
+			engine.max_thrust = 160.0
+			engine.bulk = 0.5
+			engine.fuel_cost = 0.1
+		&"thruster":
+			engine.display_name = "maneuver thruster"
+			engine.type = 2
+			engine.max_thrust = 180.0
+			engine.bulk = 0.7
+			engine.fuel_cost = 0.2
+		&"retro":
+			engine.display_name = "retro thruster"
+			engine.type = 2
+			engine.max_thrust = 500.0
+			engine.bulk = 2.3
+			engine.fuel_cost = 0.4
+	return engine
+
+
+func _reference_weapon() -> WeaponData:
+	var gun: WeaponData = WeaponData.new()
+	gun.display_name = "autocannon"
+	gun.type = 0
+	gun.projectile_scene = load("res://scenes/projectile.tscn") as PackedScene
+	gun.damage = 0.08
+	gun.rounds_per_second = 4.0
+	gun.muzzle_speed = 600.0
+	gun.spread_degrees = 2.0
+	gun.range_px = 2400.0
+	gun.traverse_range = 0.78
+	gun.traverse_rate = 3.2
+	gun.crater_radius = 14.0
+	gun.inherit_velocity = true
+	gun.energy_cost = 6.0
+	gun.bulk = 1.0
+	return gun
+
+
+## And what the bays come out of the yard holding.
+func _reference_module(which: StringName) -> ModuleData:
+	match which:
+		&"cell":
+			var cell: GeneratorData = GeneratorData.new()
+			cell.display_name = "standard cell"
+			cell.capacity = 100.0
+			cell.recharge_rate = 40.0
+			cell.recharge_delay = 0.8
+			cell.bulk = 2.0
+			return cell
+		&"scanner":
+			var eyes: ScannerData = ScannerData.new()
+			eyes.display_name = "survey array"
+			eyes.reach = 14.0
+			eyes.depth = 1
+			eyes.bulk = 1.2
+			return eyes
+		&"drive":
+			var jump: JumpDriveData = JumpDriveData.new()
+			jump.display_name = "short hop"
+			jump.reach = 10.5
+			jump.charge_time = 2.4
+			jump.fuel_per_ly = 1.7
+			jump.bulk = 1.2
+			return jump
+		&"tank":
+			var tank: TankData = TankData.new()
+			tank.display_name = "standard tank"
+			tank.fuel_capacity = 120.0
+			tank.bulk = 1.0
+			return tank
+	return null
+
+
 func _reference_hull() -> HullData:
 	var hull: HullData = HullData.new()
 	hull.id = &"reference"

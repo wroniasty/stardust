@@ -6,67 +6,73 @@
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_m2sh0"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_6c3xw"]
 [ext_resource type="Script" path="res://scripts/gun_fit.gd" id="6_reicy"]
-[ext_resource type="Resource" path="res://resources/weapons/autocannon.tres" id="7_7gut6"]
+[ext_resource type="Resource" path="res://resources/weapons/pulse_repeater.tres" id="7_reicy"]
 [ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="8_t61hl"]
 [ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_012nt"]
-[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="10_vfy2s"]
 [ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="11_ompdp"]
 [ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="12_06cuu"]
+[ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="13_27vlh"]
 [ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="13_p63l7"]
 [ext_resource type="Script" path="res://scripts/ship_preset.gd" id="14_8ukcy"]
 
-[sub_resource type="Resource" id="Resource_fvmmu"]
+[sub_resource type="Resource" id="Resource_b80dj"]
 script = ExtResource("1_reicy")
 size = 1.5
 at = Vector2(0, -2)
 
-[sub_resource type="Resource" id="Resource_q0y2m"]
+[sub_resource type="Resource" id="Resource_m2sh0"]
 script = ExtResource("1_reicy")
 size = 3.0
 installed = ExtResource("2_27vlh")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_skpsd"]
+[sub_resource type="Resource" id="Resource_6c3xw"]
 script = ExtResource("1_reicy")
 size = 1.6
 installed = ExtResource("3_b80dj")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_twovx"]
+[sub_resource type="Resource" id="Resource_uxeie"]
 script = ExtResource("1_reicy")
 size = 2.6
 installed = ExtResource("4_m2sh0")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_rypjv"]
+[sub_resource type="Resource" id="Resource_7gut6"]
 script = ExtResource("1_reicy")
 size = 2.4
 installed = ExtResource("5_6c3xw")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_6c3xw"]
+[sub_resource type="Resource" id="Resource_012nt"]
 script = ExtResource("6_reicy")
-weapon = ExtResource("7_7gut6")
+weapon = ExtResource("7_reicy")
+overrides = {
+"rounds_per_second": 12.0
+}
 
-[sub_resource type="Resource" id="Resource_reicy"]
-script = ExtResource("9_012nt")
-kind = &"drive"
-engine = ExtResource("10_vfy2s")
-
-[sub_resource type="Resource" id="Resource_27vlh"]
+[sub_resource type="Resource" id="Resource_vfy2s"]
 script = ExtResource("9_012nt")
 kind = &"torque"
 engine = ExtResource("11_ompdp")
 
-[sub_resource type="Resource" id="Resource_b80dj"]
+[sub_resource type="Resource" id="Resource_06cuu"]
 script = ExtResource("9_012nt")
 kind = &"strafe"
 engine = ExtResource("12_06cuu")
 
-[sub_resource type="Resource" id="Resource_m2sh0"]
+[sub_resource type="Resource" id="Resource_p63l7"]
 script = ExtResource("9_012nt")
 kind = &"retro"
 engine = ExtResource("13_p63l7")
+
+[sub_resource type="Resource" id="Resource_8ukcy"]
+script = ExtResource("9_012nt")
+place = &"MainDriveCenter"
+engine = ExtResource("13_27vlh")
+overrides = {
+"max_thrust": 2000.0
+}
 
 [resource]
 script = ExtResource("14_8ukcy")
@@ -74,7 +80,7 @@ id = &"dart_stock"
 display_name = "dart (stock)"
 blurb = "four torque jets, a main drive, a retro and two strafe"
 hull = ExtResource("8_t61hl")
-mounts = Array[ExtResource("9_012nt")]([SubResource("Resource_reicy"), SubResource("Resource_27vlh"), SubResource("Resource_b80dj"), SubResource("Resource_m2sh0")])
-guns = Array[ExtResource("6_reicy")]([SubResource("Resource_6c3xw")])
-bays = Array[ExtResource("1_reicy")]([SubResource("Resource_fvmmu"), SubResource("Resource_q0y2m"), SubResource("Resource_skpsd"), SubResource("Resource_twovx"), SubResource("Resource_rypjv")])
+mounts = Array[ExtResource("9_012nt")]([SubResource("Resource_vfy2s"), SubResource("Resource_06cuu"), SubResource("Resource_p63l7"), SubResource("Resource_8ukcy")])
+guns = Array[ExtResource("6_reicy")]([SubResource("Resource_012nt")])
+bays = Array[ExtResource("1_reicy")]([SubResource("Resource_b80dj"), SubResource("Resource_m2sh0"), SubResource("Resource_6c3xw"), SubResource("Resource_uxeie"), SubResource("Resource_7gut6")])
 order = 0
