@@ -8473,7 +8473,7 @@ func _check_hull_editor() -> void:
 
 	_check_the_preview_is_the_ship()
 	_check_a_gun_goes_where_it_is_told()
-	_check_an_own_part_is_the_presets_own()
+	_check_a_preset_pins_fields()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
@@ -8661,50 +8661,125 @@ func _check_a_gun_goes_where_it_is_told() -> void:
 	)
 
 
-## "Wlasny" silnik presetu to kopia, a nie katalog.
+## Preset przypina pojedyncze pola, nie zamraza calej czesci.
 ##
-## Measured before this existed: the preset's torque jet, ship A's and
-## ship B's were one object, `torque_jet.tres` itself. So the dock
-## cannot let anyone edit an engine's numbers in place -- that would
-## retune every preset and every ship in the process. What it offers
-## instead is a copy that lives in the preset, and this is the check
-## that it really is one.
-func _check_an_own_part_is_the_presets_own() -> void:
-	var panel: PresetEditor = PresetEditor.new()
-	root.add_child(panel)
-	panel._canvas.size = Vector2(400.0, 300.0)
-	panel._open(0)
-	if panel._editing == null or panel._editing.mounts.is_empty():
-		_expect(false, "the preset dock opened a preset with mounts")
-		_discard(panel)
-		return
+## Measured before any of this existed: the preset's torque jet, ship
+## A's and ship B's were one object, `torque_jet.tres` itself. So the
+## dock cannot let anyone edit an engine's numbers in place.
+##
+## The first answer was an outright copy living in the preset, and it
+## was the wrong one: a copy freezes all twenty-three of a weapon's
+## fields at the values they had that day, so retuning the shared file
+## later leaves the copy behind on every field, not only the one
+## somebody meant to change. An override says "this weapon, with the
+## damage at four" and follows the catalogue for the rest -- which is
+## what this checks.
+func _check_a_preset_pins_fields() -> void:
+	var stock: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	var catalogue: WeaponData = stock.guns[0].weapon
+	var was_damage: float = catalogue.damage
+	var was_rate: float = catalogue.rounds_per_second
 
-	var shared: EngineData = panel._editing.mounts[0].engine
-	var was: float = shared.max_thrust
-	_expect(not panel._is_own(shared), "a fresh preset names the catalogue engine")
+	# Nothing pinned: the ship carries the catalogue object itself, which
+	# is the behaviour every preset has always had.
+	var ship: Ship = _spawn_ship()
+	_expect(ShipFitout.apply(ship, stock), "a preset with nothing pinned refits")
+	var plain: WeaponData = _first_weapon(ship)
+	_expect(plain == catalogue, "and fits the catalogue weapon itself, not a copy")
 
-	panel._make_own(&"mounts", 0, &"engine")
-	var mine: EngineData = panel._editing.mounts[0].engine
+	# One field pinned: a different object, that field changed, and the
+	# rest still the catalogue's.
+	var pinned: GunFit = _copy_gun(stock.guns[0])
+	pinned.overrides = {"damage": was_damage * 0.5}
+	var one: Array[GunFit] = [pinned]
+	stock.guns = one
+	_expect(ShipFitout.apply(ship, stock), "and a preset that pins one refits too")
+	var worn: WeaponData = _first_weapon(ship)
 	_expect(
-		mine != shared and panel._is_own(mine),
-		"after making it own, the entry holds a different object",
-	)
-
-	mine.max_thrust = was * 2.0
-	_expect(
-		is_equal_approx(shared.max_thrust, was),
-		"and tuning it leaves the catalogue engine alone (%.1f, still %.1f)" % [
-			mine.max_thrust, shared.max_thrust,
+		worn != null and worn != catalogue
+		and is_equal_approx(worn.damage, was_damage * 0.5),
+		"the fitted gun differs in the pinned field (%.2f against %.2f)" % [
+			worn.damage if worn != null else -1.0, was_damage,
 		],
 	)
-	# Which is the whole point: every other preset still has the old one.
-	var elsewhere: bool = false
-	for preset: ShipPreset in ShipFitout.all():
-		for fit: MountFit in preset.mounts:
-			if fit.engine == mine:
-				elsewhere = true
-	_expect(not elsewhere, "and no other preset picked up the change")
-	_discard(panel)
+	_expect(
+		worn != null and is_equal_approx(worn.rounds_per_second, was_rate),
+		"and in nothing else",
+	)
+	_expect(
+		is_equal_approx(catalogue.damage, was_damage),
+		"while the catalogue weapon keeps its own figure (%.2f)" % catalogue.damage,
+	)
+
+	# The point of pinning rather than copying: retune the catalogue and
+	# the unpinned fields follow it.
+	catalogue.rounds_per_second = was_rate * 2.0
+	ShipFitout.apply(ship, stock)
+	var later: WeaponData = _first_weapon(ship)
+	_expect(
+		later != null and is_equal_approx(later.rounds_per_second, was_rate * 2.0)
+		and is_equal_approx(later.damage, was_damage * 0.5),
+		"a retuned catalogue reaches the unpinned fields and not the pinned one",
+	)
+	catalogue.rounds_per_second = was_rate
+	_discard(ship)
+
+	# Bulk is mass, so a pinned bulk has to reach the balance the dock
+	# draws. Off by this much and the centre of mass it shows is not the
+	# ship's.
+	var heavy: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	var drive: MountFit = null
+	for fit: MountFit in heavy.mounts:
+		if fit.kind == HullData.SLOT_DRIVE and drive == null:
+			drive = _copy_mount(fit)
+	if drive != null:
+		var rest: Array[MountFit] = []
+		for fit: MountFit in heavy.mounts:
+			rest.append(drive if fit.kind == HullData.SLOT_DRIVE else fit)
+		heavy.mounts = rest
+		var light: float = float(ShipFitout.balance_of(heavy.hull, heavy)["mass"])
+		drive.overrides = {"bulk": drive.engine.bulk * 4.0}
+		var laden: float = float(ShipFitout.balance_of(heavy.hull, heavy)["mass"])
+		_expect(
+			laden > light + 0.01,
+			"a pinned bulk weighs on the balance (%.2f against %.2f kg)" % [laden, light],
+		)
+
+	# And a typo is refused rather than ignored: `set()` on a name the
+	# resource does not know does nothing at all, so the preset would
+	# read as though it pinned something and build a ship that did not.
+	var typo: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	var wrong: GunFit = _copy_gun(typo.guns[0])
+	wrong.overrides = {"dammage": 1.0}
+	var only: Array[GunFit] = [wrong]
+	typo.guns = only
+	_expect(
+		not ShipFitout.fault_in(typo).is_empty(),
+		"a pinned field that does not exist is refused (%s)" % ShipFitout.fault_in(typo),
+	)
+
+
+## The first gun on the ship, whatever hardpoint it landed in.
+func _first_weapon(ship: Ship) -> WeaponData:
+	for gun: Hardpoint in ship.hardpoints:
+		if gun.weapon != null:
+			return gun.weapon
+	return null
+
+
+## An entry copied deeply enough to pin a field on, which `duplicate()`
+## alone is not: it hands back the same dictionary.
+func _copy_gun(fit: GunFit) -> GunFit:
+	var mine: GunFit = fit.duplicate() as GunFit
+	mine.overrides = fit.overrides.duplicate()
+	return mine
+
+
+func _copy_mount(fit: MountFit) -> MountFit:
+	var mine: MountFit = fit.duplicate() as MountFit
+	mine.overrides = fit.overrides.duplicate()
+	return mine
+
 
 
 ## Kazdy zasob musi byc `@tool`, inaczej edytor widzi placeholder.

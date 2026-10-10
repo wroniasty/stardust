@@ -249,10 +249,23 @@ zapis po prawej.
   „wszystkie \<rodzaj\>" **i** każde miejsce z nazwy; `GunFit.place` robi to
   samo dla dział (puste = po kolei, jak dotąd). Przypięte zajmują miejsca
   przed rozdaniem luźnych, inaczej przypięcie nic by nie robiło.
-- [x] Własne staty na wpis. Silnik i broń z presetu to **ten sam obiekt** co
-  plik w katalogu — zmierzone: preset i dwa statki trzymają jeden
-  `torque_jet.tres`. Przycisk „wlasny" robi kopię mieszkającą w `.tres`
-  presetu i rozwija pod wpisem `BenchResourceForm` z workbencha.
+- [x] Własne staty na wpis, jako **nadpisania pojedynczych pól**. Silnik i
+  broń z presetu to ten sam obiekt co plik w katalogu — zmierzone: preset i
+  dwa statki trzymają jeden `torque_jet.tres` — więc edycja w miejscu
+  przestroiłaby wszystko naraz. Pierwsza wersja robiła pełną kopię w `.tres`
+  presetu i była **błędna**: kopia zamraża wszystkie 23 pola, więc późniejsze
+  przestrojenie katalogu nie dochodzi do żadnego z nich, nie tylko do tego
+  jednego, który ktoś chciał zmienić. Teraz `MountFit.overrides` i
+  `GunFit.overrides` trzymają `nazwa pola → wartość`; `ShipFitout.dressed`
+  robi kopię tylko wtedy, gdy coś jest przypięte.
+- [x] Przełącznik „staty" na wierszu pokazuje i chowa panel (z licznikiem
+  przypięć, żeby zamknięty wiersz też się przyznawał), a w panelu każde pole
+  ma checkbox. Zaznaczenie zasiewa wartością z katalogu, więc samo włączenie
+  niczego nie zmienia. Nieprzypięte pola są wyszarzone.
+- [x] `bulk` to masa, więc `balance_of` ubiera silnik przed zważeniem —
+  inaczej środek masy rysowany w doku nie byłby tego statku. Literówka w
+  nazwie pola jest odrzucana przez `fault_in`, bo `set()` na nieznanej nazwie
+  nie robi nic i preset wyglądałby, jakby coś przypiął.
 - [ ] Przeciąganie zatok po podglądzie. Dziś ich `at` ustawia się tylko w
   inspektorze.
 - [ ] Podgląd skinu: dock pokazuje klucz, nie obrazek.

@@ -49,6 +49,12 @@ var _mount_rows: VBoxContainer = null
 var _gun_rows: VBoxContainer = null
 var _bay_rows: VBoxContainer = null
 var _balance: Dictionary = {}
+
+## Which rows have their stats panel open, by `"mounts:0"` and the like.
+##
+## Kept across a rebuild, because every edit rebuilds the rows and a
+## panel that shut itself on each keystroke would be unusable.
+var _open_rows: Dictionary = {}
 var _verdict: Label = null
 
 var _paths: Array[String] = []
@@ -298,17 +304,31 @@ func _copy_of(preset: ShipPreset) -> ShipPreset:
 	var out: ShipPreset = preset.duplicate() as ShipPreset
 	var mounts: Array[MountFit] = []
 	for fit: MountFit in preset.mounts:
-		mounts.append(fit.duplicate() as MountFit if fit != null else null)
+		mounts.append(_copy_fit(fit) as MountFit)
 	out.mounts = mounts
 	var guns: Array[GunFit] = []
 	for fit: GunFit in preset.guns:
-		guns.append(fit.duplicate() as GunFit if fit != null else null)
+		guns.append(_copy_fit(fit) as GunFit)
 	out.guns = guns
 	var bays: Array[BayFit] = []
 	for bay: BayFit in preset.bays:
 		bays.append(bay.duplicate() as BayFit if bay != null else null)
 	out.bays = bays
 	return out
+
+
+## An entry of a preset, copied deeply enough to edit.
+##
+## `Resource.duplicate()` copies the dictionary by reference, so without
+## this the form would write a pinned field straight into the catalogue
+## copy of the preset and "przywroc z dysku" would have nothing to go
+## back to.
+func _copy_fit(fit: Resource) -> Resource:
+	if fit == null:
+		return null
+	var mine: Resource = fit.duplicate() as Resource
+	mine.set(&"overrides", (fit.get(&"overrides") as Dictionary).duplicate())
+	return mine
 
 
 func _fill_form() -> void:
@@ -383,12 +403,10 @@ func _mount_row(index: int) -> Control:
 	)
 	row.add_child(scale)
 
-	row.add_child(_own_button(
-		fit.engine, func() -> void: _make_own(&"mounts", index, &"engine")
-	))
+	row.add_child(_stats_button("mounts:%d" % index, fit.overrides))
 	row.add_child(_remover(func() -> void: _drop(&"mounts", index)))
 
-	return _with_form(row, fit.engine)
+	return _with_form(row, "mounts:%d" % index, fit.engine, fit.overrides)
 
 
 func _gun_row(index: int) -> Control:
@@ -416,108 +434,71 @@ func _gun_row(index: int) -> Control:
 		func(picked: Resource) -> void: _set_gun(index, &"weapon", picked),
 	))
 
-	row.add_child(_own_button(
-		fit.weapon, func() -> void: _make_own(&"guns", index, &"weapon")
-	))
+	row.add_child(_stats_button("guns:%d" % index, fit.overrides))
 	row.add_child(_remover(func() -> void: _drop(&"guns", index)))
 
-	return _with_form(row, fit.weapon)
+	return _with_form(row, "guns:%d" % index, fit.weapon, fit.overrides)
 
 
-## A dropdown over a catalogue, with a leading entry for a resource the
-## preset owns -- which is in no catalogue, so without it the dropdown
-## would show the wrong name and picking nothing would silently replace
-## it.
+## A plain dropdown over a catalogue. What a preset names is always a
+## catalogue entry now; what it changes about it is pinned separately.
 func _catalogue_pick(
 	catalogue: Array[Resource], current: Resource, picked: Callable
 ) -> OptionButton:
-	var own: bool = _is_own(current)
 	var pick: OptionButton = OptionButton.new()
 	pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if own:
-		pick.add_item("wlasny: %s" % _display_of(current))
-		pick.selected = 0
 	for i: int in range(catalogue.size()):
 		pick.add_item(_display_of(catalogue[i]))
-		if not own and catalogue[i] == current:
+		if catalogue[i] == current:
 			pick.selected = i
 	pick.item_selected.connect(
-		func(index: int) -> void:
-			# Choosing from the catalogue is also how an own copy is given
-			# up: there is no separate button for going back.
-			if own and index == 0:
-				return
-			picked.call(catalogue[index - 1 if own else index])
+		func(index: int) -> void: picked.call(catalogue[index])
 	)
 	return pick
 
 
-## Whether this resource belongs to the preset rather than the
-## catalogue.
-##
-## A fresh duplicate has no path at all; one that has been saved lives
-## inside the preset's own file, as `...preset.tres::Resource_abc`. Both
-## mean the same thing: editing it changes this ship and nothing else.
-func _is_own(what: Resource) -> bool:
-	if what == null:
-		return false
-	return what.resource_path.is_empty() or what.resource_path.begins_with(_path + "::")
-
-
-## The button that detaches an entry from the catalogue.
-##
-## Needed because a preset's engine **is** the catalogue file: measured,
-## two ships built from the stock dart and the preset itself all hold
-## one `torque_jet.tres`. Editing its numbers in place would retune
-## every preset and every ship in the process, so a bespoke engine has
-## to be a copy that lives in the preset.
-func _own_button(what: Resource, action: Callable) -> Button:
+## Shows and hides the stats panel for one row, and says how many fields
+## that row pins so a closed panel still reports itself.
+func _stats_button(row_key: String, overrides: Dictionary) -> Button:
 	var button: Button = Button.new()
-	button.text = "wlasny"
-	button.tooltip_text = (
-		"zrob kopie w tym presecie i edytuj jej liczby"
-		if not _is_own(what) else "juz jest kopia presetu"
-	)
-	button.disabled = what == null or _is_own(what)
-	button.pressed.connect(action)
+	var open: bool = bool(_open_rows.get(row_key, false))
+	button.toggle_mode = true
+	button.button_pressed = open
+	button.text = "staty" if overrides.is_empty() else "staty (%d)" % overrides.size()
+	button.tooltip_text = "nadpisz pojedyncze pola tej czesci w tym presecie"
+	button.toggled.connect(func(on: bool) -> void:
+		_open_rows[row_key] = on
+		_rebuild_rows())
 	return button
 
 
-## The row, with the resource's own numbers under it when the preset
-## owns them. Built from `get_property_list()` by the shared form,
-## so a field added to `EngineData` tomorrow appears here untouched.
-func _with_form(row: Control, what: Resource) -> Control:
-	if not _is_own(what):
+## The row, with the part's fields under it while the panel is open.
+##
+## Each field has a checkbox: ticked means this preset pins it, unticked
+## means it follows the catalogue. That is the difference from copying
+## the part outright, which froze all of its numbers at the values they
+## had that day -- retune the shared engine later and a copy keeps the
+## old figures for every field, including the ones nobody meant to fix.
+##
+## The form is built from `get_property_list()`, so a field added to
+## `EngineData` tomorrow appears here with nothing touched.
+func _with_form(
+	row: Control, row_key: String, what: Resource, overrides: Dictionary
+) -> Control:
+	if what == null or not bool(_open_rows.get(row_key, false)):
 		return row
 	var holder: VBoxContainer = VBoxContainer.new()
 	holder.add_child(row)
 	var form: ResourceForm = ResourceForm.new()
-	form.show_resource(what)
+	# The dictionary is held by reference: the form writes into the very
+	# one the `MountFit` carries, so there is nothing to copy back.
+	form.show_overrides(what, overrides)
 	form.edited.connect(func(_edited: Resource) -> void: _changed())
 	var indent: MarginContainer = MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 16)
 	indent.add_child(form)
 	holder.add_child(indent)
 	return holder
-
-
-## Give this entry its own copy of what it names.
-func _make_own(list: StringName, index: int, field: StringName) -> void:
-	if _editing == null:
-		return
-	var entries: Array = _editing.get(list)
-	if index < 0 or index >= entries.size():
-		return
-	var what: Resource = entries[index].get(field)
-	if what == null or _is_own(what):
-		return
-	var mine: Resource = what.duplicate() as Resource
-	# Cleared so the save writes it into this preset instead of pointing
-	# back at the file it came from.
-	mine.resource_path = ""
-	entries[index].set(field, mine)
-	_rebuild_rows()
-	_changed()
 
 
 ## Everywhere a mount could go on the hull now chosen: the four kinds,
@@ -797,13 +778,16 @@ func _same_as_disk() -> bool:
 	if _editing.guns.size() != _on_disk.guns.size():
 		return false
 	for i: int in range(_editing.guns.size()):
-		for field: StringName in [&"place", &"weapon"]:
+		for field: StringName in [&"place", &"weapon", &"overrides"]:
 			if _editing.guns[i].get(field) != _on_disk.guns[i].get(field):
 				return false
 	if _editing.mounts.size() != _on_disk.mounts.size():
 		return false
 	for i: int in range(_editing.mounts.size()):
-		for field: StringName in [&"kind", &"place", &"engine", &"scale", &"socket", &"centered"]:
+		for field: StringName in [
+			&"kind", &"place", &"engine", &"scale", &"socket", &"centered",
+			&"overrides",
+		]:
 			if _editing.mounts[i].get(field) != _on_disk.mounts[i].get(field):
 				return false
 	if _editing.bays.size() != _on_disk.bays.size():

@@ -50,22 +50,97 @@ const LABEL_WIDTH: float = 78.0
 var _resource: Resource = null
 var _depth: int = 0
 
+## When set, the form edits a **set of overrides** on top of `_resource`
+## rather than the resource itself, and every row grows a checkbox.
+##
+## This is what a preset entry wants. An outright copy of a catalogue
+## engine freezes all twenty-three of its fields: retune the catalogue
+## later and the copy silently keeps the old numbers for every one of
+## them, including the ones nobody meant to pin. An override says "this
+## engine, but with the damage at 50", and everything unticked follows
+## the file it came from.
+var _overrides: Dictionary = {}
+var _overriding: bool = false
+
 
 ## Builds the rows for `resource`, replacing whatever was shown.
 func show_resource(resource: Resource, depth: int = 0) -> void:
+	_overriding = false
+	_overrides = {}
+	_resource = resource
+	_depth = depth
+	_build()
+
+
+## The same rows, but editing `overrides` on top of `base`.
+##
+## The dictionary is held by reference and written into directly, which
+## is what lets the preset entry that owns it see the change without
+## being told.
+func show_overrides(base: Resource, overrides: Dictionary, depth: int = 0) -> void:
+	_overriding = true
+	_overrides = overrides
+	_resource = base
+	_depth = depth
+	_build()
+
+
+func _build() -> void:
 	for child: Node in get_children():
 		remove_child(child)
 		child.queue_free()
-	_resource = resource
-	_depth = depth
-	if resource == null:
+	if _resource == null:
 		return
-	for property: Dictionary in resource.get_property_list():
+	for property: Dictionary in _resource.get_property_list():
 		if not _is_exported(property):
 			continue
+		# A nested resource cannot be half-overridden: the dictionary is
+		# flat, and "this engine but with its curve's third point moved"
+		# is not a thing it can say. Shown as a name and left alone.
+		if _overriding and int(property["type"]) == TYPE_OBJECT:
+			continue
 		var row: Control = _row(property)
-		if row != null:
-			add_child(row)
+		if row == null:
+			continue
+		add_child(row if not _overriding else _togglable(String(property["name"]), row))
+
+
+## A row with a checkbox in front of it: ticked means the preset pins
+## this one, unticked means it follows the catalogue.
+##
+## Ticking seeds the override with the value the row is already showing,
+## which is the catalogue's -- so switching it on changes nothing until
+## the number beside it is changed, and the figure never jumps.
+func _togglable(key: String, row: Control) -> Control:
+	var line: HBoxContainer = HBoxContainer.new()
+	var tick: CheckBox = CheckBox.new()
+	tick.button_pressed = _overrides.has(key)
+	tick.tooltip_text = "nadpisz to pole w tym presecie"
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tick.toggled.connect(func(on: bool) -> void:
+		if on:
+			_overrides[key] = _resource.get(key)
+		else:
+			_overrides.erase(key)
+		_set_live(row, on)
+		edited.emit(_resource))
+	line.add_child(tick)
+	line.add_child(row)
+	_set_live(row, _overrides.has(key))
+	return line
+
+
+## Greys out a row that is not overridden, so what the preset actually
+## decides is readable at a glance down the column.
+func _set_live(where: Node, on: bool) -> void:
+	for child: Node in where.get_children():
+		if child.get("disabled") != null:
+			child.set("disabled", not on)
+		if child.get("editable") != null:
+			child.set("editable", on)
+		_set_live(child, on)
+	if where is Control:
+		(where as Control).modulate = Color.WHITE if on else Color(1, 1, 1, 0.5)
 
 
 ## Whether the property is one the author wrote with `@export`. The usage
@@ -94,7 +169,7 @@ func _is_exported(property: Dictionary) -> bool:
 
 func _row(property: Dictionary) -> Control:
 	var key: String = property["name"]
-	var value: Variant = _resource.get(key)
+	var value: Variant = _value_of(key)
 	match int(property["type"]):
 		TYPE_BOOL:
 			var check: CheckBox = CheckBox.new()
@@ -114,7 +189,7 @@ func _row(property: Dictionary) -> Control:
 			line.text_submitted.connect(func(text: String) -> void:
 				_write(key, StringName(text) if is_name else text))
 			line.focus_exited.connect(func() -> void:
-				var current: String = str(_resource.get(key))
+				var current: String = str(_value_of(key))
 				if line.text != current:
 					_write(key, StringName(line.text) if is_name else line.text))
 			return _labelled(key, line)
@@ -241,7 +316,22 @@ func _count_of(value: Variant) -> int:
 ## resource (an inspector, a sprite built off it) listen for that one, and
 ## a form that edited behind their backs would leave them showing the old
 ## number.
+## What the row shows: the override when there is one, the resource's
+## own value otherwise.
+func _value_of(key: String) -> Variant:
+	if _overriding and _overrides.has(key):
+		return _overrides[key]
+	return _resource.get(key)
+
+
 func _write(key: String, value: Variant) -> void:
+	if _overriding:
+		# Into the dictionary, never into the catalogue resource: the
+		# engine being shown is the one every other preset and every
+		# flying ship is holding.
+		_overrides[key] = value
+		edited.emit(_resource)
+		return
 	_resource.set(key, value)
 	_resource.emit_changed()
 	edited.emit(_resource)

@@ -20,3 +20,17 @@ extends Resource
 
 ## What is bolted there.
 @export var weapon: WeaponData = null
+
+## Pola tego zasobu, ktore ten wpis nadpisuje: nazwa pola -> wartosc.
+##
+## A preset that wants a weaker autocannon says `{"damage": 4.0}`, not a
+## copy of the autocannon. The difference matters when the catalogue
+## moves: an outright copy freezes all twenty-three of a weapon's fields
+## at the values they had the day it was made, so retuning the shared
+## file later changes every ship except the ones that meant to differ
+## in one number. Everything unpinned here follows the file.
+##
+## Also the readable form. The `.tres` ends up saying `overrides = {
+## "damage": 4.0 }`, which is the decision; an embedded copy says
+## twenty-three numbers and leaves the reader to diff them.
+@export var overrides: Dictionary = {}

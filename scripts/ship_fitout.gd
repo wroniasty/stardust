@@ -166,6 +166,24 @@ static func scaled_blurb(factor: float) -> String:
 	]
 
 
+## Ta czesc, ktora wpis presetu naprawde montuje.
+##
+## The catalogue resource when the entry pins nothing -- which is the
+## common case and deliberately shares one object, as it always has --
+## and a copy with the pinned fields changed when it does.
+##
+## Copying only when something is pinned is the whole point: a preset
+## that says nothing about an engine keeps following the engine's file,
+## and one that says "damage 4" differs in damage and in nothing else.
+static func dressed(base: Resource, overrides: Dictionary) -> Resource:
+	if base == null or overrides.is_empty():
+		return base
+	var mine: Resource = base.duplicate() as Resource
+	for key: Variant in overrides:
+		mine.set(String(key), overrides[key])
+	return mine
+
+
 ## Co ten preset stawia i gdzie, na tym kadlubie.
 ##
 ## Three callers needed this walk and would otherwise each do it:
@@ -226,6 +244,7 @@ static func _placement(
 		"kind": place.get("kind", fit.kind),
 		"socket": socket_for(places, fit),
 		"engine": fit.engine,
+		"overrides": fit.overrides,
 		"scale": wanted.scale_of(fit),
 		"share": share,
 	}
@@ -247,15 +266,17 @@ static func armament(hull: HullData, wanted: ShipPreset) -> Array[Dictionary]:
 	if hull == null:
 		return out
 	var claimed: Dictionary = {}
-	var loose: Array[WeaponData] = []
+	var pinned: Dictionary = {}
+	var loose: Array[GunFit] = []
 	if wanted != null:
 		for fit: GunFit in wanted.guns:
 			if fit == null:
 				continue
 			if String(fit.place).is_empty():
-				loose.append(fit.weapon)
+				loose.append(fit)
 			else:
 				claimed[String(fit.place)] = fit.weapon
+				pinned[String(fit.place)] = fit.overrides
 	var next_loose: int = 0
 	for slot: Dictionary in hull.slots():
 		if SOCKET_FOR.has(slot["kind"]):
@@ -265,9 +286,13 @@ static func armament(hull: HullData, wanted: ShipPreset) -> Array[Dictionary]:
 		if claimed.has(named):
 			carried = claimed[named]
 		elif next_loose < loose.size():
-			carried = loose[next_loose]
+			carried = loose[next_loose].weapon
+			pinned[named] = loose[next_loose].overrides
 			next_loose += 1
-		out.append({"slot": slot, "weapon": carried})
+		out.append({
+			"slot": slot, "weapon": carried,
+			"overrides": pinned.get(named, {}),
+		})
 	return out
 
 
@@ -306,7 +331,12 @@ static func balance_of(hull: HullData, wanted: ShipPreset) -> Dictionary:
 	var parts: Array[Dictionary] = []
 	if wanted != null:
 		for spot: Dictionary in placements(hull, wanted):
-			var engine: EngineData = spot["engine"]
+			# Dressed, because `bulk` is one of the fields a preset may
+			# pin and bulk is mass: a balance drawn off the catalogue
+			# figure would not be this ship's.
+			var engine: EngineData = dressed(
+				spot["engine"], spot["overrides"]
+			) as EngineData
 			parts.append({
 				"at": spot["at"],
 				"mass": (
@@ -389,7 +419,8 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 		mount.rotation = float(spot["turn"])
 		mount.thrust_direction = Vector2.UP
 		mount.installed = _engine_share(
-			spot["engine"], float(spot["scale"]), float(spot["share"])
+			spot["engine"], float(spot["scale"]), float(spot["share"]),
+			spot["overrides"],
 		)
 		ship.add_child(mount)
 
@@ -398,7 +429,7 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	var armed: int = 0
 	for spot: Dictionary in armament(hull, wanted):
 		var gun: Hardpoint = _hardpoint(spot["slot"])
-		gun.weapon = spot["weapon"]
+		gun.weapon = dressed(spot["weapon"], spot["overrides"]) as WeaponData
 		if gun.weapon != null:
 			armed += 1
 		ship.add_child(gun)
@@ -500,6 +531,11 @@ static func fault_in(wanted: ShipPreset) -> String:
 			return "%s has a mount %s with nowhere to be" % [title, named]
 		if socket_for(offered, fit) <= 0.0:
 			return "%s has a mount %s with no socket size" % [title, describes]
+		var unknown: String = _unknown_field(fit.engine, fit.overrides)
+		if not unknown.is_empty():
+			return "%s pins %s on %s, which has no such field" % [
+				title, unknown, describes,
+			]
 	for fit: GunFit in wanted.guns:
 		if fit == null or fit.weapon == null:
 			return "%s carries a gun that is not there" % title
@@ -512,6 +548,9 @@ static func fault_in(wanted: ShipPreset) -> String:
 			(offered[named] as Dictionary)["kind"]
 		):
 			return "%s puts a gun in %s, which is an engine socket" % [title, named]
+		var missing: String = _unknown_field(fit.weapon, fit.overrides)
+		if not missing.is_empty():
+			return "%s pins %s on a gun, which has no such field" % [title, missing]
 	for fit: BayFit in wanted.bays:
 		if fit == null:
 			return "%s has a bay that is not there" % title
@@ -532,15 +571,36 @@ static func fault_in(wanted: ShipPreset) -> String:
 	return ""
 
 
+## The first pinned field this resource does not have, or "".
+##
+## A typo in an override key is silent otherwise: `set()` on a name the
+## resource does not know does nothing at all, so the preset would read
+## as though it pinned something and build a ship that ignored it.
+static func _unknown_field(what: Resource, overrides: Dictionary) -> String:
+	if what == null or overrides.is_empty():
+		return ""
+	var known: Dictionary = {}
+	for property: Dictionary in what.get_property_list():
+		known[String(property["name"])] = true
+	for key: Variant in overrides:
+		if not known.has(String(key)):
+			return String(key)
+	return ""
+
+
 ## One part of an engine, for a drive that is split over several mounts.
-static func _engine_share(base: EngineData, scale: float, share: float) -> EngineData:
-	var whole: EngineData = _engine(base, scale)
+static func _engine_share(
+	base: EngineData, scale: float, share: float, overrides: Dictionary
+) -> EngineData:
+	var whole: EngineData = _engine(base, scale, overrides)
 	# A share of one is the whole engine, and handing back the shared
 	# resource rather than a copy of it is what every mount that is not
 	# a split drive used to get.
 	if whole == null or is_equal_approx(share, 1.0):
 		return whole
-	var part: EngineData = whole.duplicate() as EngineData
+	# Already a copy if anything was pinned or scaled; only an untouched
+	# engine still needs one before its thrust is cut.
+	var part: EngineData = whole if whole != base else (whole.duplicate() as EngineData)
 	part.max_thrust *= share
 	part.bulk *= share
 	return part
@@ -585,12 +645,11 @@ static func _hardpoint(slot: Dictionary) -> Hardpoint:
 ## Duplicated before scaling: the resources are shared by every preset
 ## that names them, and scaling the original would make every later ship
 ## in the session inherit the change.
-static func _engine(base: EngineData, scale: float) -> EngineData:
-	if base == null:
-		return null
-	if is_equal_approx(scale, 1.0):
-		return base
-	var copy: EngineData = base.duplicate() as EngineData
+static func _engine(base: EngineData, scale: float, overrides: Dictionary) -> EngineData:
+	var worn: EngineData = dressed(base, overrides) as EngineData
+	if worn == null or is_equal_approx(scale, 1.0):
+		return worn
+	var copy: EngineData = worn if worn != base else (worn.duplicate() as EngineData)
 	copy.max_thrust *= scale
 	# Heavier as well as stronger. Scaling only the thrust would be free
 	# power, which is the one thing a sandbox must not quietly hand out.
