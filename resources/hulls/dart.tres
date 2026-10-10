@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="HullData" format=3]
+[gd_resource type="Resource" script_class="HullData" format=3 uid="uid://b3jehe4gruaxq"]
 
-[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_5nc40"]
+[ext_resource type="Script" uid="uid://c32sb7jr774dq" path="res://scripts/hull_data.gd" id="1_5nc40"]
 
 [resource]
 script = ExtResource("1_5nc40")
@@ -11,8 +11,8 @@ legs = Array[Vector2]([Vector2(-9, 13), Vector2(9, 13)])
 cargo_capacity = 6.0
 drive_slots = Array[Vector2]([Vector2(0, 10), Vector2(-2.75, 10), Vector2(2.75, 10)])
 front_slots = Array[Vector2]([Vector2(-2.5, -8), Vector2(2.5, -8)])
-side_slots = Array[Vector2]([Vector2(-4, -1), Vector2(4, -1), Vector2(6, 4.5)])
-rear_slots = Array[Vector2]([Vector2(0, 12)])
+side_slots = Array[Vector2]([Vector2(-4, -1), Vector2(4, -1), Vector2(6.25, 5), Vector2(-6.25, 5)])
+rear_slots = Array[Vector2]([Vector2(0, 7)])
 torque_slots = Array[Vector2]([Vector2(-8, -10), Vector2(8, -10), Vector2(-8, 13.5), Vector2(8, 13.5)])
 strafe_slots = Array[Vector2]([Vector2(9, 1.75), Vector2(-9, 1.75)])
 retro_slots = Array[Vector2]([Vector2(0, -12)])

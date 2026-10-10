@@ -53,6 +53,10 @@ Are in:
 
 \- `godot --headless --path . --quit-after 120` must run with no script errors in output.
 
+\- Whole check (import, idle run, smoke test, ~35 s): `powershell -File tools/check.ps1`. The smoke test needs `--fixed-fps 60` (~25 s instead of ~290 s). Index of all tests: TEST-INDEX.md.
+
+\- Smoke test: `_expect` = code bug (FAIL), `_warn` = bad shipped resource such as a hull (WARN, does not fail). Code checks fly the built-in reference hull, not resources/hulls.
+
 \- For a single script: `godot --headless --path . --script res://path/to/file.gd --check-only`.
 
 \- Use the godot MCP to run the project and read console output; use godot-docs MCP

@@ -4,16 +4,16 @@
 [ext_resource type="Script" uid="uid://ibmgpgd5l4id" path="res://scripts/player.gd" id="2_player"]
 [ext_resource type="PackedScene" path="res://scenes/ship.tscn" id="3_ship"]
 [ext_resource type="Script" uid="uid://dict7hsfwxaqu" path="res://scripts/ship_camera.gd" id="4_camera"]
-[ext_resource type="Script" path="res://scripts/fx/camera_shake.gd" id="9_shake"]
-[ext_resource type="Script" path="res://scripts/fx/soundscape.gd" id="10_sound"]
-[ext_resource type="Script" path="res://scripts/fx/debris_field.gd" id="11_debris"]
-[ext_resource type="Script" path="res://scripts/fx/engine_choir.gd" id="12_choir"]
-[ext_resource type="Script" path="res://scripts/fx/hull_voice.gd" id="13_hull_voice"]
-[ext_resource type="Script" path="res://scripts/fx/ordnance_voice.gd" id="14_ordnance"]
 [ext_resource type="PackedScene" path="res://scenes/debug_overlay.tscn" id="5_overlay"]
 [ext_resource type="PackedScene" path="res://scenes/starfield.tscn" id="6_starfield"]
 [ext_resource type="PackedScene" path="res://scenes/debug_vectors.tscn" id="7_vectors"]
 [ext_resource type="PackedScene" path="res://scenes/trajectory_predictor.tscn" id="8_trajectory"]
+[ext_resource type="Script" uid="uid://byycl8j741nic" path="res://scripts/fx/camera_shake.gd" id="9_shake"]
+[ext_resource type="Script" uid="uid://u0fn1mt0ie5u" path="res://scripts/fx/soundscape.gd" id="10_sound"]
+[ext_resource type="Script" uid="uid://cq0w3xa2ofh78" path="res://scripts/fx/debris_field.gd" id="11_debris"]
+[ext_resource type="Script" uid="uid://cry83e5np4adp" path="res://scripts/fx/engine_choir.gd" id="12_choir"]
+[ext_resource type="Script" uid="uid://nn4n1hhyj3jg" path="res://scripts/fx/hull_voice.gd" id="13_hull_voice"]
+[ext_resource type="Script" uid="uid://bfaaynwxcpxnn" path="res://scripts/fx/ordnance_voice.gd" id="14_ordnance"]
 
 [node name="World" type="Node2D" unique_id=920262928]
 script = ExtResource("1_world")
@@ -43,29 +43,29 @@ ship_path = NodePath("../Player/Ship")
 [node name="DebugOverlay" parent="." unique_id=1665694628 instance=ExtResource("5_overlay")]
 ship_path = NodePath("../Player/Ship")
 
-[node name="Presentation" type="Node2D" parent="."]
+[node name="Presentation" type="Node2D" parent="." unique_id=1449939689]
 
-[node name="CameraShake" type="Node" parent="Presentation"]
+[node name="CameraShake" type="Node" parent="Presentation" unique_id=1034283774]
 script = ExtResource("9_shake")
 ship_path = NodePath("../../Player/Ship")
 camera_path = NodePath("../../Camera")
 
-[node name="Soundscape" type="Node" parent="Presentation"]
+[node name="Soundscape" type="Node" parent="Presentation" unique_id=1735777987]
 script = ExtResource("10_sound")
 ship_path = NodePath("../../Player/Ship")
 
-[node name="DebrisField" type="Node2D" parent="Presentation"]
+[node name="DebrisField" type="Node2D" parent="Presentation" unique_id=865740576]
 script = ExtResource("11_debris")
 ship_path = NodePath("../../Player/Ship")
 
-[node name="EngineChoir" type="Node2D" parent="Presentation"]
+[node name="EngineChoir" type="Node2D" parent="Presentation" unique_id=1582371643]
 script = ExtResource("12_choir")
 ship_path = NodePath("../../Player/Ship")
 
-[node name="HullVoice" type="Node" parent="Presentation"]
+[node name="HullVoice" type="Node" parent="Presentation" unique_id=2034581086]
 script = ExtResource("13_hull_voice")
 ship_path = NodePath("../../Player/Ship")
 
-[node name="OrdnanceVoice" type="Node2D" parent="Presentation"]
+[node name="OrdnanceVoice" type="Node2D" parent="Presentation" unique_id=392270010]
 script = ExtResource("14_ordnance")
 ship_path = NodePath("../../Player/Ship")

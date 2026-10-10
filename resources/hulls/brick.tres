@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="HullData" format=3]
+[gd_resource type="Resource" script_class="HullData" format=3 uid="uid://1vtqmtksxsh0"]
 
-[ext_resource type="Script" path="res://scripts/hull_data.gd" id="1_3tqk0"]
+[ext_resource type="Script" uid="uid://c32sb7jr774dq" path="res://scripts/hull_data.gd" id="1_3tqk0"]
 
 [resource]
 script = ExtResource("1_3tqk0")
@@ -9,5 +9,7 @@ display_name = "brick"
 outline = PackedVector2Array(-14, -18, 14, -18, 14, 18, -14, 18)
 drive_slots = Array[Vector2]([Vector2(0, 18), Vector2(-5, 18), Vector2(5, 18)])
 front_slots = Array[Vector2]([Vector2(-8.5, -11.5), Vector2(8.5, -11.5)])
-side_slots = Array[Vector2]([Vector2(-14, 0), Vector2(14, 0), Vector2(14, 9)])
-rear_slots = Array[Vector2]([Vector2(0, 20)])
+side_slots = Array[Vector2]([Vector2(-14, 0), Vector2(14, 0)])
+rear_slots = Array[Vector2]([Vector2(0, 10)])
+torque_slots = Array[Vector2]([Vector2(-14, -17.75), Vector2(14, -17.75), Vector2(-14, 18), Vector2(14, 18)])
+strafe_slots = Array[Vector2]([Vector2(14, 0.5), Vector2(-14, 0.5)])

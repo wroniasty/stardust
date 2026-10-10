@@ -76,10 +76,23 @@ if (-not $import.WaitForExit($ImportTimeout * 1000)) {
 
 Invoke-Stage "Running $Frames frames headless..." @("--headless", "--path", $root, "--quit-after", $Frames) | Out-Null
 
-$smoke = Invoke-Stage "Running the smoke test..." @("--headless", "--path", $root, "--script", "res://tools/smoke_test.gd")
+# --fixed-fps 60: the flight phases are counted in physics ticks, and without
+# it a headless loop runs them in real time (about five minutes). The step the
+# physics sees is the same 1/60 s either way; only the pace changes.
+$smoke = Invoke-Stage "Running the smoke test..." @("--headless", "--fixed-fps", "60", "--path", $root, "--script", "res://tools/smoke_test.gd")
 if ($smoke -notmatch "smoke test: OK") {
     Write-Host "FAILED: the smoke test did not report OK" -ForegroundColor Red
     exit 1
+}
+
+# Content warnings (a hull a little off, a preset out of step) do not fail the
+# run: the code passed. They are listed again here so they are not lost in
+# two thousand lines of ok.
+$warned = $smoke -split "`n" | Where-Object { $_ -match "^\s+WARN " }
+if ($warned) {
+    Write-Host "OK, but the shipped resources have problems:" -ForegroundColor Yellow
+    Write-Host ($warned -join "`n") -ForegroundColor Yellow
+    exit 0
 }
 
 Write-Host "OK: no errors" -ForegroundColor Green
