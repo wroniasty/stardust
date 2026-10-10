@@ -41,7 +41,8 @@ func _enter_tree() -> void:
 	_hulls.icon_name = &"Polygon2D"
 	_hulls.default_slot = EditorDock.DOCK_SLOT_BOTTOM
 	_hulls.available_layouts = EditorDock.DOCK_LAYOUT_ALL
-	_hulls.add_child(HullEditor.new())
+	var hull_editor: HullEditor = HullEditor.new()
+	_hulls.add_child(hull_editor)
 	add_dock(_hulls)
 
 	_presets = EditorDock.new()
@@ -49,8 +50,16 @@ func _enter_tree() -> void:
 	_presets.icon_name = &"PackedScene"
 	_presets.default_slot = EditorDock.DOCK_SLOT_BOTTOM
 	_presets.available_layouts = EditorDock.DOCK_LAYOUT_ALL
-	_presets.add_child(PresetEditor.new())
+	var preset_editor: PresetEditor = PresetEditor.new()
+	_presets.add_child(preset_editor)
 	add_dock(_presets)
+
+	# Asked for from the command line by `check.ps1`, and silent
+	# otherwise. The docks only exist in the editor and the smoke test
+	# runs as a game, so this is the only place their failures are
+	# visible at all (DEVTOOLS.md rule 8).
+	if DockSelfcheck.asked():
+		DockSelfcheck.run(hull_editor, preset_editor)
 
 
 func _exit_tree() -> void:

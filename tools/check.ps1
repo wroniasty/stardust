@@ -74,6 +74,37 @@ if (-not $import.WaitForExit($ImportTimeout * 1000)) {
     $import.WaitForExit(5000) | Out-Null
 }
 
+# The docks only exist in the editor, and everything below runs as a game.
+# In the editor a .tres whose script is not @tool loads as a placeholder:
+# its values read and write, so it looks healthy, while calling a method on
+# it fails and its property list comes back without the script-variable bit.
+# The second one is silent -- it emptied the stats form with nothing printed
+# -- so a dock can be comprehensively broken with every test green
+# (DEVTOOLS.md rule 8). Found by hand three times before this existed.
+#
+# Its own editor run rather than the import above, because that one is
+# allowed to overrun and be killed: this has to be read.
+Write-Host "Checking the editor docks..."
+$dockLog = Join-Path ([System.IO.Path]::GetTempPath()) "stardust-docks.txt"
+$docks = Start-Process -FilePath $Godot -PassThru -NoNewWindow -RedirectStandardOutput $dockLog -ArgumentList @(
+    "--headless", "--path", $root, "--import", "--", "--dock-selfcheck"
+)
+if (-not $docks.WaitForExit($ImportTimeout * 1000)) {
+    Write-Host ("  the dock check did not return in {0}s" -f $ImportTimeout) -ForegroundColor Yellow
+    Stop-Process -Id $docks.Id -Force -ErrorAction SilentlyContinue
+    $docks.WaitForExit(5000) | Out-Null
+}
+$dockOut = if (Test-Path $dockLog) { Get-Content $dockLog -Raw } else { "" }
+Write-Host (($dockOut -split "`n" | Where-Object { $_ -match "^DOCK" }) -join "`n")
+$dockBad = $dockOut -split "`n" | Where-Object { $_ -match "DOCK FAIL|SCRIPT ERROR" }
+# The verdict line has to be there as well: no output at all means the run
+# died before the plugin loaded, which is a failure and not a pass.
+if ($dockBad -or ($dockOut -notmatch "DOCK all checks passed")) {
+    Write-Host "FAILED: the editor docks" -ForegroundColor Red
+    Write-Host ($dockBad -join "`n") -ForegroundColor Red
+    exit 1
+}
+
 Invoke-Stage "Running $Frames frames headless..." @("--headless", "--path", $root, "--quit-after", $Frames) | Out-Null
 
 # --fixed-fps 60: the flight phases are counted in physics ticks, and without
