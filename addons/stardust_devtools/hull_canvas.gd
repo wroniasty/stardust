@@ -93,6 +93,10 @@ var reference: ShipPreset = null
 ## because every change can move it.
 var balance: Dictionary = {}
 
+## The pictures this hull wears with the reference fitout on it, or
+## nothing while the schematic is alone.
+var _still: Array[Dictionary] = []
+
 var _handles: Array[Dictionary] = []
 var _hover: int = -1
 var _grabbed: int = -1
@@ -122,6 +126,7 @@ func framed_points() -> Array[Vector2]:
 	var points: Array[Vector2] = []
 	for handle: Dictionary in _handles:
 		points.append(handle["at"])
+	points.append_array(still_points(_still))
 	return points
 
 
@@ -144,6 +149,11 @@ func refresh() -> void:
 	balance = {}
 	if hull != null:
 		balance = ShipFitout.balance_of(hull, reference)
+	_still = []
+	if hull != null and shows_skin():
+		# The reference fitout on **this** hull, which is what the
+		# balance figures above are already measured against.
+		_still = ShipLook.still_of(hull, reference)
 	queue_redraw()
 
 
@@ -183,6 +193,9 @@ func _snapped(at: Vector2) -> Vector2:
 func _draw() -> void:
 	draw_grid()
 	if hull == null:
+		return
+	draw_still(_still)
+	if not shows_schematic():
 		return
 	_draw_middle()
 	_draw_ground()

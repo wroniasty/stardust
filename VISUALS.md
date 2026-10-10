@@ -164,7 +164,10 @@ się nie przecinają.
   `_process`: czytane wielkości zmieniają się w tempie fizyki, a
   transformacja pisana z klatki renderowania bije się z interpolatorem.
 - [x] Porządek rysowania jako jawne `z_index` na rodzinę: pióropusze -20,
-  dysze -10, kadłub 0, podwozie 5, działa 10.
+  dysze -10, kadłub 0, podwozie 5, działa 10. Stałe siedzą w `ShipLook`, nie
+  w `ShipSkin` — dock maluje ten sam stos bez tworzenia jednego węzła, a dwie
+  kolejności jednego stosu to sposób, w jaki dock pokazuje płomień nad
+  kadłubem, pod którym gra go rysuje.
 - [x] **Szew**: `Ship.configuration_changed`, emitowane po przebudowie
   grup sterowania. Skórka przebudowuje się z tego, zamiast porównywać
   scenę ze sobą co klatkę.
@@ -284,13 +287,23 @@ efektu; reszta ma kształt, który jest daną.
 #### Co na pewno ugryzie
 
 - **Pivoty.** Dysza przesunięta o dwa texele nie wygląda na przesuniętą,
-  wygląda na przykręconą krzywo. Stąd galeria.
+  wygląda na przykręconą krzywo. Stąd galeria — a od D9 także podgląd w doku,
+  który odpowiada na pytanie, na które galeria nie umie: nie „czy pivot jest w
+  środku klatki", tylko „czy ta dysza siedzi w tym gnieździe". Rysuje grafikę
+  **pod** schematem właśnie po to.
 - **Kolejność rysowania.** Bez jawnego `z_index` jest to kolejność dodawania
   węzłów, czyli kolejność przypadkowa.
 - **Przebudowany kadłub.** Narzędzie kreatywne zmienia obrys w locie —
   skórka musi się przebudować i umieć nie mieć sprite'a.
 - **Koszt.** Dwadzieścia węzłów na statek to nie jest zero. Zmierzone: 62 us
   na klatkę, 0,37% budżetu.
+- **Koszt `load()` na trafieniu w cache.** Gdy tabele wyglądu przeniosły się
+  ze pól `ShipSkin` do `ShipLook`, każdy obrazek zaczął je brać wywołaniem
+  `load()`. Policzone licznikiem, nie oszacowane: **14 335 wywołań** w jednym
+  przebiegu smoke testu (statek pyta o pięć tabel za każdą przebudową skórki,
+  a przezbrojenie ją przebudowuje) i **17 z jego 64 sekund**. Trzymane w
+  grze, dociągane na bieżąco w edytorze, bo tam plik naprawdę zmienia się pod
+  dokiem. Po poprawce 44–50 s, czyli tyle, ile przed zmianą.
 
 Z tego ugryzły dwie, obie złapane patrzeniem, nie testem: goleń podwozia
 szeroka na trzy piksele rozciągnięta na trzypikselowej nodze czyta się jak

@@ -6791,7 +6791,7 @@ func _check_boost() -> void:
 
 ## The plume sprite the skin built for one engine, found by where it sits.
 func _plume_of(skin: ShipSkin, engine: EngineInstance) -> StripSprite:
-	return _sprite_near(skin, engine.mount.position, ShipSkin.Z_PLUME)
+	return _sprite_near(skin, engine.mount.position, ShipLook.Z_PLUME)
 
 
 ## The nearest sprite of one family to a point on the hull.
@@ -11900,6 +11900,7 @@ func _check_art() -> void:
 				])
 	_expect(counted > 0, "the look tables hand out sprites (%d)" % counted)
 	_check_a_sheet_holds_several_animations()
+	_check_the_still_is_what_the_skin_would_build()
 	_expect(broken == 0, "every sprite has a texture that divides into its frames")
 	_expect(astray == 0, "and a pivot inside its own frame")
 	_expect(mislabelled == 0, "and the scale flag agrees with which folder the file is in")
@@ -12244,6 +12245,119 @@ func _check_a_sheet_holds_several_animations() -> void:
 		"and a looping one of a single frame stays put (%d)" % shown.frame,
 	)
 	_discard(shown)
+
+
+## Podglad w doku to ta sama skorka, tylko bez statku pod nia.
+##
+## The docks had to show the skinning, and the one wrong way to do it was
+## a second copy of the look rules. A dock that chose its own pictures
+## would agree with the game on the stock ships and part company at the
+## first threshold -- and the disagreement would be invisible until a
+## flame came out of the wrong side of a hull in flight.
+##
+## So `ShipLook` owns the rules and both sides ask. `ShipSkin` asks per
+## part off a live mount; the docks ask `still_of` for the lot at rest.
+## What this checks is the second one, since the first has been covered
+## since `_check_skin` -- and in particular the arithmetic the dock does
+## that no running ship ever does.
+func _check_the_still_is_what_the_skin_would_build() -> void:
+	var hull: HullData = _reference_hull()
+	var preset: ShipPreset = _reference_preset()
+
+	# The derivation that lets a still exist at all. `apply` builds every
+	# mount with thrust along UP and the place's own turn as its
+	# rotation, so a nozzle's facing **is** that turn -- which is why the
+	# dock needs no mount to work out which way a bell points.
+	var agreed: bool = true
+	for turn: float in [0.0, 0.5, -1.25, PI, TAU]:
+		var told: float = ShipLook.facing(ShipLook.exhaust_from(turn))
+		if not is_zero_approx(wrapf(told - turn, -PI, PI)):
+			agreed = false
+	_expect(agreed, "a nozzle faces the way its own place is turned")
+
+	var still: Array[Dictionary] = ShipLook.still_of(hull, preset)
+	var counted: Dictionary = {}
+	for part: Dictionary in still:
+		counted[part["part"]] = int(counted.get(part["part"], 0)) + 1
+	var engines: int = ShipFitout.placements(hull, preset).size()
+	var armed: int = 0
+	for spot: Dictionary in ShipFitout.armament(hull, preset):
+		if spot["weapon"] != null:
+			armed += 1
+	_expect(
+		engines > 0 and int(counted.get(&"nozzle", 0)) == engines
+		and int(counted.get(&"plume", 0)) == engines,
+		"a nozzle and a plume for every engine the fitout places (%d)" % engines,
+	)
+	_expect(
+		armed > 0 and int(counted.get(&"gun", 0)) == armed,
+		"a gun for every armed hardpoint and no empty one (%d)" % armed,
+	)
+	_expect(
+		hull.legs.size() > 0
+		and int(counted.get(&"strut", 0)) == hull.legs.size()
+		and int(counted.get(&"pad", 0)) == hull.legs.size(),
+		"both halves of every leg (%d)" % hull.legs.size(),
+	)
+
+	# A key naming no picture answers with nothing rather than with
+	# somebody else's: the reference hull is not a shape anybody drew.
+	_expect(
+		not counted.has(&"hull"),
+		"a hull nobody drew wears no hull picture",
+	)
+	preset.look_key = &"dart"
+	var dressed: Array[Dictionary] = ShipLook.still_of(hull, preset)
+	var worn: String = ""
+	for part: Dictionary in dressed:
+		if part["part"] == &"hull":
+			worn = String(part["name"])
+	_expect(worn == "dart", "and the preset's own key decides which it does (%s)" % worn)
+
+	_check_a_plume_starts_at_the_lip(still)
+
+	# Back to front, which is what a `_draw` has instead of a `z_index`.
+	# A flame drawn after the hull is a flame over the hull it leaves.
+	var ordered: bool = true
+	for i: int in range(1, still.size()):
+		if int(still[i]["z"]) < int(still[i - 1]["z"]):
+			ordered = false
+	_expect(
+		ordered and still.size() > 1 and int(still[0]["z"]) == ShipLook.Z_PLUME,
+		"painted back to front, flames first (%d parts)" % still.size(),
+	)
+
+
+## Plomien zaczyna sie na wylocie dyszy, nie na jej zaczepie.
+##
+## The one piece of arithmetic in a still that a running ship does
+## differently: `ShipSkin` moves the plume every tick from the mount it
+## is bolted to, and the dock has to arrive at the same place from a
+## number in a `.tres`. Being out by the lip looks like a flame starting
+## inside the bell, which reads as art that needs redrawing rather than
+## as a dock that is lying.
+func _check_a_plume_starts_at_the_lip(still: Array[Dictionary]) -> void:
+	var lipped: int = 0
+	var wrong: int = 0
+	for plume: Dictionary in still:
+		if plume["part"] != &"plume":
+			continue
+		for nozzle: Dictionary in still:
+			if nozzle["part"] != &"nozzle" or nozzle["name"] != plume["name"]:
+				continue
+			var lip: float = (nozzle["strip"] as SpriteStrip).exit
+			if lip <= 0.0:
+				continue
+			lipped += 1
+			var gap: Vector2 = (plume["at"] as Vector2) - (nozzle["at"] as Vector2)
+			if not gap.is_equal_approx(
+				ShipLook.exhaust_from(float(nozzle["turn"])) * lip
+			):
+				wrong += 1
+	_expect(
+		lipped > 0 and wrong == 0,
+		"every plume starts at its nozzle's exit plane (%d checked)" % lipped,
+	)
 
 
 ## What the low-pass on the world bus is set to.
@@ -17130,7 +17244,7 @@ func _check_ship_wear() -> void:
 
 ## The nozzle sprite the skin built for one engine.
 func _nozzle_of(skin: ShipSkin, engine: EngineInstance) -> StripSprite:
-	return _sprite_near(skin, engine.mount.position, ShipSkin.Z_NOZZLE)
+	return _sprite_near(skin, engine.mount.position, ShipLook.Z_NOZZLE)
 
 
 ## Wstrzas kamery: pierwszy odbiornik zdarzenia, czyli dowod, ze szew dziala.
@@ -17280,7 +17394,7 @@ func _check_skin() -> void:
 	_expect(named != null and named.id == &"dart", "the stock outline is recognised as the dart")
 	var dart_strip: SpriteStrip = null
 	for sprite: StripSprite in sprites:
-		if sprite.z_index == ShipSkin.Z_HULL:
+		if sprite.z_index == ShipLook.Z_HULL:
 			dart_strip = sprite.strip
 	_expect(dart_strip != null, "and wears the dart's picture")
 
@@ -17335,7 +17449,7 @@ func _check_skin() -> void:
 	)
 	var worn: SpriteStrip = null
 	for sprite: StripSprite in _strip_sprites(skin):
-		if sprite.z_index == ShipSkin.Z_HULL:
+		if sprite.z_index == ShipLook.Z_HULL:
 			worn = sprite.strip
 	_expect(
 		worn != null and worn != dart_strip,
@@ -17354,7 +17468,7 @@ func _check_skin() -> void:
 	)
 	var dressed: int = 0
 	for sprite: StripSprite in _strip_sprites(skin):
-		if sprite.z_index == ShipSkin.Z_HULL:
+		if sprite.z_index == ShipLook.Z_HULL:
 			dressed += 1
 	_expect(dressed == 0, "so it gets no hull sprite, and the Polygon2D keeps the job")
 	_expect(hull != null and hull.visible, "which means the polygon is still visible")

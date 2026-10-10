@@ -418,10 +418,7 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 		mount.position = spot["at"]
 		mount.rotation = float(spot["turn"])
 		mount.thrust_direction = Vector2.UP
-		mount.installed = _engine_share(
-			spot["engine"], float(spot["scale"]), float(spot["share"]),
-			spot["overrides"],
-		)
+		mount.installed = engine_in(spot)
 		ship.add_child(mount)
 
 	# Guns go in the hull's hardpoints and nowhere else: which gun in
@@ -589,6 +586,20 @@ static func _unknown_field(what: Resource, overrides: Dictionary) -> String:
 
 
 ## One part of an engine, for a drive that is split over several mounts.
+## The engine a placement actually ends up holding.
+##
+## One call rather than four fields read at the call site, because the
+## skin picks a nozzle off the engine's thrust and the preset dock has to
+## pick the same one. A dock that read `spot["engine"]` raw would show
+## the stock bell on a drive the preset scaled by 1.75, and the only
+## place that would ever show up is in flight.
+static func engine_in(spot: Dictionary) -> EngineData:
+	return _engine_share(
+		spot["engine"], float(spot["scale"]), float(spot["share"]),
+		spot["overrides"],
+	)
+
+
 static func _engine_share(
 	base: EngineData, scale: float, share: float, overrides: Dictionary
 ) -> EngineData:

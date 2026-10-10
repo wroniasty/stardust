@@ -16,15 +16,12 @@ extends Node2D
 ## One tick for the whole skin, not one per sprite. That is the other half of
 ## the StripSprite decision: the rate an animation runs at is a reading off
 ## the ship, and there is exactly one place the reading is taken.
-
-## Where each family sits front to back. Explicit, because the default is the
-## order the nodes happened to be added in -- an accident that looks fine
-## until a gun lands behind the hull it is bolted to.
-const Z_PLUME: int = -20
-const Z_NOZZLE: int = -10
-const Z_HULL: int = 0
-const Z_GEAR: int = 5
-const Z_GUN: int = 10
+##
+## Which picture each part gets, and the depth order they stack in, is
+## `ShipLook` rather than this file. The preset dock has to show the
+## skinning without a ship to hang it on, and a dock deciding the
+## pictures for itself would disagree with the game at the first
+## threshold -- invisibly, until a flame left the wrong side of a hull.
 
 ## How short a plume is at a whisker of throttle, as a share of full length.
 ## Not zero: an engine ticking over still has a flame, and one that grew from
@@ -89,12 +86,6 @@ var _legs: Array[Dictionary] = [] ## {strut, pad, at}
 ## What the skin replaces, kept so `F8` can hand the view back to it.
 var _polygon: Polygon2D = null
 
-var _nozzle_looks: LookTable = null
-var _plume_looks: LookTable = null
-var _gun_looks: LookTable = null
-var _gear_looks: LookTable = null
-var _hull_looks: LookTable = null
-
 
 func _ready() -> void:
 	ship = get_parent() as Ship
@@ -103,11 +94,6 @@ func _ready() -> void:
 		set_physics_process(false)
 		return
 	_polygon = ship.get_node_or_null("Hull") as Polygon2D
-	_nozzle_looks = load("res://resources/fx/looks/engine_nozzle.tres") as LookTable
-	_plume_looks = load("res://resources/fx/looks/engine_plume.tres") as LookTable
-	_gun_looks = load("res://resources/fx/looks/weapon_muzzle.tres") as LookTable
-	_gear_looks = load("res://resources/fx/looks/gear_leg.tres") as LookTable
-	_hull_looks = load("res://resources/fx/looks/hull.tres") as LookTable
 	# Fitting anything changes what has to be drawn, and the ship already
 	# announces that for its own reasons.
 	ship.configuration_changed.connect(rebuild)
@@ -164,66 +150,57 @@ func _build_hull() -> void:
 	# sprite, and the polygon underneath stays visible. A sandbox has to
 	# show the shape it actually got, and a key cannot make that untrue.
 	var key: StringName = ship.look_key if ship.look_key != &"" else named.id
-	var strip: SpriteStrip = _hull_looks.pick(named, key)
+	var strip: SpriteStrip = ShipLook.hull_strip(named, key)
 	if strip == null:
 		return
-	_hull = _place(strip, Vector2.ZERO, 0.0, Z_HULL)
+	_hull = _place(strip, Vector2.ZERO, 0.0, ShipLook.Z_HULL)
 
 
 func _build_engine(engine: EngineInstance) -> void:
 	var exhaust: Vector2 = -engine.mount.force_direction()
-	var nozzle: SpriteStrip = _nozzle_looks.pick(engine.data)
+	var nozzle: SpriteStrip = ShipLook.nozzle_strip(engine.data)
 	var lip: float = 0.0
 	if nozzle != null:
 		_nozzles[engine.mount.name] = _place(
-			nozzle, engine.mount.position, _facing(exhaust), Z_NOZZLE
+			nozzle, engine.mount.position, ShipLook.facing(exhaust), ShipLook.Z_NOZZLE
 		)
 		lip = nozzle.exit
 	_exits[engine.mount.name] = lip
 
-	var plume: SpriteStrip = _plume_looks.pick(engine.data)
+	var plume: SpriteStrip = ShipLook.plume_strip(engine.data)
 	if plume != null:
 		# At the nozzle's exit plane, which the nozzle states rather than the
 		# skin guessing from where its pixels happen to stop.
 		_plumes[engine.mount.name] = _place(
-			plume, engine.mount.position + exhaust * lip, _facing(exhaust), Z_PLUME
+			plume, engine.mount.position + exhaust * lip,
+			ShipLook.facing(exhaust), ShipLook.Z_PLUME,
 		)
 
 
 func _build_gun(hardpoint: Hardpoint) -> void:
 	if hardpoint.weapon == null:
 		return
-	var strip: SpriteStrip = _gun_looks.pick(hardpoint.weapon)
+	var strip: SpriteStrip = ShipLook.gun_strip(hardpoint.weapon)
 	if strip == null:
 		return
-	_guns[hardpoint.name] = _place(strip, hardpoint.position, hardpoint.rotation, Z_GUN)
+	_guns[hardpoint.name] = _place(
+		strip, hardpoint.position, hardpoint.rotation, ShipLook.Z_GUN
+	)
 
 
 func _build_gear() -> void:
 	if ship.gear == null:
 		return
-	var strut: SpriteStrip = _gear_looks.pick(null, &"strut")
-	var pad: SpriteStrip = _gear_looks.pick(null, &"pad")
+	var strut: SpriteStrip = ShipLook.gear_strip(&"strut")
+	var pad: SpriteStrip = ShipLook.gear_strip(&"pad")
 	if strut == null or pad == null:
 		return
 	for leg: Vector2 in ship.gear.legs:
 		_legs.append({
-			"strut": _place(strut, Vector2.ZERO, 0.0, Z_GEAR),
-			"pad": _place(pad, Vector2.ZERO, 0.0, Z_GEAR),
+			"strut": _place(strut, Vector2.ZERO, 0.0, ShipLook.Z_GEAR),
+			"pad": _place(pad, Vector2.ZERO, 0.0, ShipLook.Z_GEAR),
 			"at": leg,
 		})
-
-
-## The angle at which a sprite's own down points along `direction`.
-##
-## Everything bolted to the hull hangs downward from its pivot -- a nozzle
-## opens down, a plume flows down, a leg extends down -- so one conversion
-## covers all of them and no sprite has to be drawn pre-rotated for the mount
-## it happens to sit on.
-func _facing(direction: Vector2) -> float:
-	if direction.is_zero_approx():
-		return 0.0
-	return direction.angle() - Vector2.DOWN.angle()
 
 
 func _place(strip: SpriteStrip, at: Vector2, turn: float, depth: int) -> StripSprite:
@@ -314,7 +291,7 @@ func _hand_back(on: bool, shade: Color) -> void:
 func _tick_engines(delta: float, shade: Color) -> void:
 	for engine: EngineInstance in ship.engines:
 		var exhaust: Vector2 = -engine.thrust_direction()
-		var aim: float = _facing(exhaust)
+		var aim: float = ShipLook.facing(exhaust)
 		var nozzle: StripSprite = _nozzles.get(engine.mount.name) as StripSprite
 		if nozzle != null:
 			# Turned every tick rather than only on a gimballed engine: a
@@ -410,7 +387,7 @@ func _tick_gear(shade: Color) -> void:
 		var down: Vector2 = foot - hip
 		var own: float = maxf(strut.strip.design_size().y, 1.0)
 		strut.position = hip
-		strut.rotation = _facing(down)
+		strut.rotation = ShipLook.facing(down)
 		strut.scale = Vector2(
 			Art.WORLD_SCALE, Art.WORLD_SCALE * down.length() * out / own
 		)

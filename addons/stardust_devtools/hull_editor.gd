@@ -44,6 +44,8 @@ var _undo_button: Button = null
 var _rows: Dictionary = {}
 var _attributes: ResourceForm = null
 var _fitout_note: Label = null
+var _skin_note: Label = null
+var _layers: OptionButton = null
 var _balance: Dictionary = {}
 var _reference: OptionButton = null
 var _verdict: Label = null
@@ -192,6 +194,22 @@ func _build_side() -> Control:
 
 	column.add_child(HSeparator.new())
 
+	_layers = OptionButton.new()
+	for named: String in HullView.LAYER_NAMES:
+		_layers.add_item(named)
+	_layers.selected = _canvas.layer
+	_layers.item_selected.connect(_on_layer_picked)
+	column.add_child(_layers)
+
+	# Whether the shape on screen is one the game will put a picture on
+	# at all. `ShipSkin` matches the outline against the shipped hulls
+	# and draws nothing when it does not recognise one -- deliberately,
+	# so a shape the creative tool scaled shows as itself -- which means
+	# an unsaved drag silently costs this hull its art.
+	_skin_note = Label.new()
+	_skin_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_skin_note)
+
 	var snap: CheckBox = CheckBox.new()
 	snap.text = "siatka co %.2f" % HullCanvas.SNAP_STEP
 	snap.button_pressed = true
@@ -267,6 +285,14 @@ func _build_balance_row(key: String, caption: String) -> Control:
 	row.add_child(figure)
 	_balance[key] = figure
 	return row
+
+
+## Points, pictures or both. Refreshed rather than reframed: somebody
+## who has zoomed in on a nozzle wants to keep looking at that nozzle.
+func _on_layer_picked(index: int) -> void:
+	_canvas.layer = index
+	_canvas.refresh()
+	_refresh()
 
 
 func _on_reference_picked(_index: int) -> void:
@@ -371,6 +397,7 @@ func _refresh() -> void:
 			trouble += 1
 
 	_report_fitout()
+	_report_skin()
 	_report_balance()
 
 	var dirty: bool = not HullHandles.same(_editing, _on_disk)
@@ -402,6 +429,27 @@ func _report_fitout() -> void:
 	var fault: String = ShipFitout.fault_in(trying)
 	_fitout_note.text = "" if fault.is_empty() else fault
 	_fitout_note.modulate = Color(1.0, 0.45, 0.35)
+
+
+## Whether the game would skin this shape, and with what.
+##
+## `ShipSkin._build_hull` asks `HullData.matching` for the outline and
+## gives up when nothing matches, so the answer is a fact about the
+## **points**, not about the file: drag a corner and the ship flies as a
+## bare polygon until the file is saved. The dock draws the picture
+## anyway, because what it is for is lining the art up with the points --
+## so it has to say when the picture it is showing is one the game would
+## not.
+func _report_skin() -> void:
+	if _editing == null:
+		_skin_note.text = ""
+		return
+	var known: HullData = HullData.matching(_editing.outline)
+	if known != null:
+		_skin_note.text = ""
+		return
+	_skin_note.text = "obrys nie pasuje do zadnego zapisanego kadluba - w grze poleci bez grafiki"
+	_skin_note.modulate = Color(1.0, 0.72, 0.35)
 
 
 ## The balance figures, and one sentence saying what is wrong.

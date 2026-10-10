@@ -13,6 +13,11 @@ extends Control
 ## once: a `Control` does not clip what `_draw` puts outside its own
 ## rect, and a canvas that forgot `clip_contents` painted a hull across
 ## the whole editor window.
+##
+## It also paints the skin, for the same reason. What a schematic cannot
+## answer is whether the **art** lines up with the points: a nozzle whose
+## pivot is two texels out looks perfectly well bolted on until it is
+## drawn next to the slot it is supposed to sit in.
 
 const BACKDROP: Color = Color(0.09, 0.10, 0.13)
 const GRID_FAINT: Color = Color(1.0, 1.0, 1.0, 0.05)
@@ -22,11 +27,41 @@ const AXIS: Color = Color(1.0, 1.0, 1.0, 0.22)
 const MIN_ZOOM: float = 2.0
 const MAX_ZOOM: float = 80.0
 
+## Which of the two pictures is on: the points the solver uses, the art
+## the player sees, or both at once.
+##
+## Both is the one that earns its keep -- the art under the handles is
+## how a pivot off by two texels becomes visible -- but all three are
+## offered because the other two are each the only way to judge one
+## thing. Art alone is the only way to see the ship as the player will;
+## the schematic alone is the only way to drag a point that the art is
+## sitting on top of.
+enum Layer {SCHEMATIC, BOTH, SKIN}
+
+## In `Layer` order, for whatever control picks between them.
+const LAYER_NAMES: Array[String] = ["schemat", "schemat + skorka", "skorka"]
+
+var layer: int = Layer.SCHEMATIC
+
 var _zoom: float = 11.0
 var _origin: Vector2 = Vector2.ZERO
 
 
+## Whether the points, and whether the pictures, are being drawn. Asked
+## rather than compared against the enum at nine call sites.
+func shows_schematic() -> bool:
+	return layer != Layer.SKIN
+
+
+func shows_skin() -> bool:
+	return layer != Layer.SCHEMATIC
+
+
 func _ready() -> void:
+	# World art is authored at `Art.FACTOR` and shown at a zoom this
+	# view picks, so one texel lands on anything from a third of a pixel
+	# to several. Same filter as in flight, for the same reason.
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# A `Control` does not clip what `_draw` puts outside its own rect,
 	# and this draws at hull coordinates times a zoom: a hull opened at
 	# the wrong zoom painted its outline, its handles and its grid across
@@ -124,3 +159,71 @@ func draw_grid() -> void:
 	var zero: Vector2 = to_screen(Vector2.ZERO)
 	draw_line(Vector2(zero.x, 0.0), Vector2(zero.x, size.y), AXIS, 1.0)
 	draw_line(Vector2(0.0, zero.y), Vector2(size.x, zero.y), AXIS, 1.0)
+
+
+## Paints a `ShipLook` still: every part, in the order it was handed over.
+##
+## `draw_texture_rect_region` rather than a tree of `StripSprite`s, and
+## the reason is the one `ShipSkin` gives for not using
+## `AnimatedSprite2D`: nodes come with their own lifetimes to manage, and
+## a dock that rebuilt a dozen of them on every drag would be managing
+## them during the drag. A still needs none of that -- it needs one frame
+## of each picture in the right place.
+##
+## The frame is the first of the part's default clip, which on a file
+## with no clips is simply frame zero.
+func draw_still(parts: Array[Dictionary]) -> void:
+	for part: Dictionary in parts:
+		var strip: SpriteStrip = part["strip"]
+		if strip == null or not strip.is_valid():
+			continue
+		var frame: Vector2i = strip.frame_size()
+		if frame.x < 1 or frame.y < 1:
+			continue
+		var source: Rect2 = Rect2(
+			Vector2(0.0, float(strip.clip().row * frame.y)), Vector2(frame)
+		)
+		draw_set_transform(
+			to_screen(part["at"]), float(part["turn"]), Vector2.ONE * _zoom
+		)
+		draw_texture_rect_region(strip.texture, _quad_of(part), source)
+	# Left set, every later line in this redraw would be drawn through
+	# the last part's rotation.
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Where a part's frame lands, in hull units, relative to its own
+## position.
+##
+## The pivot is in texels and the frame is drawn from it, which is what
+## `StripSprite` does with `offset = -pivot` and a scale off the strip.
+## Taken through `design_size` rather than multiplying by
+## `Art.WORLD_SCALE` here, so interface art -- authored 1:1 -- measures
+## right without this knowing that it is the exception.
+func _quad_of(part: Dictionary) -> Rect2:
+	var strip: SpriteStrip = part["strip"]
+	var span: Vector2 = strip.design_size() * (part["stretch"] as Vector2)
+	var texel: Vector2 = span / Vector2(strip.frame_size())
+	return Rect2(-strip.pivot * texel, span)
+
+
+## Every corner of every part, so framing the view does not crop the art.
+##
+## Corners rather than centres, and rotated: a plume is four design
+## pixels wide and twenty long, and fitting it by its anchor would leave
+## most of it off the edge.
+func still_points(parts: Array[Dictionary]) -> Array[Vector2]:
+	var points: Array[Vector2] = []
+	for part: Dictionary in parts:
+		var strip: SpriteStrip = part["strip"]
+		if strip == null or not strip.is_valid():
+			continue
+		var quad: Rect2 = _quad_of(part)
+		var turn: float = float(part["turn"])
+		var at: Vector2 = part["at"]
+		for corner: Vector2 in [
+			quad.position, quad.position + Vector2(quad.size.x, 0.0),
+			quad.end, quad.position + Vector2(0.0, quad.size.y),
+		]:
+			points.append(at + corner.rotated(turn))
+	return points

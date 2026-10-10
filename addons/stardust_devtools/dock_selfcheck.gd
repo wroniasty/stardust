@@ -39,6 +39,7 @@ static func run(hulls: HullEditor, presets: PresetEditor) -> int:
 	failures += _captions()
 	failures += _hull_dock(hulls)
 	failures += _preset_dock(presets)
+	failures += _skin(hulls, presets)
 	print("DOCK %s" % (
 		"all checks passed" if failures == 0 else "%d check(s) failed" % failures
 	))
@@ -229,6 +230,84 @@ static func _preset_dock(dock: PresetEditor) -> int:
 			"whose stats panel has rows too (%d)" % _form_rows(dock._gun_rows),
 		)
 		_press_stats(dock._gun_rows, 0, false)
+	return failures
+
+
+## Czy skorka naprawde da sie narysowac w edytorze.
+##
+## The reason this is here and not only in the suite: a still is made of
+## `LookTable`s and `SpriteStrip`s loaded from `.tres`, which is exactly
+## the shape of thing that comes back as a placeholder in the editor.
+## The suite runs as a game and structurally cannot see that -- it would
+## report every picture present while the dock showed an empty canvas.
+##
+## So the pictures are counted here, and the switch is picked the way a
+## mouse picks it rather than by writing to the canvas.
+static func _skin(hulls: HullEditor, presets: PresetEditor) -> int:
+	var failures: int = 0
+
+	# Loud, if a table ever stops being a tool script: `pick` is a
+	# method, and a method on a placeholder raises.
+	var table: LookTable = ShipLook.table(ShipLook.HULL_TABLE)
+	var drawn: SpriteStrip = null
+	if table != null:
+		drawn = table.pick(HullData.of(&"dart"), &"dart")
+	failures += _says(
+		drawn != null and drawn.is_valid() and drawn.frame_size().x > 0,
+		"a look table hands out a usable strip in the editor (%s)" % [
+			"none" if drawn == null else str(drawn.frame_size()),
+		],
+	)
+
+	failures += _layer_switch(hulls, "kadlubow")
+	failures += _layer_switch(presets, "presetow")
+	return failures
+
+
+## Picks every layer on one dock and says whether the pictures follow.
+##
+## The canvas is asked what it is actually holding rather than whether
+## the enum changed, because the enum changing is not the thing that was
+## broken when a previous check of mine set state and rebuilt by hand:
+## the wiring was.
+static func _layer_switch(dock: Node, which: String) -> int:
+	var switch: OptionButton = dock.get("_layers") as OptionButton if dock != null else null
+	var canvas: HullView = dock.get("_canvas") as HullView if dock != null else null
+	if switch == null or canvas == null:
+		return _says(false, "the %s dock has a layer switch" % which)
+
+	var counts: Array[int] = []
+	for index: int in range(switch.item_count):
+		switch.select(index)
+		# `select` deliberately does not emit, so this is the other half
+		# of what a click does. Without it the handler never runs and
+		# the check would be measuring an assignment it made itself.
+		switch.item_selected.emit(index)
+		counts.append((canvas.get("_still") as Array).size())
+	var ok: bool = (
+		counts.size() == 3 and counts[0] == 0
+		and counts[1] > 0 and counts[2] > 0
+	)
+	var failures: int = _says(
+		ok, "the %s dock draws pictures only when asked (%s)" % [which, str(counts)]
+	)
+
+	# And the view frames what it draws. A still that the framing does
+	# not know about gets its plumes cropped at the edge of the dock.
+	switch.select(HullView.Layer.SKIN)
+	switch.item_selected.emit(HullView.Layer.SKIN)
+	var with_art: int = canvas.framed_points().size()
+	switch.select(HullView.Layer.SCHEMATIC)
+	switch.item_selected.emit(HullView.Layer.SCHEMATIC)
+	var without: int = canvas.framed_points().size()
+	failures += _says(
+		with_art > without,
+		"and frames the art it draws (%d points against %d)" % [with_art, without],
+	)
+
+	# Left as it was found, since the next check shares the dock.
+	switch.select(HullView.Layer.BOTH)
+	switch.item_selected.emit(HullView.Layer.BOTH)
 	return failures
 
 

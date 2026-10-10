@@ -11,7 +11,10 @@ extends HullView
 ##
 ## Everything drawn comes from `ShipFitout.placements` and
 ## `ShipFitout.balance_of`, the same calls `apply` builds the real ship
-## with, so the preview cannot show a ship the game would not build.
+## with, so the preview cannot show a ship the game would not build. The
+## pictures come from `ShipLook.still_of`, which is the half of `ShipSkin`
+## that does not need a ship -- same tables, same pivots, same depth
+## order as in flight.
 
 ## What the cursor is over, as a line of text for a status bar.
 signal hovered(note: String)
@@ -38,11 +41,16 @@ var balance: Dictionary = {}
 
 var _spots: Array[Dictionary] = []
 var _guns: Array[Dictionary] = []
+var _still: Array[Dictionary] = []
 var _hover: int = -1
 
 
 func _ready() -> void:
 	super()
+	# A preview is for looking at, so it opens with the art on. The hull
+	# dock opens without it for the opposite reason: there, the art is
+	# sitting on the points you came to drag.
+	layer = Layer.BOTH
 	refresh()
 
 
@@ -58,6 +66,7 @@ func show_preset(which: ShipPreset) -> void:
 func refresh() -> void:
 	_spots = []
 	_guns = []
+	_still = []
 	balance = {}
 	var hull: HullData = preset.hull if preset != null else null
 	if hull != null:
@@ -86,6 +95,10 @@ func refresh() -> void:
 		# Which gun lands in which hardpoint, from the same call `apply`
 		# fits them with, so a pinned gun is drawn where it will be.
 		_guns = ShipFitout.armament(hull, preset)
+		# Not a ternary: the empty branch of one is statically a plain
+		# `Array`, which an `Array[Dictionary]` refuses at runtime.
+		if shows_skin():
+			_still = ShipLook.still_of(hull, preset)
 	queue_redraw()
 
 
@@ -105,6 +118,7 @@ func framed_points() -> Array[Vector2]:
 	for bay: BayFit in preset.bays:
 		if bay != null:
 			points.append(bay.at)
+	points.append_array(still_points(_still))
 	return points
 
 
@@ -112,6 +126,12 @@ func _draw() -> void:
 	draw_grid()
 	var hull: HullData = preset.hull if preset != null else null
 	if hull == null:
+		return
+	# Art first, points over it: the question the pair answers is whether
+	# the picture sits where the solver thinks the part is, and that is
+	# only readable with the marks on top.
+	draw_still(_still)
+	if not shows_schematic():
 		return
 	_draw_outline(hull)
 	_draw_legs(hull)

@@ -127,9 +127,21 @@ func _draw() -> void:
 ## the hull's corners would go stale the first time somebody moved one.
 func leg_root(leg: Vector2) -> Vector2:
 	var ship: Ship = get_parent() as Ship
-	if ship == null or ship.hull_outline.size() < 2:
+	if ship == null:
 		return leg * 0.5
-	var outline: PackedVector2Array = ship.hull_outline
+	return root_on(ship.hull_outline, leg)
+
+
+## The same answer for a shape that is not on a ship yet.
+##
+## Static because the hull dock draws legs on a `HullData` it is in the
+## middle of editing, and there is no ship anywhere near it. The
+## alternative was a second nearest-point loop in the dock, which is the
+## copy that drifts: the leg would be drawn against the outline the dock
+## thinks it has and land somewhere else at the first touchdown.
+static func root_on(outline: PackedVector2Array, leg: Vector2) -> Vector2:
+	if outline.size() < 2:
+		return leg * 0.5
 	var best: Vector2 = outline[0]
 	var nearest: float = INF
 	for i: int in range(outline.size()):

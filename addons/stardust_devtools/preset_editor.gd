@@ -45,6 +45,7 @@ const ENGINE_KINDS: Array[StringName] = [
 
 var _files: ItemList = null
 var _canvas: PresetCanvas = null
+var _layers: OptionButton = null
 var _status: Label = null
 var _title: Label = null
 var _save: Button = null
@@ -194,6 +195,16 @@ func _build_form() -> Control:
 		_skin_pick.add_item(String(key))
 	_skin_pick.item_selected.connect(_on_skin_picked)
 	column.add_child(_titled("grafika", _skin_pick))
+
+	# Held rather than left local, so the dock check can pick a layer
+	# the way the mouse does instead of writing to the canvas behind the
+	# control's back.
+	_layers = OptionButton.new()
+	for caption: String in HullView.LAYER_NAMES:
+		_layers.add_item(caption)
+	_layers.selected = _canvas.layer
+	_layers.item_selected.connect(_on_layer_picked)
+	column.add_child(_titled("warstwa", _layers))
 
 	_scale_field = SpinBox.new()
 	_scale_field.min_value = 0.1
@@ -666,6 +677,15 @@ func _on_hull_picked(index: int) -> void:
 	# same four lines build on a different shape.
 	_canvas.show_preset(_editing)
 	_refresh()
+
+
+## Points, pictures or both. The preview opens on both; the two single
+## layers are each the only way to judge one thing -- the art alone is
+## the ship as the player will see it, the schematic alone is where
+## every slot is whether or not anything is drawn on it.
+func _on_layer_picked(index: int) -> void:
+	_canvas.layer = index
+	_canvas.refresh()
 
 
 func _on_skin_picked(index: int) -> void:

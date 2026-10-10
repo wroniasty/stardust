@@ -234,6 +234,16 @@ porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
   przeciągać, prawa startuje mniej więcej dwa razy szersza. Podłoga 240 px
   jest niska celowo — minimum wygodne to minimum, którego nie da się usunąć
   z drogi.
+- [x] Przełącznik warstwy: **schemat / schemat + skórka / skórka**. Kadłubowy
+  startuje na schemacie, bo tam się przeciąga punkty, a grafika leży dokładnie
+  na nich; presetowy startuje na obu, bo tam się patrzy. Obrazki rysuje
+  `ShipLook.still_of` — te same tabele, te same pivoty i ta sama kolejność
+  rysowania co w locie.
+- [x] Ostrzeżenie, którego wcześniej nie było czym powiedzieć: jeśli obrys nie
+  pasuje do żadnego **zapisanego** kadłuba, `ShipSkin` nie da mu grafiki (tak
+  ma być — kształt z narzędzia kreatywnego ma wyglądać jak on sam). Czyli
+  jedno przeciągnięcie przed zapisem kosztuje kadłub jego obrazek, a dock to
+  teraz mówi.
 - [ ] Ten sam dock dla broni i silników (`FIELDS` jest tabelą, nie kodem).
 
 Gotowe, gdy: dyszę da się przesunąć myszą, licznik od razu mówi, co z tego
@@ -292,7 +302,17 @@ zapis po prawej.
   decyduje przeciągnięcie, nie stała w kodzie.
 - [ ] Przeciąganie zatok po podglądzie. Dziś ich `at` ustawia się tylko w
   inspektorze.
-- [ ] Podgląd skinu: dock pokazuje klucz, nie obrazek.
+- [x] Podgląd skinu. `ShipLook` to połowa `ShipSkin`, która nie potrzebuje
+  statku: który pasek dostaje część, którą stroną wisi i gdzie siedzi cały
+  obrazek, gdy nic się nie rusza. Dock pyta o `still_of`, gra pyta o to samo
+  po kawałku z żywego mountu — bo druga kopia reguły „sterówka patrzy w tę
+  stronę" rozjechałaby się na pierwszym progu i byłoby to niewidoczne do
+  pierwszego lotu. **Statycznie**: plomień na pełnym ciągu i nogi wypuszczone,
+  czyli stany, w których widać niedopasowanie; ruch będzie w Sandboksie.
+- [x] Nie-dociągnięcie, powiedziane wprost: plomienie rysują się normalnie, a
+  w grze **addytywnie**. `draw_texture_rect_region` nie ma trybu mieszania na
+  wywołanie, a materiał na całym płótnie pomalowałby też schemat. Do
+  sprawdzania pivotów to bez znaczenia, do oceny jasności — tak.
 
 Gotowe, gdy: da się zrobić wariant statku bez dotykania GDScript i od razu
 zobaczyć, co z niego wyjdzie.
