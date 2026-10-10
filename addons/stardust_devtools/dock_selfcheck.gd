@@ -145,6 +145,23 @@ static func _hull_dock(dock: HullEditor) -> int:
 		dock._canvas.balance.has("centre"),
 		"and a centre of mass to draw",
 	)
+
+	# The attribute form, and what it deliberately leaves out: the
+	# outline and the slot lists belong to the canvas and to the
+	# counters, and nine rows of "4 items" in front of three editable
+	# fields is the noise this was built to avoid.
+	var captions: Array[Label] = _labels_under(dock._attributes)
+	var geometry: Array[String] = []
+	for label: Label in captions:
+		if label.text in ["outline", "legs", "drive_slots", "torque_slots"]:
+			geometry.append(label.text)
+	failures += _says(
+		captions.size() > 0 and geometry.is_empty(),
+		"the hull's own fields are editable (%d rows, %s)" % [
+			captions.size(),
+			"no geometry among them" if geometry.is_empty() else str(geometry),
+		],
+	)
 	return failures
 
 

@@ -26,6 +26,15 @@ const DIRECTORY: String = "res://resources/hulls"
 ## pixel; see `HullCanvas._on_motion`.
 const UNDO_DEPTH: int = 64
 
+## The narrowest the side panel may be dragged, and how much wider than
+## that it starts.
+##
+## The floor is low on purpose: a minimum wide enough to be comfortable
+## is a minimum nobody can get out of the way, and the point of a
+## splitter is that the width is the pilot's.
+const SIDE_FLOOR: float = 240.0
+const SIDE_EXTRA: float = 280.0
+
 var _files: ItemList = null
 var _canvas: HullCanvas = null
 var _status: Label = null
@@ -33,6 +42,7 @@ var _title: Label = null
 var _save: Button = null
 var _undo_button: Button = null
 var _rows: Dictionary = {}
+var _attributes: ResourceForm = null
 var _balance: Dictionary = {}
 var _reference: OptionButton = null
 var _verdict: Label = null
@@ -53,11 +63,24 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	var columns: HBoxContainer = HBoxContainer.new()
+	# Split panes rather than a box, so the dividers can be dragged.
+	# What the right-hand column needs is not a number anybody can pick
+	# once: it holds a form whose captions are sized to the longest
+	# field name, and how much of the dock that deserves depends on the
+	# hull being worked on.
+	var columns: HSplitContainer = HSplitContainer.new()
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_child(columns)
 
 	columns.add_child(_build_file_list())
+
+	var rest: HSplitContainer = HSplitContainer.new()
+	rest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Negative moves the divider left, which is the side panel's gain.
+	# It starts about twice as wide as the box it replaced and is the
+	# pilot's from the first drag.
+	rest.split_offset = -SIDE_EXTRA
+	columns.add_child(rest)
 
 	var middle: VBoxContainer = VBoxContainer.new()
 	middle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -71,9 +94,9 @@ func _build() -> void:
 	_canvas.changed.connect(_on_changed)
 	_canvas.hovered.connect(func(note: String) -> void: _status.text = note)
 	middle.add_child(_canvas)
-	columns.add_child(middle)
+	rest.add_child(middle)
 
-	columns.add_child(_build_side())
+	rest.add_child(_build_side())
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -101,7 +124,7 @@ func _build_file_list() -> Control:
 ## one clipped off the end is save.
 func _build_side() -> Control:
 	var scroller: ScrollContainer = ScrollContainer.new()
-	scroller.custom_minimum_size = Vector2(266.0, 0.0)
+	scroller.custom_minimum_size = Vector2(SIDE_FLOOR, 0.0)
 	scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
 	var column: VBoxContainer = VBoxContainer.new()
@@ -113,6 +136,22 @@ func _build_side() -> Control:
 
 	for entry: Dictionary in HullHandles.FIELDS:
 		column.add_child(_build_row(entry))
+
+	column.add_child(HSeparator.new())
+
+	# The hull's own fields, built from `get_property_list()` so one
+	# added to `HullData` tomorrow appears here untouched.
+	#
+	# Without its collections: the outline and the seven slot lists are
+	# what the canvas edits and what the counters above already count,
+	# so nine rows reading "4 items" would be noise in front of the
+	# three fields this is for.
+	var attributes: Label = Label.new()
+	attributes.text = "Atrybuty"
+	column.add_child(attributes)
+	_attributes = ResourceForm.new()
+	_attributes.edited.connect(func(_edited: Resource) -> void: _on_attribute_edited())
+	column.add_child(_attributes)
 
 	column.add_child(HSeparator.new())
 
@@ -258,6 +297,7 @@ func _open(index: int) -> void:
 	_undo.clear()
 	_canvas.reference = _picked_reference()
 	_canvas.show_hull(_editing)
+	_attributes.show_resource(_editing, 0, false)
 	_refresh()
 
 
@@ -290,6 +330,16 @@ func _revert() -> void:
 
 
 func _on_changed() -> void:
+	_refresh()
+
+
+## A field typed into the attribute form. The canvas is told because
+## `cargo_capacity` is weight and weight moves the centre of mass it
+## draws; the undo stack is told because a typed figure is a gesture
+## like a drag is.
+func _on_attribute_edited() -> void:
+	_remember("zmien atrybut")
+	_canvas.refresh()
 	_refresh()
 
 
@@ -377,14 +427,15 @@ func _report_balance() -> void:
 ## inspector is showing, so saving updates them instead of leaving three
 ## versions of the same hull in one process.
 ##
-## Geometry only, for the same reason. The dock draws shapes and never
-## shows `display_name` or `cargo_capacity`, so if someone renames a hull
-## in the inspector while this is open, saving here must not quietly put
-## the old name back.
+## All of it, now that the dock shows all of it. This wrote the
+## geometry alone while the only thing on screen was the drawing, so a
+## rename made in the inspector could not be undone by a save here.
+## With an attribute form in the panel that reasoning is the other way
+## round: the name on screen is the name that has to be written.
 func _write_file() -> void:
 	if _editing == null or _on_disk == null:
 		return
-	HullHandles.restore(_on_disk, HullHandles.snapshot(_editing), false)
+	HullHandles.restore(_on_disk, HullHandles.snapshot(_editing))
 	var failed: Error = ResourceSaver.save(_on_disk, _path)
 	if failed != OK:
 		_status.text = "nie udalo sie zapisac %s (blad %d)" % [_path, failed]

@@ -86,6 +86,9 @@ var _overriding: bool = false
 ## clamp is reapplied whenever the form changes size.
 var _natural_caption: float = LABEL_MIN
 
+## Whether the collection fields are shown at all. See `show_resource`.
+var _with_arrays: bool = true
+
 
 func _ready() -> void:
 	# The share below is of the form's own width, which it does not have
@@ -95,11 +98,20 @@ func _ready() -> void:
 
 
 ## Builds the rows for `resource`, replacing whatever was shown.
-func show_resource(resource: Resource, depth: int = 0) -> void:
+## `with_arrays` false leaves out every array, dictionary and packed
+## array. They show as a count and cannot be edited here anyway, and
+## where something else owns them -- the hull dock's canvas owns a
+## hull's outline and its slot lists, and its counters already say how
+## many there are -- nine rows of "4 items" is noise in front of the
+## three fields this panel is for.
+func show_resource(
+	resource: Resource, depth: int = 0, with_arrays: bool = true
+) -> void:
 	_overriding = false
 	_overrides = {}
 	_resource = resource
 	_depth = depth
+	_with_arrays = with_arrays
 	_build()
 
 
@@ -113,6 +125,7 @@ func show_overrides(base: Resource, overrides: Dictionary, depth: int = 0) -> vo
 	_overrides = overrides
 	_resource = base
 	_depth = depth
+	_with_arrays = true
 	_build()
 
 
@@ -130,6 +143,8 @@ func _build() -> void:
 		# flat, and "this engine but with its curve's third point moved"
 		# is not a thing it can say. Shown as a name and left alone.
 		if _overriding and int(property["type"]) == TYPE_OBJECT:
+			continue
+		if not _with_arrays and _is_collection(int(property["type"])):
 			continue
 		var row: Control = _row(property)
 		if row == null:
@@ -207,6 +222,8 @@ func _widest_caption() -> float:
 	var widest: float = LABEL_MIN
 	for property: Dictionary in _resource.get_property_list():
 		if not _is_exported(property):
+			continue
+		if not _with_arrays and _is_collection(int(property["type"])):
 			continue
 		widest = maxf(widest, font.get_string_size(
 			String(property["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1.0, size
@@ -394,6 +411,15 @@ func _count_of(value: Variant) -> int:
 ## resource (an inspector, a sprite built off it) listen for that one, and
 ## a form that edited behind their backs would leave them showing the old
 ## number.
+## Whether this is one of the types shown as a count rather than
+## edited.
+static func _is_collection(type: int) -> bool:
+	return type in [
+		TYPE_ARRAY, TYPE_DICTIONARY,
+		TYPE_PACKED_VECTOR2_ARRAY, TYPE_PACKED_FLOAT32_ARRAY,
+	]
+
+
 ## What the row shows: the override when there is one, the resource's
 ## own value otherwise.
 func _value_of(key: String) -> Variant:
