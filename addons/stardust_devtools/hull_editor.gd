@@ -43,6 +43,7 @@ var _save: Button = null
 var _undo_button: Button = null
 var _rows: Dictionary = {}
 var _attributes: ResourceForm = null
+var _fitout_note: Label = null
 var _balance: Dictionary = {}
 var _reference: OptionButton = null
 var _verdict: Label = null
@@ -182,6 +183,12 @@ func _build_side() -> Control:
 	_verdict = Label.new()
 	_verdict.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_verdict)
+
+	# Said here rather than on a counter, because it is a fact about
+	# this hull **and** the chosen fitout, not about the hull alone.
+	_fitout_note = Label.new()
+	_fitout_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_fitout_note)
 
 	column.add_child(HSeparator.new())
 
@@ -351,8 +358,7 @@ func _refresh() -> void:
 	var trouble: int = 0
 	for entry: Dictionary in HullHandles.tally(_editing):
 		var count: Label = _rows[entry["field"]]
-		var wanted: int = entry["wanted"]
-		count.text = ("%d" % entry["have"]) if wanted == 0 else ("%d/%d" % [entry["have"], wanted])
+		count.text = "%d" % entry["have"]
 		if not entry["declared"]:
 			# Not in the file: what the hull is flying on until someone
 			# touches it. Worth marking, because it is the difference
@@ -364,6 +370,7 @@ func _refresh() -> void:
 		if note != "":
 			trouble += 1
 
+	_report_fitout()
 	_report_balance()
 
 	var dirty: bool = not HullHandles.same(_editing, _on_disk)
@@ -374,6 +381,27 @@ func _refresh() -> void:
 		"  *" if dirty else "",
 		"    (%d uwag - najedz na licznik)" % trouble if trouble > 0 else "",
 	]
+
+
+## Whether the fitout being weighed can actually be built on this
+## hull.
+##
+## This replaces the per-kind warnings the counters used to carry,
+## which stopped being true when presets began binding by kind. What is
+## still a real failure is narrower and belongs to the **pair**: a
+## preset that pins a named place -- the twin-gimbal ship's forward
+## nozzle is one -- cannot be built on a hull that offers no such name,
+## and `ShipFitout.fault_in` is the one answer to that question.
+func _report_fitout() -> void:
+	var fitout: ShipPreset = _picked_reference()
+	if fitout == null or _editing == null:
+		_fitout_note.text = ""
+		return
+	var trying: ShipPreset = fitout.duplicate() as ShipPreset
+	trying.hull = _editing
+	var fault: String = ShipFitout.fault_in(trying)
+	_fitout_note.text = "" if fault.is_empty() else fault
+	_fitout_note.modulate = Color(1.0, 0.45, 0.35)
 
 
 ## The balance figures, and one sentence saying what is wrong.

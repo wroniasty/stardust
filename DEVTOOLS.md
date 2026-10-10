@@ -197,9 +197,18 @@ porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
 - [x] Etykieta pod kursorem to nazwa z `HullData.slots()`, nie druga kopia
   reguły — dlatego dysza przeciągnięta przez środek bounding boxa zmienia
   nazwę z `Nose…` na `Tail…` na żywo. Linia środka jest narysowana.
-- [x] Licznik `ile/ile` na każdy rodzaj: poniżej planu mount zostaje bez
-  miejsca (`ShipFitout.fault_in`), powyżej — nadmiar jest nieużywany. Edycja
-  nie jest blokowana, tylko nazwana.
+- [x] Licznik miejsc na każdy rodzaj, z `~` gdy kadłub leci na ramce z
+  wyliczenia. Początkowo pokazywał `ile/ile` i ostrzegał w obie strony —
+  poniżej planu mount bez miejsca, powyżej nadmiar nieużywany. Obie uwagi
+  były prawdziwe, **dopóki preset nazywał po jednym miejscu na wpis**;
+  wiązanie po rodzaju je odwróciło, bo wpis obsadza **każde** miejsce swojego
+  rodzaju. `wanted` zniknęło z `FIELDS`: te stałe mówią, ile miejsc wyprowadza
+  `default_positions`, a nie ile ich ma być. Została jedyna reguła, która się
+  nie zmieniła — poniżej trzech rogów nie ma wielokąta.
+- [x] Czy **dany fitout** mieści się na **danym kadłubie**, to pytanie o parę,
+  nie o kadłub: dok pyta `ShipFitout.fault_in` o wybrany preset z tym kadłubem
+  i pokazuje odpowiedź pod bilansem. To łapie realny przypadek, który został —
+  preset przypięty do nazwanego miejsca, którego ten kadłub nie oferuje.
 - [x] Edytowana jest **luźna kopia**. „Zapisz .tres" przepisuje ją na zasób,
   który edytor ma załadowany, i woła `ResourceSaver`; „Przywróć z dysku"
   i „Cofnij" (stos migawek na gest) działają bez dotykania pliku.

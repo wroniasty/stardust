@@ -16,50 +16,54 @@ extends RefCounted
 ## undo snapshot.
 
 ## Every editable array on a hull, in drawing order: what the resource
-## calls it, which `HullData` kind it feeds, and how many entries the rest
-## of the game counts on.
+## calls it, which `HullData` kind it feeds, and the fewest entries that
+## still mean anything.
 ##
-## `wanted` is a claim, not a limit. The editor will happily add a fifth
-## torque jet, because a hull nobody can reshape is the problem this tool
-## exists to fix -- but a hull with **fewer** places than a preset names
-## leaves a mount homeless, and that is worth saying while the mouse is
-## still down rather than at the next smoke test.
+## There used to be a `wanted` here as well -- `HullData.DRIVE_SLOTS`
+## and friends -- and the dock quoted every count against it. That read
+## as a budget and was never one: those constants say how many places
+## `default_positions` derives for a hull that declares none, and the
+## game builds whatever the resource actually lists. Presets bind by
+## kind, so five torque places get five jets and two get two. The one
+## figure that is still a rule is `least`, because everything physical
+## is computed from the outline and below three corners there is no
+## polygon.
 const FIELDS: Array[Dictionary] = [
 	{
 		"field": &"outline", "kind": &"", "caption": "obrys",
-		"wanted": 0, "least": 3,
+		"least": 3,
 	},
 	{
 		"field": &"legs", "kind": &"", "caption": "nogi",
-		"wanted": 0, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"drive_slots", "kind": HullData.SLOT_DRIVE, "caption": "main drive",
-		"wanted": HullData.DRIVE_SLOTS, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"front_slots", "kind": HullData.SLOT_FRONT, "caption": "dziala przod",
-		"wanted": HullData.FRONT_HARDPOINTS, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"side_slots", "kind": HullData.SLOT_SIDE, "caption": "dziala burty",
-		"wanted": HullData.SIDE_HARDPOINTS, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"rear_slots", "kind": HullData.SLOT_REAR, "caption": "dzialo rufa",
-		"wanted": HullData.REAR_HARDPOINTS, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"torque_slots", "kind": HullData.SLOT_TORQUE, "caption": "torque",
-		"wanted": HullData.TORQUE_SLOTS, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"strafe_slots", "kind": HullData.SLOT_STRAFE, "caption": "strafe",
-		"wanted": HullData.STRAFE_SLOTS, "least": 0,
+		"least": 0,
 	},
 	{
 		"field": &"retro_slots", "kind": HullData.SLOT_RETRO, "caption": "retro",
-		"wanted": HullData.RETRO_SLOTS, "least": 0,
+		"least": 0,
 	},
 ]
 
@@ -272,34 +276,34 @@ static func nearest_edge(hull: HullData, at: Vector2) -> Dictionary:
 	return out
 
 
-## How many of each kind this hull offers against how many the game wants,
-## with the consequence spelled out.
+## Ile miejsc kazdego rodzaju ten kadlub oferuje.
 ##
-## Each entry is `{field, caption, have, wanted, declared, note}`, where an
-## empty note means nothing is wrong. Short of the wanted count a preset's
-## named mount has nowhere to go and `ShipFitout.fault_in` will say so; over
-## it the extra place is simply unused, which is harmless and worth knowing
-## before someone wonders why their fifth jet does nothing.
+## Each entry is `{field, caption, have, declared, note}`.
+##
+## It used to quote `have` against a wanted count and warn either way:
+## short of it a preset's named mount had nowhere to go, over it the
+## extra place went unused. Both were true while a preset named one
+## place per entry. Binding by kind inverted them -- an entry now says
+## "a torque jet in **every** torque place", so a hull with three gets
+## three and a hull with five gets five -- and `FIELDS["wanted"]` went
+## back to being what it always was underneath: how many
+## `default_positions` derives, not a budget anybody has to meet.
+##
+## The one note left is the one that is still true, because everything
+## physical is computed from the outline: below three corners there is
+## no polygon. Whether a **particular fitout** fits a hull is a question
+## about the pair, and `ShipFitout.fault_in` answers it.
 static func tally(hull: HullData) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for entry: Dictionary in FIELDS:
 		var field: StringName = entry["field"]
 		var have: int = shown(hull, field).size()
-		var wanted: int = entry["wanted"]
-		var note: String = ""
-		if have < int(entry["least"]):
-			note = "za malo na wielokat"
-		elif wanted > 0 and have < wanted:
-			note = "brakuje %d - mount bez miejsca" % (wanted - have)
-		elif wanted > 0 and have > wanted:
-			note = "%d ponad plan - nieuzywane" % (have - wanted)
 		out.append({
 			"field": field,
 			"caption": entry["caption"],
 			"have": have,
-			"wanted": wanted,
 			"declared": declares(hull, field),
-			"note": note,
+			"note": "za malo na wielokat" if have < int(entry["least"]) else "",
 		})
 	return out
 

@@ -8496,7 +8496,7 @@ func _check_hull_editor() -> void:
 	_check_dragging_writes_the_frame_down()
 	_check_the_label_is_what_gets_built()
 	_check_a_saved_hull_loads_again()
-	_check_the_counter_says_what_is_wrong()
+	_check_the_counter_counts()
 
 
 ## Rysunek zostaje w plotnie, a kadlub w kadrze.
@@ -9056,34 +9056,52 @@ func _check_a_saved_hull_loads_again() -> void:
 	DirAccess.remove_absolute(temp)
 
 
-## Licznik mowi, czego brakuje, zanim powie to smoke test.
+## Licznik liczy miejsca, a nie odchylenie od planu.
 ##
-## Every hull offers the same number of each kind and the rest of the game
-## counts on it: a preset names `FrontHardpoint2`, and a hull with one
-## front slot leaves that mount homeless. The editor does not forbid the
-## edit -- a hull nobody can reshape is the problem it exists to fix --
-## but it has to say so while the mouse is still down. The outline is the
-## one thing it does refuse, because everything physical is computed from
-## it and three corners is the least that is a shape.
-func _check_the_counter_says_what_is_wrong() -> void:
+## It used to warn either way about a per-kind count: short of
+## `HullData.FRONT_HARDPOINTS` a preset's named mount had nowhere to
+## go, over it the extra place went unused. Both were true while a
+## preset named one place per entry, and binding by kind inverted both
+## -- an entry fills **every** place of its kind, so adding a gun place
+## adds a gun and removing one removes a gun. A hull cannot be short of
+## anything on its own any more; whether a **given fitout** fits a
+## given hull is `ShipFitout.fault_in`, which the dock asks separately.
+##
+## What is left is the one rule that did not move: everything physical
+## is computed from the outline, so three corners is the least that is
+## a shape.
+func _check_the_counter_counts() -> void:
 	var hull: HullData = _reference_hull()
-	_expect(_hull_note(hull, &"front_slots") == "", "a stock dart draws no complaint")
+	var was: int = _hull_count(hull, &"front_slots")
+	_expect(was > 0, "the reference hull has gun places (%d)" % was)
 	_expect(HullHandles.erase(hull, &"front_slots", 0), "a gun place can be removed")
 	_expect(
-		_hull_note(hull, &"front_slots") != "",
-		"and one short, the counter says so: %s" % _hull_note(hull, &"front_slots"),
+		_hull_count(hull, &"front_slots") == was - 1,
+		"and the counter follows it down (%d)" % _hull_count(hull, &"front_slots"),
+	)
+	_expect(
+		_hull_note(hull, &"front_slots") == "",
+		"with no complaint, because a hull decides how many it has",
 	)
 	HullHandles.add(hull, &"front_slots", Vector2(0.0, -6.0))
 	HullHandles.add(hull, &"front_slots", Vector2(1.0, -6.0))
 	_expect(
-		_hull_note(hull, &"front_slots") != "",
-		"one over the plan and it says that too: %s" % _hull_note(hull, &"front_slots"),
+		_hull_count(hull, &"front_slots") == was + 1
+		and _hull_note(hull, &"front_slots") == "",
+		"and back up again, still without one (%d)" % _hull_count(hull, &"front_slots"),
 	)
 
 	HullHandles.add(hull, &"outline", Vector2.ZERO)
 	_expect(HullHandles.erase(hull, &"outline", 3), "a fourth corner can go")
 	_expect(not HullHandles.erase(hull, &"outline", 0), "a triangle cannot give up a third")
 	_expect(HullHandles.shown(hull, &"outline").size() == 3, "so the hull stays a shape")
+
+
+func _hull_count(hull: HullData, field: StringName) -> int:
+	for entry: Dictionary in HullHandles.tally(hull):
+		if entry["field"] == field:
+			return entry["have"]
+	return -1
 
 
 func _hull_note(hull: HullData, field: StringName) -> String:
