@@ -107,16 +107,24 @@ var _grabbed: int = -1
 var _dragged: bool = false
 var _panning: bool = false
 var _last_mouse: Vector2 = Vector2.ZERO
-var _fitted: bool = false
+## Whether the view is somebody's: panned or zoomed by hand. Until it
+## is, the canvas reframes itself whenever it changes size, so a dock
+## opened at one height and then dragged to another still shows the hull.
+var _touched: bool = false
 
 
 func _ready() -> void:
+	# A `Control` does not clip what `_draw` puts outside its own rect, and
+	# this one draws at hull coordinates times a zoom: the first hull
+	# opened at the wrong zoom painted its outline, its handles and its
+	# grid across the file list, the inspector and the dock beside it.
+	clip_contents = true
 	resized.connect(_on_resized)
 	refresh()
 
 
 func _on_resized() -> void:
-	if not _fitted:
+	if not _touched:
 		fit()
 	queue_redraw()
 
@@ -126,9 +134,7 @@ func show_hull(which: HullData) -> void:
 	hull = which
 	_hover = -1
 	_grabbed = -1
-	_fitted = false
-	refresh()
-	fit()
+	reframe()
 
 
 ## Re-read the hull. Called after anything changes it, including changes
@@ -165,8 +171,15 @@ func fit() -> void:
 	var span: Vector2 = box.size.max(Vector2(1.0, 1.0))
 	_zoom = clampf(minf(size.x / span.x, size.y / span.y), MIN_ZOOM, MAX_ZOOM)
 	_origin = size * 0.5 - box.get_center() * _zoom
-	_fitted = true
 	queue_redraw()
+
+
+## Frame the hull and hand the view back to the canvas, so it keeps
+## following until somebody pans or zooms again.
+func reframe() -> void:
+	_touched = false
+	refresh()
+	fit()
 
 
 func to_screen(at: Vector2) -> Vector2:
@@ -401,6 +414,7 @@ func _on_button(event: InputEventMouseButton) -> void:
 func _on_motion(event: InputEventMouseMotion) -> void:
 	if _panning:
 		_origin += event.relative
+		_touched = true
 		queue_redraw()
 		return
 
@@ -446,6 +460,7 @@ func _report(which: int) -> void:
 
 func _zoom_about(at: Vector2, by: float) -> void:
 	var before: Vector2 = to_hull(at)
+	_touched = true
 	_zoom = clampf(_zoom * by, MIN_ZOOM, MAX_ZOOM)
 	_origin = at - before * _zoom
 	queue_redraw()

@@ -8662,6 +8662,7 @@ func _check_hull_editor() -> void:
 		panel._editing != panel._on_disk and HullHandles.same(panel._editing, panel._on_disk),
 		"which starts out saying the same thing as the file",
 	)
+	_check_the_drawing_stays_in_the_canvas(panel)
 	_discard(panel)
 
 	_check_the_dock_can_call_these_at_all()
@@ -8670,6 +8671,57 @@ func _check_hull_editor() -> void:
 	_check_the_label_is_what_gets_built()
 	_check_a_saved_hull_loads_again()
 	_check_the_counter_says_what_is_wrong()
+
+
+## Rysunek zostaje w plotnie, a kadlub w kadrze.
+##
+## A `Control` does not clip what `_draw` puts outside its own rect, and
+## this one draws at hull coordinates times a zoom. Opened at the wrong
+## zoom it painted the outline, the handles and the grid across the file
+## list, the inspector and the dock beside it -- reported from the
+## editor, and visible as a hull drawn over the whole window.
+##
+## Two things hold it in: the canvas clips, and framing a hull puts every
+## handle inside the rect. Both are checkable here, because a `Control`
+## is a `Control` whether or not an editor is running -- unlike the
+## placeholder trap above, which is why that one is checked by reading
+## the file instead.
+func _check_the_drawing_stays_in_the_canvas(panel: HullEditor) -> void:
+	var canvas: HullCanvas = panel._canvas
+	_expect(canvas.clip_contents, "the canvas clips what it draws")
+	if canvas.hull == null:
+		return
+
+	var rect: Rect2 = Rect2(Vector2.ZERO, canvas.size)
+	var strays: int = 0
+	var worst: Vector2 = Vector2.ZERO
+	for handle: Dictionary in HullHandles.of(canvas.hull):
+		var at: Vector2 = canvas.to_screen(handle["at"])
+		if not rect.has_point(at):
+			strays += 1
+			worst = at
+	_expect(
+		strays == 0,
+		"framing a hull puts every one of its places on screen (%d outside %s%s)" % [
+			strays, canvas.size, "" if strays == 0 else ", worst at %s" % worst,
+		],
+	)
+
+	# And the widest hull in the catalogue, which is the one that would
+	# overflow: the view has to follow the hull, not the other way round.
+	var widest: HullData = null
+	for hull: HullData in HullData.catalogue():
+		if widest == null or hull.bounds().size.length() > widest.bounds().size.length():
+			widest = hull
+	canvas.show_hull(HullHandles.copy_of(widest))
+	var over: int = 0
+	for handle: Dictionary in HullHandles.of(canvas.hull):
+		if not rect.has_point(canvas.to_screen(handle["at"])):
+			over += 1
+	_expect(
+		over == 0,
+		"and so does the widest hull there is, %s (%d outside)" % [widest.id, over],
+	)
 
 
 ## Zasoby, ktorych metody wola edytor, musza byc `@tool`.

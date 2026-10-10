@@ -154,7 +154,7 @@ func _build_side() -> Control:
 
 	var fit: Button = Button.new()
 	fit.text = "Dopasuj widok"
-	fit.pressed.connect(func() -> void: _canvas.fit())
+	fit.pressed.connect(func() -> void: _canvas.reframe())
 	column.add_child(fit)
 
 	_undo_button = Button.new()
