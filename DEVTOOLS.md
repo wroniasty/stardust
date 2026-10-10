@@ -14,6 +14,7 @@ Cel w jednym zdaniu: **wybrać dowolny kadłub, silniki i broń, włączyć stan
 4. **Stany to „przypięcia" (pins), nie hacki.** Statek sam nadpisuje `hull_heat` i `air_density` w każdym ticku fizyki (`_update_heat`). Przypięcie wartości jest więc ponawiane po jego kroku, a zdjęcie przypięcia oddaje stan symulacji.
 5. **Nic z tego nie trafia do gry.** `tools/` i `addons/stardust_devtools/` są wyłączone z eksportu (filtr eksportu), tak samo jak dziś `tools/`.
 6. **Smoke test obejmuje narzędzie.** Workbench musi się kompilować i ładować w `tools/smoke_test.gd`, inaczej zgnije po pierwszej zmianie API statku.
+7. **Czego smoke test nie obejmie: semantyki edytora.** Suita chodzi jako gra, a tam każda instancja jest realna. W edytorze `.tres`, którego skrypt nie jest `@tool`, wczytuje się jako **placeholder**: pola czyta i zapisuje, więc wygląda zdrowo, ale wywołanie metody pada („Attempt to call a method on a placeholder instance"). Dock może być więc kompletnie zepsuty przy całkowicie zielonej suicie — tak się stało z `ShipPreset.scale_of`. Każdy zasób, którego **metody** woła kod edytora, musi mieć `@tool`; `_check_the_dock_can_call_these_at_all` czyta pierwszą linię tych plików, bo `Script.is_tool()` odpowiada o instancji zbudowanej w tym procesie, a pytanie dotyczy edytora. Jedyna prawdziwa weryfikacja to przebieg `--headless --import`, który ładuje wtyczki.
 
 ---
 

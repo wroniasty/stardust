@@ -8664,11 +8664,57 @@ func _check_hull_editor() -> void:
 	)
 	_discard(panel)
 
+	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
 	_check_the_label_is_what_gets_built()
 	_check_a_saved_hull_loads_again()
 	_check_the_counter_says_what_is_wrong()
+
+
+## Zasoby, ktorych metody wola edytor, musza byc `@tool`.
+##
+## The one thing this suite structurally cannot measure. In the editor a
+## `.tres` whose script is not a tool script loads as a **placeholder**:
+## its exported properties read and write, so it looks fine, but calling
+## a method on it fails with "Attempt to call a method on a placeholder
+## instance". In a running game every instance is real, so the dock can
+## be comprehensively broken with the whole suite green.
+##
+## It hid for a while because the dock edits a `HullData.new()` made from
+## tool code, which is a real instance -- only the **loaded** resources
+## are placeholders. So `slots()` worked on the copy being dragged and
+## `ShipPreset.scale_of` did not, and the failure arrived on the first
+## press of a "+" button.
+##
+## Reading the file rather than asking the class, because
+## `Script.is_tool()` answers about the instance this process built and
+## the question is about the editor's.
+const EDITOR_RESOURCES: Array[String] = [
+	"res://scripts/hull_data.gd",
+	"res://scripts/ship_preset.gd",
+	"res://scripts/mount_fit.gd",
+	"res://scripts/bay_fit.gd",
+]
+
+
+func _check_the_dock_can_call_these_at_all() -> void:
+	var missing: Array[String] = []
+	for path: String in EDITOR_RESOURCES:
+		var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			missing.append("%s is not there" % path.get_file())
+			continue
+		var head: String = file.get_as_text().strip_edges()
+		file.close()
+		if not head.begins_with("@tool"):
+			missing.append(path.get_file())
+	_expect(
+		missing.is_empty(),
+		"the resources the dock calls methods on are tool scripts (%s)" % [
+			"all four" if missing.is_empty() else str(missing),
+		],
+	)
 
 
 ## Dock liczy ten sam srodek masy, co lecacy statek.

@@ -1,3 +1,4 @@
+@tool
 class_name HullData
 extends Resource
 ## Kadlub jako zasob: nazwa, obrys i rozstaw nog.

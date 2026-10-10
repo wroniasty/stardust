@@ -1,3 +1,4 @@
+@tool
 class_name MountFit
 extends Resource
 ## Jaki silnik idzie w ktore miejsca kadluba.

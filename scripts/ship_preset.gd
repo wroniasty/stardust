@@ -1,3 +1,4 @@
+@tool
 class_name ShipPreset
 extends Resource
 ## Gotowy statek jako zasob: kadlub, silniki, dziala i zatoki na moduly.

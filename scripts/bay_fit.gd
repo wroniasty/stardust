@@ -1,3 +1,4 @@
+@tool
 class_name BayFit
 extends Resource
 ## Jedna zatoka na modul: jak duza i co w niej lezy na starcie.
