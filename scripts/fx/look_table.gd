@@ -1,3 +1,4 @@
+@tool
 class_name LookTable
 extends Resource
 ## Ktory obrazek dostaje rzecz -- wyliczony z tego, czym ta rzecz jest.

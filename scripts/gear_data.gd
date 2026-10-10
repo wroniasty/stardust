@@ -1,3 +1,4 @@
+@tool
 class_name GearData
 extends ModuleData
 ## What a set of landing legs will and will not put up with.

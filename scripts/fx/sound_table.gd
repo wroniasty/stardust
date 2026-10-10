@@ -1,3 +1,4 @@
+@tool
 class_name SoundTable
 extends Resource
 ## Jak brzmi rzecz — wyliczone z tego, czym ta rzecz jest.

@@ -1,3 +1,4 @@
+@tool
 class_name JumpDriveData
 extends ModuleData
 ## A jump drive: how far it reaches, how long it charges, what it burns.

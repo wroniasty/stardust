@@ -1,3 +1,4 @@
+@tool
 class_name SpriteStrip
 extends Resource
 ## Jeden obrazek -- albo kilka klatek jednego -- i miejsce, w ktorym siedzi

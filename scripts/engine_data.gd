@@ -1,3 +1,4 @@
+@tool
 class_name EngineData
 extends ModuleData
 ## What an engine *is*, independent of where it is bolted on.

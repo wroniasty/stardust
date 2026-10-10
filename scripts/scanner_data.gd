@@ -1,3 +1,4 @@
+@tool
 class_name ScannerData
 extends ModuleData
 ## A survey scanner: how far it sees other systems, and how much it says.

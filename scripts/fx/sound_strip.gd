@@ -1,3 +1,4 @@
+@tool
 class_name SoundStrip
 extends Resource
 ## How a thing sounds: sample, path, loudness, pitch range, response time.

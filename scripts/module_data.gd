@@ -1,3 +1,4 @@
+@tool
 class_name ModuleData
 extends Resource
 ## What every module has in common: a size, and the right to change numbers

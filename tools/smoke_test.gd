@@ -8707,49 +8707,105 @@ func _check_an_own_part_is_the_presets_own() -> void:
 	_discard(panel)
 
 
-## Zasoby, ktorych metody wola edytor, musza byc `@tool`.
+## Kazdy zasob musi byc `@tool`, inaczej edytor widzi placeholder.
 ##
-## The one thing this suite structurally cannot measure. In the editor a
-## `.tres` whose script is not a tool script loads as a **placeholder**:
-## its exported properties read and write, so it looks fine, but calling
-## a method on it fails with "Attempt to call a method on a placeholder
-## instance". In a running game every instance is real, so the dock can
-## be comprehensively broken with the whole suite green.
+## The one thing this suite structurally cannot measure, so what it
+## measures is the cause. In the editor a `.tres` whose script is not a
+## tool script loads as a **placeholder**. Its values read and write, so
+## it looks entirely healthy -- and two separate things are quietly
+## broken:
 ##
-## It hid for a while because the dock edits a `HullData.new()` made from
-## tool code, which is a real instance -- only the **loaded** resources
-## are placeholders. So `slots()` worked on the copy being dragged and
-## `ShipPreset.scale_of` did not, and the failure arrived on the first
-## press of a "+" button.
+##  - calling a method on it fails outright ("Attempt to call a method
+##    on a placeholder instance"), which is how `ShipPreset.scale_of`
+##    took the preset dock down on the first press of a button;
+##  - `get_property_list()` reports its exported fields **without**
+##    `PROPERTY_USAGE_SCRIPT_VARIABLE`. Measured on a loaded weapon:
+##    twenty-three script variables became zero, every field came back
+##    at usage 6 rather than 4102, and `ResourceForm` -- which filters
+##    on exactly that bit -- built a form with no rows. No error, no
+##    warning, an empty panel.
 ##
-## Reading the file rather than asking the class, because
-## `Script.is_tool()` answers about the instance this process built and
-## the question is about the editor's.
-const EDITOR_RESOURCES: Array[String] = [
-	"res://scripts/hull_data.gd",
-	"res://scripts/ship_preset.gd",
-	"res://scripts/mount_fit.gd",
-	"res://scripts/bay_fit.gd",
-]
-
-
+## This was a list of four files and is now a rule, because the second
+## failure proved the list was the wrong shape: it named the resources
+## somebody had thought of. Every class under `scripts/` whose ancestry
+## reaches `Resource` has to declare `@tool`. None of them defines
+## `_init`, so running in the editor is inert; what it buys is that a
+## loaded one is a real object.
 func _check_the_dock_can_call_these_at_all() -> void:
-	var missing: Array[String] = []
-	for path: String in EDITOR_RESOURCES:
-		var file: FileAccess = FileAccess.open(path, FileAccess.READ)
-		if file == null:
-			missing.append("%s is not there" % path.get_file())
+	var parent_of: Dictionary = {}
+	var is_tool: Dictionary = {}
+	var file_of: Dictionary = {}
+	for path: String in _scripts_under("res://scripts"):
+		var text: String = FileAccess.get_file_as_string(path)
+		if text.is_empty():
 			continue
-		var head: String = file.get_as_text().strip_edges()
-		file.close()
-		if not head.begins_with("@tool"):
-			missing.append(path.get_file())
+		var named: String = ""
+		var parent: String = ""
+		var tool_script: bool = false
+		for line: String in text.split("\n"):
+			if line.begins_with("@tool"):
+				tool_script = true
+			elif line.begins_with("class_name "):
+				named = line.substr(11).strip_edges()
+			elif line.begins_with("extends "):
+				parent = line.substr(8).strip_edges()
+				break
+		if named.is_empty() or parent.is_empty():
+			continue
+		parent_of[named] = parent
+		is_tool[named] = tool_script
+		file_of[named] = path
+
+	var resources: int = 0
+	var missing: Array[String] = []
+	for named: String in parent_of:
+		if not _rooted_at_resource(named, parent_of):
+			continue
+		resources += 1
+		if not bool(is_tool[named]):
+			missing.append(String(file_of[named]).get_file())
 	_expect(
-		missing.is_empty(),
-		"the resources the dock calls methods on are tool scripts (%s)" % [
-			"all four" if missing.is_empty() else str(missing),
+		resources > 0 and missing.is_empty(),
+		"all %d resource scripts run in the editor (%s)" % [
+			resources, "none missing" if missing.is_empty() else str(missing),
 		],
 	)
+
+
+## Whether this class is a Resource, following `extends` upwards.
+##
+## Bounded by the map's own size rather than by trusting the chain to
+## end: a file that extended itself would otherwise hang the suite.
+func _rooted_at_resource(named: String, parent_of: Dictionary) -> bool:
+	var at: String = named
+	for _step: int in range(parent_of.size() + 1):
+		var parent: String = parent_of.get(at, "")
+		if parent.is_empty():
+			return false
+		if parent == "Resource":
+			return true
+		at = parent
+	return false
+
+
+## Every .gd under a directory, walked down.
+func _scripts_under(where: String) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	var directory: DirAccess = DirAccess.open(where)
+	if directory == null:
+		return out
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		var path: String = "%s/%s" % [where, entry]
+		if directory.current_is_dir():
+			out.append_array(_scripts_under(path))
+		elif entry.ends_with(".gd"):
+			out.append(path)
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return out
+
 
 
 ## Dock liczy ten sam srodek masy, co lecacy statek.

@@ -1,3 +1,4 @@
+@tool
 class_name ShotModData
 extends ModuleData
 ## Something plugged into a weapon, changing what its rounds do and what they

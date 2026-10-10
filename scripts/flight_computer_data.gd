@@ -1,3 +1,4 @@
+@tool
 class_name FlightComputerData
 extends ModuleData
 ## The box that decides which engine does what, and what else it will do for

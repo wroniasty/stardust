@@ -1,3 +1,4 @@
+@tool
 class_name TankData
 extends ModuleData
 ## A tank: how much fuel it holds.

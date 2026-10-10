@@ -1,3 +1,4 @@
+@tool
 class_name GeneratorData
 extends ModuleData
 ## What a power generator is: how much it holds, how fast it refills, and how

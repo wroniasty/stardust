@@ -1,3 +1,4 @@
+@tool
 class_name WeaponData
 extends ModuleData
 ## What a weapon *is*, independent of the hardpoint it is bolted to.
