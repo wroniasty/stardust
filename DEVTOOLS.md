@@ -144,6 +144,28 @@ Gotowe, gdy: zmiana `rounds_per_second` albo `max_thrust` suwakiem jest widoczna
 
 Gotowe, gdy: zmiana wartości w inspektorze Godota jest od razu słyszalna lub widoczna w uruchomionym Workbenchu.
 
+### D10: Reset warsztatu — Workbench → Sandbox
+
+Workbench urósł do pięciu paneli, własnego formularza, systemu przypięć i
+kanału debuggera — i najtańszą drogą dalej okazało się zacząć od nowa.
+
+- [x] `tools/workbench/` skasowany w całości, razem z `bench_debugger.gd` po
+  stronie wtyczki. Historia trzyma wszystko: `git show 6d8c67a:tools/workbench/`.
+- [x] `tools/sandbox/sandbox.tscn` — **pusta** scena, świadomie. Następna
+  rzecz ma tu trafić dlatego, że czegoś brakuje, a nie dlatego, że stary
+  warsztat to miał.
+- [x] Przycisk w docku to „Uruchom Sandbox"; lista zasobów po katalogach i
+  etykieta linku zniknęły. Lista była gorszą drogą do kadłuba i do presetu,
+  odkąd oba mają własny dok, a kanał nie miał już drugiego końca.
+- [x] Przeżył jeden element, bo przestał być warsztatowy: `BenchResourceForm`
+  → `tools/resource_form.gd` jako `ResourceForm`. Dok presetów buduje z niego
+  wiersze „własnych" statów, a druga taka sama automatyka byłaby drugim
+  miejscem na uczenie się dziwactw `get_property_list()`. Jedyny pomocnik,
+  którego używał (`BenchForm.labelled`), wciągnięty do środka.
+- [x] Dwieście dwadzieścia linii `_check_workbench` w smoke teście zastąpione
+  sprawdzeniem, że scena Sandbox istnieje i się tworzy. Rośnie razem z nią.
+- [ ] Co ma być w Sandboxie. Otwarte celowo.
+
 ### D7: Domknięcie
 
 - [ ] Workbench w `tools/smoke_test.gd`: ładuje scenę, składa każdy preset, przełącza każdy stan, wystrzeliwuje każdą broń, bez błędów silnika.

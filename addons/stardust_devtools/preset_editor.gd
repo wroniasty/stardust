@@ -484,14 +484,14 @@ func _own_button(what: Resource, action: Callable) -> Button:
 
 
 ## The row, with the resource's own numbers under it when the preset
-## owns them. Built from `get_property_list()` by the workbench's form,
+## owns them. Built from `get_property_list()` by the shared form,
 ## so a field added to `EngineData` tomorrow appears here untouched.
 func _with_form(row: Control, what: Resource) -> Control:
 	if not _is_own(what):
 		return row
 	var holder: VBoxContainer = VBoxContainer.new()
 	holder.add_child(row)
-	var form: BenchResourceForm = BenchResourceForm.new()
+	var form: ResourceForm = ResourceForm.new()
 	form.show_resource(what)
 	form.edited.connect(func(_edited: Resource) -> void: _changed())
 	var indent: MarginContainer = MarginContainer.new()

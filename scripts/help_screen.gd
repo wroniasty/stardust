@@ -82,7 +82,7 @@ const LABELS: Array[Dictionary] = [
 	{"block": "DEBUG", "action": &"debug_toggle", "says": "debug overlay"},
 	{"block": "DEBUG", "action": &"debug_creative", "says": "sandbox"},
 	{"block": "DEBUG", "action": &"debug_planet", "says": "planet configurator"},
-	{"block": "DEBUG", "action": &"bench_toggle_panel", "says": "workbench: hide the panel"},
+	{"block": "DEBUG", "action": &"bench_toggle_panel", "says": "sandbox: hide the panel"},
 	{"block": "DEBUG", "action": &"debug_carve", "says": "carve a crater"},
 	{"block": "DEBUG", "action": &"debug_damage_engine", "says": "damage an engine"},
 	{"block": "DEBUG", "action": &"debug_repair", "says": "repair the engines"},

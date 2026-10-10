@@ -1,7 +1,12 @@
 @tool
-class_name BenchResourceForm
+class_name ResourceForm
 extends VBoxContainer
 ## A form for any Resource, built from what the resource says about itself.
+##
+## Lived in `tools/workbench/` until the workbench was reset. It survived
+## that because it had stopped being the bench's: the preset dock builds
+## its own rows from it, and a second auto-form would have been a second
+## place for `get_property_list()` quirks to be learned.
 ##
 ## Every exported variable becomes a row, typed by `get_property_list()`:
 ## a range hint is a clamp, an enum hint is a drop-down, an embedded resource
@@ -39,6 +44,9 @@ const MAX_DEPTH: int = 3
 ## looked at when the row was built.
 const FLOAT_STEP: float = 0.0001
 
+## How wide the caption column is, so the controls line up down the form.
+const LABEL_WIDTH: float = 78.0
+
 var _resource: Resource = null
 var _depth: int = 0
 
@@ -62,6 +70,23 @@ func show_resource(resource: Resource, depth: int = 0) -> void:
 
 ## Whether the property is one the author wrote with `@export`. The usage
 ## flags are how the editor tells, and the form follows the editor.
+## `control` beside a fixed-width caption, taking the rest of the row.
+##
+## Inlined when the workbench was reset: it was one of six helpers on a
+## `BenchForm` class, and the only one anything left standing still
+## wanted.
+static func _labelled(text: String, control: Control) -> HBoxContainer:
+	var row: HBoxContainer = HBoxContainer.new()
+	var label: Label = Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(LABEL_WIDTH, 0.0)
+	label.clip_text = true
+	row.add_child(label)
+	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(control)
+	return row
+
+
 func _is_exported(property: Dictionary) -> bool:
 	var usage: int = property["usage"]
 	return (usage & PROPERTY_USAGE_EDITOR) != 0 and (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0
@@ -75,13 +100,13 @@ func _row(property: Dictionary) -> Control:
 			var check: CheckBox = CheckBox.new()
 			check.button_pressed = bool(value)
 			check.toggled.connect(func(on: bool) -> void: _write(key, on))
-			return BenchForm.labelled(key, check)
+			return _labelled(key, check)
 		TYPE_INT:
 			if int(property["hint"]) == PROPERTY_HINT_ENUM:
-				return BenchForm.labelled(key, _enum_picker(key, property, int(value)))
-			return BenchForm.labelled(key, _number(key, property, float(value), true))
+				return _labelled(key, _enum_picker(key, property, int(value)))
+			return _labelled(key, _number(key, property, float(value), true))
 		TYPE_FLOAT:
-			return BenchForm.labelled(key, _number(key, property, float(value), false))
+			return _labelled(key, _number(key, property, float(value), false))
 		TYPE_STRING, TYPE_STRING_NAME:
 			var line: LineEdit = LineEdit.new()
 			line.text = str(value)
@@ -92,22 +117,22 @@ func _row(property: Dictionary) -> Control:
 				var current: String = str(_resource.get(key))
 				if line.text != current:
 					_write(key, StringName(line.text) if is_name else line.text))
-			return BenchForm.labelled(key, line)
+			return _labelled(key, line)
 		TYPE_COLOR:
 			var picker: ColorPickerButton = ColorPickerButton.new()
 			picker.color = value
 			picker.custom_minimum_size = Vector2(40.0, 14.0)
 			picker.color_changed.connect(func(color: Color) -> void: _write(key, color))
-			return BenchForm.labelled(key, picker)
+			return _labelled(key, picker)
 		TYPE_VECTOR2:
-			return BenchForm.labelled(key, _vector(key, value as Vector2))
+			return _labelled(key, _vector(key, value as Vector2))
 		TYPE_OBJECT:
 			return _object_row(key, value as Resource)
 		TYPE_ARRAY, TYPE_DICTIONARY, TYPE_PACKED_VECTOR2_ARRAY, TYPE_PACKED_FLOAT32_ARRAY:
 			var label: Label = Label.new()
 			label.text = "%d items" % _count_of(value)
 			label.modulate = Color(1, 1, 1, 0.55)
-			return BenchForm.labelled(key, label)
+			return _labelled(key, label)
 	return null
 
 
@@ -177,21 +202,21 @@ func _object_row(key: String, value: Resource) -> Control:
 		var empty: Label = Label.new()
 		empty.text = "(none)"
 		empty.modulate = Color(1, 1, 1, 0.55)
-		return BenchForm.labelled(key, empty)
+		return _labelled(key, empty)
 	if value.get_script() == null or _depth >= MAX_DEPTH or not value.resource_path.is_empty():
 		var named: Label = Label.new()
 		named.text = value.resource_path.get_file() if not value.resource_path.is_empty() \
 				else value.get_class()
 		named.clip_text = true
 		named.modulate = Color(1, 1, 1, 0.55)
-		return BenchForm.labelled(key, named)
+		return _labelled(key, named)
 
 	var box: VBoxContainer = VBoxContainer.new()
 	var fold: Button = Button.new()
 	fold.text = "▸ %s" % key
 	fold.toggle_mode = true
 	fold.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var inner: BenchResourceForm = BenchResourceForm.new()
+	var inner: ResourceForm = ResourceForm.new()
 	inner.visible = false
 	inner.edited.connect(func(source: Resource) -> void: edited.emit(source))
 	inner.show_resource(value, _depth + 1)

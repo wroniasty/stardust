@@ -13,6 +13,7 @@ const SHIP_SCENE: String = "res://scenes/ship.tscn"
 const PLANET_SCENE: String = "res://scenes/planet.tscn"
 const CRATE_SCENE: String = "res://scenes/loot_crate.tscn"
 const STARFIELD_SCENE: String = "res://scenes/starfield.tscn"
+const SANDBOX_SCENE: String = "res://tools/sandbox/sandbox.tscn"
 
 ## Every look table on disk. A const list rather than a directory walk,
 ## because a table that stops being written is a table that stops being
@@ -1170,7 +1171,7 @@ func _evaluate_phase() -> void:
 			_check_ship_fitouts()
 			_check_fitout_presets()
 			_check_creative_tool()
-			_check_workbench()
+			_check_sandbox()
 			_check_art()
 			_check_skin()
 			_check_camera_shake()
@@ -4051,226 +4052,27 @@ func _check_ship_fitouts() -> void:
 	full.queue_free()
 
 
-## The sandbox exists because most of what M2 built can only be judged by
-## flying it, and rolling for a gimballed drive until one drops is not
-## testing the gimbal. What has to hold is that nothing it conjures is
-## something the game could not have dropped, and that every shape it offers
-## actually goes through the machinery.
-func _check_workbench() -> void:
-	# DEVTOOLS.md D1: the bench has to survive being asked for every
-	# combination its forms offer. It is a tool nobody flies on a schedule,
-	# so without this it would rot the first time the ship's API moved.
-	var bench: Workbench = (
-		load("res://tools/workbench/workbench.tscn") as PackedScene
-	).instantiate() as Workbench
-	root.add_child(bench)
-	var ship: Ship = bench.ship
-	var panel: BenchShipPanel = bench._ship_panel
-	_expect(ship != null and panel != null, "the workbench builds a ship and its panel")
-
-	var presets: int = ShipFitout.all().size()
-	var wrong_rows: int = 0
-	for i: int in range(presets):
-		panel._presets.selected = i
-		panel._on_preset()
-		panel._refresh()
-		if panel._engine_box.get_child_count() != ship.engine_mounts().size():
-			wrong_rows += 1
-	_expect(wrong_rows == 0, "the panel lists one row per mount after every one of %d presets" % presets)
-
-	var hulls: int = HullData.catalogue().size()
-	for i: int in range(hulls):
-		panel._hulls.selected = i
-		panel._scale.value = 1.0 + 0.5 * float(i % 2)
-		panel._on_hull()
-	_expect(ship.hull_outline.size() >= 3, "every hull in the catalogue can be put on the bench ship")
-
-	panel._presets.selected = 0
-	panel._on_preset()
-	panel._refresh()
-	var swaps: int = 0
-	for mount: EngineMount in ship.engine_mounts():
-		var picker: OptionButton = panel._engine_picker(mount)
-		for index: int in range(picker.item_count):
-			panel._on_engine_picked(index, mount, picker)
-			swaps += 1
-		# Never in the tree, so nobody else will free it, and a popup menu
-		# leaked at exit is an error the whole check fails on.
-		picker.free()
-	for hardpoint: Hardpoint in ship.hardpoints:
-		var picker: OptionButton = panel._gun_picker(hardpoint)
-		for index: int in range(picker.item_count):
-			panel._on_gun_picked(index, hardpoint, picker)
-			swaps += 1
-			hardpoint.fire(Vector2.ZERO, bench.get_node("Projectiles"), ship)
-		picker.free()
-	_expect(swaps > 0, "every engine and gun the forms offer can be fitted (%d swaps)" % swaps)
-
-	# D2: states. A pin has to survive what the ship does to its own heat,
-	# and the forms have to reach the same doors the game does.
-	var states: BenchStatePanel = bench._state_panel
-	bench.pins.pin(&"hull_heat", 0.8)
-	bench.pins.pin(&"air_density", 0.6)
-	ship.hull_heat = 0.0
-	ship.air_density = 0.0
-	bench.pins._apply()
+## Sandbox sie laduje, i na razie nic wiecej.
+##
+## What stood here was two hundred lines asking the workbench for every
+## combination its five panels offered -- a tool nobody flies on a
+## schedule, so without that it would rot the first time the ship's API
+## moved. The workbench has been reset to an empty scene, so what is
+## left to check is that the scene is there and instantiates. This grows
+## back as the sandbox does.
+func _check_sandbox() -> void:
+	var scene: PackedScene = load(SANDBOX_SCENE) as PackedScene
+	_expect(scene != null, "the sandbox scene is there")
+	if scene == null:
+		return
+	var made: Node = scene.instantiate()
 	_expect(
-		is_equal_approx(ship.hull_heat, 0.8) and is_equal_approx(ship.air_density, 0.6),
-		"a pin puts back what the ship zeroed",
+		made is Sandbox and made.name == "Sandbox",
+		"and it instantiates as a Sandbox (%s)" % made.name,
 	)
-	bench.pins.unpin(&"hull_heat")
-	ship.hull_heat = 0.1
-	bench.pins._apply()
-	_expect(is_equal_approx(ship.hull_heat, 0.1), "an unpinned field is left to the ship")
+	root.add_child(made)
+	_discard(made)
 
-	ship.repair_hull()
-	states._on_integrity(0.5)
-	_expect(is_equal_approx(ship.hull_integrity, 0.5), "the integrity slider sets the hull")
-	var hit: Array[float] = []
-	ship.hull_impact.connect(func(speed: float, _damage: float) -> void: hit.append(speed))
-	states._impact_speed.value = 100.0
-	states._on_impact()
-	_expect(hit.size() == 1 and is_equal_approx(hit[0], 100.0), "the impact button raises the same signal terrain does")
-	_expect(ship.hull_integrity < 0.5, "and charges the same price (%.2f)" % ship.hull_integrity)
-
-	var died: Array[bool] = []
-	ship.destroyed.connect(func(_at: Vector2, _velocity: Vector2) -> void: died.append(true))
-	states._on_destroy()
-	_expect(died.size() == 1, "the destroy button takes the real death path")
-	ship.respawn(Vector2.ZERO, Vector2.ZERO)
-
-	for engine: EngineInstance in ship.engines:
-		engine.health = 0.2
-	states._on_repair_engines()
-	_expect(ship.worst_engine_health() > 0.99, "repairing the engines repairs every engine")
-
-	bench.hold(&"boost", true)
-	_expect(Input.is_action_pressed(&"boost"), "a held action reaches the Input Map")
-	bench.hold(&"boost", false)
-	_expect(not Input.is_action_pressed(&"boost"), "and lets go of it again")
-	states._on_clear()
-
-	# D3: targets and the gun readout.
-	var dummies: BenchDummies = bench.dummies
-	dummies.radius = 200.0
-	dummies.spawn(3)
-	_expect(dummies.count() == 3, "the bench can set out three targets")
-	var target: Ship = dummies._slots[0]["ship"] as Ship
-	_expect(target.freeze, "and they stay where they were put")
-	target.take_damage(0.1, "test")
-	dummies._physics_process(0.016)
-	_expect(
-		dummies.hits == 1 and absf(dummies.total_damage - 0.1) < 0.001,
-		"a hit on a target is counted and measured (%.3f)" % dummies.total_damage,
-	)
-	_expect(dummies.damage_per_second() > 0.0, "and shows up as damage per second")
-	target.take_damage(5.0, "test")
-	_expect(dummies.kills == 1, "a destroyed target is counted as a kill")
-	dummies._revive(target)
-	_expect(
-		is_equal_approx(target.hull_integrity, 1.0) and target.freeze,
-		"and is put back whole and frozen",
-	)
-	var fire: BenchFirePanel = bench._fire_panel
-	fire._refresh_guns()
-	_expect(
-		fire._guns_box.get_child_count() == maxi(ship.hardpoints.size(), 1),
-		"the fire panel describes every gun the ship has",
-	)
-	dummies.clear()
-
-	# D4: the sound panel plays through the game's own air rule.
-	var sounds: BenchSoundPanel = bench._sound_panel
-	var shots: SoundTable = load("res://resources/fx/sounds/weapon_shot.tres") as SoundTable
-	var strip: SoundStrip = shots.every_strip()[0]
-	sounds._path_pick.selected = 2
-	var scape: Soundscape = Soundscape.of()
-	_expect(scape != null, "the bench has the same soundscape the game has")
-	scape.density = 1.0
-	sounds._on_play(strip)
-	_expect(sounds._status.text.contains("played"), "a sound through the air plays in air")
-	scape.density = 0.0
-	sounds._on_play(strip)
-	_expect(
-		sounds._status.text.contains("silence"),
-		"and is silent in vacuum, by the same rule",
-	)
-
-	var rows: int = 0
-	for index: int in range(sounds._tables.size()):
-		sounds._table_pick.selected = index
-		sounds._fill()
-		rows += sounds._list.get_child_count()
-	_expect(rows >= sounds._tables.size(), "every table on disk lists something to press (%d rows)" % rows)
-
-	var loop: SoundStrip = null
-	for table: SoundTable in sounds._tables:
-		for candidate: SoundStrip in table.every_strip():
-			if candidate != null and candidate.loops and candidate.is_valid() and loop == null:
-				loop = candidate
-	_expect(loop != null, "there is a looping sound to test")
-	sounds._on_loop(true, loop)
-	sounds._process(0.016)
-	_expect(sounds._running.size() == 1, "a loop can be started")
-	sounds._stop_all()
-	_expect(sounds._running.is_empty(), "and stopped")
-	scape.density = 0.0
-
-	# D5: the resource form writes into the live object and can undo it.
-	var resources: BenchResourcePanel = bench._resource_panel
-	var categories: Array = BenchResourcePanel.CATEGORIES.keys()
-	var empty_forms: int = 0
-	for index: int in range(categories.size()):
-		resources._category.selected = index
-		resources._fill_files()
-		if resources._form.get_child_count() == 0:
-			empty_forms += 1
-	_expect(empty_forms == 0, "every resource category opens a form with rows in it")
-
-	resources._category.selected = categories.find("engines")
-	resources._fill_files()
-	var drive: EngineData = resources._current as EngineData
-	var before: float = drive.max_thrust
-	var seen: Array[Resource] = []
-	resources._form.edited.connect(func(r: Resource) -> void: seen.append(r))
-	resources._form._write("max_thrust", before * 2.0)
-	_expect(is_equal_approx(drive.max_thrust, before * 2.0), "the form writes into the live engine")
-	_expect(seen.size() == 1 and seen[0] == drive, "and says which resource it wrote to")
-	_expect(resources._dirty.has(drive.resource_path), "and marks the file as edited")
-	resources.revert_current()
-	_expect(is_equal_approx(drive.max_thrust, before), "reverting restores the file's value (%.1f)" % drive.max_thrust)
-	_expect(not resources._dirty.has(drive.resource_path), "and clears the mark")
-
-	var weapon_index: int = categories.find("weapons")
-	resources._category.selected = weapon_index
-	resources._fill_files()
-	var enum_rows: int = 0
-	for row: Node in resources._form.get_children():
-		for inner: Node in row.get_children():
-			if inner is OptionButton:
-				enum_rows += 1
-	_expect(enum_rows >= 1, "an enum field (the weapon type) becomes a drop-down")
-
-	# D6: an edit arriving from the editor lands on the live resource.
-	var drive_path: String = "res://resources/engines/main_drive.tres"
-	var live_drive: EngineData = load(drive_path) as EngineData
-	var original: float = live_drive.max_thrust
-	_expect(
-		bench.bridge.apply(drive_path, "max_thrust", original * 3.0)
-			and is_equal_approx(live_drive.max_thrust, original * 3.0),
-		"a property sent from the editor is written to the live engine",
-	)
-	_expect(
-		not bench.bridge.apply(drive_path, "no_such_property", 1.0),
-		"and a property that does not exist is refused",
-	)
-	live_drive.max_thrust = original
-	ship.rebuild_control_groups(false)
-
-	# Freed on the spot, not queued: the missiles fired above would still be
-	# alive for the checks that follow, and the next one counts motors.
-	root.remove_child(bench)
-	bench.free()
 
 
 func _check_creative_tool() -> void:

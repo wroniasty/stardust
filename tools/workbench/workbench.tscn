@@ -1,6 +1,0 @@
-[gd_scene format=3]
-
-[ext_resource type="Script" path="res://tools/workbench/workbench.gd" id="1_bench"]
-
-[node name="Workbench" type="Node2D"]
-script = ExtResource("1_bench")
