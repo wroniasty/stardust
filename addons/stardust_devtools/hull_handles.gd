@@ -76,6 +76,15 @@ static func spec_for(field: StringName) -> Dictionary:
 	return {}
 
 
+## Which array feeds a `HullData` kind, so anything keyed by field --
+## the palette, the counters -- can be asked about a kind instead.
+static func field_for_kind(kind: StringName) -> StringName:
+	for entry: Dictionary in FIELDS:
+		if entry["kind"] == kind and kind != &"":
+			return entry["field"]
+	return &""
+
+
 ## What the .tres actually says, as a loose copy nobody can write back
 ## through by accident.
 static func read(hull: HullData, field: StringName) -> Array[Vector2]:

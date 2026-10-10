@@ -195,6 +195,35 @@ porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
 Gotowe, gdy: dyszę da się przesunąć myszą, licznik od razu mówi, co z tego
 wynika, a zapisany `.tres` wczytuje grę bez niespodzianek.
 
+### D9: Dock „Presety" — cały statek w jednym pliku
+
+Preset niesie teraz wszystko: kadłub, który silnik w które **rodzaje** miejsc,
+działa, zatoki na moduły z zawartością, i grafikę. Dock jest rodzeństwem
+kadłubowego i ma ten sam układ: lista po lewej, obraz w środku, formularz i
+zapis po prawej.
+
+- [x] `preset_canvas.gd`: podgląd tego, co ten fitout stawia na tym kadłubie —
+  obrys, nogi, silniki w kolorach rodzajów z kreską kierunku, hardpointy jako
+  trójkąty (uzbrojone na żółto), zatoki jako kwadraty wielkości dziury, środek
+  masy. Tylko do odczytu: preset nie ma własnej geometrii, o pozycje pyta się
+  kadłuba.
+- [x] Rysuje z `ShipFitout.placements` — tej samej listy, z której `apply`
+  buduje prawdziwy statek. Smoke test sprawdza, że każdy narysowany silnik to
+  silnik, który statek dostaje, w tym samym punkcie.
+- [x] `preset_editor.gd`: nazwa, opis, kadłub, **grafika** (`look_key`),
+  mnożnik silników, wiersze silników / dział / zatok z dodawaniem i
+  usuwaniem, blok bilansu, zapis i przywrócenie.
+- [x] Zapis zablokowany, gdy `fault_in` odrzuca preset: statek, który by się
+  nie zbudował, nie może nadpisać działającego.
+- [x] `hull_view.gd`: wspólna transformacja widoku, siatka i kadrowanie dla
+  obu płócien — bo raz już się rozjechały (jedno zapomniało `clip_contents`).
+- [ ] Przeciąganie zatok po podglądzie. Dziś ich `at` ustawia się tylko w
+  inspektorze.
+- [ ] Podgląd skinu: dock pokazuje klucz, nie obrazek.
+
+Gotowe, gdy: da się zrobić wariant statku bez dotykania GDScript i od razu
+zobaczyć, co z niego wyjdzie.
+
 ---
 
 ## 3. Otwarte pytania

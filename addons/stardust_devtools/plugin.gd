@@ -8,7 +8,9 @@ extends EditorPlugin
 ## edited in the inspector to it, so the change is heard and seen on the
 ## ship at once instead of after a save and a restart. And give hulls a
 ## dock of their own, because a hull is a shape and the inspector shows
-## it as a column of numbers (see `hull_editor.gd`).
+## it as a column of numbers (see `hull_editor.gd`). And presets another,
+## because a preset is four lines that build nine engines somewhere, and
+## no column of dropdowns says where (see `preset_editor.gd`).
 
 const WORKBENCH_SCENE: String = "res://tools/workbench/workbench.tscn"
 
@@ -38,6 +40,7 @@ var _dock: VBoxContainer = null
 ## game cannot: if a later Godot moves it, this file breaks and nothing
 ## that ships does.
 var _hulls: EditorDock = null
+var _presets: EditorDock = null
 var _debugger: StardustBenchDebugger = null
 var _category: OptionButton = null
 var _files: ItemList = null
@@ -63,12 +66,24 @@ func _enter_tree() -> void:
 	_hulls.add_child(HullEditor.new())
 	add_dock(_hulls)
 
+	_presets = EditorDock.new()
+	_presets.title = "Presety"
+	_presets.icon_name = &"PackedScene"
+	_presets.default_slot = EditorDock.DOCK_SLOT_BOTTOM
+	_presets.available_layouts = EditorDock.DOCK_LAYOUT_ALL
+	_presets.add_child(PresetEditor.new())
+	add_dock(_presets)
+
 
 func _exit_tree() -> void:
 	var inspector: EditorInspector = EditorInterface.get_inspector()
 	if inspector.property_edited.is_connected(_on_property_edited):
 		inspector.property_edited.disconnect(_on_property_edited)
 	remove_debugger_plugin(_debugger)
+	if _presets != null:
+		remove_dock(_presets)
+		_presets.queue_free()
+		_presets = null
 	if _hulls != null:
 		remove_dock(_hulls)
 		_hulls.queue_free()

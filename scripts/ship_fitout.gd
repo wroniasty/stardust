@@ -85,9 +85,8 @@ static func places_of(hull: HullData) -> Dictionary:
 ## kind implies.
 ##
 ## One function because three callers ask and they must not disagree.
-## `apply` sizes the socket with it, `_add_main_drives` sizes the pair,
-## and `fault_in` uses it to refuse a mount that would end up with no
-## socket at all.
+## `placements` sizes every socket with it and `fault_in` uses it to
+## refuse a mount that would end up with no socket at all.
 ##
 ## Simpler than it was. While a preset named one place per entry, the
 ## main drive was a **role** rather than a place the hull names -- its
@@ -167,6 +166,71 @@ static func scaled_blurb(factor: float) -> String:
 	]
 
 
+## Co ten preset stawia i gdzie, na tym kadlubie.
+##
+## Three callers needed this walk and would otherwise each do it:
+## `apply` to build the mounts, `balance_of` to weigh them, and the
+## preset dock to draw them. It is the whole of what binding by kind
+## means -- one entry fills every place of its kind, a drive splits
+## across the pair either side of the centre line -- and three copies of
+## that rule would be three chances to disagree about what a preset is.
+##
+## Each entry is `{name, at, turn, kind, socket, engine, scale, share}`.
+## `share` is the fraction of the engine this mount gets, which is less
+## than one only for a drive split over several places.
+static func placements(hull: HullData, wanted: ShipPreset) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if hull == null or wanted == null:
+		return out
+	var places: Dictionary = places_of(hull)
+	for fit: MountFit in wanted.mounts:
+		if fit == null or fit.engine == null:
+			continue
+		# A named place wins over a kind, for the one mount a kind cannot
+		# describe: the forward-facing nozzle on the twin-gimbal ship.
+		if not String(fit.place).is_empty():
+			out.append(_placement(
+				wanted, fit, String(fit.place),
+				places.get(String(fit.place), {}), places, 1.0,
+			))
+			continue
+		var filled: Array[Dictionary] = []
+		for slot: Dictionary in hull.slots_of(fit.kind):
+			# A drive is split across the pair either side of the centre
+			# line, or sits whole on the centre one.
+			if fit.kind != HullData.SLOT_DRIVE:
+				filled.append(slot)
+			elif is_zero_approx((slot["at"] as Vector2).x) == fit.centered:
+				filled.append(slot)
+		var share: float = 1.0
+		if fit.kind == HullData.SLOT_DRIVE and not filled.is_empty():
+			share = 1.0 / float(filled.size())
+		for slot: Dictionary in filled:
+			out.append(_placement(
+				wanted, fit, String(slot["name"]), slot, places, share,
+			))
+	return out
+
+
+static func _placement(
+	wanted: ShipPreset, fit: MountFit, named: String,
+	place: Dictionary, places: Dictionary, share: float
+) -> Dictionary:
+	# The hull decides where it sits and which way it faces; the preset's
+	# own `at` and `turn` are read only for a place the hull does not
+	# offer.
+	return {
+		"name": named,
+		"at": place["at"] if not place.is_empty() else fit.at,
+		"turn": float(place["turn"]) if not place.is_empty() else fit.turn,
+		"kind": place.get("kind", fit.kind),
+		"socket": socket_for(places, fit),
+		"engine": fit.engine,
+		"scale": wanted.scale_of(fit),
+		"share": share,
+	}
+
+
 ## Gdzie wypadnie srodek masy tego kadluba z tym wyposazeniem, i co z
 ## tego wynika dla sterowania.
 ##
@@ -201,34 +265,15 @@ static func balance_of(hull: HullData, wanted: ShipPreset) -> Dictionary:
 
 	var parts: Array[Dictionary] = []
 	if wanted != null:
-		for fit: MountFit in wanted.mounts:
-			if fit.engine == null:
-				continue
-			var heft: float = (
-				fit.engine.bulk * bulk_factor(wanted.scale_of(fit))
-				* EngineMount.MASS_PER_BULK
-			)
-			if not String(fit.place).is_empty():
-				var place: Dictionary = places_of(hull).get(String(fit.place), {})
-				parts.append({
-					"at": place["at"] if not place.is_empty() else fit.at,
-					"mass": heft,
-				})
-				continue
-			var filled: Array[Dictionary] = []
-			for slot: Dictionary in hull.slots_of(fit.kind):
-				# A drive is split across the pair either side of the
-				# centre line, or sits whole on the centre one.
-				if fit.kind != HullData.SLOT_DRIVE:
-					filled.append(slot)
-				elif is_zero_approx((slot["at"] as Vector2).x) == fit.centered:
-					filled.append(slot)
-			var share: float = 1.0 / maxf(float(filled.size()), 1.0)
-			for slot: Dictionary in filled:
-				parts.append({
-					"at": slot["at"],
-					"mass": heft * (share if fit.kind == HullData.SLOT_DRIVE else 1.0),
-				})
+		for spot: Dictionary in placements(hull, wanted):
+			var engine: EngineData = spot["engine"]
+			parts.append({
+				"at": spot["at"],
+				"mass": (
+					engine.bulk * bulk_factor(float(spot["scale"]))
+					* EngineMount.MASS_PER_BULK * float(spot["share"])
+				),
+			})
 		for bay: BayFit in wanted.bays:
 			if bay != null and bay.installed != null:
 				parts.append({"at": bay.at, "mass": bay.installed.bulk})
@@ -296,22 +341,17 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	# Where the hull says each of its places is, by name. A preset names a
 	# role -- NoseLeftTorque, StrafeRightThruster -- and the hull decides
 	# where that lands, exactly as it already did for drives and guns.
-	var places: Dictionary = places_of(hull)
-
-	for fit: MountFit in wanted.mounts:
-		# A named place wins over a kind, for the one mount a kind cannot
-		# describe: the forward-facing nozzle on the twin-gimbal ship.
-		if not String(fit.place).is_empty():
-			_add_mount(ship, scene, wanted, fit, String(fit.place), places)
-			continue
-		if fit.kind == HullData.SLOT_DRIVE:
-			_add_main_drives(ship, scene, hull, wanted, fit, places)
-			continue
-		# Every place of this kind the hull offers. The entry says what
-		# goes in a torque socket; how many torque sockets there are is
-		# the hull's business and nothing here counts them.
-		for slot: Dictionary in hull.slots_of(fit.kind):
-			_add_mount(ship, scene, wanted, fit, String(slot["name"]), places)
+	for spot: Dictionary in placements(hull, wanted):
+		var mount: EngineMount = scene.instantiate() as EngineMount
+		mount.name = String(spot["name"])
+		mount.size = float(spot["socket"])
+		mount.position = spot["at"]
+		mount.rotation = float(spot["turn"])
+		mount.thrust_direction = Vector2.UP
+		mount.installed = _engine_share(
+			spot["engine"], float(spot["scale"]), float(spot["share"])
+		)
+		ship.add_child(mount)
 
 	# Guns go in the hull's hardpoints and nowhere else. The preset says
 	# which weapons it carries, in order; the hull says where the places
@@ -341,6 +381,7 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	# and a pair of feet written out in every preset -- three of which flew
 	# the same dart and had to agree about it by hand.
 	ship.hull = hull
+	ship.look_key = wanted.skin_key()
 	ship.hull_outline = hull.outline
 	# Zero on a hull means "this shape does not say", which the hull's own
 	# field documents and this used to ignore -- a refit onto one of the
@@ -360,25 +401,6 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	ship._build_collision_shape()
 	ship.rebuild_control_groups(false)
 	return true
-
-
-## One engine in one of the hull's places.
-##
-## The hull decides where it sits and which way it faces; the preset's
-## own `at` and `turn` are read only for a place the hull does not offer.
-static func _add_mount(
-	ship: Ship, scene: PackedScene, wanted: ShipPreset, fit: MountFit,
-	named: String, places: Dictionary
-) -> void:
-	var mount: EngineMount = scene.instantiate() as EngineMount
-	mount.name = named
-	var place: Dictionary = places.get(named, {})
-	mount.size = socket_for(places, fit)
-	mount.position = place["at"] if not place.is_empty() else fit.at
-	mount.rotation = float(place["turn"]) if not place.is_empty() else fit.turn
-	mount.thrust_direction = Vector2.UP
-	mount.installed = _engine(fit.engine, wanted.scale_of(fit))
-	ship.add_child(mount)
 
 
 ## The module bays this ship has, built from the preset.
@@ -469,43 +491,14 @@ static func fault_in(wanted: ShipPreset) -> String:
 	return ""
 
 
-## The preset's main drive, put into the hull's side drive slots -- or into the
-## centre one, whole, when the fit says `centered`: a nozzle that steers by
-## swinging on the centre line is a different ship from a pair.
-##
-## Engines go in slots and nowhere else, so the position in the preset is
-## ignored: the hull says where the places are. The centre slot stays empty
-## and the drive is split across the pair either side of it, each taking half
-## the thrust and half the bulk, so the total is what the preset declared and
-## the pair pushes straight along the ship.
-static func _add_main_drives(
-	ship: Ship, scene: PackedScene, hull: HullData, wanted: ShipPreset,
-	fit: MountFit, places: Dictionary
-) -> void:
-	var sides: Array[Dictionary] = []
-	for slot: Dictionary in hull.slots_of(HullData.SLOT_DRIVE):
-		if is_zero_approx((slot["at"] as Vector2).x) == fit.centered:
-			sides.append(slot)
-	if sides.is_empty():
-		return
-	var share: float = 1.0 / float(sides.size())
-	var socket: float = socket_for(places, fit)
-	for slot: Dictionary in sides:
-		var mount: EngineMount = scene.instantiate() as EngineMount
-		mount.name = String(slot["name"])
-		mount.size = socket
-		mount.position = slot["at"]
-		mount.rotation = float(slot["turn"])
-		mount.thrust_direction = Vector2.UP
-		mount.installed = _engine_share(fit.engine, wanted.scale_of(fit), share)
-		ship.add_child(mount)
-
-
 ## One part of an engine, for a drive that is split over several mounts.
 static func _engine_share(base: EngineData, scale: float, share: float) -> EngineData:
 	var whole: EngineData = _engine(base, scale)
-	if whole == null:
-		return null
+	# A share of one is the whole engine, and handing back the shared
+	# resource rather than a copy of it is what every mount that is not
+	# a split drive used to get.
+	if whole == null or is_equal_approx(share, 1.0):
+		return whole
 	var part: EngineData = whole.duplicate() as EngineData
 	part.max_thrust *= share
 	part.bulk *= share

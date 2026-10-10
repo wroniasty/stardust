@@ -1,12 +1,13 @@
 @tool
 class_name HullCanvas
-extends Control
+extends HullView
 ## Plotno edytora kadluba: rysuje ksztalt i pozwala go ciagnac mysza.
 ##
 ## Drawing and mouse, and nothing else: what a point *means* lives in
-## `HullHandles`, and which file is open lives in the panel above. This
-## deliberately knows nothing about the editor, so it can be put in a
-## window, run with F6, or instantiated by the smoke test.
+## `HullHandles`, which file is open lives in the panel above, and where
+## a point lands on screen lives in `HullView`. This deliberately knows
+## nothing about the editor, so it can be put in a window, run with F6,
+## or instantiated by the smoke test.
 ##
 ## A hull is about twenty-four pixels tall, so the view is zoomed hard by
 ## default and the grid is drawn in hull units rather than screen pixels.
@@ -56,10 +57,6 @@ const STRAFE_TOLERANCE: float = 0.5
 ## hull is 0 to 3 px; ten leaves the ship resting twenty-five px up.
 const LEG_TOLERANCE: float = 6.0
 
-const BACKDROP: Color = Color(0.09, 0.10, 0.13)
-const GRID_FAINT: Color = Color(1.0, 1.0, 1.0, 0.05)
-const GRID_STRONG: Color = Color(1.0, 1.0, 1.0, 0.11)
-const AXIS: Color = Color(1.0, 1.0, 1.0, 0.22)
 const MIDDLE: Color = Color(1.0, 0.85, 0.4, 0.35)
 const HULL_FILL: Color = Color(0.62, 0.78, 1.0, 0.10)
 
@@ -73,9 +70,6 @@ const EDGE_RADIUS: float = 8.0
 ## what the shipped hulls are written in (`-2.75`, `1.75`): a tool that
 ## snapped to whole pixels could not reproduce the files it edits.
 const SNAP_STEP: float = 0.25
-
-const MIN_ZOOM: float = 2.0
-const MAX_ZOOM: float = 80.0
 
 ## How long the tick showing which way a mount faces is drawn, in pixels.
 const FACING_TICK: float = 11.0
@@ -99,8 +93,6 @@ var reference: ShipPreset = null
 ## because every change can move it.
 var balance: Dictionary = {}
 
-var _zoom: float = 11.0
-var _origin: Vector2 = Vector2.ZERO
 var _handles: Array[Dictionary] = []
 var _hover: int = -1
 var _grabbed: int = -1
@@ -114,19 +106,23 @@ var _touched: bool = false
 
 
 func _ready() -> void:
-	# A `Control` does not clip what `_draw` puts outside its own rect, and
-	# this one draws at hull coordinates times a zoom: the first hull
-	# opened at the wrong zoom painted its outline, its handles and its
-	# grid across the file list, the inspector and the dock beside it.
-	clip_contents = true
-	resized.connect(_on_resized)
+	super()
 	refresh()
 
 
-func _on_resized() -> void:
-	if not _touched:
-		fit()
-	queue_redraw()
+## The view is this canvas's once it has been panned or zoomed; until
+## then it keeps reframing itself as the dock changes size.
+func view_is_held() -> bool:
+	return _touched
+
+
+## What the view frames: every place the hull has, the nozzles bolted
+## outside the outline included.
+func framed_points() -> Array[Vector2]:
+	var points: Array[Vector2] = []
+	for handle: Dictionary in _handles:
+		points.append(handle["at"])
+	return points
 
 
 ## Put a hull on the canvas and frame it.
@@ -151,43 +147,12 @@ func refresh() -> void:
 	queue_redraw()
 
 
-## Frame everything the hull has, outline and bolted-on nozzles alike,
-## with a margin.
-func fit() -> void:
-	if hull == null or size.x < 1.0 or size.y < 1.0:
-		return
-	var box: Rect2 = Rect2()
-	var first: bool = true
-	for handle: Dictionary in _handles:
-		var at: Vector2 = handle["at"]
-		if first:
-			box = Rect2(at, Vector2.ZERO)
-			first = false
-		else:
-			box = box.expand(at)
-	if first:
-		box = Rect2(Vector2(-10.0, -10.0), Vector2(20.0, 20.0))
-	box = box.grow(3.0)
-	var span: Vector2 = box.size.max(Vector2(1.0, 1.0))
-	_zoom = clampf(minf(size.x / span.x, size.y / span.y), MIN_ZOOM, MAX_ZOOM)
-	_origin = size * 0.5 - box.get_center() * _zoom
-	queue_redraw()
-
-
 ## Frame the hull and hand the view back to the canvas, so it keeps
 ## following until somebody pans or zooms again.
 func reframe() -> void:
 	_touched = false
 	refresh()
 	fit()
-
-
-func to_screen(at: Vector2) -> Vector2:
-	return _origin + at * _zoom
-
-
-func to_hull(at: Vector2) -> Vector2:
-	return (at - _origin) / _zoom
 
 
 ## Add a point to one array, dropped in the middle of what that array
@@ -216,8 +181,7 @@ func _snapped(at: Vector2) -> Vector2:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), BACKDROP)
-	_draw_grid()
+	draw_grid()
 	if hull == null:
 		return
 	_draw_middle()
@@ -227,37 +191,6 @@ func _draw() -> void:
 	_draw_slots()
 	_draw_balance()
 	_draw_handles()
-
-
-## Hull units, not screen pixels: a grid that changes meaning as you zoom
-## tells you nothing about the numbers you are typing into a .tres.
-func _draw_grid() -> void:
-	var step: float = 1.0
-	while step * _zoom < 7.0:
-		step *= 5.0
-	var top_left: Vector2 = to_hull(Vector2.ZERO)
-	var bottom_right: Vector2 = to_hull(size)
-	var x: float = floorf(top_left.x / step) * step
-	while x <= bottom_right.x:
-		var strong: bool = is_zero_approx(fmod(absf(x), step * 5.0))
-		draw_line(
-			Vector2(to_screen(Vector2(x, 0.0)).x, 0.0),
-			Vector2(to_screen(Vector2(x, 0.0)).x, size.y),
-			GRID_STRONG if strong else GRID_FAINT, 1.0,
-		)
-		x += step
-	var y: float = floorf(top_left.y / step) * step
-	while y <= bottom_right.y:
-		var strong_row: bool = is_zero_approx(fmod(absf(y), step * 5.0))
-		draw_line(
-			Vector2(0.0, to_screen(Vector2(0.0, y)).y),
-			Vector2(size.x, to_screen(Vector2(0.0, y)).y),
-			GRID_STRONG if strong_row else GRID_FAINT, 1.0,
-		)
-		y += step
-	var zero: Vector2 = to_screen(Vector2.ZERO)
-	draw_line(Vector2(zero.x, 0.0), Vector2(zero.x, size.y), AXIS, 1.0)
-	draw_line(Vector2(0.0, zero.y), Vector2(size.x, zero.y), AXIS, 1.0)
 
 
 ## The line that decides whether a torque jet is called Nose or Tail.
@@ -375,7 +308,11 @@ func _on_button(event: InputEventMouseButton) -> void:
 	if event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 		if not event.pressed:
 			return
-		_zoom_about(event.position, 1.12 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.12)
+		_touched = true
+		zoom_about(
+			event.position,
+			1.12 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.12,
+		)
 		accept_event()
 		return
 
@@ -413,9 +350,8 @@ func _on_button(event: InputEventMouseButton) -> void:
 
 func _on_motion(event: InputEventMouseMotion) -> void:
 	if _panning:
-		_origin += event.relative
 		_touched = true
-		queue_redraw()
+		pan_by(event.relative)
 		return
 
 	if _grabbed >= 0:
@@ -456,14 +392,6 @@ func _report(which: int) -> void:
 		spec.get("caption", ""), handle["label"], at.x, at.y,
 		"   [z wyliczenia - przeciagniecie zapisze caly komplet]" if handle["derived"] else "",
 	])
-
-
-func _zoom_about(at: Vector2, by: float) -> void:
-	var before: Vector2 = to_hull(at)
-	_touched = true
-	_zoom = clampf(_zoom * by, MIN_ZOOM, MAX_ZOOM)
-	_origin = at - before * _zoom
-	queue_redraw()
 
 
 func _erase_under(at: Vector2) -> void:

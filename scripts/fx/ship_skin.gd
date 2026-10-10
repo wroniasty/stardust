@@ -155,7 +155,16 @@ func _build_hull() -> void:
 	var named: HullData = HullData.matching(ship.hull_outline)
 	if named == null:
 		return
-	var strip: SpriteStrip = _hull_looks.pick(named, named.id)
+	# The preset's key when it has one, the hull's name otherwise. A
+	# preset is a whole ship and that includes what it looks like, so two
+	# fitouts on one hull can wear different pictures.
+	#
+	# Still gated on the outline matching, which is the part worth
+	# keeping: a shape the creative tool scaled matches nothing, gets no
+	# sprite, and the polygon underneath stays visible. A sandbox has to
+	# show the shape it actually got, and a key cannot make that untrue.
+	var key: StringName = ship.look_key if ship.look_key != &"" else named.id
+	var strip: SpriteStrip = _hull_looks.pick(named, key)
 	if strip == null:
 		return
 	_hull = _place(strip, Vector2.ZERO, 0.0, Z_HULL)

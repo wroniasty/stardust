@@ -55,6 +55,19 @@ extends Resource
 ## How many module bays, how big, and what is in them.
 @export var bays: Array[BayFit] = []
 
+## Which picture this ship wears, as a key into
+## `resources/fx/looks/hull.tres`. Empty means the hull's own id, which
+## is what every shipped preset uses.
+##
+## A **name**, not a texture, and that is the architecture rather than
+## timidity: `LookTable` says the table "lives in the presentation layer
+## and reads the item, never the other way round", and no gameplay
+## resource in this project carries a picture. A key is the same thing
+## `HullData.id` already does -- it just lets two presets on one hull
+## look different, which is what a raider version of the freighter
+## needs.
+@export var look_key: StringName = &""
+
 ## Where this sits in the menu.
 ##
 ## A directory listing is alphabetical, and the first entry is the one a
@@ -87,3 +100,11 @@ func caption() -> String:
 ## preset's together.
 func scale_of(fit: MountFit) -> float:
 	return fit.scale * engine_scale
+
+
+## The key the hull look table is asked with: this preset's, or the
+## hull's own name when it does not care.
+func skin_key() -> StringName:
+	if look_key != &"":
+		return look_key
+	return hull.id if hull != null else &""

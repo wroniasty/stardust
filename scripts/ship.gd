@@ -35,6 +35,14 @@ const FORWARD: Vector2 = Vector2.UP
 ## engines and guns from the two resources instead of from nodes in the scene.
 @export var hull: HullData = null
 
+## Which hull picture this ship wears, from the preset that built it.
+## Empty means the hull's own name.
+##
+## On the ship rather than looked up from the preset, because the
+## presentation layer reads the ship and knows nothing else -- the same
+## rule that keeps `ShipSkin` listening and never writing.
+@export var look_key: StringName = &""
+
 ## Which entry of ShipFitout.all() to build when `hull` is set. Empty builds
 ## only the hull's empty places, and a ship without a hull keeps whatever its
 ## scene holds.
