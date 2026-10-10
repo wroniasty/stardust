@@ -163,13 +163,29 @@ static func _preset_dock(dock: PresetEditor) -> int:
 	# The stats panel, which is what the placeholder bug emptied. Opened
 	# the way the button opens it, so this fails if the wiring changes
 	# and not only if the form does.
-	dock._open_rows["mounts:0"] = true
-	dock._rebuild_rows()
+	#
+	# Every row, not only the first: a mount bound to a named place is
+	# a different path through `_mount_row` from one bound to a kind,
+	# and the first row is whichever the preset happens to list first.
+	var empty_mounts: Array[String] = []
+	for index: int in range(dock._editing.mounts.size()):
+		# Pressed, not set. The handler rebuilds every row, which frees
+		# the very button that is emitting -- and that is the part a
+		# check which only wrote `_open_rows` would never exercise.
+		if not _press_stats(dock._mount_rows, index):
+			empty_mounts.append("mounts:%d no button" % index)
+			continue
+		if _form_rows(dock._mount_rows) == 0:
+			empty_mounts.append("mounts:%d" % index)
+		dock._open_rows["mounts:%d" % index] = false
+		dock._rebuild_rows()
 	failures += _says(
-		_form_rows(dock._mount_rows) > 0,
-		"and a stats panel with rows in it (%d)" % _form_rows(dock._mount_rows),
+		empty_mounts.is_empty(),
+		"every engine row opens a stats panel (%d rows, %s)" % [
+			dock._editing.mounts.size(),
+			"all filled" if empty_mounts.is_empty() else str(empty_mounts),
+		],
 	)
-	dock._open_rows["mounts:0"] = false
 
 	# And the same for a gun, which is the row the bug was reported on:
 	# an engine kept working because `EngineData` happened to be fixed
@@ -185,6 +201,30 @@ static func _preset_dock(dock: PresetEditor) -> int:
 		dock._open_rows["guns:0"] = false
 	dock._rebuild_rows()
 	return failures
+
+
+## Presses the stats toggle on one row, the way a mouse would, and
+## says whether there was one to press.
+static func _press_stats(rows: Node, index: int) -> bool:
+	var row: Node = rows.get_child(index) if index < rows.get_child_count() else null
+	if row == null:
+		return false
+	var button: Button = _stats_toggle(row)
+	if button == null:
+		return false
+	button.button_pressed = true
+	return true
+
+
+static func _stats_toggle(where: Node) -> Button:
+	for child: Node in where.get_children():
+		var button: Button = child as Button
+		if button != null and button.toggle_mode and button.text.begins_with("staty"):
+			return button
+		var deeper: Button = _stats_toggle(child)
+		if deeper != null:
+			return deeper
+	return null
 
 
 ## How many rows the first `ResourceForm` under here has.

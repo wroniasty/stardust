@@ -4118,7 +4118,7 @@ func _check_creative_tool() -> void:
 	_expect(mismatched == 0, "and hands the same shape to projectiles")
 
 	# Twice the size is four times the area, so four times the mass.
-	var small: PackedVector2Array = HullData.of(&"dart").outline
+	var small: PackedVector2Array = _reference_hull().outline
 	ship.hull_outline = small
 	var one: float = ship.hull_mass()
 	var doubled: PackedVector2Array = PackedVector2Array()
@@ -8281,8 +8281,8 @@ func _check_cloud_count() -> void:
 ## asserted the dart's jets are at plus and minus eight would pass just
 ## as well with the table still hardcoded.
 func _check_hull_places_its_engines() -> void:
-	var hull: HullData = HullData.of(&"dart")
-	_expect(hull != null, "there is a stock hull to ask")
+	var hull: HullData = _reference_hull()
+	_expect(hull != null, "there is a reference hull to ask")
 	if hull == null:
 		return
 
@@ -8307,31 +8307,44 @@ func _check_hull_places_its_engines() -> void:
 			continue
 		if not node.position.is_equal_approx(offered[named]["at"]):
 			wrong += 1
-	# A warning: the ship wears the frozen reference hull, so this is really
-	# "has the shipped dart moved since the reference was written".
-	_warn(
+	_expect(
 		wrong == 0,
-		"every mount stands where the shipped dart says it does (%d adrift)" % wrong,
+		"every mount stands where the hull says it does (%d adrift)" % wrong,
+	)
+
+	# And the same question asked of the **shipped** dart, which is the
+	# content check: has the file moved away from the reference the
+	# flight tests fly. A warning, not a failure -- somebody nudging a
+	# jet is tuning a ship.
+	var shipped: HullData = HullData.of(&"dart")
+	var drifted: int = 0
+	if shipped != null:
+		for slot: Dictionary in shipped.slots():
+			var node: Node2D = ship.get_node_or_null(
+				NodePath(String(slot["name"]))
+			) as Node2D
+			if node != null and not node.position.is_equal_approx(slot["at"]):
+				drifted += 1
+	_warn(
+		drifted == 0,
+		"the shipped dart still matches the reference (%d adrift)" % drifted,
 	)
 
 	# A place that takes an engine does not get a gun. This read
 	# `== SLOT_DRIVE` until the hull learned the other three kinds, and
 	# then quietly fitted a hardpoint to each of the seven.
 	_expect(
-		ship.hardpoints.size() == (
-			HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS
-			+ HullData.REAR_HARDPOINTS
-		),
+		ship.hardpoints.size() == _gun_places(hull),
 		"the guns are the gun places and nothing else (%d)" % ship.hardpoints.size(),
 	)
 	var engines: int = 0
 	for mount: EngineMount in ship.engine_mounts():
 		engines += 1
+	var sockets: int = 0
+	for kind: StringName in ShipFitout.SOCKET_FOR:
+		sockets += _places_of_kind(hull, kind)
 	_expect(
-		engines == (
-			HullData.DRIVE_SLOTS + HullData.TORQUE_SLOTS
-			+ HullData.STRAFE_SLOTS + HullData.RETRO_SLOTS
-		),
+		engines == sockets,
 		"and the engine sockets are the engine places (%d)" % engines,
 	)
 	ship.queue_free()
@@ -8346,7 +8359,7 @@ func _check_hull_places_its_engines() -> void:
 ## cannot pass by accident: a duplicated hull with one jet moved, applied
 ## to a ship, has to put the jet where the copy says.
 func _check_moving_a_slot_moves_the_mount() -> void:
-	var moved: HullData = (HullData.of(&"dart") as HullData).duplicate() as HullData
+	var moved: HullData = _reference_hull()
 	var shifted: Array[Vector2] = []
 	for at: Vector2 in moved.torque_slots:
 		shifted.append(at + Vector2(0.0, 3.0) if at.y < 0.0 else at)
@@ -8386,14 +8399,14 @@ func _check_moving_a_slot_moves_the_mount() -> void:
 ## nose-first are the same hull, which is what makes the resource
 ## editable by hand without a convention nobody wrote down.
 func _check_slot_names_follow_position() -> void:
-	var shuffled: HullData = (HullData.of(&"dart") as HullData).duplicate() as HullData
+	var shuffled: HullData = _reference_hull()
 	var backwards: Array[Vector2] = []
 	for i: int in range(shuffled.torque_slots.size()):
 		backwards.append(shuffled.torque_slots[shuffled.torque_slots.size() - 1 - i])
 	shuffled.torque_slots = backwards
 
 	var before: Dictionary = {}
-	for slot: Dictionary in (HullData.of(&"dart") as HullData).slots():
+	for slot: Dictionary in _reference_hull().slots():
 		before[String(slot["name"])] = slot["at"]
 	var after: Dictionary = {}
 	for slot: Dictionary in shuffled.slots():
@@ -8977,7 +8990,7 @@ func _check_dragging_writes_the_frame_down() -> void:
 ## would pass on the day it was written and lie quietly ever after, so
 ## what this really pins is that there is only one copy.
 func _check_the_label_is_what_gets_built() -> void:
-	var hull: HullData = HullHandles.copy_of(HullData.of(&"dart"))
+	var hull: HullData = _reference_hull()
 	var middle: float = hull.bounds().get_center().y
 	var jets: Array[Vector2] = HullHandles.shown(hull, &"torque_slots")
 	var which: int = -1
@@ -9053,7 +9066,7 @@ func _check_a_saved_hull_loads_again() -> void:
 ## one thing it does refuse, because everything physical is computed from
 ## it and three corners is the least that is a shape.
 func _check_the_counter_says_what_is_wrong() -> void:
-	var hull: HullData = HullHandles.copy_of(HullData.of(&"dart"))
+	var hull: HullData = _reference_hull()
 	_expect(_hull_note(hull, &"front_slots") == "", "a stock dart draws no complaint")
 	_expect(HullHandles.erase(hull, &"front_slots", 0), "a gun place can be removed")
 	_expect(
@@ -9608,7 +9621,7 @@ func _preset_named(fragment: String) -> ShipPreset:
 func _bad_preset(title: String) -> ShipPreset:
 	var out: ShipPreset = ShipPreset.new()
 	out.display_name = title
-	out.hull = HullData.of(&"dart")
+	out.hull = _reference_hull()
 	return out
 
 
