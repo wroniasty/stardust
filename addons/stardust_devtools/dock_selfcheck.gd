@@ -84,6 +84,10 @@ static func _placeholders() -> int:
 static func _captions() -> int:
 	var gun: Resource = load("res://resources/weapons/autocannon.tres")
 	var form: ResourceForm = ResourceForm.new()
+	# Sized first: the column is a share of the form's width now, so a
+	# form of no width would clamp every caption to the floor and this
+	# would have nothing to measure.
+	form.size = Vector2(400.0, 300.0)
 	form.show_resource(gun)
 	var font: Font = form.get_theme_default_font()
 	var size: int = form.get_theme_default_font_size()
@@ -92,9 +96,16 @@ static func _captions() -> int:
 		var needs: float = font.get_string_size(
 			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size
 		).x
+		# The ceiling worked out here rather than asked of the form:
+		# `caption_width()` is what sets these labels, so comparing
+		# against it compares the answer with itself. Pinning the column
+		# to the floor passed a check written that way.
+		var ceiling: float = maxf(
+			ResourceForm.LABEL_MIN, form.size.x * ResourceForm.CAPTION_SHARE
+		)
 		# At the ceiling the name is clipped on purpose and the tooltip
-		# carries it; below the ceiling it has to fit.
-		if label.custom_minimum_size.x < needs and label.custom_minimum_size.x < ResourceForm.LABEL_MAX:
+		# carries it; below it the name has to fit.
+		if label.custom_minimum_size.x < needs and label.custom_minimum_size.x < ceiling:
 			clipped.append(label.text)
 	var rows: int = _labels_under(form).size()
 	form.free()
