@@ -92,7 +92,13 @@ const HULL_DENSITY: float = 6.0 / 176.0
 
 ## What the bare hull weighs today. Derived, not declared.
 func hull_mass() -> float:
-	return maxf(_polygon_area(_hull_polygon()) * HULL_DENSITY, 0.0001)
+	return mass_of_outline(_hull_polygon())
+
+
+## And the same for an outline nobody has built a ship out of yet, which
+## is what the hull editor has.
+static func mass_of_outline(polygon: PackedVector2Array) -> float:
+	return maxf(_polygon_area(polygon) * HULL_DENSITY, 0.0001)
 
 ## Floor for the angular speed at which kill rotation gives up pulsing and just
 ## zeroes the spin. The real threshold is computed per tick from the ship's own
@@ -1150,19 +1156,43 @@ func rebuild_control_groups(verbose: bool = true) -> void:
 ## at their mounts. The body is switched to a custom centre of mass because the
 ## default one ignores the modules entirely, and every torque in the control
 ## maths is measured from it.
+## Srodek masy i bezwladnosc z samych liczb, bez wezlow.
+##
+## Static and taking plain records, because the hull editor has to ask
+## the same question about a hull nobody has built a ship out of yet --
+## and a dock that drew a centre of mass the ship does not have would be
+## worse than a dock that drew none. `parts` is `[{at, mass}]`; the
+## answer is `{mass, centre, inertia}`.
+static func mass_budget(
+	polygon: PackedVector2Array, bare: float, parts: Array[Dictionary]
+) -> Dictionary:
+	var centroid: Vector2 = _polygon_centroid(polygon)
+	var total: float = bare
+	var weighted: Vector2 = centroid * bare
+	for part: Dictionary in parts:
+		var heft: float = part["mass"]
+		total += heft
+		weighted += (part["at"] as Vector2) * heft
+	var centre: Vector2 = weighted / maxf(total, 0.0001)
+
+	# Parallel axis theorem: the hull's own inertia about its centroid,
+	# shifted to the combined centre, plus each part as a point mass.
+	var spin: float = (
+		_polygon_inertia(polygon, bare, centroid)
+		+ bare * centroid.distance_squared_to(centre)
+	)
+	for part: Dictionary in parts:
+		spin += float(part["mass"]) * (part["at"] as Vector2).distance_squared_to(centre)
+	return {"mass": total, "centre": centre, "inertia": maxf(spin, 0.0001)}
+
+
 func _recompute_mass_properties() -> void:
 	var polygon: PackedVector2Array = _hull_polygon()
-	var hull_centroid: Vector2 = _polygon_centroid(polygon)
-	var bare: float = hull_mass()
-	var hull_inertia: float = _polygon_inertia(polygon, bare, hull_centroid)
-
-	var total_mass: float = bare
-	var weighted: Vector2 = hull_centroid * bare
+	var parts: Array[Dictionary] = []
 	for engine: EngineInstance in engines:
-		var module: float = engine.mount.module_mass()
-		total_mass += module
-		weighted += engine.mount.position * module
-
+		parts.append({
+			"at": engine.mount.position, "mass": engine.mount.module_mass(),
+		})
 	# Cargo is mass, but not at the rate a bolted-in module is. Measured at
 	# one-to-one, a full hold added 75% to the ship and took 43% of its
 	# acceleration: carrying anything at all turned it into a brick and the
@@ -1173,31 +1203,17 @@ func _recompute_mass_properties() -> void:
 	# Fitted modules keep their full mass. Fitting is a swap, so the net
 	# change is small, and the centre of mass sits where it does because of
 	# those exact figures (IDEAS.md section 3).
-	var load: float = cargo_used() * CARGO_MASS_PER_BULK
-	total_mass += load
-	weighted += CARGO_BAY * load
-
+	parts.append({"at": CARGO_BAY, "mass": cargo_used() * CARGO_MASS_PER_BULK})
 	for bay: ModuleBay in bays:
-		total_mass += bay.module_mass()
-		weighted += bay.position * bay.module_mass()
+		parts.append({"at": bay.position, "mass": bay.module_mass()})
 	if gear != null:
-		total_mass += gear.module_mass()
-		weighted += gear.position * gear.module_mass()
+		parts.append({"at": gear.position, "mass": gear.module_mass()})
 
-	var centre: Vector2 = weighted / maxf(total_mass, 0.0001)
+	var budget: Dictionary = mass_budget(polygon, hull_mass(), parts)
+	var centre: Vector2 = budget["centre"]
+	var total_inertia: float = budget["inertia"]
 
-	# Parallel axis theorem: the hull's own inertia about its centroid, shifted
-	# to the combined centre, plus each module as a point mass.
-	var total_inertia: float = hull_inertia + bare * hull_centroid.distance_squared_to(centre)
-	for engine: EngineInstance in engines:
-		total_inertia += engine.mount.module_mass() * engine.mount.position.distance_squared_to(centre)
-	total_inertia += load * CARGO_BAY.distance_squared_to(centre)
-	for bay: ModuleBay in bays:
-		total_inertia += bay.module_mass() * bay.position.distance_squared_to(centre)
-	if gear != null:
-		total_inertia += gear.module_mass() * gear.position.distance_squared_to(centre)
-
-	mass = total_mass
+	mass = budget["mass"]
 	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = centre
 	inertia = maxf(total_inertia, 0.0001)
@@ -1219,14 +1235,14 @@ func _hull_polygon() -> PackedVector2Array:
 
 
 ## Unsigned area of a polygon, by the shoelace sum.
-func _polygon_area(polygon: PackedVector2Array) -> float:
+static func _polygon_area(polygon: PackedVector2Array) -> float:
 	var twice: float = 0.0
 	for i: int in range(polygon.size()):
 		twice += polygon[i].cross(polygon[(i + 1) % polygon.size()])
 	return absf(twice) * 0.5
 
 
-func _polygon_centroid(polygon: PackedVector2Array) -> Vector2:
+static func _polygon_centroid(polygon: PackedVector2Array) -> Vector2:
 	var area: float = 0.0
 	var centroid: Vector2 = Vector2.ZERO
 	for i: int in range(polygon.size()):
@@ -1241,7 +1257,7 @@ func _polygon_centroid(polygon: PackedVector2Array) -> Vector2:
 
 
 ## Mass moment of inertia of a uniform polygon about its own centroid.
-func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid: Vector2) -> float:
+static func _polygon_inertia(polygon: PackedVector2Array, polygon_mass: float, centroid: Vector2) -> float:
 	var area: float = 0.0
 	var moment: float = 0.0
 	for i: int in range(polygon.size()):

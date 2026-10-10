@@ -180,8 +180,15 @@ porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
 - [x] Smoke test: `_check_hull_editor` — kolory kontra `FIELDS`, budowa docka,
   zapis i ponowne wczytanie z `CACHE_MODE_IGNORE` (typowane tablice przeżywają
   podróż), przemianowanie dyszy, licznik braków.
-- [ ] Środek masy i krzyż momentu na podglądzie. Wymaga wyposażenia, nie
-  samego kadłuba: `ShipFitout` zna masy silników, `HullData` nie.
+- [x] Środek masy, krzyż momentu, rząd strafe i linia gruntu na podglądzie,
+  liczone `ShipFitout.balance_of` — tą samą arytmetyką co lecący statek
+  (`Ship.mass_budget`), więc dock nie może narysować środka masy, którego
+  statek nie ma. Smoke test pilnuje zgodności na 70 kombinacjach.
+  Wyposażenie wybiera się w panelu, bo kadłub sam nie ma środka masy.
+- [x] Linia środka bounding boxa jest **przyciemniona** i podpisana „nazwy".
+  W pierwszej wersji była jedyną poziomą linią na płótnie i rysowana grubo —
+  i pierwsze, co się stało, to wyrównanie do niej pary strafe, czyli do
+  jedynej linii, do której te pozycje nie mają być wyrównane.
 - [ ] Ten sam dock dla broni i silników (`FIELDS` jest tabelą, nie kodem).
 
 Gotowe, gdy: dyszę da się przesunąć myszą, licznik od razu mówi, co z tego

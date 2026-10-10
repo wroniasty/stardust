@@ -1,20 +1,34 @@
 class_name MountFit
 extends Resource
-## Jeden silnik w jednym miejscu kadluba, jako dane.
+## Jaki silnik idzie w ktore miejsca kadluba.
 ##
-## One entry of what used to be a dictionary in `ShipFitout`'s table. The
-## fields are the same ones `apply` always read; what changed is that an
-## engine is now the resource itself rather than a short name looked up in
-## a second table, so a preset cannot name an engine that does not exist.
+## By **kind**, not by name. One entry says "a torque jet in every torque
+## place this hull offers", so the same preset builds a ship on a hull
+## with two jets and on a hull with six, and the number of jets is a fact
+## about the hull's `.tres` alone.
+##
+## It used to name one place per entry -- `NoseLeftTorque`,
+## `StrafeRightThruster` -- which made a preset quietly hull-specific: a
+## hull drawn with three torque places left one empty and nothing
+## reported it, because the preset had two names and the hull had three.
+## The stock dart went from eight entries to four when this changed, and
+## the four say what the ship actually is.
 
-## Which of the hull's places this fills, by the name `HullData.slots()`
-## gives it: `NoseLeftTorque`, `StrafeRightThruster`, `MainDrive`.
+## Which of the hull's kinds this fills: `HullData.SLOT_DRIVE`,
+## `SLOT_TORQUE`, `SLOT_STRAFE`, `SLOT_RETRO`. Every place the hull offers
+## of this kind gets one of these engines.
+@export var kind: StringName = &""
+
+## One named place instead of a whole kind, for the mount a kind cannot
+## describe.
 ##
-## A role, not a position. The hull decides where that lands, which is
-## what lets a hull be reshaped without touching any preset.
+## Takes precedence over `kind` when set. The game has one: the
+## forward-facing nozzle on the twin-gimbal ship, which is a second drive
+## pointing the other way and which no hull offers a place for -- so it
+## carries its own `at` and `turn` as well.
 @export var place: StringName = &""
 
-## What goes in it.
+## What goes in.
 @export var engine: EngineData = null
 
 ## Multiplies the engine's thrust **and** its bulk, so a bigger engine is
@@ -23,7 +37,7 @@ extends Resource
 ## much of the increase is paid in bulk is `ShipFitout.BULK_SHARE`.
 @export var scale: float = 1.0
 
-## How big the socket is. Zero means "whatever this role takes", which is
+## How big the socket is. Zero means "whatever this kind takes", which is
 ## `ShipFitout.SOCKET_FOR` -- a fact about the job rather than about the
 ## ship, which is why almost every mount leaves this alone.
 @export var socket: float = 0.0
@@ -33,11 +47,7 @@ extends Resource
 ## number: the twin-gimbal preset is built on it.
 @export var centered: bool = false
 
-## Where to put it when the hull has no place by this name, and which way
-## to face.
-##
-## The last of the hand-written positions. One mount in the game needs it
-## -- the forward-facing nozzle on the twin-gimbal ship, which no hull can
-## describe yet -- and `ShipFitout.fault_in` asks for it only there.
+## Where to put it, and which way to face, when `place` names somewhere
+## the hull does not offer. Ignored otherwise: the hull decides.
 @export var at: Vector2 = Vector2.ZERO
 @export var turn: float = 0.0

@@ -40,9 +40,9 @@ size = 2.4
 installed = ExtResource("5_l8f88")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_6k77h"]
+[sub_resource type="Resource" id="Resource_ir78u"]
 script = ExtResource("8_oww2e")
-place = &"MainDrive"
+kind = &"drive"
 engine = ExtResource("9_8gwvw")
 
 [resource]
@@ -51,6 +51,6 @@ id = &"bare_hull"
 display_name = "bare hull"
 blurb = "the main drive and nothing else -- the configuration report has plenty to say"
 hull = ExtResource("7_t8bgr")
-mounts = Array[ExtResource("8_oww2e")]([SubResource("Resource_6k77h")])
+mounts = Array[ExtResource("8_oww2e")]([SubResource("Resource_ir78u")])
 bays = Array[ExtResource("1_ir78u")]([SubResource("Resource_08iaw"), SubResource("Resource_auf6e"), SubResource("Resource_m7d2t"), SubResource("Resource_d6jpf"), SubResource("Resource_o7t2j")])
 order = 6

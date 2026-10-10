@@ -44,44 +44,24 @@ size = 2.4
 installed = ExtResource("5_rvo70")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_ggyt6"]
+[sub_resource type="Resource" id="Resource_oh1y0"]
 script = ExtResource("9_1ymbm")
-place = &"MainDrive"
+kind = &"drive"
 engine = ExtResource("10_6mfjq")
 
-[sub_resource type="Resource" id="Resource_2fw0v"]
+[sub_resource type="Resource" id="Resource_bgnui"]
 script = ExtResource("9_1ymbm")
-place = &"NoseLeftTorque"
+kind = &"torque"
 engine = ExtResource("11_aqfde")
 
-[sub_resource type="Resource" id="Resource_bav3y"]
+[sub_resource type="Resource" id="Resource_0avyb"]
 script = ExtResource("9_1ymbm")
-place = &"NoseRightTorque"
-engine = ExtResource("11_aqfde")
-
-[sub_resource type="Resource" id="Resource_v5ulv"]
-script = ExtResource("9_1ymbm")
-place = &"TailLeftTorque"
-engine = ExtResource("11_aqfde")
-
-[sub_resource type="Resource" id="Resource_l3h42"]
-script = ExtResource("9_1ymbm")
-place = &"TailRightTorque"
-engine = ExtResource("11_aqfde")
-
-[sub_resource type="Resource" id="Resource_slp1g"]
-script = ExtResource("9_1ymbm")
-place = &"StrafeLeftThruster"
+kind = &"strafe"
 engine = ExtResource("12_7b8qe")
 
-[sub_resource type="Resource" id="Resource_r7u5n"]
+[sub_resource type="Resource" id="Resource_m5bt4"]
 script = ExtResource("9_1ymbm")
-place = &"StrafeRightThruster"
-engine = ExtResource("12_7b8qe")
-
-[sub_resource type="Resource" id="Resource_x32mq"]
-script = ExtResource("9_1ymbm")
-place = &"NoseReverseThruster"
+kind = &"retro"
 engine = ExtResource("13_lrh4g")
 
 [resource]
@@ -89,7 +69,7 @@ script = ExtResource("14_jvk5m")
 id = &"dart_stronger_jets"
 display_name = "dart, stronger jets"
 hull = ExtResource("8_8vrka")
-mounts = Array[ExtResource("9_1ymbm")]([SubResource("Resource_ggyt6"), SubResource("Resource_2fw0v"), SubResource("Resource_bav3y"), SubResource("Resource_v5ulv"), SubResource("Resource_l3h42"), SubResource("Resource_slp1g"), SubResource("Resource_r7u5n"), SubResource("Resource_x32mq")])
+mounts = Array[ExtResource("9_1ymbm")]([SubResource("Resource_oh1y0"), SubResource("Resource_bgnui"), SubResource("Resource_0avyb"), SubResource("Resource_m5bt4")])
 guns = Array[ExtResource("6_us1ag")]([ExtResource("7_ncypg")])
 bays = Array[ExtResource("1_oh1y0")]([SubResource("Resource_fbbnf"), SubResource("Resource_lfftb"), SubResource("Resource_qwpdq"), SubResource("Resource_cymcj"), SubResource("Resource_r2p0u")])
 order = 1

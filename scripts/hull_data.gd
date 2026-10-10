@@ -310,6 +310,15 @@ func slots() -> Array[Dictionary]:
 		SLOT_RETRO: "NoseReverseThruster",
 	}
 	var middle: float = bounds().get_center().y
+	# Names handed out so far. A role name is derived from position, and
+	# positions can repeat a role: Nose/Tail times Left/Right is exactly
+	# four names, so a hull with five torque jets used to give two of them
+	# the same name -- and the fifth then **replaced** the fourth, because
+	# `ShipFitout.add_hull_slots` skips a place whose node already exists.
+	# Measured on a hull with five: nineteen places declared, eighteen
+	# names, four torque mounts built, and the jet at y=13.5 simply gone
+	# with nothing reported.
+	var taken: Dictionary = {}
 	for kind: StringName in [
 		SLOT_DRIVE, SLOT_FRONT, SLOT_SIDE, SLOT_REAR,
 		SLOT_TORQUE, SLOT_STRAFE, SLOT_RETRO,
@@ -346,8 +355,28 @@ func slots() -> Array[Dictionary]:
 				pass
 			elif kind != SLOT_REAR or places.size() > 1:
 				slot_name += str(i + 1)
-			out.append(_slot(StringName(slot_name), kind, at, _turn_for(kind, at)))
+			out.append(
+				_slot(StringName(_unique(slot_name, taken)), kind, at, _turn_for(kind, at))
+			)
 	return out
+
+
+## A name nothing else has yet, suffixed if it has to be.
+##
+## The first place to claim a role keeps the bare name, so adding a fifth
+## torque jet does not rename the four already there -- which matters
+## because a preset and a save both refer to places by name. The suffix
+## follows array order, which is the only ordering a resource has.
+static func _unique(wanted: String, taken: Dictionary) -> String:
+	if not taken.has(wanted):
+		taken[wanted] = true
+		return wanted
+	var count: int = 2
+	while taken.has("%s%d" % [wanted, count]):
+		count += 1
+	var tried: String = "%s%d" % [wanted, count]
+	taken[tried] = true
+	return tried
 
 
 ## Which way a place faces: forward and aft drives point the ship's way, side

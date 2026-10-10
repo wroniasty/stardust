@@ -41,13 +41,13 @@ size = 2.4
 installed = ExtResource("5_wdgwv")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_5cuqh"]
+[sub_resource type="Resource" id="Resource_apn0g"]
 script = ExtResource("9_rkpqb")
-place = &"MainDrive"
+kind = &"drive"
 engine = ExtResource("10_0r8r0")
 centered = true
 
-[sub_resource type="Resource" id="Resource_le1h2"]
+[sub_resource type="Resource" id="Resource_jr2bt"]
 script = ExtResource("9_rkpqb")
 place = &"NoseDrive"
 engine = ExtResource("10_0r8r0")
@@ -61,7 +61,7 @@ id = &"twin_gimbal"
 display_name = "twin gimbal (force couple)"
 blurb = "two steerable nozzles, nose and tail: the moments add, the thrusts cancel"
 hull = ExtResource("8_0wl33")
-mounts = Array[ExtResource("9_rkpqb")]([SubResource("Resource_5cuqh"), SubResource("Resource_le1h2")])
+mounts = Array[ExtResource("9_rkpqb")]([SubResource("Resource_apn0g"), SubResource("Resource_jr2bt")])
 guns = Array[ExtResource("6_ttdgg")]([ExtResource("7_xfw23")])
 bays = Array[ExtResource("1_apn0g")]([SubResource("Resource_ugc27"), SubResource("Resource_nik3j"), SubResource("Resource_d2tjf"), SubResource("Resource_obdeg"), SubResource("Resource_2wrkg")])
 order = 2

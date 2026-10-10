@@ -44,45 +44,25 @@ size = 2.4
 installed = ExtResource("5_31ffw")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_t5k62"]
+[sub_resource type="Resource" id="Resource_36e7v"]
 script = ExtResource("9_05phl")
-place = &"MainDrive"
+kind = &"drive"
 engine = ExtResource("10_yty4c")
 scale = 1.4
 
-[sub_resource type="Resource" id="Resource_v76ep"]
+[sub_resource type="Resource" id="Resource_7vp44"]
 script = ExtResource("9_05phl")
-place = &"NoseLeftTorque"
+kind = &"torque"
 engine = ExtResource("11_7y281")
 
-[sub_resource type="Resource" id="Resource_glnk0"]
+[sub_resource type="Resource" id="Resource_pmkai"]
 script = ExtResource("9_05phl")
-place = &"NoseRightTorque"
-engine = ExtResource("11_7y281")
-
-[sub_resource type="Resource" id="Resource_vpfjs"]
-script = ExtResource("9_05phl")
-place = &"TailLeftTorque"
-engine = ExtResource("11_7y281")
-
-[sub_resource type="Resource" id="Resource_5qbmy"]
-script = ExtResource("9_05phl")
-place = &"TailRightTorque"
-engine = ExtResource("11_7y281")
-
-[sub_resource type="Resource" id="Resource_2g47s"]
-script = ExtResource("9_05phl")
-place = &"StrafeLeftThruster"
+kind = &"strafe"
 engine = ExtResource("12_kdpiu")
 
-[sub_resource type="Resource" id="Resource_maymo"]
+[sub_resource type="Resource" id="Resource_cxp86"]
 script = ExtResource("9_05phl")
-place = &"StrafeRightThruster"
-engine = ExtResource("12_kdpiu")
-
-[sub_resource type="Resource" id="Resource_hslql"]
-script = ExtResource("9_05phl")
-place = &"NoseReverseThruster"
+kind = &"retro"
 engine = ExtResource("13_wfrfl")
 
 [resource]
@@ -91,7 +71,7 @@ id = &"freighter"
 display_name = "freighter"
 blurb = "a big hold, a heavy hull, wide legs and little power per kilo"
 hull = ExtResource("8_3bg1k")
-mounts = Array[ExtResource("9_05phl")]([SubResource("Resource_t5k62"), SubResource("Resource_v76ep"), SubResource("Resource_glnk0"), SubResource("Resource_vpfjs"), SubResource("Resource_5qbmy"), SubResource("Resource_2g47s"), SubResource("Resource_maymo"), SubResource("Resource_hslql")])
+mounts = Array[ExtResource("9_05phl")]([SubResource("Resource_36e7v"), SubResource("Resource_7vp44"), SubResource("Resource_pmkai"), SubResource("Resource_cxp86")])
 guns = Array[ExtResource("6_qm45p")]([ExtResource("7_k4uo2")])
 bays = Array[ExtResource("1_36e7v")]([SubResource("Resource_3efbn"), SubResource("Resource_b57sg"), SubResource("Resource_wspqp"), SubResource("Resource_ia6pv"), SubResource("Resource_vlri0")])
 order = 5

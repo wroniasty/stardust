@@ -43,25 +43,20 @@ size = 2.4
 installed = ExtResource("5_5ouwu")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_gatpx"]
+[sub_resource type="Resource" id="Resource_36ccl"]
 script = ExtResource("9_beyy2")
-place = &"MainDrive"
+kind = &"drive"
 engine = ExtResource("10_smkly")
 centered = true
 
-[sub_resource type="Resource" id="Resource_vrp4l"]
+[sub_resource type="Resource" id="Resource_kxbgq"]
 script = ExtResource("9_beyy2")
-place = &"StrafeLeftThruster"
+kind = &"strafe"
 engine = ExtResource("11_fi5bf")
 
-[sub_resource type="Resource" id="Resource_pu0q4"]
+[sub_resource type="Resource" id="Resource_s8aen"]
 script = ExtResource("9_beyy2")
-place = &"StrafeRightThruster"
-engine = ExtResource("11_fi5bf")
-
-[sub_resource type="Resource" id="Resource_js3ef"]
-script = ExtResource("9_beyy2")
-place = &"NoseReverseThruster"
+kind = &"retro"
 engine = ExtResource("12_gyfhg")
 
 [resource]
@@ -70,7 +65,7 @@ id = &"single_gimbal"
 display_name = "single gimbal (drifts)"
 blurb = "rotation out of the gimballed main drive, and nothing else turns it"
 hull = ExtResource("8_uisfy")
-mounts = Array[ExtResource("9_beyy2")]([SubResource("Resource_gatpx"), SubResource("Resource_vrp4l"), SubResource("Resource_pu0q4"), SubResource("Resource_js3ef")])
+mounts = Array[ExtResource("9_beyy2")]([SubResource("Resource_36ccl"), SubResource("Resource_kxbgq"), SubResource("Resource_s8aen")])
 guns = Array[ExtResource("6_bdol4")]([ExtResource("7_owynd")])
 bays = Array[ExtResource("1_36ccl")]([SubResource("Resource_bt2tf"), SubResource("Resource_jr4id"), SubResource("Resource_rb642"), SubResource("Resource_ciw5k"), SubResource("Resource_28gbm")])
 order = 3

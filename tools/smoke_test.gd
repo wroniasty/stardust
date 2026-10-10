@@ -8664,10 +8664,55 @@ func _check_hull_editor() -> void:
 	)
 	_discard(panel)
 
+	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
 	_check_the_label_is_what_gets_built()
 	_check_a_saved_hull_loads_again()
 	_check_the_counter_says_what_is_wrong()
+
+
+## Dock liczy ten sam srodek masy, co lecacy statek.
+##
+## The whole value of drawing it is that it is the **real** figure. The
+## dock has to answer from data -- there is no ship in the editor, and a
+## hull being dragged is not one yet -- so the arithmetic is shared
+## rather than copied (`Ship.mass_budget`), and this is what holds the
+## two together.
+##
+## Worth the seventy combinations it walks, because a dock that draws a
+## centre of mass one pixel off is worse than one that draws none: one
+## pixel of arm is the size of the error this is all meant to prevent,
+## and a designer would be aligning to a line that is not there.
+func _check_the_dock_agrees_with_the_ship() -> void:
+	var ship: Ship = _spawn_ship()
+	var worst: float = 0.0
+	var worst_mass: float = 0.0
+	var where: String = ""
+	var pairs: int = 0
+	for preset: ShipPreset in ShipFitout.all():
+		for hull: HullData in HullData.catalogue():
+			var wearing: ShipPreset = preset.duplicate() as ShipPreset
+			wearing.hull = hull
+			if not ShipFitout.apply(ship, wearing):
+				continue
+			pairs += 1
+			var said: Dictionary = ShipFitout.balance_of(hull, wearing)
+			var gap: float = (said["centre"] as Vector2).distance_to(ship.center_of_mass)
+			worst_mass = maxf(worst_mass, absf(float(said["mass"]) - ship.mass))
+			if gap > worst:
+				worst = gap
+				where = "%s on %s" % [preset.display_name, hull.id]
+	_expect(
+		pairs > 0 and worst < 0.01,
+		"the dock's centre of mass is the ship's, over %d fitouts (worst %.4f px%s)" % [
+			pairs, worst, "" if where.is_empty() else " on " + where,
+		],
+	)
+	_expect(
+		worst_mass < 0.01,
+		"and so is the mass it weighs (worst %.4f kg)" % worst_mass,
+	)
+	_discard(ship)
 
 
 ## Przeciagniecie punktu "z wyliczenia" zapisuje caly komplet.
@@ -8960,12 +9005,16 @@ func _check_preset_fields() -> void:
 			],
 		)
 		for fit: MountFit in preset.mounts:
-			if fit.place != ShipFitout.MAIN_DRIVE:
-				continue
-			_expect(
-				fit.at.is_zero_approx(),
-				"%s does not pretend to place its main drive" % preset.display_name,
-			)
+			# A kind-bound mount has no business carrying a position: the
+			# hull has the places. Only a named place the hull does not
+			# offer may, and the game has exactly one.
+			if String(fit.place).is_empty():
+				_expect(
+					fit.at.is_zero_approx(),
+					"%s does not pretend to place its %s" % [
+						preset.display_name, fit.kind,
+					],
+				)
 
 	# And the blurb is computed off the same expression the engines are,
 	# which is the whole of why it can no longer be wrong. It was: a
@@ -9078,10 +9127,8 @@ func _check_fitout_presets() -> void:
 		if String(mount.name).begins_with("MainDrive"):
 			stock_drives += 1
 	_expect(
-		stock_drives == HullData.DRIVE_SLOTS
-		and ship.hardpoints.size() == (
-			HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS + HullData.REAR_HARDPOINTS
-		),
+		stock_drives == _places_of_kind(ship.hull, HullData.SLOT_DRIVE)
+		and ship.hardpoints.size() == _gun_places(ship.hull),
 		"the stock ship has the hull's slots (%d drive, %d hardpoints)" % [
 			stock_drives, ship.hardpoints.size(),
 		],
@@ -9101,23 +9148,42 @@ func _check_fitout_presets() -> void:
 		for gun: Hardpoint in ship.hardpoints:
 			if gun.weapon != null:
 				armed += 1
-		# The preset's main drive is one entry and two engines: it is split over
-		# the hull's side drive slots.
+		# How many engines the preset asks for, worked out from the hull.
+		# One entry fills **every** place of its kind now, so the answer
+		# is a property of the pair and not of the preset: the same four
+		# entries build nine engines on the dart and two on the rhombus.
 		var declared: int = 0
 		for fit: MountFit in preset.mounts:
-			declared += 2 if fit.place == ShipFitout.MAIN_DRIVE and not fit.centered else 1
+			if not String(fit.place).is_empty():
+				declared += 1
+			elif fit.kind == HullData.SLOT_DRIVE:
+				# Split across the pair either side of the centre line, or
+				# whole on the centre one.
+				var centre: int = 0
+				var sides: int = 0
+				for slot: Dictionary in preset.hull.slots_of(HullData.SLOT_DRIVE):
+					if is_zero_approx((slot["at"] as Vector2).x):
+						centre += 1
+					else:
+						sides += 1
+				declared += centre if fit.centered else sides
+			else:
+				declared += preset.hull.slots_of(fit.kind).size()
 		_expect(
 			fitted_mounts == declared and armed == preset.guns.size(),
 			"%s is built with what it declares (%d engines, %d guns)" % [
 				preset.display_name, fitted_mounts, armed,
 			],
 		)
-		# And with every place the hull offers, filled or not.
+		# And with every place the hull offers, filled or not. Counted off
+		# the hull rather than against `HullData.DRIVE_SLOTS` and friends,
+		# which is the whole point: those constants build the derived
+		# frame and are not a limit, so a hull that declares five side
+		# guns gets five and a test comparing against three would call
+		# the hull wrong rather than itself.
 		_expect(
-			drive_slots == HullData.DRIVE_SLOTS
-			and ship.hardpoints.size() == (
-				HullData.FRONT_HARDPOINTS + HullData.SIDE_HARDPOINTS + HullData.REAR_HARDPOINTS
-			),
+			drive_slots == _places_of_kind(preset.hull, HullData.SLOT_DRIVE)
+			and ship.hardpoints.size() == _gun_places(preset.hull),
 			"%s has the hull's slots (%d drive, %d hardpoints)" % [
 				preset.display_name, drive_slots, ship.hardpoints.size(),
 			],
@@ -9132,6 +9198,7 @@ func _check_fitout_presets() -> void:
 		)
 
 	_check_main_socket_takes_anything(ship)
+	_check_every_hull_builds_a_ship()
 	_check_refit_is_safe()
 	_check_preset_fields()
 	_check_hull_places_its_engines()
@@ -9325,11 +9392,153 @@ func _bad_preset(title: String) -> ShipPreset:
 	return out
 
 
+## Ile miejsc danego rodzaju kadlub oferuje.
+func _places_of_kind(hull: HullData, kind: StringName) -> int:
+	return hull.slots_of(kind).size() if hull != null else 0
+
+
+## And how many of its places take a gun: every place that is not an
+## engine socket. Asked of `ShipFitout` rather than listed here, so the
+## two cannot disagree about what a place is for.
+func _gun_places(hull: HullData) -> int:
+	if hull == null:
+		return 0
+	var guns: int = 0
+	for slot: Dictionary in hull.slots():
+		if not ShipFitout.SOCKET_FOR.has(slot["kind"]):
+			guns += 1
+	return guns
+
+
+## Najgorsza resztkowa sila boczna na obrocie, kadlub po kadlubie.
+##
+## A ratchet, not a standard. The balance checks in this suite were
+## always right -- "CW leaves no net side force", "strafe barely rotates
+## the ship" -- and they only ever ran on the dart. Measured across the
+## catalogue, **the dart is the only hull that is actually balanced**:
+## `wide_delta` leaves 350 N on a turn, five times worse than the hand
+## edit that prompted this work.
+##
+## So each hull's residual is recorded as measured, with a little margin,
+## and the test fails when one gets worse. Lowering a number here is
+## tuning work on that hull's `.tres`, not test work -- and the hull dock
+## now shows the same figures while a slot is being dragged, which is
+## where they are cheap to fix rather than four minutes later.
+const TURN_RESIDUAL: Dictionary = {
+	&"dart": 0.5,
+	&"broad_dart": 2.5,
+	&"sliver": 6.5,
+	&"long_lance": 15.5,
+	&"interceptor": 25.5,
+	&"rhombus": 63.5,
+	&"hexagon": 71.5,
+	&"brick": 79.0,
+	&"freighter": 97.5,
+	&"wide_delta": 352.0,
+}
+
+## How far below the hull's own underside a foot may sit.
+##
+## Measured: every shipped hull is between 0 and 3 px. A leg much further
+## out is a stilt, and the hull hovers -- a 10 px drop left the ship
+## resting 25 px above the ground, which is how this came up.
+const LEG_DROP: float = 6.0
+
+
+## Kazdy kadlub z katalogu buduje statek, nie tylko dart.
+##
+## What the old version of this checked was that the dart comes out with
+## three drives and six hardpoints. That is a fact about one file: it
+## passed while a hull with five torque places silently lost one, and it
+## would have failed on any hull somebody drew differently. What is
+## actually invariant is the **relationship** -- every place the hull
+## declares gets a node, under a name nothing else has -- and that is
+## checkable on every hull there is.
+func _check_every_hull_builds_a_ship() -> void:
+	var ship: Ship = _spawn_ship()
+	var stock: ShipPreset = ShipFitout.preset("dart (stock)")
+	for hull: HullData in HullData.catalogue():
+		var wearing: ShipPreset = stock.duplicate() as ShipPreset
+		wearing.hull = hull
+		# One preset, every hull. This is what binding by kind bought: the
+		# four entries say drive, torque, strafe, retro, and the hull says
+		# how many of each there are.
+		_expect(
+			ShipFitout.apply(ship, wearing),
+			"%s takes the stock fitout (%s)" % [hull.id, ShipFitout.fault_in(wearing)],
+		)
+
+		# A name nothing else has. Nose/Tail times Left/Right is exactly
+		# four names, so a hull with five torque places used to give two
+		# of them one name -- and `add_hull_slots` then skipped the second,
+		# leaving a declared place with no mount and nothing reported.
+		var names: Dictionary = {}
+		var places: int = 0
+		for slot: Dictionary in hull.slots():
+			names[String(slot["name"])] = true
+			places += 1
+		_expect(
+			names.size() == places,
+			"%s names its %d places uniquely" % [hull.id, places],
+		)
+
+		# And every one of them is on the ship. Counted off the hull, so a
+		# hull drawn with two drives or six guns is checked against itself.
+		var missing: Array[String] = []
+		for slot: Dictionary in hull.slots():
+			if not ship.has_node(NodePath(String(slot["name"]))):
+				missing.append(String(slot["name"]))
+		_expect(
+			missing.is_empty(),
+			"%s gets a socket at every place it declares (%s)" % [
+				hull.id, "none missing" if missing.is_empty() else str(missing),
+			],
+		)
+
+		_check_hull_turns_without_drifting(ship, hull)
+		_check_feet_are_under_the_hull(hull)
+	_discard(ship)
+
+
+## Obrot nie moze pchac statku na boki bardziej, niz dotad pchal.
+func _check_hull_turns_without_drifting(ship: Ship, hull: HullData) -> void:
+	ship.rebuild_control_groups(false)
+	var worst: float = 0.0
+	for command: int in [ShipControl.Command.CW, ShipControl.Command.CCW]:
+		var net: Vector2 = Vector2.ZERO
+		for member: Dictionary in ship.control.groups.get(command, []):
+			var engine: EngineInstance = member["engine"]
+			net += engine.nominal_force() * float(member["weight"])
+		worst = maxf(worst, net.length())
+	var allowed: float = float(TURN_RESIDUAL.get(hull.id, 0.5))
+	_expect(
+		worst <= allowed,
+		"%s turns with %.1f N of side force, no worse than the %.1f recorded" % [
+			hull.id, worst, allowed,
+		],
+	)
+
+
+## Stopa pod kadlubem, nie na szczudle.
+func _check_feet_are_under_the_hull(hull: HullData) -> void:
+	if hull.legs.is_empty():
+		return
+	var drop: float = 0.0
+	for leg: Vector2 in hull.legs:
+		drop = maxf(drop, leg.y - hull.bounds().end.y)
+	_expect(
+		drop <= LEG_DROP,
+		"%s stands on its feet rather than on stilts (%.1f px below the hull)" % [
+			hull.id, drop,
+		],
+	)
+
+
 ## The engine the stock preset puts in its main drive, whole rather than
 ## the half each of the pair either side of the centre line gets.
 func _stock_main_drive() -> EngineData:
 	for fit: MountFit in ShipFitout.preset("dart (stock)").mounts:
-		if fit.place == ShipFitout.MAIN_DRIVE:
+		if fit.kind == HullData.SLOT_DRIVE:
 			return fit.engine
 	return null
 

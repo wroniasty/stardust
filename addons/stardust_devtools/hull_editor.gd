@@ -33,6 +33,9 @@ var _title: Label = null
 var _save: Button = null
 var _undo_button: Button = null
 var _rows: Dictionary = {}
+var _balance: Dictionary = {}
+var _reference: OptionButton = null
+var _verdict: Label = null
 var _paths: Array[String] = []
 
 ## The resource as it is on disk (the editor's own loaded instance), and
@@ -113,6 +116,36 @@ func _build_side() -> Control:
 
 	column.add_child(HSeparator.new())
 
+	# The figures that decide whether a hand-drawn hull flies straight,
+	# and the fitout they are measured with.
+	#
+	# A hull has no centre of mass of its own: the engines and the modules
+	# are most of a ship's weight, and where they sit is the preset's
+	# business. So the dock says which fitout it weighed, rather than
+	# quoting a number that is true of nothing.
+	var heading: Label = Label.new()
+	heading.text = "Bilans"
+	column.add_child(heading)
+
+	_reference = OptionButton.new()
+	for preset: ShipPreset in ShipFitout.all():
+		_reference.add_item(preset.display_name)
+	_reference.item_selected.connect(_on_reference_picked)
+	column.add_child(_reference)
+
+	for row: Array in [
+		["mass", "masa"], ["centre", "srodek masy y"],
+		["torque_gap", "krzyz momentu"], ["strafe_gap", "strafe od srodka"],
+		["leg_drop", "nogi pod kadlubem"],
+	]:
+		column.add_child(_build_balance_row(row[0], row[1]))
+
+	_verdict = Label.new()
+	_verdict.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_verdict)
+
+	column.add_child(HSeparator.new())
+
 	var snap: CheckBox = CheckBox.new()
 	snap.text = "siatka co %.2f" % HullCanvas.SNAP_STEP
 	snap.button_pressed = true
@@ -175,6 +208,33 @@ func _build_row(entry: Dictionary) -> Control:
 	return row
 
 
+## One line of the balance block: a caption and a figure that goes red
+## when it is outside tolerance.
+func _build_balance_row(key: String, caption: String) -> Control:
+	var row: HBoxContainer = HBoxContainer.new()
+	var label: Label = Label.new()
+	label.text = caption
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+	var figure: Label = Label.new()
+	figure.text = "-"
+	row.add_child(figure)
+	_balance[key] = figure
+	return row
+
+
+func _on_reference_picked(_index: int) -> void:
+	_canvas.reference = _picked_reference()
+	_canvas.refresh()
+	_refresh()
+
+
+func _picked_reference() -> ShipPreset:
+	var presets: Array[ShipPreset] = ShipFitout.all()
+	var index: int = _reference.selected
+	return presets[index] if index >= 0 and index < presets.size() else null
+
+
 func _fill_files() -> void:
 	_files.clear()
 	_paths.clear()
@@ -196,6 +256,7 @@ func _open(index: int) -> void:
 		return
 	_editing = HullHandles.copy_of(_on_disk)
 	_undo.clear()
+	_canvas.reference = _picked_reference()
 	_canvas.show_hull(_editing)
 	_refresh()
 
@@ -253,6 +314,8 @@ func _refresh() -> void:
 		if note != "":
 			trouble += 1
 
+	_report_balance()
+
 	var dirty: bool = not HullHandles.same(_editing, _on_disk)
 	_save.disabled = not dirty
 	_undo_button.disabled = _undo.is_empty()
@@ -261,6 +324,49 @@ func _refresh() -> void:
 		"  *" if dirty else "",
 		"    (%d uwag - najedz na licznik)" % trouble if trouble > 0 else "",
 	]
+
+
+## The balance figures, and one sentence saying what is wrong.
+##
+## Red is not a refusal. A hull with a 3 px torque gap flies, it just
+## yaws when you ask it to strafe -- and knowing that while the mouse is
+## still down is the whole point, because the alternative is finding out
+## from the smoke test four minutes later.
+func _report_balance() -> void:
+	var found: Dictionary = _canvas.balance
+	if found.is_empty():
+		return
+	(_balance["mass"] as Label).text = "%.2f kg" % float(found["mass"])
+	(_balance["centre"] as Label).text = "%.2f" % (found["centre"] as Vector2).y
+
+	var wrong: Array[String] = []
+	for key: String in ["torque_gap", "strafe_gap", "leg_drop"]:
+		var value: float = found[key]
+		var allowed: float = {
+			"torque_gap": HullCanvas.TORQUE_TOLERANCE,
+			"strafe_gap": HullCanvas.STRAFE_TOLERANCE,
+			"leg_drop": HullCanvas.LEG_TOLERANCE,
+		}[key]
+		var figure: Label = _balance[key]
+		figure.text = "%.2f px" % value
+		var over: bool = value > allowed
+		figure.modulate = Color(1.0, 0.45, 0.35) if over else Color(0.45, 0.95, 0.60)
+		if over:
+			wrong.append(key)
+
+	if wrong.is_empty():
+		_verdict.text = "wywazony: obrot nie znosi na bok, strafe nie obraca"
+		_verdict.modulate = Color(0.45, 0.95, 0.60)
+		return
+	var says: Array[String] = []
+	if wrong.has("torque_gap"):
+		says.append("obrot bedzie pchal statek na bok (dysze nie sa para wzgledem srodka masy)")
+	if wrong.has("strafe_gap"):
+		says.append("strafe bedzie obracal statkiem")
+	if wrong.has("leg_drop"):
+		says.append("statek stanie wysoko nad gruntem")
+	_verdict.text = " - ".join(says)
+	_verdict.modulate = Color(1.0, 0.45, 0.35)
 
 
 ## Copy the edited values onto the resource the editor has loaded and

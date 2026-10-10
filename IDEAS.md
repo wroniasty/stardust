@@ -623,6 +623,55 @@ jest ciche sumowanie, w którym dwa pół-generatory biją jeden dobry. Montaż
 podmienia (`Ship.bay_for` najpierw szuka zatoki trzymającej ten rodzaj), więc
 statek nie kończy po cichu z dwoma generatorami, kiedy jeden jest podłączony.
 
+### Wszystko mierzy się względem środka masy
+
+Pozycje dysz w `.tres` są dostrojone do **środka masy**, nie do zera i nie do
+środka obrysu. Para ogonowa stockowego darta siedzi na y=13.5, a nie na 10,
+właśnie dlatego, że środek masy (y=+1.75) jest za środkiem geometrycznym —
+wtedy ramiona nosa i ogona są równe (±11.75) i para jest parą.
+
+Dwie reguły, obie mierzone względem środka masy, obie niewidoczne w edytorze
+wielokątów:
+
+- **Krzyż momentu**: ramię dyszy dziobowej i rufowej muszą być równe, inaczej
+  obrót pcha statek na bok. Przy rozjechanej parze solver odpala słabszego
+  partnera na mniejszej wadze i reszta zostaje jako siła.
+- **Rząd strafe**: sterownice muszą leżeć **na** linii środka masy, inaczej
+  strafe obraca. Przy 2.5 px odchyłki to 0.31 rad/s² nieproszonego obrotu —
+  a dodatkowo solver dobiera do strafe'a dysze torque, które przy zepsutej
+  parze dostają różne wagi po tej samej stronie i też nie znoszą się.
+
+Zmierzone na całym katalogu: **dart jest jedynym naprawdę wyważonym kadłubem**.
+`wide_delta` zostawia 350 N na obrocie, `brick` 78 N, `freighter` 96 N. Dlatego
+test jest zapadką (`TURN_RESIDUAL` w smoke teście), a nie normą: pilnuje, żeby
+nie było gorzej, a obniżanie liczby jest pracą nad tym kadłubem.
+
+`ShipFitout.balance_of` liczy te figury z samych danych, tą samą arytmetyką co
+lecący statek (`Ship.mass_budget`), żeby dock kadłubów mógł je pokazywać przy
+kursorze. Smoke test pilnuje zgodności na wszystkich 70 kombinacjach kadłub ×
+preset — dock rysujący środek masy o piksel obok byłby gorszy niż dock, który
+go nie rysuje wcale.
+
+### Ile miejsc ma kadłub
+
+`HullData.DRIVE_SLOTS` i reszta **nie są limitem**. Budują ramkę, którą dostaje
+kadłub nic nie deklarujący, i nic więcej: `slots()` iteruje po tym, co jest w
+tablicy, więc kadłub z pięcioma slotami burtowymi dostaje pięć hardpointów.
+Zmierzone: 5 burtowych → 8 hardpointów, bez żadnej zmiany w kodzie.
+
+Prawdziwym ograniczeniem były **nazwy**. Nazwa miejsca wynika z pozycji, a
+Nose/Tail × Left/Right to dokładnie cztery nazwy — piąta dysza torque
+kolidowała, `add_hull_slots` pomijał miejsce, którego węzeł już istniał, i
+piąte miejsce po cichu podmieniało czwarte. Teraz pierwsze wystąpienie
+zachowuje nazwę, a kolejne dostają sufiks, więc dodanie piątej dyszy nie
+przemianowuje czterech już obecnych (preset i zapis odwołują się po nazwie).
+
+Preset wiąże silnik z **rodzajem** miejsca, nie z nazwą: jeden wpis mówi „dysza
+torque w każde miejsce typu torque". Dzięki temu te same cztery wpisy budują
+dziewięć silników na darcie i dwa na rombie, a jeden preset pasuje do każdego
+kadłuba w katalogu. Wcześniej preset nazywał po jednym miejscu na wpis, więc
+był cicho przywiązany do konkretnego kadłuba.
+
 Rozmiar gniazda silnika ma jedną odpowiedź: `ShipFitout.socket_for`. `MainDrive`
 to **rola**, nie miejsce, które kadłub nazywa po imieniu (jego miejsca to
 MainDriveCenter, Left, Right), więc wyszukanie rozmiaru po nazwie zwraca zero.

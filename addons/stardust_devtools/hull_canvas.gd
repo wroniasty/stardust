@@ -37,6 +37,25 @@ const PAINT: Dictionary = {
 	&"retro_slots": Color(1.00, 0.42, 0.60),
 }
 
+## The centre of mass, and the two things measured against it. Brighter
+## than anything else on the canvas because they are the figures a hull
+## is wrong about, and the ones a designer cannot see.
+const BALANCE: Color = Color(1.0, 0.45, 0.35)
+const BALANCE_OK: Color = Color(0.45, 0.95, 0.60)
+const GROUND: Color = Color(0.60, 0.55, 0.45, 0.55)
+
+## How far off each figure may be before it is drawn as wrong.
+##
+## Measured across the catalogue: the stock dart is 0.00 and 0.00, and it
+## is the only hull that is. Half a pixel of arm is the point at which
+## the residual side force stops being visible in flight.
+const TORQUE_TOLERANCE: float = 0.5
+const STRAFE_TOLERANCE: float = 0.5
+
+## And how far below the hull's underside a foot may hang. Every shipped
+## hull is 0 to 3 px; ten leaves the ship resting twenty-five px up.
+const LEG_TOLERANCE: float = 6.0
+
 const BACKDROP: Color = Color(0.09, 0.10, 0.13)
 const GRID_FAINT: Color = Color(1.0, 1.0, 1.0, 0.05)
 const GRID_STRONG: Color = Color(1.0, 1.0, 1.0, 0.11)
@@ -69,6 +88,16 @@ var hull: HullData = null
 ## (`-2.75`, `1.75`), so that is the step; holding Alt drags free.
 var snapping: bool = true
 var snap_step: float = SNAP_STEP
+
+## The fitout the balance is measured with. A hull has no centre of
+## mass on its own -- engines and modules are most of a ship's weight --
+## so the figures are only meaningful against a fitout, and the dock says
+## which one it used.
+var reference: ShipPreset = null
+
+## What `ShipFitout.balance_of` last said. Recomputed on every change,
+## because every change can move it.
+var balance: Dictionary = {}
 
 var _zoom: float = 11.0
 var _origin: Vector2 = Vector2.ZERO
@@ -110,6 +139,9 @@ func refresh() -> void:
 	_handles = []
 	if hull != null:
 		_handles = HullHandles.of(hull)
+	balance = {}
+	if hull != null:
+		balance = ShipFitout.balance_of(hull, reference)
 	queue_redraw()
 
 
@@ -176,9 +208,11 @@ func _draw() -> void:
 	if hull == null:
 		return
 	_draw_middle()
+	_draw_ground()
 	_draw_outline()
 	_draw_legs()
 	_draw_slots()
+	_draw_balance()
 	_draw_handles()
 
 
@@ -223,11 +257,18 @@ func _draw_middle() -> void:
 		return
 	var middle: float = hull.bounds().get_center().y
 	var at: float = to_screen(Vector2(0.0, middle)).y
-	draw_dashed_line(Vector2(0.0, at), Vector2(size.x, at), MIDDLE, 1.0, 4.0)
+	# Faint, and labelled for what it actually decides. The first version
+	# drew this as the only horizontal line on the canvas, brightly, and
+	# the first thing anyone did with the dock was align the strafe pair
+	# to it -- which is the one line those positions must **not** be
+	# aligned to. What they answer to is the centre of mass, below.
+	var dim: Color = MIDDLE
+	dim.a *= 0.5
+	draw_dashed_line(Vector2(0.0, at), Vector2(size.x, at), dim, 1.0, 3.0)
 	var font: Font = get_theme_default_font()
 	draw_string(
-		font, Vector2(6.0, at - 4.0), "nose / tail  y=%.2f" % middle,
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, MIDDLE,
+		font, Vector2(6.0, at - 3.0), "nose/tail, nazwy  y=%.2f" % middle,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 9, dim,
 	)
 
 
@@ -440,3 +481,76 @@ func _insert_on_edge(at: Vector2) -> void:
 	HullHandles.insert(hull, &"outline", int(found["edge"]) + 1, _snapped(want))
 	refresh()
 	changed.emit()
+
+
+## Srodek masy, i te dwie rzeczy, ktore sie wzgledem niego mierzy.
+##
+## The line that matters. A torque jet's arm is its distance from **here**,
+## not from the middle of the outline, and a strafe thruster makes no spin
+## only when it sits on this line. Neither is visible without drawing it,
+## which is how a hull with a 2.5 px strafe offset got saved.
+func _draw_balance() -> void:
+	if balance.is_empty():
+		return
+	var centre: Vector2 = balance["centre"]
+	var at: Vector2 = to_screen(centre)
+	draw_dashed_line(
+		Vector2(0.0, at.y), Vector2(size.x, at.y), BALANCE, 1.0, 6.0,
+	)
+	# A crosshair, so the x of it is readable too: a hull whose weight is
+	# off the centre line rolls under its own main drive.
+	draw_line(at + Vector2(-6.0, 0.0), at + Vector2(6.0, 0.0), BALANCE, 1.5)
+	draw_line(at + Vector2(0.0, -6.0), at + Vector2(0.0, 6.0), BALANCE, 1.5)
+	var font: Font = get_theme_default_font()
+	draw_string(
+		font, Vector2(6.0, at.y - 4.0),
+		"srodek masy  (%.2f, %.2f)" % [centre.x, centre.y],
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, BALANCE,
+	)
+
+	# Each jet's and thruster's arm, drawn as the thing it is: the gap
+	# between where it sits and the line it turns the ship about.
+	_draw_arms(HullHandles.shown(hull, &"torque_slots"), centre,
+			float(balance["torque_gap"]), TORQUE_TOLERANCE)
+	_draw_arms(HullHandles.shown(hull, &"strafe_slots"), centre,
+			float(balance["strafe_gap"]), STRAFE_TOLERANCE)
+
+
+## A tick from each place to the centre-of-mass line, green while the
+## figure is inside tolerance and red once it is not.
+func _draw_arms(
+	places: Array[Vector2], centre: Vector2, gap: float, tolerance: float
+) -> void:
+	var tint: Color = BALANCE_OK if gap <= tolerance else BALANCE
+	tint.a = 0.8
+	for place: Vector2 in places:
+		var from: Vector2 = to_screen(place)
+		draw_line(from, Vector2(from.x, to_screen(centre).y), tint, 1.0)
+
+
+## Gdzie kadlub stanie, jesli nogi sa tam, gdzie sa.
+##
+## Two lines: the hull's own underside, and the lowest foot. The gap
+## between them is how high the ship hovers, which is invisible in a
+## polygon editor and was ten pixels on a hull saved from this dock.
+func _draw_ground() -> void:
+	if hull.outline.size() < 3:
+		return
+	var under: float = to_screen(Vector2(0.0, hull.bounds().end.y)).y
+	draw_line(Vector2(0.0, under), Vector2(size.x, under), GROUND, 1.0)
+	if hull.legs.is_empty():
+		return
+	var lowest: float = hull.legs[0].y
+	for leg: Vector2 in hull.legs:
+		lowest = maxf(lowest, leg.y)
+	var floor_at: float = to_screen(Vector2(0.0, lowest)).y
+	var drop: float = lowest - hull.bounds().end.y
+	var tint: Color = GROUND if drop <= LEG_TOLERANCE else BALANCE
+	draw_dashed_line(
+		Vector2(0.0, floor_at), Vector2(size.x, floor_at), tint, 1.0, 2.0,
+	)
+	draw_string(
+		get_theme_default_font(), Vector2(6.0, floor_at + 10.0),
+		"grunt, %.1f px pod kadlubem" % drop,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, 9, tint,
+	)

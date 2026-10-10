@@ -62,10 +62,6 @@ const SOCKET_FOR: Dictionary = {
 	HullData.SLOT_DRIVE: MAIN_DRIVE_SOCKET,
 }
 
-## The place name that means "the hull's main drive", wherever the hull
-## puts it. The one role whose mount is split across several places.
-const MAIN_DRIVE: StringName = &"MainDrive"
-
 ## How much of a thrust increase is paid for in bulk.
 ##
 ## Not all of it: a bigger engine of the same design is heavier, and not
@@ -86,24 +82,26 @@ static func places_of(hull: HullData) -> Dictionary:
 
 
 ## How big a mount's socket actually is: its own figure, or the one its
-## role implies.
+## kind implies.
 ##
 ## One function because three callers ask and they must not disagree.
 ## `apply` sizes the socket with it, `_add_main_drives` sizes the pair,
 ## and `fault_in` uses it to refuse a mount that would end up with no
-## socket at all -- which is exactly what they did disagree about when
-## the presets became resources: `MainDrive` is a **role**, not a place
-## the hull names (its places are MainDriveCenter, Left and Right), so a
-## lookup by name found nothing and called the stock dart malformed. The
-## old table hid it by writing the drive socket out in every preset.
+## socket at all.
+##
+## Simpler than it was. While a preset named one place per entry, the
+## main drive was a **role** rather than a place the hull names -- its
+## places are MainDriveCenter, Left and Right -- so a lookup by name
+## found nothing and called every shipped preset malformed. Binding by
+## kind removes the special case: a drive is a kind like any other.
 static func socket_for(places: Dictionary, fit: MountFit) -> float:
 	if fit.socket > 0.0:
 		return fit.socket
-	if fit.place == MAIN_DRIVE:
-		return MAIN_DRIVE_SOCKET
-	return float(SOCKET_FOR.get(
-		(places.get(String(fit.place), {}) as Dictionary).get("kind", &""), 0.0
-	))
+	if not String(fit.place).is_empty():
+		return float(SOCKET_FOR.get(
+			(places.get(String(fit.place), {}) as Dictionary).get("kind", &""), 0.0
+		))
+	return float(SOCKET_FOR.get(fit.kind, 0.0))
 
 
 ## Every preset on disk, in the order they should be offered.
@@ -169,6 +167,101 @@ static func scaled_blurb(factor: float) -> String:
 	]
 
 
+## Gdzie wypadnie srodek masy tego kadluba z tym wyposazeniem, i co z
+## tego wynika dla sterowania.
+##
+## From data alone -- no `Ship`, no physics -- because the hull editor has
+## to answer it while a slot is still under the cursor. The arithmetic is
+## `Ship.mass_budget`, the same one the flying ship uses, so the dock
+## cannot draw a centre of mass the ship does not have.
+##
+## Beyond `mass`, `centre` and `inertia` it returns the three figures that
+## decide whether a hand-drawn hull flies straight. All of them are
+## measured against the **centre of mass**, which is the thing a designer
+## cannot see and the reason these are worth drawing:
+##
+##  - `torque_gap`: how far the torque cross is from balancing, in pixels
+##    of arm. Zero means the forward jets and the aft jets have equal arms
+##    about the centre of mass, which is the whole of what makes them a
+##    couple. The stock dart's aft pair sits at y=13.5 and not at 10
+##    exactly because of this.
+##  - `strafe_gap`: how far the strafe row sits from the centre of mass.
+##    Zero means a strafe burn is pure sideways; 2.5 px of offset is a
+##    third of a radian per second of unasked-for spin.
+##  - `leg_drop`: how far the lowest foot hangs below the hull's own
+##    underside. Every shipped hull is between 0 and 3; ten leaves the
+##    ship resting twenty-five pixels above the ground.
+static func balance_of(hull: HullData, wanted: ShipPreset) -> Dictionary:
+	var out: Dictionary = {
+		"mass": 0.0, "centre": Vector2.ZERO, "inertia": 0.0,
+		"torque_gap": 0.0, "strafe_gap": 0.0, "leg_drop": 0.0,
+	}
+	if hull == null or hull.outline.size() < 3:
+		return out
+
+	var parts: Array[Dictionary] = []
+	if wanted != null:
+		for fit: MountFit in wanted.mounts:
+			if fit.engine == null:
+				continue
+			var heft: float = (
+				fit.engine.bulk * bulk_factor(wanted.scale_of(fit))
+				* EngineMount.MASS_PER_BULK
+			)
+			if not String(fit.place).is_empty():
+				var place: Dictionary = places_of(hull).get(String(fit.place), {})
+				parts.append({
+					"at": place["at"] if not place.is_empty() else fit.at,
+					"mass": heft,
+				})
+				continue
+			var filled: Array[Dictionary] = []
+			for slot: Dictionary in hull.slots_of(fit.kind):
+				# A drive is split across the pair either side of the
+				# centre line, or sits whole on the centre one.
+				if fit.kind != HullData.SLOT_DRIVE:
+					filled.append(slot)
+				elif is_zero_approx((slot["at"] as Vector2).x) == fit.centered:
+					filled.append(slot)
+			var share: float = 1.0 / maxf(float(filled.size()), 1.0)
+			for slot: Dictionary in filled:
+				parts.append({
+					"at": slot["at"],
+					"mass": heft * (share if fit.kind == HullData.SLOT_DRIVE else 1.0),
+				})
+		for bay: BayFit in wanted.bays:
+			if bay != null and bay.installed != null:
+				parts.append({"at": bay.at, "mass": bay.installed.bulk})
+
+	var budget: Dictionary = Ship.mass_budget(
+		hull.outline, Ship.mass_of_outline(hull.outline), parts
+	)
+	out["mass"] = budget["mass"]
+	out["centre"] = budget["centre"]
+	out["inertia"] = budget["inertia"]
+
+	var centre: Vector2 = budget["centre"]
+	# The worst mismatch between a forward jet's arm and an aft one's.
+	var forward: float = 0.0
+	var aft: float = 0.0
+	for slot: Dictionary in hull.slots_of(HullData.SLOT_TORQUE):
+		var arm: float = (slot["at"] as Vector2).y - centre.y
+		if arm < 0.0:
+			forward = minf(forward, arm)
+		else:
+			aft = maxf(aft, arm)
+	out["torque_gap"] = absf(absf(forward) - absf(aft))
+
+	for slot: Dictionary in hull.slots_of(HullData.SLOT_STRAFE):
+		out["strafe_gap"] = maxf(
+			float(out["strafe_gap"]), absf((slot["at"] as Vector2).y - centre.y)
+		)
+
+	for leg: Vector2 in hull.legs:
+		out["leg_drop"] = maxf(float(out["leg_drop"]), leg.y - hull.bounds().end.y)
+	return out
+
+
 ## Rebuilds a ship as one of these, in place.
 ##
 ## In place rather than by swapping in another scene, because everything
@@ -206,22 +299,19 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	var places: Dictionary = places_of(hull)
 
 	for fit: MountFit in wanted.mounts:
-		if fit.place == MAIN_DRIVE:
+		# A named place wins over a kind, for the one mount a kind cannot
+		# describe: the forward-facing nozzle on the twin-gimbal ship.
+		if not String(fit.place).is_empty():
+			_add_mount(ship, scene, wanted, fit, String(fit.place), places)
+			continue
+		if fit.kind == HullData.SLOT_DRIVE:
 			_add_main_drives(ship, scene, hull, wanted, fit, places)
 			continue
-		var mount: EngineMount = scene.instantiate() as EngineMount
-		mount.name = String(fit.place)
-		var place: Dictionary = places.get(mount.name, {})
-		mount.size = socket_for(places, fit)
-		# The hull first, and the preset's own only for a mount the hull
-		# has no place for -- the forward-facing nozzle on the twin-gimbal
-		# ship is the one, and until a hull can describe that it stays in
-		# the preset.
-		mount.position = place["at"] if not place.is_empty() else fit.at
-		mount.rotation = float(place["turn"]) if not place.is_empty() else fit.turn
-		mount.thrust_direction = Vector2.UP
-		mount.installed = _engine(fit.engine, wanted.scale_of(fit))
-		ship.add_child(mount)
+		# Every place of this kind the hull offers. The entry says what
+		# goes in a torque socket; how many torque sockets there are is
+		# the hull's business and nothing here counts them.
+		for slot: Dictionary in hull.slots_of(fit.kind):
+			_add_mount(ship, scene, wanted, fit, String(slot["name"]), places)
 
 	# Guns go in the hull's hardpoints and nowhere else. The preset says
 	# which weapons it carries, in order; the hull says where the places
@@ -270,6 +360,25 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 	ship._build_collision_shape()
 	ship.rebuild_control_groups(false)
 	return true
+
+
+## One engine in one of the hull's places.
+##
+## The hull decides where it sits and which way it faces; the preset's
+## own `at` and `turn` are read only for a place the hull does not offer.
+static func _add_mount(
+	ship: Ship, scene: PackedScene, wanted: ShipPreset, fit: MountFit,
+	named: String, places: Dictionary
+) -> void:
+	var mount: EngineMount = scene.instantiate() as EngineMount
+	mount.name = named
+	var place: Dictionary = places.get(named, {})
+	mount.size = socket_for(places, fit)
+	mount.position = place["at"] if not place.is_empty() else fit.at
+	mount.rotation = float(place["turn"]) if not place.is_empty() else fit.turn
+	mount.thrust_direction = Vector2.UP
+	mount.installed = _engine(fit.engine, wanted.scale_of(fit))
+	ship.add_child(mount)
 
 
 ## The module bays this ship has, built from the preset.
@@ -326,17 +435,17 @@ static func fault_in(wanted: ShipPreset) -> String:
 		if fit == null:
 			return "%s has a mount that is not there" % title
 		var named: String = String(fit.place)
-		if named.is_empty():
-			return "%s has a mount with no place on the hull" % title
+		var describes: String = named if not named.is_empty() else String(fit.kind)
+		if named.is_empty() and String(fit.kind).is_empty():
+			return "%s has a mount that fills neither a kind nor a place" % title
 		if fit.engine == null:
-			return "%s has nothing to put in %s" % [title, named]
-		# A mount needs a position of its own only where the hull has no
-		# place by that name: the forward-facing nozzle on the twin-gimbal
-		# ship, which no hull can describe yet.
-		if named != MAIN_DRIVE and not offered.has(named) and fit.at.is_zero_approx():
+			return "%s has nothing to put in %s" % [title, describes]
+		# A named place needs a position of its own only where the hull
+		# does not offer it. A kind never does: the hull has the places.
+		if not named.is_empty() and not offered.has(named) and fit.at.is_zero_approx():
 			return "%s has a mount %s with nowhere to be" % [title, named]
 		if socket_for(offered, fit) <= 0.0:
-			return "%s has a mount %s with no socket size" % [title, named]
+			return "%s has a mount %s with no socket size" % [title, describes]
 	for gun: WeaponData in wanted.guns:
 		if gun == null:
 			return "%s carries a gun that is not there" % title
