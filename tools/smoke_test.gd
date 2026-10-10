@@ -8670,6 +8670,8 @@ func _check_hull_editor() -> void:
 	_discard(panel)
 
 	_check_the_preview_is_the_ship()
+	_check_a_gun_goes_where_it_is_told()
+	_check_an_own_part_is_the_presets_own()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
@@ -8786,6 +8788,121 @@ func _check_the_preview_is_the_ship() -> void:
 		],
 	)
 	_discard(ship)
+
+
+## Dzialo idzie tam, gdzie preset kaze.
+##
+## Guns were a bare list of weapons dealt out in hull order -- front
+## first, then the sides, then astern. That is still what an entry with
+## no place means, and still what every shipped preset uses, but it left
+## "the rocket goes in the rear hardpoint" unsayable.
+##
+## The order matters as much as the pinning: a pinned gun claims its
+## place **before** the loose ones are dealt, or an unpinned gun reaching
+## that place first would take it and the pin would silently do nothing.
+func _check_a_gun_goes_where_it_is_told() -> void:
+	var stock: ShipPreset = ShipFitout.preset("dart (stock)").duplicate() as ShipPreset
+	var hull: HullData = stock.hull
+
+	# Where an unpinned gun lands, so the pin can be shown to move it.
+	var loose: Array[Dictionary] = ShipFitout.armament(hull, stock)
+	var first_armed: String = ""
+	for spot: Dictionary in loose:
+		if spot["weapon"] != null and first_armed.is_empty():
+			first_armed = String((spot["slot"] as Dictionary)["name"])
+	_expect(
+		first_armed == "FrontHardpoint1",
+		"an unpinned gun goes to the first gun place the hull offers (%s)" % first_armed,
+	)
+
+	# Pinned somewhere else, and with a second, unpinned gun that would
+	# otherwise have reached the front place first.
+	var pinned: GunFit = GunFit.new()
+	pinned.place = &"RearHardpoint"
+	pinned.weapon = stock.guns[0].weapon
+	var tagalong: GunFit = GunFit.new()
+	tagalong.weapon = stock.guns[0].weapon
+	var two: Array[GunFit] = [pinned, tagalong]
+	stock.guns = two
+
+	var armed_at: Dictionary = {}
+	for spot: Dictionary in ShipFitout.armament(hull, stock):
+		if spot["weapon"] != null:
+			armed_at[String((spot["slot"] as Dictionary)["name"])] = true
+	_expect(
+		armed_at.has("RearHardpoint") and armed_at.has("FrontHardpoint1")
+		and armed_at.size() == 2,
+		"a pinned gun takes the place it names and the loose one takes the next (%s)" % [
+			armed_at.keys(),
+		],
+	)
+
+	# And the ship agrees with the list the dock drew.
+	var ship: Ship = _spawn_ship()
+	_expect(ShipFitout.apply(ship, stock), "a preset with a pinned gun refits")
+	var astern: Hardpoint = ship.get_node_or_null(NodePath("RearHardpoint")) as Hardpoint
+	_expect(
+		astern != null and astern.weapon != null,
+		"and the rear hardpoint is the one carrying it",
+	)
+	_discard(ship)
+
+	# A place the hull has no name for is refused rather than ignored.
+	var nowhere: GunFit = GunFit.new()
+	nowhere.place = &"NoSuchHardpoint"
+	nowhere.weapon = stock.guns[0].weapon
+	var one: Array[GunFit] = [nowhere]
+	stock.guns = one
+	_expect(
+		not ShipFitout.fault_in(stock).is_empty(),
+		"a gun pinned to a place that is not there is refused (%s)" % ShipFitout.fault_in(stock),
+	)
+
+
+## "Wlasny" silnik presetu to kopia, a nie katalog.
+##
+## Measured before this existed: the preset's torque jet, ship A's and
+## ship B's were one object, `torque_jet.tres` itself. So the dock
+## cannot let anyone edit an engine's numbers in place -- that would
+## retune every preset and every ship in the process. What it offers
+## instead is a copy that lives in the preset, and this is the check
+## that it really is one.
+func _check_an_own_part_is_the_presets_own() -> void:
+	var panel: PresetEditor = PresetEditor.new()
+	root.add_child(panel)
+	panel._canvas.size = Vector2(400.0, 300.0)
+	panel._open(0)
+	if panel._editing == null or panel._editing.mounts.is_empty():
+		_expect(false, "the preset dock opened a preset with mounts")
+		_discard(panel)
+		return
+
+	var shared: EngineData = panel._editing.mounts[0].engine
+	var was: float = shared.max_thrust
+	_expect(not panel._is_own(shared), "a fresh preset names the catalogue engine")
+
+	panel._make_own(&"mounts", 0, &"engine")
+	var mine: EngineData = panel._editing.mounts[0].engine
+	_expect(
+		mine != shared and panel._is_own(mine),
+		"after making it own, the entry holds a different object",
+	)
+
+	mine.max_thrust = was * 2.0
+	_expect(
+		is_equal_approx(shared.max_thrust, was),
+		"and tuning it leaves the catalogue engine alone (%.1f, still %.1f)" % [
+			mine.max_thrust, shared.max_thrust,
+		],
+	)
+	# Which is the whole point: every other preset still has the old one.
+	var elsewhere: bool = false
+	for preset: ShipPreset in ShipFitout.all():
+		for fit: MountFit in preset.mounts:
+			if fit.engine == mine:
+				elsewhere = true
+	_expect(not elsewhere, "and no other preset picked up the change")
+	_discard(panel)
 
 
 ## Zasoby, ktorych metody wola edytor, musza byc `@tool`.
@@ -9098,7 +9215,7 @@ func _check_refit_is_safe() -> void:
 	var gun_in_a_bay: ShipPreset = _bad_preset("a gun in a module bay")
 	var roomy: BayFit = BayFit.new()
 	roomy.size = 50.0
-	roomy.installed = good.guns[0]
+	roomy.installed = good.guns[0].weapon
 	gun_in_a_bay.bays.append(roomy)
 	broken.append(gun_in_a_bay)
 

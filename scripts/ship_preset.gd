@@ -46,11 +46,14 @@ extends Resource
 ## Which engine goes in which of the hull's places.
 @export var mounts: Array[MountFit] = []
 
-## The guns it carries, in order. The hull says where the hardpoints are
-## and these fill them front first, then the sides, then astern -- so this
-## is weapons and nothing else. It used to carry a hardpoint name and a
-## position as well, neither of which was ever read.
-@export var guns: Array[WeaponData] = []
+## The guns it carries. Each may name the hull place it goes in, or
+## leave it empty and be dealt out in hull order -- front first, then
+## the sides, then astern.
+##
+## A bare list of weapons until a dock existed to pick places in: order
+## was the only thing a hand-edited file could express, and "the rocket
+## goes astern" was not sayable. See `GunFit`.
+@export var guns: Array[GunFit] = []
 
 ## How many module bays, how big, and what is in them.
 @export var bays: Array[BayFit] = []

@@ -217,6 +217,18 @@ zapis po prawej.
   nie zbudował, nie może nadpisać działającego.
 - [x] `hull_view.gd`: wspólna transformacja widoku, siatka i kadrowanie dla
   obu płócien — bo raz już się rozjechały (jedno zapomniało `clip_contents`).
+- [x] Puste gniazda rysowane pierścieniem. Podgląd pokazywał tylko obsadzone
+  miejsca, więc dart wyglądał, jakby miał dwa miejsca na napęd zamiast trzech
+  — a trzecie jest puste **z wyboru** (`centered = false` obsadza parę po
+  bokach, `true` jedno na osi; ciąg dzieli się przez liczbę obsadzonych).
+- [x] Wybór miejsca przez designera. Lista rozwijana silnika pokazuje
+  „wszystkie \<rodzaj\>" **i** każde miejsce z nazwy; `GunFit.place` robi to
+  samo dla dział (puste = po kolei, jak dotąd). Przypięte zajmują miejsca
+  przed rozdaniem luźnych, inaczej przypięcie nic by nie robiło.
+- [x] Własne staty na wpis. Silnik i broń z presetu to **ten sam obiekt** co
+  plik w katalogu — zmierzone: preset i dwa statki trzymają jeden
+  `torque_jet.tres`. Przycisk „wlasny" robi kopię mieszkającą w `.tres`
+  presetu i rozwija pod wpisem `BenchResourceForm` z workbencha.
 - [ ] Przeciąganie zatok po podglądzie. Dziś ich `at` ustawia się tylko w
   inspektorze.
 - [ ] Podgląd skinu: dock pokazuje klucz, nie obrazek.

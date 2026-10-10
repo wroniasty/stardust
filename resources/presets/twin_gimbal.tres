@@ -5,7 +5,7 @@
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_63wqp"]
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_0m1hv"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_wdgwv"]
-[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_ttdgg"]
+[ext_resource type="Script" path="res://scripts/gun_fit.gd" id="6_apn0g"]
 [ext_resource type="Resource" path="res://resources/weapons/pulse_repeater.tres" id="7_xfw23"]
 [ext_resource type="Resource" path="res://resources/hulls/rhombus.tres" id="8_0wl33"]
 [ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_rkpqb"]
@@ -41,6 +41,10 @@ size = 2.4
 installed = ExtResource("5_wdgwv")
 at = Vector2(0, 1.75)
 
+[sub_resource type="Resource" id="Resource_63wqp"]
+script = ExtResource("6_apn0g")
+weapon = ExtResource("7_xfw23")
+
 [sub_resource type="Resource" id="Resource_apn0g"]
 script = ExtResource("9_rkpqb")
 kind = &"drive"
@@ -62,6 +66,6 @@ display_name = "twin gimbal (force couple)"
 blurb = "two steerable nozzles, nose and tail: the moments add, the thrusts cancel"
 hull = ExtResource("8_0wl33")
 mounts = Array[ExtResource("9_rkpqb")]([SubResource("Resource_apn0g"), SubResource("Resource_jr2bt")])
-guns = Array[ExtResource("6_ttdgg")]([ExtResource("7_xfw23")])
+guns = Array[ExtResource("6_apn0g")]([SubResource("Resource_63wqp")])
 bays = Array[ExtResource("1_apn0g")]([SubResource("Resource_ugc27"), SubResource("Resource_nik3j"), SubResource("Resource_d2tjf"), SubResource("Resource_obdeg"), SubResource("Resource_2wrkg")])
 order = 2

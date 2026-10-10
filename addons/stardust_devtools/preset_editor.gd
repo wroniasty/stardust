@@ -300,8 +300,9 @@ func _copy_of(preset: ShipPreset) -> ShipPreset:
 	for fit: MountFit in preset.mounts:
 		mounts.append(fit.duplicate() as MountFit if fit != null else null)
 	out.mounts = mounts
-	var guns: Array[WeaponData] = []
-	guns.assign(preset.guns)
+	var guns: Array[GunFit] = []
+	for fit: GunFit in preset.guns:
+		guns.append(fit.duplicate() as GunFit if fit != null else null)
 	out.guns = guns
 	var bays: Array[BayFit] = []
 	for bay: BayFit in preset.bays:
@@ -353,32 +354,24 @@ func _mount_row(index: int) -> Control:
 	var fit: MountFit = _editing.mounts[index]
 	var row: HBoxContainer = HBoxContainer.new()
 
-	var kind: OptionButton = OptionButton.new()
-	for i: int in range(ENGINE_KINDS.size()):
-		kind.add_item(String(ENGINE_KINDS[i]))
-		if ENGINE_KINDS[i] == fit.kind:
-			kind.selected = i
-	# A mount pinned to a named place is the odd one out, and saying so
-	# beats showing a kind dropdown that does nothing.
-	if not String(fit.place).is_empty():
-		kind.disabled = true
-		kind.add_item(String(fit.place))
-		kind.selected = kind.item_count - 1
-	kind.item_selected.connect(
-		func(picked: int) -> void: _set_mount(index, &"kind", ENGINE_KINDS[picked])
+	# Where it goes: a whole kind, or one named place. Both are things
+	# a preset can say, and before the dock existed only the kind was
+	# reachable without editing the file by hand.
+	var where: OptionButton = OptionButton.new()
+	var choices: Array[Dictionary] = _mount_choices(fit)
+	for i: int in range(choices.size()):
+		where.add_item(String(choices[i]["caption"]))
+		if choices[i]["kind"] == fit.kind and choices[i]["place"] == fit.place:
+			where.selected = i
+	where.item_selected.connect(
+		func(picked: int) -> void: _set_where(index, choices[picked])
 	)
-	row.add_child(kind)
+	row.add_child(where)
 
-	var engine: OptionButton = OptionButton.new()
-	engine.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for i: int in range(_engines.size()):
-		engine.add_item(_display_of(_engines[i]))
-		if _engines[i] == fit.engine:
-			engine.selected = i
-	engine.item_selected.connect(
-		func(picked: int) -> void: _set_mount(index, &"engine", _engines[picked])
-	)
-	row.add_child(engine)
+	row.add_child(_catalogue_pick(
+		_engines, fit.engine,
+		func(picked: Resource) -> void: _set_mount(index, &"engine", picked),
+	))
 
 	var scale: SpinBox = SpinBox.new()
 	scale.min_value = 0.1
@@ -390,22 +383,184 @@ func _mount_row(index: int) -> Control:
 	)
 	row.add_child(scale)
 
+	row.add_child(_own_button(
+		fit.engine, func() -> void: _make_own(&"mounts", index, &"engine")
+	))
 	row.add_child(_remover(func() -> void: _drop(&"mounts", index)))
-	return row
+
+	return _with_form(row, fit.engine)
 
 
 func _gun_row(index: int) -> Control:
+	var fit: GunFit = _editing.guns[index]
 	var row: HBoxContainer = HBoxContainer.new()
+
+	# Empty means "dealt out in hull order", which is what a bare list
+	# of weapons always meant and what most presets still want.
+	var where: OptionButton = OptionButton.new()
+	var places: Array[StringName] = _gun_places()
+	where.add_item("(po kolei)")
+	for i: int in range(places.size()):
+		where.add_item(String(places[i]))
+		if places[i] == fit.place:
+			where.selected = i + 1
+	where.item_selected.connect(
+		func(picked: int) -> void: _set_gun(
+			index, &"place", &"" if picked == 0 else places[picked - 1]
+		)
+	)
+	row.add_child(where)
+
+	row.add_child(_catalogue_pick(
+		_weapons, fit.weapon,
+		func(picked: Resource) -> void: _set_gun(index, &"weapon", picked),
+	))
+
+	row.add_child(_own_button(
+		fit.weapon, func() -> void: _make_own(&"guns", index, &"weapon")
+	))
+	row.add_child(_remover(func() -> void: _drop(&"guns", index)))
+
+	return _with_form(row, fit.weapon)
+
+
+## A dropdown over a catalogue, with a leading entry for a resource the
+## preset owns -- which is in no catalogue, so without it the dropdown
+## would show the wrong name and picking nothing would silently replace
+## it.
+func _catalogue_pick(
+	catalogue: Array[Resource], current: Resource, picked: Callable
+) -> OptionButton:
+	var own: bool = _is_own(current)
 	var pick: OptionButton = OptionButton.new()
 	pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for i: int in range(_weapons.size()):
-		pick.add_item(_display_of(_weapons[i]))
-		if _weapons[i] == _editing.guns[index]:
+	if own:
+		pick.add_item("wlasny: %s" % _display_of(current))
+		pick.selected = 0
+	for i: int in range(catalogue.size()):
+		pick.add_item(_display_of(catalogue[i]))
+		if not own and catalogue[i] == current:
 			pick.selected = i
-	pick.item_selected.connect(func(picked: int) -> void: _set_gun(index, _weapons[picked]))
-	row.add_child(pick)
-	row.add_child(_remover(func() -> void: _drop(&"guns", index)))
-	return row
+	pick.item_selected.connect(
+		func(index: int) -> void:
+			# Choosing from the catalogue is also how an own copy is given
+			# up: there is no separate button for going back.
+			if own and index == 0:
+				return
+			picked.call(catalogue[index - 1 if own else index])
+	)
+	return pick
+
+
+## Whether this resource belongs to the preset rather than the
+## catalogue.
+##
+## A fresh duplicate has no path at all; one that has been saved lives
+## inside the preset's own file, as `...preset.tres::Resource_abc`. Both
+## mean the same thing: editing it changes this ship and nothing else.
+func _is_own(what: Resource) -> bool:
+	if what == null:
+		return false
+	return what.resource_path.is_empty() or what.resource_path.begins_with(_path + "::")
+
+
+## The button that detaches an entry from the catalogue.
+##
+## Needed because a preset's engine **is** the catalogue file: measured,
+## two ships built from the stock dart and the preset itself all hold
+## one `torque_jet.tres`. Editing its numbers in place would retune
+## every preset and every ship in the process, so a bespoke engine has
+## to be a copy that lives in the preset.
+func _own_button(what: Resource, action: Callable) -> Button:
+	var button: Button = Button.new()
+	button.text = "wlasny"
+	button.tooltip_text = (
+		"zrob kopie w tym presecie i edytuj jej liczby"
+		if not _is_own(what) else "juz jest kopia presetu"
+	)
+	button.disabled = what == null or _is_own(what)
+	button.pressed.connect(action)
+	return button
+
+
+## The row, with the resource's own numbers under it when the preset
+## owns them. Built from `get_property_list()` by the workbench's form,
+## so a field added to `EngineData` tomorrow appears here untouched.
+func _with_form(row: Control, what: Resource) -> Control:
+	if not _is_own(what):
+		return row
+	var holder: VBoxContainer = VBoxContainer.new()
+	holder.add_child(row)
+	var form: BenchResourceForm = BenchResourceForm.new()
+	form.show_resource(what)
+	form.edited.connect(func(_edited: Resource) -> void: _changed())
+	var indent: MarginContainer = MarginContainer.new()
+	indent.add_theme_constant_override("margin_left", 16)
+	indent.add_child(form)
+	holder.add_child(indent)
+	return holder
+
+
+## Give this entry its own copy of what it names.
+func _make_own(list: StringName, index: int, field: StringName) -> void:
+	if _editing == null:
+		return
+	var entries: Array = _editing.get(list)
+	if index < 0 or index >= entries.size():
+		return
+	var what: Resource = entries[index].get(field)
+	if what == null or _is_own(what):
+		return
+	var mine: Resource = what.duplicate() as Resource
+	# Cleared so the save writes it into this preset instead of pointing
+	# back at the file it came from.
+	mine.resource_path = ""
+	entries[index].set(field, mine)
+	_rebuild_rows()
+	_changed()
+
+
+## Everywhere a mount could go on the hull now chosen: the four kinds,
+## then each engine place by name. A mount already pinned somewhere the
+## hull does not offer keeps its own entry, so selecting it is possible
+## and losing it by accident is not.
+func _mount_choices(fit: MountFit) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for kind: StringName in ENGINE_KINDS:
+		out.append({
+			"caption": "wszystkie %s" % kind, "kind": kind, "place": &"",
+		})
+	var hull: HullData = _editing.hull if _editing != null else null
+	if hull != null:
+		for slot: Dictionary in hull.slots():
+			if not ShipFitout.SOCKET_FOR.has(slot["kind"]):
+				continue
+			out.append({
+				"caption": String(slot["name"]), "kind": &"", "place": slot["name"],
+			})
+	var named: StringName = fit.place
+	if named != &"":
+		var known: bool = false
+		for choice: Dictionary in out:
+			if choice["place"] == named:
+				known = true
+		if not known:
+			out.append({
+				"caption": "%s (poza kadlubem)" % named, "kind": &"", "place": named,
+			})
+	return out
+
+
+## The gun places this hull offers, by name.
+func _gun_places() -> Array[StringName]:
+	var out: Array[StringName] = []
+	var hull: HullData = _editing.hull if _editing != null else null
+	if hull == null:
+		return out
+	for slot: Dictionary in hull.slots():
+		if not ShipFitout.SOCKET_FOR.has(slot["kind"]):
+			out.append(slot["name"])
+	return out
 
 
 func _bay_row(index: int) -> Control:
@@ -448,10 +603,15 @@ func _remover(action: Callable) -> Button:
 
 
 func _display_of(what: Resource) -> String:
+	if what == null:
+		return "(nic)"
 	var named: Variant = what.get("display_name")
 	if named is String and not (named as String).is_empty():
 		return named
-	return what.resource_path.get_file().get_basename()
+	# An own copy has no file of its own, or a path ending in `::id`,
+	# neither of which reads as a name.
+	var file: String = what.resource_path.get_file().get_basename()
+	return file if not file.is_empty() else "bez nazwy"
 
 
 # --- edits -----------------------------------------------------------
@@ -467,6 +627,10 @@ func _on_hull_picked(index: int) -> void:
 	if _filling or _editing == null or index < 0 or index >= _hulls.size():
 		return
 	_editing.hull = _hulls[index]
+	# The rows list this hull's places, so they are stale the moment it
+	# changes -- and a mount pinned to a place the new hull has no name
+	# for shows up as "poza kadlubem" rather than vanishing.
+	_rebuild_rows()
 	# A new hull reframes: the point of changing it is to see what the
 	# same four lines build on a different shape.
 	_canvas.show_preset(_editing)
@@ -487,10 +651,22 @@ func _set_mount(index: int, field: StringName, value: Variant) -> void:
 	_changed()
 
 
-func _set_gun(index: int, weapon: WeaponData) -> void:
+## A mount fills a kind **or** a place, never both: `placements` reads
+## the place first, and leaving a stale kind behind would make the file
+## say two things.
+func _set_where(index: int, choice: Dictionary) -> void:
+	if _filling or _editing == null or index >= _editing.mounts.size():
+		return
+	var fit: MountFit = _editing.mounts[index]
+	fit.kind = choice["kind"]
+	fit.place = choice["place"]
+	_changed()
+
+
+func _set_gun(index: int, field: StringName, value: Variant) -> void:
 	if _filling or _editing == null or index >= _editing.guns.size():
 		return
-	_editing.guns[index] = weapon
+	_editing.guns[index].set(field, value)
 	_changed()
 
 
@@ -516,7 +692,9 @@ func _add_mount() -> void:
 func _add_gun() -> void:
 	if _editing == null or _weapons.is_empty():
 		return
-	_editing.guns.append(_weapons[0] as WeaponData)
+	var fit: GunFit = GunFit.new()
+	fit.weapon = _weapons[0] as WeaponData
+	_editing.guns.append(fit)
 	_rebuild_rows()
 	_changed()
 
@@ -616,8 +794,12 @@ func _same_as_disk() -> bool:
 	]:
 		if _editing.get(field) != _on_disk.get(field):
 			return false
-	if _editing.guns != _on_disk.guns:
+	if _editing.guns.size() != _on_disk.guns.size():
 		return false
+	for i: int in range(_editing.guns.size()):
+		for field: StringName in [&"place", &"weapon"]:
+			if _editing.guns[i].get(field) != _on_disk.guns[i].get(field):
+				return false
 	if _editing.mounts.size() != _on_disk.mounts.size():
 		return false
 	for i: int in range(_editing.mounts.size()):

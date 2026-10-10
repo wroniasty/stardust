@@ -231,6 +231,46 @@ static func _placement(
 	}
 
 
+## Ktore dzialo laduje w ktorym hardpoincie.
+##
+## The other half of `placements`, and extracted for the same reason:
+## `apply` fits the guns, the preset dock draws them, and the rule for
+## dealing them out is not obvious enough to write twice.
+##
+## Pinned guns claim their place first, so a preset that names the rear
+## hardpoint gets it even when an unpinned gun would have reached it in
+## order. The rest fill what is left, front to back. Each entry is
+## `{slot, weapon}`, one per gun place the hull offers, with a null
+## weapon for a place nothing fills.
+static func armament(hull: HullData, wanted: ShipPreset) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if hull == null:
+		return out
+	var claimed: Dictionary = {}
+	var loose: Array[WeaponData] = []
+	if wanted != null:
+		for fit: GunFit in wanted.guns:
+			if fit == null:
+				continue
+			if String(fit.place).is_empty():
+				loose.append(fit.weapon)
+			else:
+				claimed[String(fit.place)] = fit.weapon
+	var next_loose: int = 0
+	for slot: Dictionary in hull.slots():
+		if SOCKET_FOR.has(slot["kind"]):
+			continue
+		var named: String = String(slot["name"])
+		var carried: WeaponData = null
+		if claimed.has(named):
+			carried = claimed[named]
+		elif next_loose < loose.size():
+			carried = loose[next_loose]
+			next_loose += 1
+		out.append({"slot": slot, "weapon": carried})
+	return out
+
+
 ## Gdzie wypadnie srodek masy tego kadluba z tym wyposazeniem, i co z
 ## tego wynika dla sterowania.
 ##
@@ -353,26 +393,18 @@ static func apply(ship: Ship, wanted: ShipPreset) -> bool:
 		)
 		ship.add_child(mount)
 
-	# Guns go in the hull's hardpoints and nowhere else. The preset says
-	# which weapons it carries, in order; the hull says where the places
-	# are, and the weapons fill them front first, then the sides, then
-	# astern.
-	var next_weapon: int = 0
-	for slot: Dictionary in hull.slots():
-		# Every place that takes an **engine** is skipped, not just the
-		# drives: this read `== SLOT_DRIVE` until the hull learned about
-		# torque jets, strafe thrusters and the nose reverse, and then
-		# quietly fitted a gun to each of the seven.
-		if SOCKET_FOR.has(slot["kind"]):
-			continue
-		var gun: Hardpoint = _hardpoint(slot)
-		if next_weapon < wanted.guns.size():
-			gun.weapon = wanted.guns[next_weapon]
-			next_weapon += 1
+	# Guns go in the hull's hardpoints and nowhere else: which gun in
+	# which is `armament`, so the dock draws what gets built.
+	var armed: int = 0
+	for spot: Dictionary in armament(hull, wanted):
+		var gun: Hardpoint = _hardpoint(spot["slot"])
+		gun.weapon = spot["weapon"]
+		if gun.weapon != null:
+			armed += 1
 		ship.add_child(gun)
-	if next_weapon < wanted.guns.size():
+	if armed < wanted.guns.size():
 		push_warning("preset %s has %d more guns than the hull has hardpoints" % [
-			wanted.display_name, wanted.guns.size() - next_weapon,
+			wanted.display_name, wanted.guns.size() - armed,
 		])
 
 	_add_bays(ship, wanted)
@@ -468,9 +500,18 @@ static func fault_in(wanted: ShipPreset) -> String:
 			return "%s has a mount %s with nowhere to be" % [title, named]
 		if socket_for(offered, fit) <= 0.0:
 			return "%s has a mount %s with no socket size" % [title, describes]
-	for gun: WeaponData in wanted.guns:
-		if gun == null:
+	for fit: GunFit in wanted.guns:
+		if fit == null or fit.weapon == null:
 			return "%s carries a gun that is not there" % title
+		var named: String = String(fit.place)
+		if not named.is_empty() and not offered.has(named):
+			return "%s puts a gun in %s, which this hull has no place for" % [
+				title, named,
+			]
+		if not named.is_empty() and SOCKET_FOR.has(
+			(offered[named] as Dictionary)["kind"]
+		):
+			return "%s puts a gun in %s, which is an engine socket" % [title, named]
 	for fit: BayFit in wanted.bays:
 		if fit == null:
 			return "%s has a bay that is not there" % title

@@ -5,7 +5,7 @@
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_0avyb"]
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_m5bt4"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_rvo70"]
-[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_us1ag"]
+[ext_resource type="Script" path="res://scripts/gun_fit.gd" id="6_oh1y0"]
 [ext_resource type="Resource" path="res://resources/weapons/autocannon.tres" id="7_ncypg"]
 [ext_resource type="Resource" path="res://resources/hulls/dart.tres" id="8_8vrka"]
 [ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_1ymbm"]
@@ -44,6 +44,10 @@ size = 2.4
 installed = ExtResource("5_rvo70")
 at = Vector2(0, 1.75)
 
+[sub_resource type="Resource" id="Resource_rvo70"]
+script = ExtResource("6_oh1y0")
+weapon = ExtResource("7_ncypg")
+
 [sub_resource type="Resource" id="Resource_oh1y0"]
 script = ExtResource("9_1ymbm")
 kind = &"drive"
@@ -70,7 +74,7 @@ id = &"dart_stronger_jets"
 display_name = "dart, stronger jets"
 hull = ExtResource("8_8vrka")
 mounts = Array[ExtResource("9_1ymbm")]([SubResource("Resource_oh1y0"), SubResource("Resource_bgnui"), SubResource("Resource_0avyb"), SubResource("Resource_m5bt4")])
-guns = Array[ExtResource("6_us1ag")]([ExtResource("7_ncypg")])
+guns = Array[ExtResource("6_oh1y0")]([SubResource("Resource_rvo70")])
 bays = Array[ExtResource("1_oh1y0")]([SubResource("Resource_fbbnf"), SubResource("Resource_lfftb"), SubResource("Resource_qwpdq"), SubResource("Resource_cymcj"), SubResource("Resource_r2p0u")])
 order = 1
 engine_scale = 1.75

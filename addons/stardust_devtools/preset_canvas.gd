@@ -63,18 +63,29 @@ func refresh() -> void:
 	if hull != null:
 		_spots = ShipFitout.placements(hull, preset)
 		balance = ShipFitout.balance_of(hull, preset)
-		# The gun places, filled in the order the hull offers them --
-		# front first, then the sides, then astern, exactly as `apply`
-		# hands the weapons out.
-		var next_gun: int = 0
+		# Every engine place the hull offers and the preset leaves empty,
+		# drawn faint. The ship gets those too -- `add_hull_slots` fits an
+		# empty socket at each, which is the ship telling the pilot where
+		# something could go -- and a preview that showed only the filled
+		# ones made the dart look as though it had two drive places when
+		# it has three.
+		var filled: Dictionary = {}
+		for spot: Dictionary in _spots:
+			filled[String(spot["name"])] = true
 		for slot: Dictionary in hull.slots():
-			if ShipFitout.SOCKET_FOR.has(slot["kind"]):
+			if not ShipFitout.SOCKET_FOR.has(slot["kind"]):
 				continue
-			var carried: WeaponData = null
-			if next_gun < preset.guns.size():
-				carried = preset.guns[next_gun]
-				next_gun += 1
-			_guns.append({"slot": slot, "weapon": carried})
+			if filled.has(String(slot["name"])):
+				continue
+			_spots.append({
+				"name": String(slot["name"]), "at": slot["at"],
+				"turn": float(slot["turn"]), "kind": slot["kind"],
+				"socket": float(ShipFitout.SOCKET_FOR[slot["kind"]]),
+				"engine": null, "scale": 1.0, "share": 1.0,
+			})
+		# Which gun lands in which hardpoint, from the same call `apply`
+		# fits them with, so a pinned gun is drawn where it will be.
+		_guns = ShipFitout.armament(hull, preset)
 	queue_redraw()
 
 
@@ -166,10 +177,18 @@ func _draw_guns() -> void:
 func _draw_mounts() -> void:
 	for spot: Dictionary in _spots:
 		var tint: Color = _paint_for(spot["kind"])
+		var empty: bool = spot["engine"] == null
+		if empty:
+			tint.a = 0.35
 		var at: Vector2 = to_screen(spot["at"])
 		var facing: Vector2 = Vector2.UP.rotated(float(spot["turn"]))
 		draw_line(at, at + facing * FACING_TICK, tint, 1.0)
-		draw_circle(at, 3.0, tint)
+		# A ring for a socket with nothing in it, a disc for one with an
+		# engine: the difference has to read at three pixels.
+		if empty:
+			draw_arc(at, 3.0, 0.0, TAU, 14, tint, 1.0)
+		else:
+			draw_circle(at, 3.0, tint)
 
 
 ## The same colours the hull dock paints each kind of place in, so the

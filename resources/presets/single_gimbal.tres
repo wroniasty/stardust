@@ -5,7 +5,7 @@
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_s8aen"]
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_eb3fv"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_5ouwu"]
-[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_bdol4"]
+[ext_resource type="Script" path="res://scripts/gun_fit.gd" id="6_36ccl"]
 [ext_resource type="Resource" path="res://resources/weapons/beam_lance.tres" id="7_owynd"]
 [ext_resource type="Resource" path="res://resources/hulls/broad_dart.tres" id="8_uisfy"]
 [ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_beyy2"]
@@ -43,6 +43,10 @@ size = 2.4
 installed = ExtResource("5_5ouwu")
 at = Vector2(0, 1.75)
 
+[sub_resource type="Resource" id="Resource_eb3fv"]
+script = ExtResource("6_36ccl")
+weapon = ExtResource("7_owynd")
+
 [sub_resource type="Resource" id="Resource_36ccl"]
 script = ExtResource("9_beyy2")
 kind = &"drive"
@@ -66,6 +70,6 @@ display_name = "single gimbal (drifts)"
 blurb = "rotation out of the gimballed main drive, and nothing else turns it"
 hull = ExtResource("8_uisfy")
 mounts = Array[ExtResource("9_beyy2")]([SubResource("Resource_36ccl"), SubResource("Resource_kxbgq"), SubResource("Resource_s8aen")])
-guns = Array[ExtResource("6_bdol4")]([ExtResource("7_owynd")])
+guns = Array[ExtResource("6_36ccl")]([SubResource("Resource_eb3fv")])
 bays = Array[ExtResource("1_36ccl")]([SubResource("Resource_bt2tf"), SubResource("Resource_jr4id"), SubResource("Resource_rb642"), SubResource("Resource_ciw5k"), SubResource("Resource_28gbm")])
 order = 3

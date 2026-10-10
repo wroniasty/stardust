@@ -1,3 +1,4 @@
+@tool
 class_name BenchResourceForm
 extends VBoxContainer
 ## A form for any Resource, built from what the resource says about itself.
@@ -12,7 +13,15 @@ extends VBoxContainer
 ##
 ## It writes into the live object. Resources are shared through the loader's
 ## cache, so the engine a ship is flying *is* the one being edited, and a
-## change is felt on the next tick without anything being told.
+## change is felt on the next tick without anything being told. That is
+## also the reason the preset dock makes a resource its **own copy**
+## before handing it to this: editing a catalogue engine in place would
+## change it for every preset and every ship in the process.
+##
+## `@tool` because the preset dock is an editor dock, and a non-tool
+## script loaded there is a placeholder whose methods cannot be called
+## (DEVTOOLS.md rule 7). It has no `_init` and no side effects, so
+## running in the editor costs nothing.
 ##
 ## What it does not do: arrays, dictionaries and packed arrays are shown as a
 ## count and left alone. They are structure rather than a number to nudge,

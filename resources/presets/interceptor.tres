@@ -5,7 +5,7 @@
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_aypsi"]
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_3ejgo"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_f6ffi"]
-[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="6_fk6s7"]
+[ext_resource type="Script" path="res://scripts/gun_fit.gd" id="6_5fdqe"]
 [ext_resource type="Resource" path="res://resources/weapons/pulse_repeater.tres" id="7_4cxxj"]
 [ext_resource type="Resource" path="res://resources/hulls/interceptor.tres" id="8_tsjjq"]
 [ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_ufuax"]
@@ -44,6 +44,14 @@ size = 2.4
 installed = ExtResource("5_f6ffi")
 at = Vector2(0, 1.75)
 
+[sub_resource type="Resource" id="Resource_f6ffi"]
+script = ExtResource("6_5fdqe")
+weapon = ExtResource("7_4cxxj")
+
+[sub_resource type="Resource" id="Resource_fk6s7"]
+script = ExtResource("6_5fdqe")
+weapon = ExtResource("7_4cxxj")
+
 [sub_resource type="Resource" id="Resource_5fdqe"]
 script = ExtResource("9_ufuax")
 kind = &"drive"
@@ -73,6 +81,6 @@ display_name = "interceptor"
 blurb = "light and nimble, two cannon, a hold worth nothing"
 hull = ExtResource("8_tsjjq")
 mounts = Array[ExtResource("9_ufuax")]([SubResource("Resource_5fdqe"), SubResource("Resource_14hvh"), SubResource("Resource_aypsi"), SubResource("Resource_3ejgo")])
-guns = Array[ExtResource("6_fk6s7")]([ExtResource("7_4cxxj"), ExtResource("7_4cxxj")])
+guns = Array[ExtResource("6_5fdqe")]([SubResource("Resource_f6ffi"), SubResource("Resource_fk6s7")])
 bays = Array[ExtResource("1_5fdqe")]([SubResource("Resource_podpr"), SubResource("Resource_645s5"), SubResource("Resource_76mlj"), SubResource("Resource_nmkp0"), SubResource("Resource_1w4q3")])
 order = 4
