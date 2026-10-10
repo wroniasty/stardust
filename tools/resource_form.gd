@@ -44,8 +44,23 @@ const MAX_DEPTH: int = 3
 ## looked at when the row was built.
 const FLOAT_STEP: float = 0.0001
 
-## How wide the caption column is, so the controls line up down the form.
-const LABEL_WIDTH: float = 78.0
+## The narrowest and widest the caption column is allowed to be.
+##
+## Measured rather than fixed. It was a flat 78 px, which fits `bulk`
+## and `damage` and cuts `rounds_per_second` down to "rounds" -- and a
+## form of fifteen rows reading "travers", "travers", "missile",
+## "missile" is a form you cannot use. The names are known before a
+## single row is built, so the column is sized to the longest of them.
+const LABEL_MIN: float = 78.0
+
+## A ceiling so one freakish name cannot squeeze every control in the
+## form down to nothing. Past it the name is clipped and the tooltip
+## carries it.
+const LABEL_MAX: float = 170.0
+
+## What a caption label is called, so it can be told from a label that
+## is showing a value.
+const CAPTION: StringName = &"Caption"
 
 var _resource: Resource = null
 var _depth: int = 0
@@ -61,6 +76,10 @@ var _depth: int = 0
 ## the file it came from.
 var _overrides: Dictionary = {}
 var _overriding: bool = false
+
+## Width of the caption column for the rows currently shown, worked out
+## in `_build` from the names it is about to lay out.
+var _caption_width: float = LABEL_MIN
 
 
 ## Builds the rows for `resource`, replacing whatever was shown.
@@ -91,6 +110,7 @@ func _build() -> void:
 		child.queue_free()
 	if _resource == null:
 		return
+	_caption_width = _widest_caption()
 	for property: Dictionary in _resource.get_property_list():
 		if not _is_exported(property):
 			continue
@@ -145,17 +165,41 @@ func _set_live(where: Node, on: bool) -> void:
 
 ## Whether the property is one the author wrote with `@export`. The usage
 ## flags are how the editor tells, and the form follows the editor.
-## `control` beside a fixed-width caption, taking the rest of the row.
+## How wide the caption column has to be for the rows about to be
+## built: the longest field name, within the bounds above.
+func _widest_caption() -> float:
+	var font: Font = get_theme_default_font()
+	var size: int = get_theme_default_font_size()
+	var widest: float = LABEL_MIN
+	for property: Dictionary in _resource.get_property_list():
+		if not _is_exported(property):
+			continue
+		widest = maxf(widest, font.get_string_size(
+			String(property["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1.0, size
+		).x)
+	# Room for the gap the container puts between the two.
+	return minf(widest + 6.0, LABEL_MAX)
+
+
+## `control` beside the caption column, taking the rest of the row.
 ##
 ## Inlined when the workbench was reset: it was one of six helpers on a
 ## `BenchForm` class, and the only one anything left standing still
 ## wanted.
-static func _labelled(text: String, control: Control) -> HBoxContainer:
+func _labelled(text: String, control: Control) -> HBoxContainer:
 	var row: HBoxContainer = HBoxContainer.new()
 	var label: Label = Label.new()
+	# Named so the dock self-check can tell a caption from the labels
+	# that carry a value -- "0 items", a nested resource's file name --
+	# which have no column to fit into.
+	label.name = CAPTION
 	label.text = text
-	label.custom_minimum_size = Vector2(LABEL_WIDTH, 0.0)
+	label.custom_minimum_size = Vector2(_caption_width, 0.0)
 	label.clip_text = true
+	# The name in full, for the one that was too long even for the
+	# ceiling.
+	label.tooltip_text = text
+	label.mouse_filter = Control.MOUSE_FILTER_PASS
 	row.add_child(label)
 	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(control)

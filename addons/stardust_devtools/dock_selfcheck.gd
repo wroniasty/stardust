@@ -36,6 +36,7 @@ static func asked() -> bool:
 static func run(hulls: HullEditor, presets: PresetEditor) -> int:
 	var failures: int = 0
 	failures += _placeholders()
+	failures += _captions()
 	failures += _hull_dock(hulls)
 	failures += _preset_dock(presets)
 	print("DOCK %s" % (
@@ -72,6 +73,47 @@ static func _placeholders() -> int:
 		"a loaded weapon reports its exported fields (%d)" % script_vars,
 	)
 	return failures
+
+
+## Czy podpisy pol sie miesczcza.
+##
+## Reported from the dock as fifteen rows reading "damag", "rounds",
+## "travers", "travers": the caption column was a flat 78 px and the
+## names were clipped to nonsense. It is measured from the names now,
+## and this is what stops it being a constant again.
+static func _captions() -> int:
+	var gun: Resource = load("res://resources/weapons/autocannon.tres")
+	var form: ResourceForm = ResourceForm.new()
+	form.show_resource(gun)
+	var font: Font = form.get_theme_default_font()
+	var size: int = form.get_theme_default_font_size()
+	var clipped: Array[String] = []
+	for label: Label in _labels_under(form):
+		var needs: float = font.get_string_size(
+			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size
+		).x
+		# At the ceiling the name is clipped on purpose and the tooltip
+		# carries it; below the ceiling it has to fit.
+		if label.custom_minimum_size.x < needs and label.custom_minimum_size.x < ResourceForm.LABEL_MAX:
+			clipped.append(label.text)
+	var rows: int = _labels_under(form).size()
+	form.free()
+	return _says(
+		rows > 0 and clipped.is_empty(),
+		"every field name fits its column (%d rows, %s)" % [
+			rows, "none clipped" if clipped.is_empty() else str(clipped),
+		],
+	)
+
+
+static func _labels_under(where: Node) -> Array[Label]:
+	var out: Array[Label] = []
+	for child: Node in where.get_children():
+		# Captions only: a label showing a value has no column to fit.
+		if child is Label and child.name == ResourceForm.CAPTION:
+			out.append(child)
+		out.append_array(_labels_under(child))
+	return out
 
 
 static func _hull_dock(dock: HullEditor) -> int:

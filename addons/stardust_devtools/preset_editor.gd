@@ -147,7 +147,10 @@ func _build() -> void:
 
 func _build_form() -> Control:
 	var scroller: ScrollContainer = ScrollContainer.new()
-	scroller.custom_minimum_size = Vector2(300.0, 0.0)
+	# Wide enough for a stats panel: a caption column sized to
+	# `rounds_per_second`, a checkbox in front of it and a spin box
+	# after it do not fit in three hundred.
+	scroller.custom_minimum_size = Vector2(380.0, 0.0)
 	scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
 	var column: VBoxContainer = VBoxContainer.new()
