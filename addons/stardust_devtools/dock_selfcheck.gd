@@ -177,8 +177,9 @@ static func _preset_dock(dock: PresetEditor) -> int:
 			continue
 		if _form_rows(dock._mount_rows) == 0:
 			empty_mounts.append("mounts:%d" % index)
-		dock._open_rows["mounts:%d" % index] = false
-		dock._rebuild_rows()
+		# Pressed again to close it, the same way, so the next row is
+		# measured on its own.
+		_press_stats(dock._mount_rows, index, false)
 	failures += _says(
 		empty_mounts.is_empty(),
 		"every engine row opens a stats panel (%d rows, %s)" % [
@@ -192,27 +193,25 @@ static func _preset_dock(dock: PresetEditor) -> int:
 	# first, so a check that only looked there would have passed.
 	failures += _says(not dock._editing.guns.is_empty(), "the preset carries a gun")
 	if not dock._editing.guns.is_empty():
-		dock._open_rows["guns:0"] = true
-		dock._rebuild_rows()
+		_press_stats(dock._gun_rows, 0)
 		failures += _says(
 			_form_rows(dock._gun_rows) > 0,
 			"whose stats panel has rows too (%d)" % _form_rows(dock._gun_rows),
 		)
-		dock._open_rows["guns:0"] = false
-	dock._rebuild_rows()
+		_press_stats(dock._gun_rows, 0, false)
 	return failures
 
 
 ## Presses the stats toggle on one row, the way a mouse would, and
 ## says whether there was one to press.
-static func _press_stats(rows: Node, index: int) -> bool:
+static func _press_stats(rows: Node, index: int, on: bool = true) -> bool:
 	var row: Node = rows.get_child(index) if index < rows.get_child_count() else null
 	if row == null:
 		return false
 	var button: Button = _stats_toggle(row)
 	if button == null:
 		return false
-	button.button_pressed = true
+	button.button_pressed = on
 	return true
 
 
@@ -227,9 +226,17 @@ static func _stats_toggle(where: Node) -> Button:
 	return null
 
 
-## How many rows the first `ResourceForm` under here has.
+## How many rows the first **shown** `ResourceForm` under here has.
+##
+## Visibility counts. The panel is hidden rather than destroyed when the
+## toggle is off, so a check that merely found the form would pass on a
+## panel nobody can see -- which is the shape of the bug it is here to
+## catch.
 static func _form_rows(where: Node) -> int:
 	for child: Node in where.get_children():
+		var control: Control = child as Control
+		if control != null and not control.visible:
+			continue
 		if child is ResourceForm:
 			return child.get_child_count()
 		var deeper: int = _form_rows(child)

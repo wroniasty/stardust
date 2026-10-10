@@ -305,17 +305,25 @@ func _open(index: int) -> void:
 ## object the rest of the game does.
 func _copy_of(preset: ShipPreset) -> ShipPreset:
 	var out: ShipPreset = preset.duplicate() as ShipPreset
+	# A null entry is dropped rather than carried: the rows, the
+	# preview and the save all read this list, and none of them has any
+	# use for a mount that is not there.
 	var mounts: Array[MountFit] = []
 	for fit: MountFit in preset.mounts:
-		mounts.append(_copy_fit(fit) as MountFit)
+		var copy: MountFit = _copy_fit(fit) as MountFit
+		if copy != null:
+			mounts.append(copy)
 	out.mounts = mounts
 	var guns: Array[GunFit] = []
 	for fit: GunFit in preset.guns:
-		guns.append(_copy_fit(fit) as GunFit)
+		var copy: GunFit = _copy_fit(fit) as GunFit
+		if copy != null:
+			guns.append(copy)
 	out.guns = guns
 	var bays: Array[BayFit] = []
 	for bay: BayFit in preset.bays:
-		bays.append(bay.duplicate() as BayFit if bay != null else null)
+		if bay != null:
+			bays.append(bay.duplicate() as BayFit)
 	out.bays = bays
 	return out
 
@@ -326,11 +334,22 @@ func _copy_of(preset: ShipPreset) -> ShipPreset:
 ## this the form would write a pinned field straight into the catalogue
 ## copy of the preset and "przywroc z dysku" would have nothing to go
 ## back to.
+##
+## The type is checked rather than cast. Reported from an editor
+## session: `fit.get(&"overrides")` came back as nothing -- a resource
+## whose script had been hot-reloaded under it while the field was
+## being added -- and `as Dictionary` threw, which left this function
+## half done and put a **null** in the preset's mount list. Everything
+## that read that list afterwards fell over on it: the engine rows, the
+## place dropdown and the dirty check, all reporting a null where a
+## mount should be. An entry that cannot be copied properly is still an
+## entry, and the dock has to survive it.
 func _copy_fit(fit: Resource) -> Resource:
 	if fit == null:
 		return null
 	var mine: Resource = fit.duplicate() as Resource
-	mine.set(&"overrides", (fit.get(&"overrides") as Dictionary).duplicate())
+	var had: Variant = fit.get(&"overrides")
+	mine.set(&"overrides", (had as Dictionary).duplicate() if had is Dictionary else {})
 	return mine
 
 
@@ -406,10 +425,10 @@ func _mount_row(index: int) -> Control:
 	)
 	row.add_child(scale)
 
-	row.add_child(_stats_button("mounts:%d" % index, fit.overrides))
-	row.add_child(_remover(func() -> void: _drop(&"mounts", index)))
-
-	return _with_form(row, "mounts:%d" % index, fit.engine, fit.overrides)
+	return _with_stats(
+		row, "mounts:%d" % index, fit.engine, fit.overrides,
+		func() -> void: _drop(&"mounts", index),
+	)
 
 
 func _gun_row(index: int) -> Control:
@@ -437,10 +456,10 @@ func _gun_row(index: int) -> Control:
 		func(picked: Resource) -> void: _set_gun(index, &"weapon", picked),
 	))
 
-	row.add_child(_stats_button("guns:%d" % index, fit.overrides))
-	row.add_child(_remover(func() -> void: _drop(&"guns", index)))
-
-	return _with_form(row, "guns:%d" % index, fit.weapon, fit.overrides)
+	return _with_stats(
+		row, "guns:%d" % index, fit.weapon, fit.overrides,
+		func() -> void: _drop(&"guns", index),
+	)
 
 
 ## A plain dropdown over a catalogue. What a preset names is always a
@@ -460,48 +479,60 @@ func _catalogue_pick(
 	return pick
 
 
-## Shows and hides the stats panel for one row, and says how many fields
-## that row pins so a closed panel still reports itself.
-func _stats_button(row_key: String, overrides: Dictionary) -> Button:
-	var button: Button = Button.new()
-	var open: bool = bool(_open_rows.get(row_key, false))
-	button.toggle_mode = true
-	button.button_pressed = open
-	button.text = "staty" if overrides.is_empty() else "staty (%d)" % overrides.size()
-	button.tooltip_text = "nadpisz pojedyncze pola tej czesci w tym presecie"
-	button.toggled.connect(func(on: bool) -> void:
-		_open_rows[row_key] = on
-		_rebuild_rows())
-	return button
-
-
-## The row, with the part's fields under it while the panel is open.
+## One row, its stats toggle and the panel the toggle shows.
 ##
-## Each field has a checkbox: ticked means this preset pins it, unticked
-## means it follows the catalogue. That is the difference from copying
-## the part outright, which froze all of its numbers at the values they
-## had that day -- retune the shared engine later and a copy keeps the
-## old figures for every field, including the ones nobody meant to fix.
+## Each field in the panel has a checkbox: ticked means this preset pins
+## it, unticked means it follows the catalogue. That is the difference
+## from copying the part outright, which froze all of its numbers at the
+## values they had that day -- retune the shared engine later and a copy
+## keeps the old figures for every field, including the ones nobody
+## meant to fix. The panel is built from `get_property_list()`, so a
+## field added to `EngineData` tomorrow appears with nothing touched.
 ##
-## The form is built from `get_property_list()`, so a field added to
-## `EngineData` tomorrow appears here with nothing touched.
-func _with_form(
-	row: Control, row_key: String, what: Resource, overrides: Dictionary
+## Showing it **hides and unhides** rather than rebuilding the rows. The
+## first version rebuilt them from inside the toggle's own handler,
+## which frees the button that is emitting the signal: it worked in a
+## headless run and did not in the editor, where a gun row opened and an
+## engine row did not. Nothing is freed now, and the panel is built the
+## first time it is asked for rather than for every row that has one.
+func _with_stats(
+	row: HBoxContainer, row_key: String, what: Resource,
+	overrides: Dictionary, remove: Callable
 ) -> Control:
-	if what == null or not bool(_open_rows.get(row_key, false)):
-		return row
 	var holder: VBoxContainer = VBoxContainer.new()
-	holder.add_child(row)
-	var form: ResourceForm = ResourceForm.new()
-	# The dictionary is held by reference: the form writes into the very
-	# one the `MountFit` carries, so there is nothing to copy back.
-	form.show_overrides(what, overrides)
-	form.edited.connect(func(_edited: Resource) -> void: _changed())
 	var indent: MarginContainer = MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 16)
-	indent.add_child(form)
+	indent.visible = bool(_open_rows.get(row_key, false))
+
+	var button: Button = Button.new()
+	button.toggle_mode = true
+	button.button_pressed = indent.visible
+	button.text = "staty" if overrides.is_empty() else "staty (%d)" % overrides.size()
+	button.tooltip_text = "nadpisz pojedyncze pola tej czesci w tym presecie"
+	button.disabled = what == null
+	button.toggled.connect(func(on: bool) -> void:
+		_open_rows[row_key] = on
+		if on and indent.get_child_count() == 0:
+			indent.add_child(_stats_form(what, overrides))
+		indent.visible = on)
+	row.add_child(button)
+	row.add_child(_remover(remove))
+
+	if indent.visible and what != null:
+		indent.add_child(_stats_form(what, overrides))
+	holder.add_child(row)
 	holder.add_child(indent)
 	return holder
+
+
+## The panel itself. The dictionary is held by reference: the form
+## writes into the very one the entry carries, so there is nothing to
+## copy back.
+func _stats_form(what: Resource, overrides: Dictionary) -> ResourceForm:
+	var form: ResourceForm = ResourceForm.new()
+	form.show_overrides(what, overrides)
+	form.edited.connect(func(_edited: Resource) -> void: _changed())
+	return form
 
 
 ## Everywhere a mount could go on the hull now chosen: the four kinds,
