@@ -241,6 +241,18 @@ static func _item_dock(dock: ItemEditor) -> int:
 		dock._samples.get_child_count() == ModuleData.RARITY_NAMES.size(),
 		"one sample per grade (%d)" % dock._samples.get_child_count(),
 	)
+	# And each one says what the item came out as, not only the field
+	# with a band on it: a tank has no bands at all, so the first
+	# version of this panel printed `bulk` five times and nothing else.
+	var said: String = ItemEditor.stats_line(
+		dock._loot.sample(dock._editing, dock._kind, 2, dock._seed) as ModuleData
+	)
+	failures += _says(
+		said.contains("damage") and said.contains("range") and said.split("  ").size() >= 8,
+		"with every stat on it, not just the banded one (%d figures)" % [
+			said.split("  ").size(),
+		],
+	)
 	var dull: ModuleData = dock._loot.sample(
 		dock._editing, dock._kind, 0, dock._seed
 	) as ModuleData

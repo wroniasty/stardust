@@ -20,9 +20,17 @@ extends CanvasLayer
 ## so the moons and stars of M3 appear here without this file changing.
 
 ## How far the scanner reaches for celestial bodies, measured to the surface.
-## Generous for now: one that only saw as far as the gravity well would be
-## useless for navigating between bodies. In M5 this becomes a property of a
-## scanner module, and a better scanner sees further (IDEAS.md section 4).
+## Generous on purpose: one that only saw as far as the gravity well would be
+## useless for navigating between bodies.
+##
+## **It stays a fact about the hull, and that was decided rather than
+## postponed.** This used to say "in M5 this becomes a property of a scanner
+## module, and a better scanner sees further", and the opposite is what
+## happened: a module free to raise this number would be a module able to
+## promise contacts the world has not built, because twenty thousand is the
+## radius inside which `StreamingManager` guarantees nothing is asleep. So
+## there are two sensors -- this one looks in, `ScannerData` looks out at
+## other systems -- and `scanner_data.gd` carries the whole argument.
 @export var scan_range: float = 20000.0
 
 ## How far it reaches for loot. Much shorter, and deliberately so: a crate on

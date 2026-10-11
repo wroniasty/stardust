@@ -539,33 +539,80 @@ func _explain() -> String:
 ## comes out of the pair -- which is a question only the generator can
 ## answer, so it is asked rather than modelled. The same instance, the
 ## same `_dress`, the same clamps.
+##
+## **Every stat, not only the banded ones.** The first version printed
+## the fields with bands on them, so a file with no bands showed one
+## number -- `bulk` -- and a tank rolled five times read as five
+## identical tanks. What a roll does to the rest is most of the news:
+## an affix moved something, the clamps caught something, and neither is
+## visible if the panel only prints what the designer was already
+## looking at.
+##
+## The rows are the module's own `stat_rows()`, which is what a card
+## shows the pilot: one list, so a sample here and a find in the game
+## cannot describe the same item differently. A banded field the card
+## leaves out is appended, because somebody is tuning it.
 func _fill_samples() -> void:
 	for child: Node in _samples.get_children():
 		_samples.remove_child(child)
 		child.queue_free()
 	if _editing == null or _loot == null:
 		return
-	var watched: Array[String] = []
-	for field: String in _editing.roll_ranges:
-		watched.append(field)
-	if watched.is_empty():
-		watched.append("bulk")
 	for grade: int in range(ModuleData.RARITY_NAMES.size()):
 		var rolled: ModuleData = _loot.sample(
 			_editing, _kind, grade, _seed + grade * 7919
 		) as ModuleData
-		var line: Label = Label.new()
-		line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		if rolled == null:
-			line.text = "%s: nie udalo sie zlosowac" % ModuleData.RARITY_NAMES[grade]
-		else:
-			var parts: PackedStringArray = PackedStringArray()
-			for field: String in watched:
-				parts.append("%s %s" % [
-					field.left(9), short(float(rolled.get(field))),
-				])
-			line.text = "%-9s %s | %s" % [
-				ModuleData.RARITY_NAMES[grade], rolled.title(), " ".join(parts),
-			]
-		line.modulate = ModuleData.RARITY_COLORS[grade]
-		_samples.add_child(line)
+		_samples.add_child(_sample_block(grade, rolled))
+
+
+## One grade: what it is called, and what it came out as.
+##
+## Two labels rather than one line, because the name carries the affixes
+## and the numbers carry the result, and at this width they are both
+## going to wrap -- so the break is put where it means something instead
+## of wherever the column ends.
+func _sample_block(grade: int, rolled: ModuleData) -> Control:
+	var block: VBoxContainer = VBoxContainer.new()
+	block.add_theme_constant_override("separation", 0)
+	var head: Label = Label.new()
+	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	head.modulate = ModuleData.RARITY_COLORS[grade]
+	block.add_child(head)
+	if rolled == null:
+		head.text = "%s: nie udalo sie zlosowac" % ModuleData.RARITY_NAMES[grade]
+		return block
+	head.text = "%s  %s" % [ModuleData.RARITY_NAMES[grade], rolled.title()]
+	var stats: Label = Label.new()
+	stats.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stats.text = "   %s" % stats_line(rolled)
+	# The same hue, dimmer: the grade is the thing to find at a glance
+	# and the numbers are what you read once you have found it.
+	stats.modulate = Color(ModuleData.RARITY_COLORS[grade], 0.75)
+	block.add_child(stats)
+	return block
+
+
+## Everything a rolled item has to say, in one line.
+##
+## `stat_rows()` is the module's own answer to that and already carries
+## how many digits each figure deserves, so this prints rather than
+## decides. Public, because the dock's check reads it to say the panel
+## shows more than one number.
+static func stats_line(item: ModuleData) -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	var said: Dictionary = {}
+	for stat: Dictionary in item.stat_rows():
+		var label: String = stat["label"]
+		said[label] = true
+		parts.append("%s %s%s" % [
+			label,
+			String.num(float(stat["value"]), int(stat["digits"])),
+			String(stat["suffix"]),
+		])
+	# A band on a field the card does not print is still a field
+	# somebody is tuning, and this panel is where they are tuning it.
+	for field: String in item.roll_ranges:
+		if said.has(field) or not field in item:
+			continue
+		parts.append("%s %s" % [field, short(float(item.get(field)))])
+	return "  ".join(parts)
