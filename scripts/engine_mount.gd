@@ -139,7 +139,7 @@ func fits(data: EngineData) -> bool:
 
 
 ## True if the slot takes this kind of engine at all, ignoring how big it is.
-## Split out from fits() so the loadout screen can tell "wrong kind" from
+## Split out from fits() so a screen can tell "wrong kind" from
 ## "too big", which are different problems with different answers.
 func accepts(type: EngineData.Type) -> bool:
 	return (allowed_types & (1 << int(type))) != 0

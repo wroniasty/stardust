@@ -8606,6 +8606,7 @@ func _check_hull_editor() -> void:
 	_check_the_ship_draws_above_the_world()
 	_check_the_altitude_tape_is_out_of_the_way()
 	_check_the_ship_panel_is_four_bars()
+	_check_every_action_a_script_asks_for_exists()
 	_check_a_crate_loads_the_bay()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
@@ -10138,6 +10139,48 @@ func _check_a_crate_loads_the_bay() -> void:
 	_discard(yard)
 	loot.free()
 	_discard(ship)
+
+
+## Kazda akcja, o ktora pyta skrypt, musi byc w mapie wejscia.
+##
+## Found the hard way, by me, in the same session this was written:
+## four actions were deleted with the screen that owned them, and two
+## of them were also the ship editor's keys. Nothing noticed until the
+## editor was opened and Godot printed `The InputMap action
+## "loadout_fit" doesn't exist` -- because the gate runs the game for
+## 120 frames and the suite never opens that screen, so the line that
+## asks is never reached.
+##
+## A scan rather than a list, for the same reason the `@tool` check is
+## one: a hand-written list of actions is a second copy of the input
+## map, and the copy is what goes stale. This reads the scripts.
+func _check_every_action_a_script_asks_for_exists() -> void:
+	var asking: RegEx = RegEx.new()
+	asking.compile(
+		"is_action_(?:just_)?(?:pressed|released)\\(&?\"([a-z_0-9]+)\""
+		+ "|get_action_strength\\(&?\"([a-z_0-9]+)\""
+	)
+	var missing: Array[String] = []
+	var seen: Dictionary = {}
+	var counted: int = 0
+	for path: String in _scripts_under("res://scripts"):
+		var text: String = FileAccess.get_file_as_string(path)
+		for found: RegExMatch in asking.search_all(text):
+			var named: String = found.get_string(1)
+			if named.is_empty():
+				named = found.get_string(2)
+			if named.is_empty() or seen.has(named):
+				continue
+			seen[named] = true
+			counted += 1
+			if not InputMap.has_action(named):
+				missing.append("%s wants %s" % [path.get_file(), named])
+	_expect(
+		counted > 10 and missing.is_empty(),
+		"every action the scripts ask for is in the map (%d asked, %s)" % [
+			counted, "all there" if missing.is_empty() else str(missing),
+		],
+	)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

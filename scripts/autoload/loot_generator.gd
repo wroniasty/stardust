@@ -359,7 +359,8 @@ const LIMITS: Dictionary = {
 	# Generous on purpose. An engine too big for the hull you are flying is a
 	# legitimate find rather than a bad roll -- it is loot for a bigger ship --
 	# so the ceiling belongs to the machine, not to the stock hull's largest
-	# slot. The loadout screen is what has to explain why it will not go in.
+	# slot. Something has to explain why it will not go in -- which is
+	# nobody, since the Tab screen went: see the note in the suite.
 	"bulk": Vector2(0.1, 8.0),
 	"spool_time": Vector2(0.05, 5.0),
 	"reliability": Vector2(0.1, 1.0),

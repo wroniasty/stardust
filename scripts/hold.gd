@@ -35,7 +35,9 @@ extends RefCounted
 
 ## The one module the ship is carrying loose, and how good it was. One slot,
 ## not an inventory: a full hold has to be dealt with before the next find,
-## which keeps the loadout screen to a single decision (IDEAS.md section 4).
+## which kept the quick screen to a single decision (IDEAS.md section 4).
+## That screen is gone and the one slot is now only where a module
+## taken **off** the ship waits.
 var carried: Resource = null
 
 ## The cargo bay: things stowed for later, measured in the same bulk unit as

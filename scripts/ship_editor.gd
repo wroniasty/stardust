@@ -230,9 +230,9 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"ui_left"):
 		_slot -= 1
 		_named = null
-	elif event.is_action_pressed(&"loadout_fit"):
+	elif event.is_action_pressed(&"editor_fit"):
 		_fit()
-	elif event.is_action_pressed(&"loadout_drop"):
+	elif event.is_action_pressed(&"editor_drop"):
 		_jettison()
 	elif event.is_action_pressed(&"editor_stow"):
 		_stow()

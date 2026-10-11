@@ -70,6 +70,8 @@ const LABELS: Array[Dictionary] = [
 	{"block": "SCREENS", "action": &"toggle_map", "says": "system map"},
 	{"block": "SCREENS", "action": &"toggle_galaxy_map", "says": "galaxy chart"},
 	{"block": "SCREENS", "action": &"toggle_editor", "says": "ship editor"},
+	{"block": "SCREENS", "action": &"editor_fit", "says": "editor: fit"},
+	{"block": "SCREENS", "action": &"editor_drop", "says": "editor: jettison"},
 	{"block": "SCREENS", "action": &"editor_stow", "says": "editor: stow"},
 	{"block": "SCREENS", "action": &"editor_aim_ccw", "says": "editor: turn the mount left"},
 	{"block": "SCREENS", "action": &"editor_aim_cw", "says": "editor: turn the mount right"},
