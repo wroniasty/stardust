@@ -37,13 +37,39 @@ const HEAT_CAUTION: float = 0.8
 const FUEL_CAUTION: float = 0.25
 const FUEL_ALARM: float = 0.05
 
+## What a crossing gone wrong is called.
+##
+## Amber and steady, all three, and they come last on the list. Nothing
+## here kills: the hull holds, the air is fine, and what is wrong is
+## that the trip is not working -- so they wait behind every reading
+## that ends a flight, and they never pulse, because a pulse means
+## "now" and these are states a pilot sits in for a minute while they
+## fix them.
+##
+## `OFF COURSE` rather than the pilot's own phrasing of it, "correct
+## course": read as a statement that says the course is correct, which
+## is the opposite of the state it marks, and a band is the one place
+## in the interface with no room to disambiguate.
+const TRANSFER_WORDS: Dictionary = {
+	TransferPlan.Verdict.OVERSHOOT: "OVERSHOOT",
+	TransferPlan.Verdict.AWAY: "WRONG DIRECTION",
+	TransferPlan.Verdict.OFF_COURSE: "OFF COURSE",
+}
+
 
 ## The one warning worth a band, or an empty dictionary when nothing is
 ## wrong. `{"says": String, "level": Level}`.
 ##
 ## `well` may be null: out in the open there is no orbit to decay and no
 ## ground to meet, which is most of what this looks at.
-static func worst(ship: Ship, well: GravityWell) -> Dictionary:
+##
+## `transfer` is handed in rather than worked out here, and that is the
+## rule this file keeps: it is a function of what it is given. A version
+## that asked `TransferPlan.of(ship)` itself would read the pin out of
+## the static `NavMarker` -- which means a check of the hull thresholds
+## would pass or fail depending on whether some earlier check happened
+## to leave a pin in the map.
+static func worst(ship: Ship, well: GravityWell, transfer: TransferPlan = null) -> Dictionary:
 	if ship == null or not is_instance_valid(ship):
 		return {}
 
@@ -79,5 +105,10 @@ static func worst(ship: Ship, well: GravityWell) -> Dictionary:
 
 	if tank > 0.0 and ship.fuel / tank <= FUEL_CAUTION:
 		return {"says": "FUEL", "level": Level.CAUTION}
+
+	if transfer != null and transfer.shows:
+		var says: String = String(TRANSFER_WORDS.get(transfer.verdict, ""))
+		if not says.is_empty():
+			return {"says": says, "level": Level.CAUTION}
 
 	return {}

@@ -176,12 +176,27 @@ czytania:
 +---------------------------+  +-----------------------------+
 ```
 
-Pierścień krawędzi ekranu zostaje skanerowi (jest, działa) — z jednym
-wyjątkiem i jest on świadomy. **Taśma wysokości** stoi w lewym paśmie, między
+Pierścień krawędzi ekranu zostaje skanerowi (jest, działa) — z dwoma
+wyjątkami i oba są świadome. **Taśma wysokości** stoi w lewym paśmie, między
 panelem STATEK a KONTEKST, bo przyrząd, który się **pilnuje**, a nie sprawdza,
 potrzebuje wysokości bardziej niż szerokości, a róg daje odwrotnie. Dwieście
 pikseli krawędzi między tymi panelami nie odpowiadało dotąd na nic. Granica
 zostaje ta sama: nietykalne 400x220 obowiązuje i taśma jest po jego lewej.
+
+**Pierścień przelotu** jest drugim i jest **jedyną rzeczą, która wchodzi
+w nietykalne 400x220**. Wolno mu to jako wskaźnikowi nałożonemu na świat
+(prymityw 6), tak samo jak linii horyzontu, i cena jest zapłacona w alfie: samo
+koło ma 2 px i **jedną trzecią** krycia, więc nigdy nie wygrywa z tym, na co
+pilot naprawdę patrzy. Promień to jedna trzecia wysokości ekranu — na tyle
+dużo, że pięć stopni stożka to dziesięć pikseli łuku, na tyle mało, że koło i
+jego znacznik są w jednym spojrzeniu ze statkiem. Nie dotyka żadnego panelu,
+taśmy ani guzika i tego pilnuje test.
+
+**W paśmie po lewej stoi `SPD`, nad planetą i poza nią.** Prędkość była
+w prawym dolnym rogu w przelocie i na taśmie nad planetą, czyli była jedynym
+odczytem, który **przenosił się**, gdy znikał grunt. Wiersz zero pasma jest
+teraz stały: nad planetą opada za nim `V/S` i `GRAV`, w przelocie nad nim
+stoją trzy liczby przelotu.
 
 Metryka, jedna dla wszystkiego: **4 px od krawędzi ekranu, 3 px wyściółki
 wewnątrz panelu, 1 px odstępu między wierszami, panel nie szerszy niż 140 px i
@@ -271,6 +286,20 @@ skrzynia na ekranie. Czyta się natychmiast i kosztuje osiem kresek.
 **6. Wskaźnik nałożony na świat.** Linia horyzontu i wektor prędkości przy
 lądowaniu: 1 px, `nav`, rysowane w przestrzeni świata, nie w warstwie panelu.
 Wskaźnik ma przecinać obraz, bo mówi o obrazie.
+
+**Druga postać: pierścień wokół statku.** Koło o promieniu jednej trzeciej
+wysokości ekranu, 2 px, `nav` z alfą 0.33, a na nim znaczniki. Przelot do
+szpilki jest tym pierwszym użyciem: kreska na namiarze szpilki (`nav`,
+z odległością wypisaną pod nią w środku koła), dwie ciche kreski `grid` na
+krawędziach stożka pięciu stopni i kwadracik `accent` tam, gdzie statek
+faktycznie leci. Zamknięcie odstępu między kwadracikiem a kreską **jest**
+manewrem — kąt czytany z dwóch liczb to kąt, którego nikt nie czyta.
+
+Pierścień jest wyśrodkowany **na ekranie, nie na statku**, i to jedyne miejsce,
+gdzie ten wskaźnik jest nieliteralny: kamera pozwala statkowi odstawać od środka
+kadru przy rozpędzaniu, a kompas, który jeździ po ekranie w trakcie czytania,
+jest gorszy niż kompas narysowany kilka pikseli od swojego statku. Bursztyn
+w pole pilota nie wchodzi — co jest nie tak, mówi pasmo u góry ekranu.
 
 **7. Przełącznik.** Prostokąt **12 px** wysokości z czterema narożnikami i
 **trzyliterowym kodem** w środku, w kolumnie co 1 px, szeroki tyle, co liczby

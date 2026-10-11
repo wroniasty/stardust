@@ -164,8 +164,40 @@ const TAPE_FIGURE_FILL: float = 0.10
 ## to stand beside the picture rather than under it.
 const DIAL: float = 46.0
 
-## The heading dial out in the open, where there is no orbit to draw.
-const ARROW_DIAL: float = 40.0
+## The crossing ring: the compass round the ship when there is a pin to
+## cross to.
+##
+## A third of the screen's height for its radius, which is the one
+## measurement here that came as an instruction rather than as a
+## finding -- and it is a good one: big enough that five degrees of cone
+## is ten pixels of arc and the eye can judge it, small enough that the
+## ring and its mark are still in the same glance as the ship.
+##
+## It crosses the pilot's untouchable 400x220, which nothing else in
+## the interface does. That is the horizon's exemption in UI_STYLE
+## section 5 -- an indicator laid over the world rather than a panel
+## sitting on it -- and the price of taking it is paid in alpha: the
+## circle itself is a third of an ink, so it never competes with
+## anything the pilot is actually looking at. The two px are the asked
+## width.
+const RING_SHARE: float = 1.0 / 3.0
+const RING_WIDTH: float = 2.0
+const RING_ALPHA: float = 0.33
+const RING_STEPS: int = 96
+
+## How far the bearing mark reaches either side of the ring, how big
+## the mark for the way the ship is going is, and how far inside the
+## ring the range is printed.
+const RING_TICK: float = 4.0
+const RING_CONE_TICK: float = 2.5
+const RING_VELOCITY: float = 2.0
+const RING_TEXT_INSET: float = 11.0
+
+## When the braking burn stops being a number and starts being a thing
+## about to happen, in seconds. Inside it the figure goes to the ship's
+## own accent, which is the channel thrust is already drawn in -- the
+## pilot is about to be asked to use it.
+const BURN_SOON: float = 20.0
 
 ## How much world shows through a panel.
 const PANEL_OPACITY: float = 0.86
@@ -242,10 +274,6 @@ const STATE_WORDS: Dictionary = {
 	GravityWell.OrbitState.ESCAPE: "ESCAPE",
 }
 
-## The transfer arrow, for when there is no well to be in.
-const ARROW_LENGTH: float = 15.0
-const ARROW_HEAD: float = 4.0
-
 var _ship: Ship = null
 var _rig: MiningRig = null
 var _canvas: Control = null
@@ -280,6 +308,14 @@ const MAX_NOTCHES: int = 24
 
 ## Seconds left of that flash.
 var _refused_for: float = 0.0
+
+## The crossing, worked out once a frame in `_read` and read by three
+## things that have to agree about it: the ring in the middle of the
+## screen, the figures under the band and the warning at the top. Null
+## whenever there is a well to be in -- down there the tape, the orbit
+## dial and the ground are the instruments, and a pin on another planet
+## is not what the pilot is flying by.
+var _transfer: TransferPlan = null
 
 var _hull: UiValue = UiValue.new(1.0)
 var _speed: UiValue = UiValue.new(1.0)
@@ -392,6 +428,14 @@ func _read(delta: float) -> void:
 	_speed.feed(_ship.linear_velocity.length(), delta)
 
 	var planet: GravityWell = host()
+	# Out in the open, and only there. A ring and a braking countdown
+	# over a planet would be a second answer to "what am I doing now"
+	# in the same glance as the tape, and the pin is almost always on
+	# the far side of the system from the ground being landed on.
+	if planet == null:
+		_transfer = TransferPlan.of(_ship)
+	else:
+		_transfer = null
 	if planet == null:
 		return
 	_altitude.feed(planet.height_above_terrain(_ship.global_position), delta)
@@ -402,6 +446,13 @@ func _read(delta: float) -> void:
 		_ship.global_position
 	)
 	_descent.feed(-relative.dot(up), delta)
+
+
+## The crossing as of the last sample, or null when there is no
+## crossing to be on. Public because every claim worth making about
+## this instrument is a claim about the numbers, not about the pixels.
+func transfer() -> TransferPlan:
+	return _transfer
 
 
 ## The body whose well the ship is actually in, or null out in the dark.
@@ -452,8 +503,11 @@ func _draw_hud() -> void:
 	# in it. An empty panel is not restraint -- it is a box that
 	# teaches the eye to skip that part of the screen, which is the one
 	# habit an interface must not train.
-	_draw_altitude_tape(font, view, well)
+	_draw_left_band(font, view, well)
 	_draw_controls(font)
+	# Over the world rather than in a corner, and the one thing in the
+	# interface that crosses the pilot's field: see `RING_SHARE`.
+	_draw_crossing_ring(font, view)
 	_draw_warning_band(font, view)
 
 
@@ -891,20 +945,19 @@ func _draw_world_corner(font: Font, at: Rect2, planet: GravityWell) -> void:
 func _draw_instrument_corner(font: Font, at: Rect2, planet: GravityWell) -> void:
 	var y: float = at.position.y + float(UiFont.BODY)
 	if planet == null:
-		_draw_heading(at)
-		var x: float = at.position.x + ARROW_DIAL + 4.0
-		var width: float = at.end.x - x
+		# Out in the open this corner used to hold a dial with an arrow
+		# on it and the speed beside it. Both went: the arrow said which
+		# way the ship was going, which the trajectory view draws into
+		# the world at the ship itself, and speed is one reading that now
+		# has one place -- the band down the left edge, in the row it
+		# stands in over a planet. The pilot who wants it does not have
+		# to learn that it moves when the ground goes away.
 		UiDraw.row(
-			_canvas, font, Vector2(x, y), width, "V",
-			"%.0f" % _speed.stepped(), _ink.ok, _ink.label,
-		)
-		y += ROW
-		UiDraw.row(
-			_canvas, font, Vector2(x, y), width, "GEAR",
+			_canvas, font, Vector2(at.position.x, y), at.size.x, "GEAR",
 			_gear_text(), _gear_colour(), _ink.label,
 		)
 		y += ROW
-		_text(font, Vector2(x, y), "in transit", _ink.label)
+		_text(font, Vector2(at.position.x, y), "in transit", _ink.label)
 		return
 
 	# How high, how fast and how fast down are one instrument now and
@@ -936,7 +989,17 @@ func _tape_label(value: float) -> String:
 	return "%.0f" % value
 
 
-## The altitude tape, down the left edge between the two panels there.
+## The left band: the altitude tape when there is ground under it, the
+## figures either way.
+##
+## One band and one anchor, in a well or out of it. **`SPD` stands in
+## the same row of the same column wherever the ship is**, and
+## everything else in the band is arranged around that: over a planet
+## the descent rate and the pull follow it downwards and the scale
+## stands above it, out in the open the crossing's figures stack
+## upwards into the room the scale is not using. Speed used to be in
+## the bottom right corner out here and on the band over a planet,
+## which made it the one reading that moved when the ground went away.
 ##
 ## Not in a corner, and that is what it is for. The four corners answer
 ## four questions in a fixed place; height on an approach is not a
@@ -954,9 +1017,7 @@ func _tape_label(value: float) -> String:
 ## because it is a block of text; this is a line and some ticks, and
 ## two hundred pixels of slab down the side of the screen would be the
 ## heaviest thing in the interface, holding the lightest.
-func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
-	if well == null:
-		return
+func _draw_left_band(font: Font, view: Vector2, well: GravityWell) -> void:
 	var box: Rect2 = tape_box(font, view)
 	if box.size.y <= 0.0:
 		return
@@ -965,9 +1026,13 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 	# instrument: height, speed, the rate the first is changing and
 	# what is pulling on it are one reading taken four ways, and a
 	# pilot on finals is looking at one place rather than four corners.
-	var stats: Array[Dictionary] = tape_figures()
+	var stats: Array[Dictionary] = band_figures(well)
+	# The room kept for figures is the room the **tape's** three take,
+	# whatever is being shown: that is what fixes where `SPD` sits, and
+	# a scale that grew taller when a crossing figure went away would
+	# move the one row the eye is trained on.
 	var figures: float = (
-		float(stats.size()) * TAPE_FIGURE_ROW + TAPE_FIGURE_GAP
+		float(FIGURE_WIDTHS.size()) * TAPE_FIGURE_ROW + TAPE_FIGURE_GAP
 	)
 	# The scale takes only as much width as it needs; the band is wider
 	# so that a figure has somewhere to sit past the line.
@@ -979,7 +1044,7 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 			box.size.y - figures,
 		),
 	)
-	if well.has_ground():
+	if well != null and well.has_ground():
 		UiDraw.ladder(
 			_canvas, font, scale,
 			_altitude.stepped(), Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
@@ -993,10 +1058,14 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 	var spine: float = UiDraw.ladder_spine(
 		font, scale, Vector2(0.0, TAPE_TOP), _tape_label
 	)
-	var y: float = box.end.y - float(stats.size()) * TAPE_FIGURE_ROW
+	# Row zero is where `SPD` goes, measured up from the bottom of the
+	# band by the tape's own figure count rather than by how many are
+	# being drawn. Negative rows stack upwards from it.
+	var anchor: float = box.end.y - float(FIGURE_WIDTHS.size()) * TAPE_FIGURE_ROW
 	for one: Dictionary in stats:
 		var cell: Rect2 = Rect2(
-			Vector2(box.position.x, y), Vector2(box.size.x, TAPE_FIGURE_ROW - 1.0)
+			Vector2(box.position.x, anchor + float(one["row"]) * TAPE_FIGURE_ROW),
+			Vector2(box.size.x, TAPE_FIGURE_ROW - 1.0),
 		)
 		# A hint of a plate and four corners, because this one sits on
 		# the starfield rather than in a panel: the brackets say where
@@ -1022,7 +1091,6 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 			says,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, one["ink"],
 		)
-		y += TAPE_FIGURE_ROW
 	_tape_spine = spine
 
 
@@ -1056,6 +1124,91 @@ func tape_figures() -> Array[Dictionary]:
 		"ink": _ink.label,
 	})
 	return out
+
+
+## Everything in the band, each with the row it stands in.
+##
+## Row zero is `SPD` and it never moves. Over a planet the other two
+## tape figures follow it down; out in the open the crossing's three
+## stack **upwards** into the room the scale is not using, which keeps
+## their reading order top to bottom and still leaves speed where the
+## eye already looks for it.
+##
+## The crossing's figures appear only once the nose is inside the cone
+## (`TransferPlan.solved`), and that is the whole argument for having
+## them: forty degrees off the line, the closest approach is most of
+## the range and the braking burn is for a manoeuvre that has not been
+## flown yet. Printing them anyway would be printing six digits of
+## precision about a plan the ship is not on, which is worse than
+## printing nothing -- the band would look like an answer.
+func band_figures(well: GravityWell) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var tape: Array[Dictionary] = tape_figures()
+	if tape.is_empty():
+		return out
+	if well != null:
+		for i: int in range(tape.size()):
+			var one: Dictionary = tape[i].duplicate()
+			one["row"] = i
+			out.append(one)
+		return out
+
+	if _transfer != null and _transfer.solved():
+		# Three rows above speed, in the order a pilot asks them: where
+		# will I pass, when, and when do I have to start stopping.
+		var rows: Array[Dictionary] = [
+			{
+				"label": "CPA", "says": _range_text(_transfer.approach),
+				"ink": _ink.value,
+			},
+			{
+				"label": "ETA", "says": _countdown_text(_transfer.approach_in),
+				"ink": _ink.label,
+			},
+			{
+				"label": "BURN", "says": _burn_text(_transfer.burn_in),
+				"ink": (
+					_ink.caution if _transfer.burn_in <= 0.0
+					else (
+						_ink.accent if _transfer.burn_in < BURN_SOON
+						else _ink.value
+					)
+				),
+			},
+		]
+		for i: int in range(rows.size()):
+			var row: Dictionary = rows[i]
+			row["row"] = i - rows.size()
+			out.append(row)
+	var speed: Dictionary = tape[0].duplicate()
+	speed["row"] = 0
+	out.append(speed)
+	return out
+
+
+## A range, in as few characters as say it.
+##
+## Pixels under a thousand, thousands under a million, millions after
+## that. A crossing is two hundred thousand pixels and the last three
+## digits of that are not a number anybody acts on -- while the last
+## three of a thousand, on the way in, are the ones that matter.
+func _range_text(pixels: float) -> String:
+	if pixels < 1000.0:
+		return "%.0f" % pixels
+	if pixels < 1000000.0:
+		return "%.0fk" % (pixels * 0.001)
+	return "%.1fM" % (pixels * 0.000001)
+
+
+## When to turn round and burn, or that the moment has gone.
+##
+## `NOW` for anything at or past zero, including the ship with nothing
+## to brake with: both mean the same thing to a pilot, which is that
+## the next thing to do is slow down and it is already late.
+func _burn_text(seconds: float) -> String:
+	if seconds <= 0.0 or is_inf(seconds):
+		return "NOW"
+	return _countdown_text(seconds)
 
 
 ## Where the tape goes: the left edge, between the two panels on it.
@@ -1094,8 +1247,9 @@ func spine_offset(font: Font) -> float:
 		- UiDraw.ladder_label_room(font, band, _tape_label)
 	)
 	var widest_label: float = 0.0
-	for one: Array in FIGURE_WIDTHS:
-		widest_label = maxf(widest_label, UiDraw.text_width(font, one[0]) + 3.0)
+	for table: Array in [FIGURE_WIDTHS, CROSSING_WIDTHS]:
+		for one: Array in table:
+			widest_label = maxf(widest_label, UiDraw.text_width(font, one[0]) + 3.0)
 	return maxf(cursor_side, widest_label)
 
 
@@ -1107,21 +1261,30 @@ func spine_offset(font: Font) -> float:
 func band_width(font: Font) -> float:
 	var band: Vector2 = Vector2(0.0, TAPE_TOP)
 	var widest_value: float = 0.0
-	for one: Array in FIGURE_WIDTHS:
-		widest_value = maxf(widest_value, UiDraw.text_width(font, one[1]))
+	for table: Array in [FIGURE_WIDTHS, CROSSING_WIDTHS]:
+		for one: Array in table:
+			widest_value = maxf(widest_value, UiDraw.text_width(font, one[1]))
 	return spine_offset(font) + maxf(
 		UiDraw.ladder_label_room(font, band, _tape_label), widest_value + 4.0
 	)
 
 
-## Every figure under the scale at its widest: the label, and the
+## Every figure the band can carry, at its widest: the label, and the
 ## largest thing its format can print.
 ##
-## One table, because three things size themselves from it -- where the
-## line stands, how wide the band is, and the check that both are
-## right.
+## Two tables, because the band shows one set or the other and the
+## **room below the scale is the tape's three** either way -- that is
+## what keeps `SPD` in one row of the screen. The crossing's three
+## stand above it, so they size the column without lengthening it.
+##
+## Everything measures itself from these: where the line stands, how
+## wide the band is, how wide the buttons under it are, and the check
+## that all of those agree.
 const FIGURE_WIDTHS: Array[Array] = [
 	["SPD", "99999"], ["V/S", "-9999.0"], ["GRAV", "999.9"],
+]
+const CROSSING_WIDTHS: Array[Array] = [
+	["CPA", "99.9M"], ["ETA", "999.9h"], ["BURN", "999.9h"],
 ]
 
 
@@ -1158,21 +1321,86 @@ func _draw_ore(font: Font, at: Vector2, width: float) -> void:
 	)
 
 
-## Which way the ship is going, for when there is no orbit to draw.
-func _draw_heading(at: Rect2) -> void:
-	var centre: Vector2 = (
-		at.position + Vector2(ARROW_DIAL, ARROW_DIAL) * 0.5
-	).round()
-	_canvas.draw_arc(centre, ARROW_DIAL * 0.5 - 2.0, 0.0, TAU, 24, _ink.edge, 1.0)
-	if _ship.linear_velocity.length() <= 0.01:
+## The crossing ring: where the pin is, and where the ship is actually
+## going, on one circle round the middle of the screen.
+##
+## **Why a ring and not a row of numbers.** The question out here is an
+## angle, and an angle read off two figures is an angle nobody reads.
+## The pin's bearing and the ship's own course are two marks on the same
+## circle, so closing the gap between them is the manoeuvre, and the
+## five degree cone is drawn on the ring as the two faint ticks the
+## bright mark has to sit between. Nothing on screen has to be
+## remembered to fly it.
+##
+## Centred on the **screen**, not on the ship, and that is the one place
+## this instrument is deliberately not literal. The camera lets the ship
+## lag up to a fraction of the frame when it is accelerating, so a ring
+## pinned to the hull would wander into a corner panel and back out of
+## it with every burn -- and a compass that moves while you read it is
+## worse than one drawn a few pixels from the thing it belongs to.
+##
+## Colour: the pin and its ring are `nav`, the world channel, and the
+## ship's own course is `accent`, the ship channel, which is the palette
+## rule doing exactly the job it was written for (UI_STYLE section 3).
+## Amber stays out of the pilot's field entirely -- the band at the top
+## says what is wrong, and this says what to do about it.
+func _draw_crossing_ring(font: Font, view: Vector2) -> void:
+	if _transfer == null or not _transfer.shows:
 		return
-	var along: Vector2 = _ship.linear_velocity.normalized().rotated(-_view_rotation())
-	var tip: Vector2 = (centre + along * ARROW_LENGTH).round()
-	_canvas.draw_line(centre, tip, _ink.ok, 1.0)
+	var centre: Vector2 = (view * 0.5).round()
+	var radius: float = roundf(view.y * RING_SHARE)
+	_canvas.draw_arc(
+		centre, radius, 0.0, TAU, RING_STEPS,
+		Color(_ink.nav, RING_ALPHA), RING_WIDTH,
+	)
+
+	var turn: float = _view_rotation()
+	var to_pin: Vector2 = Vector2.from_angle(_transfer.bearing - turn)
+	# The cone first, so the bright mark is drawn over its own ticks
+	# rather than under them.
+	var cone: float = deg_to_rad(TransferPlan.CONE_DEGREES)
 	for side: float in [-1.0, 1.0]:
+		var edge: Vector2 = to_pin.rotated(side * cone)
 		_canvas.draw_line(
-			tip, (tip - along.rotated(side * 0.4) * ARROW_HEAD).round(), _ink.ok, 1.0
+			(centre + edge * (radius - RING_CONE_TICK)).round(),
+			(centre + edge * (radius + RING_CONE_TICK)).round(),
+			_ink.grid, 1.0,
 		)
+	_canvas.draw_line(
+		(centre + to_pin * (radius - RING_TICK)).round(),
+		(centre + to_pin * (radius + RING_TICK)).round(),
+		_ink.nav, RING_WIDTH,
+	)
+
+	# Where the ship is going, on the same circle. Not drawn while it is
+	# barely moving: a direction of travel at two pixels a second is
+	# whatever the last nudge left behind, and a mark that spins round
+	# the ring while the ship drifts is a mark that says the opposite of
+	# what it means.
+	if _transfer.speed >= TransferPlan.MIN_SPEED:
+		var along: Vector2 = _ship.linear_velocity.normalized().rotated(-turn)
+		var mark: Vector2 = (centre + along * radius).round()
+		_canvas.draw_rect(
+			Rect2(
+				mark - Vector2(RING_VELOCITY, RING_VELOCITY),
+				Vector2(RING_VELOCITY, RING_VELOCITY) * 2.0,
+			),
+			_ink.accent, true,
+		)
+
+	# The range, inside the ring at the bearing. Pushed in by half its
+	# own width where the mark is out to the side, or the text would sit
+	# half over the circle it is labelling.
+	var says: String = _range_text(_transfer.distance)
+	var wide: float = UiDraw.text_width(font, says)
+	var inset: float = RING_TEXT_INSET + absf(to_pin.x) * wide * 0.5
+	var at: Vector2 = centre + to_pin * (radius - inset)
+	_text(
+		font,
+		UiDraw.snap(at - Vector2(wide * 0.5, -float(UiFont.BODY) * 0.5)),
+		says,
+		_ink.value,
+	)
 
 
 ## A countdown a pilot can act on.
@@ -1319,7 +1547,7 @@ func _dot(at: Vector2, colour: Color) -> void:
 func _draw_warning_band(font: Font, view: Vector2) -> void:
 	if _ship == null or not is_instance_valid(_ship):
 		return
-	var trouble: Dictionary = UiWarning.worst(_ship, host())
+	var trouble: Dictionary = UiWarning.worst(_ship, host(), _transfer)
 	if trouble.is_empty():
 		return
 

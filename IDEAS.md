@@ -530,6 +530,70 @@ się dzieje. Zapis ją niesie, czytany z wartością domyślną zamiast podbicia
 wersji: pole, którego ktoś nie miał, to pole, które się domyślnie wypełnia, a
 podbicie wersji wyrzuciłoby każdy istniejący zapis dla jednej szpilki.
 
+### Przelot do szpilki: cztery stany, trzy liczby i jeden pierścień
+
+Przelot między planetami był jedyną częścią latania **bez przyrządu**. W studni
+jest orbita do czytania, taśma do pilnowania i grunt do oceny; poza nią była
+liczba, która wolno malała, i nic, co by powiedziało, czy dojdzie do zera.
+Można było lecieć czterdzieści stopni obok dwustutysięcznego przelotu przez
+półtorej minuty i nic na ekranie się z tym nie spierało.
+
+`TransferPlan` odpowiada na cztery pytania w kolejności, w jakiej się pojawiają:
+czy się zbliżam, czy lecę prosto, jak blisko naprawdę minę i — to decyduje, czy
+przelot się udał — czy nie jest już za późno, żeby wyhamować.
+
+**Prosta, nie konika.** Szpilka to punkt w pikselach układu, a statek poza
+studnią planety siedzi w załatanej studni gwiazdy, więc prawdziwy tor jest
+stożkową, a to jest jej cięciwa. Świadomie: pilot pali, leci luzem i pali, a
+przez luz gwiazda zagina tor o ułamek stopnia na minutę. Liczby służą do „zawróć
+teraz" i „zacznij hamować teraz", a oba te wnioski przeżywają uproszczenie.
+Nie przeżywa go muśnięcie na drugim końcu układu — dlatego **najbliższe
+przejście jest liczbą, którą pilot czyta**, a nie obietnicą, której ktoś
+dotrzymuje.
+
+**Stożek pięciu stopni** jest granicą między dwoma manewrami, nie progiem
+ładności. Wewnątrz najbliższe przejście to kilka procent odległości, a całą
+robotą jest wypał hamujący; na zewnątrz najbliższe przejście to większość
+odległości, a robotą jest zwrot. Dlatego liczby (CPA, ETA, BURN) pojawiają się
+**dopiero wewnątrz stożka**: wypisane przy czterdziestu stopniach byłyby sześcioma
+cyframi dokładności o planie, którego statek nie realizuje, a to jest gorsze
+niż brak — pasmo wyglądałoby jak odpowiedź.
+
+**Dziesięć tysięcy pikseli** i przyrząd znika. Tam przejmuje własny znacznik
+skanera (szpilka siedzi na jego pierścieniu krawędzi od początku), a to też
+mniej więcej cztery promienie planety — pierścień mówiący „tam" o czymś, co
+zajmuje trzecią część widoku, jest pierścieniem w drodze.
+
+**Czas do wypału** liczy się z jedynej liczby, o jaką można zapytać statek:
+czym hamuje. Poza studnią hamuje **zwrotem na retrograde i głównym napędem**
+(sekcja „Hamowanie poza grawitacją planety"), więc to autorytet `FORWARD`
+podzielony przez masę; kadłub, który nie ma czym się obrócić, dostaje `BACK`.
+Wypał startuje tam, gdzie droga hamowania zrównuje się z pozostałą odległością,
+a `burn_in` to długość luzu przed nim. **Zwrot nie jest liczony**: kosztuje
+około dwóch sekund stałego narzutu (zmierzone), a wypały w przelocie trwają
+dziesiątki sekund, czyli mieści się w zapasie, który pilot i tak zostawia.
+Zabijana jest składowa zbliżania, nie cały wektor — na linii dokładnie, na
+krawędzi stożka o 0,4% za mało, czyli dziesięć razy mniej niż koszt pominięcia
+zwrotu.
+
+Zmierzone w teście: 200 000 px, 300 px/s, kadłub odniesienia → 667 s luzu,
+775 px drogi hamowania, wypał za **664 s**. Przy 4817 px/s droga hamowania
+zrównuje się z całą odległością — powyżej tego statek leci prosto w cel
+i **nie ma już jak stanąć** (`OVERSHOOT`).
+
+**Poniżej 8 px/s nie ma kursu**, który mógłby być zły (`Ship.HEADING_MIN_SPEED`,
+ta sama liczba i ten sam powód, co w trzymaniu kursu): statek dryfujący dwa
+piksele na sekundę nie leci w złą stronę, on nie leci. Namiar i odległość są
+wtedy uczciwe, każda pozostała liczba dzieliłaby przez prędkość, której nie ma.
+
+**Słowa w pasmie są bursztynowe i stoją na końcu listy.** Nic z tego nie zabija:
+kadłub trzyma, powietrza nie ma, nie działa **podróż**. Dlatego czekają za
+każdym odczytem, który kończy lot, i nigdy nie pulsują — puls znaczy „teraz",
+a to są stany, w których pilot siedzi minutę, zanim je naprawi. `OFF COURSE`
+zamiast pilotowego „correct course": to drugie czyta się jak zdanie o tym, że
+kurs jest poprawny, czyli jak dokładne przeciwieństwo stanu, który opisuje,
+a pasmo to jedyne miejsce w interfejsie bez miejsca na dopowiedzenie.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne

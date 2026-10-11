@@ -8725,6 +8725,8 @@ func _check_hull_editor() -> void:
 	_check_the_trajectory_view_is_a_function()
 	_check_the_ship_draws_above_the_world()
 	_check_the_altitude_tape_is_out_of_the_way()
+	_check_the_crossing_is_solved_not_guessed()
+	_check_the_crossing_ring_knows_its_place()
 	_check_the_ship_panel_is_four_bars()
 	_check_every_action_a_script_asks_for_exists()
 	_check_a_crate_loads_the_bay()
@@ -9794,6 +9796,294 @@ func _effective_z(item: CanvasItem) -> int:
 	return depth
 
 
+## Przelot do pinezki: cztery stany i trzy liczby.
+##
+## All of it arithmetic, because all of it **is** arithmetic: whether
+## the ship is closing, whether it is inside the cone, where the
+## straight line passes and when the braking burn has to start. The
+## picture is two marks on a circle, and the circle is the easy part.
+##
+## Each verdict is driven by a velocity chosen to produce it and then
+## checked against the figure that goes with it, which is the pair that
+## catches a sign error: AWAY with a closest approach of zero and
+## ON_COURSE with a closest approach of half the range both look
+## perfectly healthy from one assertion.
+func _check_the_crossing_is_solved_not_guessed() -> void:
+	var ship: Ship = _spawn_ship()
+	# Out in the dark, well clear of the test planet's reach: the whole
+	# instrument is for the part of a flight where no well is holding
+	# the ship, and `host()` is what decides that.
+	ship.global_position = Vector2(2000000.0, 2000000.0)
+	NavMarker.unmark()
+	_expect(not TransferPlan.of(ship).marked, "no pin, no crossing")
+
+	var range_to: float = 200000.0
+	NavMarker.mark(ship.global_position + Vector2(range_to, 0.0))
+	ship.linear_velocity = Vector2(300.0, 0.0)
+	var straight: TransferPlan = TransferPlan.of(ship)
+	_expect(
+		straight.marked and straight.shows
+		and absf(straight.distance - range_to) < 1.0
+		and is_zero_approx(straight.bearing),
+		"a pin two hundred thousand pixels east bears east (%.0f px, %.2f rad)" % [
+			straight.distance, straight.bearing,
+		],
+	)
+	_expect(
+		straight.verdict == TransferPlan.Verdict.ON_COURSE
+		and straight.approach < 1.0
+		and absf(straight.approach_in - range_to / 300.0) < 1.0,
+		"straight at it is on course, reaching it in %.0f s (%s)" % [
+			straight.approach_in, _verdict_name(straight.verdict),
+		],
+	)
+	# The burn, from the one figure the ship can be asked for: what it
+	# brakes at. Worked out here the long way round rather than copied
+	# out of the plan, or this would be checking that a line of code is
+	# that line of code.
+	var brakes: float = straight.braking
+	var wanted_burn: float = (range_to - 300.0 * 300.0 / (2.0 * brakes)) / 300.0
+	_expect(
+		brakes > 0.0 and absf(straight.burn_in - wanted_burn) < 0.5,
+		"and the burn starts in %.0f s: %.0f s of coast less %.0f px of braking" % [
+			straight.burn_in, range_to / 300.0, 300.0 * 300.0 / (2.0 * brakes),
+		],
+	)
+
+	# Too fast to stop in the range that is left: on course, nose in the
+	# right place, and the trip already lost.
+	var fast: float = sqrt(2.0 * brakes * range_to) * 1.5
+	ship.linear_velocity = Vector2(fast, 0.0)
+	var late: TransferPlan = TransferPlan.of(ship)
+	_expect(
+		late.verdict == TransferPlan.Verdict.OVERSHOOT and late.burn_in < 0.0,
+		"at %.0f px/s the burn is already late (%s, %.0f s)" % [
+			fast, _verdict_name(late.verdict), late.burn_in,
+		],
+	)
+
+	# The other way entirely.
+	ship.linear_velocity = Vector2(-300.0, 0.0)
+	var back: TransferPlan = TransferPlan.of(ship)
+	_expect(
+		back.verdict == TransferPlan.Verdict.AWAY
+		and back.closing < 0.0
+		and absf(back.approach - range_to) < 1.0,
+		"going the other way, the closest approach is here and now (%s, %.0f px)" % [
+			_verdict_name(back.verdict), back.approach,
+		],
+	)
+
+	# Thirty degrees off: closing, but it will pass half the range wide.
+	ship.linear_velocity = Vector2(300.0, 0.0).rotated(deg_to_rad(30.0))
+	var wide: TransferPlan = TransferPlan.of(ship)
+	_expect(
+		wide.verdict == TransferPlan.Verdict.OFF_COURSE
+		and wide.closing > 0.0
+		and absf(wide.approach - range_to * 0.5) < 100.0,
+		"thirty degrees off passes %.0f px wide, half the range (%s)" % [
+			wide.approach, _verdict_name(wide.verdict),
+		],
+	)
+	# And the cone is a line, not a feeling: one degree either side of it
+	# decides which manoeuvre the pilot is being shown.
+	ship.linear_velocity = Vector2(300.0, 0.0).rotated(
+		deg_to_rad(TransferPlan.CONE_DEGREES - 1.0)
+	)
+	_expect(
+		TransferPlan.of(ship).verdict == TransferPlan.Verdict.ON_COURSE,
+		"one degree inside the cone is on course",
+	)
+	ship.linear_velocity = Vector2(300.0, 0.0).rotated(
+		deg_to_rad(TransferPlan.CONE_DEGREES + 1.0)
+	)
+	_expect(
+		TransferPlan.of(ship).verdict == TransferPlan.Verdict.OFF_COURSE,
+		"one degree outside it is not",
+	)
+
+	# Not moving: the range and the bearing are honest and nothing else
+	# is, because every other figure divides by a speed that is not
+	# there. No verdict either -- a ship that has not set off is not
+	# going the wrong way.
+	ship.linear_velocity = Vector2(1.0, 0.0)
+	var still: TransferPlan = TransferPlan.of(ship)
+	_expect(
+		still.shows and still.verdict == TransferPlan.Verdict.NONE
+		and absf(still.distance - range_to) < 1.0 and not still.solved(),
+		"a ship that has not set off gets a bearing and no verdict (%s)" % [
+			_verdict_name(still.verdict),
+		],
+	)
+
+	# Arrived: the instrument goes away rather than counting down the
+	# last few hundred pixels, because the scanner has had the pin on
+	# its edge ring the whole time.
+	NavMarker.mark(ship.global_position + Vector2(TransferPlan.ARRIVED * 0.5, 0.0))
+	ship.linear_velocity = Vector2(300.0, 0.0)
+	var close_in: TransferPlan = TransferPlan.of(ship)
+	_expect(
+		close_in.marked and not close_in.shows,
+		"inside %.0f px the crossing is over (%.0f px)" % [
+			TransferPlan.ARRIVED, close_in.distance,
+		],
+	)
+
+	# The band at the top. The words are the point: one of them was
+	# going to be the pilot's own "CORRECT COURSE", which reads as a
+	# statement that the course is correct.
+	NavMarker.mark(ship.global_position + Vector2(range_to, 0.0))
+	ship.hull_integrity = 1.0
+	ship.hull_heat = 0.0
+	ship.fuel = ship.fuel_capacity()
+	var said: Array[String] = []
+	for velocity: Vector2 in [
+		Vector2(300.0, 0.0),
+		Vector2(300.0, 0.0).rotated(deg_to_rad(30.0)),
+		Vector2(-300.0, 0.0),
+		Vector2(fast, 0.0),
+	]:
+		ship.linear_velocity = velocity
+		said.append(String(
+			UiWarning.worst(ship, null, TransferPlan.of(ship)).get("says", "")
+		))
+	_expect(
+		said == ["", "OFF COURSE", "WRONG DIRECTION", "OVERSHOOT"],
+		"on course says nothing; the other three say what is wrong (%s)" % str(said),
+	)
+	# A hull in trouble outranks a trip in trouble: the list is ordered
+	# by how soon a thing kills, and a bad crossing never does.
+	ship.hull_integrity = 0.2
+	ship.linear_velocity = Vector2(-300.0, 0.0)
+	_expect(
+		UiWarning.worst(ship, null, TransferPlan.of(ship)).get("says", "") == "HULL",
+		"and a wrecked hull outranks all of them",
+	)
+	ship.hull_integrity = 1.0
+
+	NavMarker.unmark()
+	_discard(ship)
+
+
+## A verdict as its own name, for the failure messages. A number there
+## is a number somebody has to count enum entries to read.
+func _verdict_name(verdict: int) -> String:
+	return String(TransferPlan.Verdict.keys()[verdict])
+
+
+## Pierscien przelotu: jedyna rzecz, ktora wchodzi w pole pilota.
+##
+## Two claims, and the first is the one the style guide cares about: the
+## ring crosses the pilot's untouchable 400x220 **and touches nothing
+## else**. It is allowed in there as an indicator laid over the world,
+## the way the horizon is, and that exemption is worth a check precisely
+## because it is an exemption -- a ring that also clipped a corner panel
+## would be an instrument quietly taking the one rule the interface has.
+##
+## The second is where the figures stand. `SPD` is in one row of one
+## column whether there is ground under the ship or two hundred thousand
+## pixels of nothing, which is what the band was rearranged for.
+func _check_the_crossing_ring_knows_its_place() -> void:
+	var font: Font = ModuleData.card_font()
+	var view: Vector2 = Vector2(640.0, 360.0)
+	var hud: FlightHud = FlightHud.new()
+	root.add_child(hud)
+	var ship: Ship = _spawn_ship()
+	hud.bind(ship)
+
+	var radius: float = roundf(view.y * FlightHud.RING_SHARE)
+	var ring: Rect2 = Rect2(
+		view * 0.5 - Vector2(radius, radius), Vector2(radius, radius) * 2.0
+	)
+	_expect(
+		ring.position.y >= 0.0 and ring.end.y <= view.y
+		and ring.intersects(UiFrame.field(view)),
+		"the ring fits the screen and crosses the pilot's field on purpose (r %.0f)" % radius,
+	)
+	var touched: Array[String] = []
+	for slot: int in [
+		UiFrame.Slot.SHIP, UiFrame.Slot.WORLD,
+		UiFrame.Slot.CONTEXT, UiFrame.Slot.INSTRUMENTS,
+	]:
+		if ring.intersects(UiFrame.slot(view, slot)):
+			touched.append(str(slot))
+	if ring.intersects(hud.tape_box(font, view)):
+		touched.append("tape")
+	for one: Dictionary in hud.control_layout():
+		if ring.intersects(one["box"] as Rect2):
+			touched.append(String(one["says"]))
+	_expect(
+		touched.is_empty(),
+		"and reaches no panel, no tape and no button (%s)" % [
+			"clear" if touched.is_empty() else str(touched),
+		],
+	)
+
+	# The figures. Driven through `_read`, because what decides whether
+	# there is a crossing at all is which well the ship is in, and that
+	# is sampled there rather than asked for in the draw.
+	ship.global_position = Vector2(2000000.0, 2000000.0)
+	ship.linear_velocity = Vector2(300.0, 0.0)
+	NavMarker.mark(ship.global_position + Vector2(200000.0, 0.0))
+	hud._read(1.0)
+	_expect(
+		hud.transfer() != null and hud.transfer().solved(),
+		"out in the dark with a pin, the HUD has a crossing to show",
+	)
+
+	var out_there: Array[Dictionary] = hud.band_figures(null)
+	var over_ground: Array[Dictionary] = hud.band_figures(_planet)
+	var labels: Array[String] = []
+	var rows: Array[int] = []
+	for one: Dictionary in out_there:
+		labels.append(String(one["label"]))
+		rows.append(int(one["row"]))
+	_expect(
+		labels == ["CPA", "ETA", "BURN", "SPD"] and rows == [-3, -2, -1, 0],
+		"the crossing stacks upwards and leaves speed at the bottom (%s, %s)" % [
+			str(labels), str(rows),
+		],
+	)
+	var ground_labels: Array[String] = []
+	for one: Dictionary in over_ground:
+		ground_labels.append(String(one["label"]))
+	_expect(
+		ground_labels == ["SPD", "V/S", "GRAV"],
+		"and over ground the band is the tape's own three (%s)" % str(ground_labels),
+	)
+	# The claim itself: the same row of the same column, either way.
+	_expect(
+		int(out_there[3]["row"]) == 0 and int(over_ground[0]["row"]) == 0,
+		"speed is row zero in both, which is the row it never leaves",
+	)
+	# And the rows above it stay inside the band rather than climbing
+	# into the ship panel.
+	var box: Rect2 = hud.tape_box(font, view)
+	var top: float = (
+		box.end.y - float(FlightHud.FIGURE_WIDTHS.size()) * FlightHud.TAPE_FIGURE_ROW
+		- 3.0 * FlightHud.TAPE_FIGURE_ROW
+	)
+	_expect(
+		top >= box.position.y,
+		"with %.0f px to spare above the topmost of them" % (top - box.position.y),
+	)
+
+	# In a well there is no crossing, whatever the map says: the tape,
+	# the dial and the ground are the instruments down there.
+	ship.global_position = _planet.global_position + Vector2(
+		_planet.surface_radius * 1.4, 0.0
+	)
+	hud._read(1.0)
+	_expect(
+		hud.host() != null and hud.transfer() == null,
+		"and inside a planet's reach the ring is not drawn at all",
+	)
+
+	NavMarker.unmark()
+	_discard(hud)
+	_discard(ship)
+
+
 ## Tasma wysokosci: gdzie stoi i czy kursor parkuje.
 ##
 ## What matters about this instrument is **where** it is. It is the
@@ -9854,7 +10144,7 @@ func _check_the_altitude_tape_is_out_of_the_way() -> void:
 	# from the ladder alone put every value straight through it.
 	var spine: float = box.position.x + hud.spine_offset(font)
 	var crossing: Array[String] = []
-	for row: Array in FlightHud.FIGURE_WIDTHS:
+	for row: Array in FlightHud.FIGURE_WIDTHS + FlightHud.CROSSING_WIDTHS:
 		var label_ends: float = (
 			box.position.x + 2.0 + UiDraw.text_width(font, row[0])
 		)

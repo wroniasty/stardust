@@ -719,6 +719,42 @@ Gotowe, gdy: w locie widzę swój tor i to, co z nim robi silnik.
 
 ---
 
+## MAUX8: Przelot do szpilki
+
+Cel: w przelocie widać, czy dolecę — i kiedy zacząć hamować.
+
+- [x] `TransferPlan` jako **jedna migawka na klatkę**, jak `ConfigurationReport`:
+  pierścień, liczby pod taśmą i pasmo ostrzeżeń muszą mówić o tej samej chwili,
+  a trzech czytających z własną arytmetyką to trzy odpowiedzi, które rozjeżdżają
+  się w klatce, w której zaczyna się wypał. Cztery stany: idę w złą stronę,
+  zbliżam się nie wprost, zbliżam się wprost, nie mam już jak stanąć.
+- [x] **Strzałka z prawego dolnego rogu wypadła.** Mówiła, w którą stronę
+  statek leci, a to rysuje teraz widok trajektorii — w świecie, przy statku,
+  a nie jako czterdziestopikselowa tarcza w panelu.
+- [x] **`SPD` przeniosło się do pasma po lewej, do wiersza, w którym stoi nad
+  planetą.** Była jedynym odczytem, który przenosił się, gdy znikał grunt.
+  Wiersz zero pasma jest teraz stały w jedną i drugą stronę.
+- [x] **Pierścień przelotu**: koło o promieniu 1/3 wysokości ekranu, 2 px,
+  `nav` z alfą 0.33, kreska na namiarze szpilki z odległością, dwie ciche
+  kreski na krawędziach stożka 5 stopni i kwadracik tam, gdzie statek leci.
+  Jedyna rzecz w interfejsie, która wchodzi w nietykalne 400x220 — wolno jej
+  jako wskaźnikowi nałożonemu na świat (UI_STYLE prymityw 6), a test pilnuje,
+  że nie dotyka żadnego panelu, taśmy ani guzika.
+- [x] **Trzy liczby tylko wewnątrz stożka**: najbliższe przejście (CPA), czas
+  do niego (ETA) i czas do wypału hamującego (BURN), ustawione w górę nad
+  `SPD`. Przy czterdziestu stopniach byłyby dokładnością o planie, którego
+  statek nie realizuje.
+- [x] **Ostrzeżenia w tym samym pasmie, co HULL i FUEL**, bursztynowe, na końcu
+  listy, bez pulsu: `WRONG DIRECTION`, `OFF COURSE`, `OVERSHOOT`. Stan przelotu
+  nikogo nie zabija, więc czeka za wszystkim, co zabija.
+- [x] **Poniżej 10 000 px przyrząd znika** — przejmuje znacznik skanera, a
+  pierścień mówiący „tam" o czymś, co zajmuje trzecią część widoku, jest
+  pierścieniem w drodze. W studni planety nie pokazuje się wcale.
+
+Gotowe, gdy: dolatuję do szpilki bez zgadywania, kiedy zawrócić i zahamować.
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.
