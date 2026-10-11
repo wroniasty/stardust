@@ -513,6 +513,10 @@ func _on_crate_touched(crate: LootCrate, body: Node) -> void:
 	var ship: Ship = body as Ship
 	if ship == null or crate.item == null:
 		return
+	var cache: StoresCache = crate.item as StoresCache
+	if cache != null:
+		_pick_up_units(crate, cache, ship)
+		return
 	# Straight into the bay. There is no step in between any more: the
 	# hands were a question with one answer, since a pilot who flew
 	# into a crate wanted what was in it.
@@ -523,6 +527,32 @@ func _on_crate_touched(crate: LootCrate, body: Node) -> void:
 	print("picked up: %s" % crate.label())
 	# Told, not inferred: the shelf this came off stays empty when the
 	# planet is streamed out and back.
+	StreamingManager.forget_crate(crate)
+	crate.queue_free()
+
+
+## A box of units, taken by the unit.
+##
+## **Part of a box is a real answer here**, which it is not for a
+## module: a module either fits in the hold or it does not, while forty
+## spare parts into room for twelve is twelve parts aboard and
+## twenty-eight still standing on the ground. `load_units` already
+## promises exactly that, so the crate keeps what would not go in and
+## says so by relabelling itself.
+func _pick_up_units(crate: LootCrate, cache: StoresCache, ship: Ship) -> void:
+	# The hold does the arithmetic and leaves the remainder in the box;
+	# what is left here is the one decision this file owns, which is
+	# whether there is still a crate.
+	var taken: int = ship.take_cache(cache)
+	if taken <= 0:
+		# A full hold is the pilot's problem to solve, not a reason to
+		# destroy what they flew into.
+		return
+	print("picked up: %d %s" % [taken, Stores.kind_name(cache.kind)])
+	if cache.units > 0:
+		# Repaint and relabel: what is in it changed.
+		crate.hold(cache)
+		return
 	StreamingManager.forget_crate(crate)
 	crate.queue_free()
 

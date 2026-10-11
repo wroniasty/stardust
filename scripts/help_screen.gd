@@ -67,8 +67,8 @@ const LABELS: Array[Dictionary] = [
 	{"block": "VIEW", "action": &"camera_level", "says": "level the view"},
 
 	{"block": "SCREENS", "action": &"toggle_help", "says": "this screen"},
-	{"block": "SCREENS", "action": &"toggle_map", "says": "map over the world"},
-	{"block": "SCREENS", "action": &"toggle_map_full", "says": "map, paused"},
+	{"block": "SCREENS", "action": &"toggle_map", "says": "system map"},
+	{"block": "SCREENS", "action": &"peek_map", "says": "hold: map while flying"},
 	{"block": "SCREENS", "action": &"toggle_galaxy_map", "says": "galaxy chart"},
 	{"block": "SCREENS", "action": &"toggle_editor", "says": "ship editor"},
 	{"block": "SCREENS", "action": &"editor_fit", "says": "editor: fit"},

@@ -21,8 +21,9 @@ signal touched(crate: LootCrate, body: Node)
 ## reason: the day crates stop hanging off planets, one line changes.
 const LOOT_GROUP: StringName = &"loot"
 
-## What is inside. Rarity comes off the module itself now, so a crate
-## cannot be painted a different colour from the thing in it.
+## What is inside: a module, or a `StoresCache` holding a count of
+## something. Rarity comes off the module itself, so a crate cannot be
+## painted a different colour from the thing in it.
 var item: Resource = null
 
 ## The one list, on ModuleData. Kept here as a name because the scanner and
@@ -130,6 +131,14 @@ func hold(new_item: Resource, new_rarity: int = -1) -> void:
 ## orbit. Exposed so a test can check the crate and the grade agree rather
 ## than re-deriving the lookup and agreeing with itself.
 func rarity_color_of() -> Color:
+	# A box of units has no grade -- fifty spare parts are fifty spare
+	# parts -- so it is painted by what is in it instead. Asked here
+	# rather than in `_paint`, because the scanner reads this one to
+	# draw its loot marks and a crate that was one colour in the world
+	# and another on the scanner would be two crates.
+	var cache: StoresCache = item as StoresCache
+	if cache != null:
+		return StoresCache.tint(cache.kind)
 	return RARITY_COLORS[clampi(rarity(), 0, RARITY_COLORS.size() - 1)]
 
 
@@ -145,6 +154,9 @@ func label() -> String:
 	# One question to one place. This used to ask each kind separately and
 	# get a different habit back from each: the weapon's baked name, a name
 	# built here out of the engine's enum, and "module" for everything else.
+	var cache: StoresCache = item as StoresCache
+	if cache != null:
+		return cache.title()
 	var module: ModuleData = item as ModuleData
 	return module.title() if module != null else "module"
 
@@ -152,7 +164,7 @@ func label() -> String:
 func _paint() -> void:
 	if _body == null:
 		return
-	var colour: Color = RARITY_COLORS[clampi(rarity(), 0, RARITY_COLORS.size() - 1)]
+	var colour: Color = rarity_color_of()
 	_body.self_modulate = colour
 	_glow.color = Color(colour.r, colour.g, colour.b, 0.25)
 

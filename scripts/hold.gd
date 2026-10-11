@@ -249,6 +249,42 @@ func refine(
 	return made
 
 
+## Takes every unit of one kind out and hands them back as a box.
+##
+## All of one kind rather than a batch, because "how many of these do I
+## keep" is a question with no instrument to answer it in flight: a
+## hold is emptied to make room for something whose bulk the pilot is
+## looking at, and half-emptying it is two decisions where there was
+## one. Null when there is none of that kind aboard, so a caller can
+## tell "thrown" from "nothing to throw" without counting first.
+##
+## The transaction is here and the box is a `StoresCache`, which is the
+## same split as scrapping: the rate or the shape is a fact about the
+## galaxy, and the swap is a thing that happens to this ship.
+func dump(kind: Stores.Kind) -> StoresCache:
+	var count: int = stores.count(kind)
+	if count <= 0:
+		return null
+	stores.spend(kind, count)
+	return StoresCache.of(int(kind), count)
+
+
+## Takes what will fit out of a box of units and leaves the rest in it.
+##
+## **Part of a box is a real answer here**, which it is not for a
+## module: a module either fits or it does not, while forty spare parts
+## into room for twelve is twelve aboard and twenty-eight still in the
+## box. Returns how many went in, and the box is left holding what did
+## not -- so whoever owns the crate can tell "gone" from "lighter" by
+## asking the box rather than by doing the subtraction again.
+func take_cache(cache: StoresCache, capacity: float) -> int:
+	if cache == null or cache.units <= 0:
+		return 0
+	var taken: int = load_units(cache.kind, cache.units, capacity)
+	cache.units -= taken
+	return taken
+
+
 ## Breaks what is in the hands down into spare parts. Returns how many
 ## were kept, zero when there was nothing to break.
 ##
@@ -295,11 +331,13 @@ func scrap_cargo(index: int, capacity: float, place: Refinery.Place) -> int:
 ## world to scatter, so the loss is recoverable by somebody brave
 ## enough to fly back to the wreck through whatever made it.
 ##
-## The counted stores are simply gone, and that is a decision rather
-## than an oversight: a crate holds a thing and a spare part is a
-## quantity, so a hundred and forty of them would be a hundred and
-## forty crates, or a crate type that does not exist yet. The refinery
-## is how they are replaced.
+## The counted stores are simply gone, and that stays a decision now
+## that it no longer has to be: a `StoresCache` could carry all of them
+## out in one box, the way `dump` does when a pilot throws them. What
+## it costs is the one thing a death is for -- everything the trip was
+## for goes, and a wreck that handed the ore back would be a wreck that
+## cost the flight and nothing else. Worth revisiting when enemies drop
+## what they were carrying, which is the other half of the same box.
 ##
 func spill() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []

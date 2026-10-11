@@ -559,10 +559,14 @@ odległości, a robotą jest zwrot. Dlatego liczby (CPA, ETA, BURN) pojawiają s
 cyframi dokładności o planie, którego statek nie realizuje, a to jest gorsze
 niż brak — pasmo wyglądałoby jak odpowiedź.
 
-**Dziesięć tysięcy pikseli** i przyrząd znika. Tam przejmuje własny znacznik
-skanera (szpilka siedzi na jego pierścieniu krawędzi od początku), a to też
-mniej więcej cztery promienie planety — pierścień mówiący „tam" o czymś, co
-zajmuje trzecią część widoku, jest pierścieniem w drodze.
+**Pięćset pikseli** i przyrząd znika. Pierwsza wersja miała dziesięć tysięcy,
+z argumentem, że tam przejmuje własny znacznik skanera i że to mniej więcej
+cztery promienie planety, więc cel jest już tarczą, a nie punktem. Pilot to
+przeleciał i argument upadł: szpilka jest **miejscem**, nie planetą, i najczęściej
+siedzi w pustce, gdzie nie ma czego zobaczyć — przyrząd gasł więc kilometry
+przed celem i zostawiał bez niczego tę jedną końcówkę, w której naprawdę
+wypada wypał hamujący. Przy pięciuset pikseli szpilka jest na tym samym
+ekranie, co statek, i pierścień nie ma już nic do powiedzenia.
 
 **Czas do wypału** liczy się z jedynej liczby, o jaką można zapytać statek:
 czym hamuje. Poza studnią hamuje **zwrotem na retrograde i głównym napędem**
@@ -593,6 +597,65 @@ a to są stany, w których pilot siedzi minutę, zanim je naprawi. `OFF COURSE`
 zamiast pilotowego „correct course": to drugie czyta się jak zdanie o tym, że
 kurs jest poprawny, czyli jak dokładne przeciwieństwo stanu, który opisuje,
 a pasmo to jedyne miejsce w interfejsie bez miejsca na dopowiedzenie.
+
+### Wyrzut za burtę: trzy składowe i naprzemienne boki
+
+Wyrzut miał czterdzieści pikseli na sekundę prosto w tył i w pustce to
+wystarcza: tam nic nie siada, więc odstęp tylko rośnie, a skrzynka jest głucha
+dwie sekundy i zostaje osiemdziesiąt pikseli za rufą. **Na gruncie to nie
+działało** i powód jest geometryczny: statek na gruncie stoi dziobem w górę,
+więc kierunek „w tył" to prosto w ziemię. Skrzynka szła w dół, spadała te dwa
+piksele z luku i siadała długość kadłuba za podwoziem — dojechanie gdziekolwiek
+było podniesieniem jej z powrotem. Zgłoszone z gruntu, przez pilota.
+
+Teraz wyrzut ma trzy składowe: **70 w tył** (drzwi są z tyłu, to fakt
+o statku), **50 w bok** (naprzemiennie, patrz niżej) i **140 w górę** — od
+tego, co ciągnie, pytane przez `gravity_acceleration_at`, a nie czytane z
+`_gravity`: ten drugi to cache wypełniany w czasie całkowania, a lądowanie jest
+dokładnie tym stanem, w którym całkowanie wychodzi wcześniej. Winda jest
+większa niż wyrzut w tył, bo **musi go pokonać**: przy równych liczbach obie
+składowe kasują się na promieniu i skrzynka wychodzi tylko bokiem.
+
+Zmierzone na planecie testowej: skrzynka siada **151 px** od statku, wobec
+**47 px** starym sposobem, przy kadłubie 13 px. To jest ta różnica, o którą
+szło — 47 px to pod podwoziem, 151 px to trzeba po to pojechać.
+
+**Boki naprzemiennie, nie losowo** (`Ship._eject_side`). Opróżnianie luku to
+kilka wyrzutów pod rząd, więc stały bok składałby skrzynki w jedno miejsce,
+a losowy byłby nieodtwarzalny w teście. Przełączanie robi jedno i drugie:
+rozsypuje i da się o nim napisać sprawdzenie.
+
+### Skrzynka z liczbą: czego nie dało się wyrzucić
+
+Moduł dawał się wyrzucić od pierwszego dnia — każdy jest rzeczą, a skrzynka
+trzyma rzecz — a liczone zapasy nie. Luk pełny rudy albo części dawał się
+opróżnić wyłącznie w rafinerii, czyli był lukiem bez miejsca na napęd, który
+właśnie się znalazł. `Hold.spill` mówił to od drugiej strony: zrzuca moduły
+i **traci** jednostki, „bo sto czterdzieści części to sto czterdzieści skrzynek
+albo typ skrzynki, który jeszcze nie istnieje". `StoresCache` jest tym typem.
+
+**Nie jest `ModuleData`** i to jest decyzja, nie skrót: nie ma gabarytu
+własnego, klasy, kondycji ani gniazda, do którego by pasowała, a każde z tych
+pól trzeba byłoby obdarzyć znaczeniem, którego nie ma. Ma rodzaj i liczbę,
+a gabaryt wynika z `Stores`.
+
+**Nie jest losowana i nie ma jej w żadnej tabeli.** Istnieje, bo ktoś ją
+wyrzucił — i później, bo coś zginęło, trzymając ją. Generator rozsypujący
+takie pudła po planetach rozsypywałby **wyroby** na światach bez przemysłu,
+czyli odwrotnie niż ekonomia gry: ruda wychodzi z ziemi, części i pył
+z rafinerii.
+
+**Cały zapas jednego rodzaju na raz.** „Ile zostawić" to pytanie, na które
+w locie nie ma przyrządu, a luk opróżnia się pod rzecz, której gabaryt pilot
+ma właśnie przed oczami — połowiczne opróżnianie to dwie decyzje tam, gdzie
+była jedna.
+
+**Podniesienie bierze tyle, ile wejdzie.** Tu część pudła jest sensowną
+odpowiedzią, a przy module nie jest: moduł albo wchodzi, albo nie, a
+czterdzieści części do miejsca na dwanaście to dwanaście na pokładzie
+i dwadzieścia osiem dalej w pudle. Transakcja siedzi w `Hold.take_cache`
+i zostawia resztę w pudle, więc świat ma do podjęcia jedną decyzję: czy
+skrzynka jeszcze stoi.
 
 ### Para obrotowa musi być symetryczna
 

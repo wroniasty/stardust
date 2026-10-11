@@ -1316,6 +1316,7 @@ func _evaluate_phase() -> void:
 			_check_system_tour()
 			_check_system_map()
 			_check_the_live_map_does_not_stop_the_world()
+			_check_the_peek_frames_the_body_it_is_at()
 			_check_nav_marker()
 			_check_galaxy_chart()
 			_check_garrison()
@@ -1339,6 +1340,8 @@ func _evaluate_phase() -> void:
 			_check_scanner(_planet)
 			_check_crate_physics(_planet)
 			_check_ejection()
+			_check_what_is_thrown_out_on_the_ground_lands_clear(_planet)
+			_check_a_box_of_units_can_go_overboard()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -2163,7 +2166,13 @@ func _check_scanner(planet: Planet) -> void:
 	_expect(near.size() == 1, "a crate inside the loot range is reported")
 	if near.size() == 1:
 		_expect(bool(near[0]["on_ring"]), "off screen it goes on the ring")
-		_expect(int(near[0]["rarity"]) == 3, "and carries its rarity, which is its colour")
+		# The colour itself, because that is what the mark is drawn in
+		# and a box of units has no grade to look one up from.
+		_expect(
+			(near[0]["ink"] as Color) == crate.rarity_color_of()
+			and (near[0]["ink"] as Color) == LootCrate.RARITY_COLORS[3],
+			"and carries the colour the crate is painted, not a grade to re-derive",
+		)
 
 	crate.global_position = ship.global_position + Vector2(20.0, 30.0)
 	var seen: Array[Dictionary] = scanner.loot_contacts(
@@ -4393,29 +4402,50 @@ func _check_crate_physics(planet: Planet) -> void:
 	bullet.queue_free()
 
 
-## What throwing something overboard does to it.
+## Co robi wyrzucenie czegos za burte -- i gdzie to laduje.
+##
+## The shove used to be forty px/s straight aft and the check used to
+## say exactly that. Both were wrong on the ground, which is where it
+## was reported from: the box went aft, fell the two pixels out of the
+## bay and settled a hull's length behind the legs, so taxiing anywhere
+## picked it straight back up.
+##
+## So the claim is no longer about the vector, it is about **where the
+## box ends up**, measured by flying it until it stops -- and measured
+## twice, once with the shove the game gives it and once with the shove
+## it used to give it, because "two hundred pixels" is only a number
+## until something worse is standing next to it.
 func _check_ejection() -> void:
 	var ship: Ship = _spawn_ship()
 	ship.global_position = Vector2(4000.0, -9000.0)
 	ship.global_rotation = 0.7
 	ship.linear_velocity = Vector2(120.0, -45.0)
 
+	# Out in the open there is no up, so the shove is the two the hull
+	# itself decides: out of the doors and across them.
 	var shove: Vector2 = ship.eject_velocity() - ship.linear_velocity
+	var local: Vector2 = shove.rotated(-ship.global_rotation)
 	_expect(
-		is_equal_approx(shove.length(), Ship.EJECT_SPEED),
-		"an ejected module gets a %.0f px/s shove on top of the ship's own speed" % [
-			Ship.EJECT_SPEED,
+		is_equal_approx(local.y, Ship.EJECT_SPEED)
+		and is_equal_approx(absf(local.x), Ship.EJECT_SIDEWAYS),
+		"a module goes out of the back and across: %.0f aft, %.0f sideways" % [
+			local.y, local.x,
 		],
-	)
-	# Aft, which is where the doors are. Measured in the ship's frame so the
-	# claim survives the ship being pointed anywhere.
-	_expect(
-		ship.to_local(ship.global_position + shove).normalized().dot(Vector2.DOWN) > 0.999,
-		"and it goes out of the back, not through the nose",
 	)
 	_expect(
 		ship.eject_point().distance_to(ship.to_global(Ship.CARGO_BAY)) < 0.001,
 		"out of the cargo bay, which is where the module was",
+	)
+	# Alternating sides, so emptying a hold scatters the crates rather
+	# than stacking them in one place.
+	ship.take(_reference_engine(&"drive"))
+	ship.jettison()
+	var after: Vector2 = (
+		ship.eject_velocity() - ship.linear_velocity
+	).rotated(-ship.global_rotation)
+	_expect(
+		signf(after.x) == -signf(local.x) and not is_zero_approx(after.x),
+		"and the next one goes out the other side (%.0f then %.0f)" % [local.x, after.x],
 	)
 
 	# The whole point: it leaves. Flown, with the ship coasting alongside.
@@ -4435,6 +4465,188 @@ func _check_ejection() -> void:
 	)
 	crate.queue_free()
 	ship.queue_free()
+
+
+## Wyrzucone na gruncie musi wyladowac tam, gdzie go nie przejedziemy.
+##
+## The one the pilot reported, and the only honest way to check it is to
+## fly the box until it stops moving and then measure. Both shoves are
+## flown from the same spot on the same ground: the one the game gives
+## it now, and the aft-only forty px/s it used to, which is what the
+## hull is standing on top of.
+func _check_what_is_thrown_out_on_the_ground_lands_clear(planet: Planet) -> void:
+	var ship: Ship = _spawn_ship()
+	var out: Vector2 = Vector2.from_angle(0.4)
+	var surface: float = planet.surface_radius_at(
+		planet.global_position + out * planet.surface_radius * 1.3
+	)
+	var stood: Vector2 = planet.global_position + out * (surface + 18.0)
+	ship.global_position = stood
+	# Nose away from the ground, which is how a landed ship stands.
+	ship.global_rotation = out.angle() + PI * 0.5
+	ship.linear_velocity = Vector2.ZERO
+
+	var lifted: Vector2 = ship.eject_velocity()
+	# **The lift has to beat the doors.** A landed ship stands nose-up,
+	# so aft is straight down: the shove out of the bay fires the box at
+	# the ground it is standing on, and the lift is the only part of it
+	# pointing anywhere else. Measured along the radius, which is the
+	# only direction that means anything on a round planet.
+	var away: float = (lifted - ship.linear_velocity).dot(out)
+	_expect(
+		away > 40.0,
+		"standing nose-up, the shove still leaves the ground (%.0f px/s out, doors %.0f in)" % [
+			away, Ship.EJECT_SPEED,
+		],
+	)
+
+	var reach: float = _thrown_settles_at(planet, ship, lifted)
+	# What it used to do: aft, and only aft.
+	var old: Vector2 = ship.linear_velocity + ship.transform.basis_xform(
+		Vector2.DOWN
+	).normalized() * 40.0
+	var was: float = _thrown_settles_at(planet, ship, old)
+	_expect(
+		reach > 120.0 and reach > was * 2.0,
+		"a thrown box settles %.0f px away, against %.0f px the old way" % [reach, was],
+	)
+	# And clear of the hull by a margin a pilot cannot cross by accident:
+	# the crate answers again two seconds after it is thrown, and the
+	# ship is some twenty-five pixels long.
+	_expect(
+		reach > ship.hull_extent() * 4.0,
+		"which is more than four hull lengths (%.0f px of %.0f)" % [
+			reach, ship.hull_extent(),
+		],
+	)
+	_discard(ship)
+
+
+## Where a box thrown at this velocity comes to rest, in pixels from the
+## ship that threw it. Flown through the crate's own integration, so it
+## is the same fall the game gives it.
+func _thrown_settles_at(planet: Planet, ship: Ship, velocity: Vector2) -> float:
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	planet.add_child(crate)
+	crate.eject(ship.eject_point(), velocity)
+	for tick: int in range(900):
+		crate._physics_process(1.0 / 60.0)
+		if not crate.loose:
+			break
+	var reach: float = crate.global_position.distance_to(ship.global_position)
+	_discard(crate)
+	return reach
+
+
+## Skrzynka z liczba w srodku: jak sie wyrzuca zapasy i jak sie je
+## podnosi z powrotem.
+##
+## The piece `Hold.spill` has been pointing at for months -- "a crate
+## type that does not exist yet". A module could always go overboard
+## and a count could not, so a hold filled with ore or parts could only
+## be emptied at a refinery, which is a hold with no room for the drive
+## you just found.
+##
+## The part worth testing is the arithmetic, in both directions and at
+## the edges: all of one kind goes out as one box, the box weighs what
+## it weighed in the hold, and picking it up with room for half of it
+## takes half and **leaves the rest in the box** rather than losing it
+## or doubling it.
+func _check_a_box_of_units_can_go_overboard() -> void:
+	var ship: Ship = _spawn_ship()
+	var thrown: Array[Resource] = []
+	ship.jettisoned.connect(func(item: Resource, _grade: int) -> void: thrown.append(item))
+
+	_expect(
+		ship.jettison_units(Stores.Kind.STARDUST) == null,
+		"nothing of that kind aboard, nothing thrown",
+	)
+	var aboard: int = ship.load_units(Stores.Kind.SPARE_PARTS, 20)
+	var carried_bulk: float = ship.cargo_used()
+	_expect(aboard == 20 and carried_bulk > 0.0, "twenty parts aboard (%d)" % aboard)
+
+	var box: StoresCache = ship.jettison_units(Stores.Kind.SPARE_PARTS)
+	_expect(
+		box != null and box.units == aboard
+		and box.kind == Stores.Kind.SPARE_PARTS,
+		"all of one kind leaves in one box (%s)" % [
+			"none" if box == null else box.title(),
+		],
+	)
+	_expect(
+		ship.carrying(Stores.Kind.SPARE_PARTS) == 0
+		and ship.cargo_used() < carried_bulk,
+		"and the hold is that much emptier (%.2f of %.2f bulk)" % [
+			ship.cargo_used(), carried_bulk,
+		],
+	)
+	_expect(
+		is_equal_approx(box.bulk(), carried_bulk)
+		and thrown.size() == 1 and thrown[0] == box,
+		"the box weighs what it weighed aboard, and the world was told (%.2f)" % box.bulk(),
+	)
+	# It says what it is, and it is painted by what is in it rather than
+	# by a grade it has not got.
+	var crate: LootCrate = (load(CRATE_SCENE) as PackedScene).instantiate() as LootCrate
+	crate.hold(box)
+	root.add_child(crate)
+	_expect(
+		crate.label() == "20 spare parts"
+		and crate.rarity_color_of() == StoresCache.tint(Stores.Kind.SPARE_PARTS),
+		"the crate says what is in it and is painted for it (%s)" % crate.label(),
+	)
+	_discard(crate)
+
+	# Back aboard, into a hold with room for some of it. The ore is the
+	# bulky one, so it is what fills the hold up.
+	ship.load_units(Stores.Kind.IRON_ORE, 500)
+	var room: float = ship.cargo_free()
+	var fits: int = Stores.fits_in(Stores.Kind.SPARE_PARTS, room)
+	_expect(
+		fits > 0 and fits < box.units,
+		"a nearly full hold has room for some of the box, not all (%d of %d)" % [
+			fits, box.units,
+		],
+	)
+	var taken: int = ship.take_cache(box)
+	_expect(
+		taken == fits and box.units == 20 - fits,
+		"so it takes what fits and the rest stays in the box (%d in, %d left)" % [
+			taken, box.units,
+		],
+	)
+	# And a box emptied right out is a box with nothing in it, which is
+	# what tells the world to take the crate away.
+	ship.spend_units(Stores.Kind.IRON_ORE, 500)
+	var rest: int = ship.take_cache(box)
+	_expect(
+		rest == 20 - fits and box.units == 0,
+		"with room again the rest goes in and the box is empty (%d)" % rest,
+	)
+	_expect(ship.take_cache(box) == 0, "and an empty box gives nothing")
+
+	# The editor's own door, through the same path a click takes.
+	var editor: ShipEditor = ShipEditor.new()
+	root.add_child(editor)
+	editor.bind(ship)
+	ship.load_units(Stores.Kind.STARDUST, 12)
+	var doors: Array[String] = []
+	for button: Dictionary in editor.buttons():
+		if String(button["id"]).begins_with("dump"):
+			doors.append("%s %s" % [button["id"], button["on"]])
+	_expect(
+		doors.size() == ShipEditor.STORE_ROWS.size(),
+		"the stores panel has a door for every row it draws (%s)" % str(doors),
+	)
+	_expect(
+		editor.press("dump1") and ship.carrying(Stores.Kind.STARDUST) == 0
+		and thrown.size() == 2 and thrown[1] is StoresCache,
+		"pressing one throws that store overboard as a box (%s)" % [
+			"none" if thrown.size() < 2 else (thrown[1] as StoresCache).title(),
+		],
+	)
+	_discard(editor)
+	_discard(ship)
 
 
 ## The galaxy's layout: spacing, the gradient, and whether the graph holds.
@@ -7818,18 +8030,18 @@ func _check_system_map() -> void:
 	pilot.free()
 
 
-## Mapa na zywo: M nad lecacym swiatem, Shift+M zatrzymana.
+## Mapa: M czyta i zatrzymuje, Shift+M trzymane patrzy w locie.
 ##
 ## Driven by pushing the **key events out of the input map** rather than
 ## by calling `toggle()`, because the thing worth doubting is the
 ## binding: `toggle_map` is a bare M, and Godot matches a bare M action
-## against Shift+M as well unless asked not to. A check that called
-## `toggle(Mode.LIVE)` would pass on an M that opened the paused map.
+## against Shift+M as well unless asked not to -- so the shifted one has
+## to be answered first or a peek would toggle the paused map underneath
+## it. A check that called `toggle(Mode.LIVE)` would pass on that bug.
 ##
-## The pair that matters in each assertion is live-and-then-full: every
-## claim about the live map is made twice, once where it should hold and
-## once where it should not, because "the forecast did not move" and
-## "nothing re-flies it" look identical from one measurement.
+## Every claim about the watching map is made twice, once where it
+## should hold and once where it should not: "the forecast did not move"
+## and "nothing re-flies it" look identical from one measurement.
 func _check_the_live_map_does_not_stop_the_world() -> void:
 	var system: StarSystem = StarSystem.generate(20261011)
 	var ship: Ship = _spawn_ship()
@@ -7842,12 +8054,47 @@ func _check_the_live_map_does_not_stop_the_world() -> void:
 	_expect(not map.is_open() and not map.is_live(), "no map until a key is pressed")
 	_push_action_key(&"toggle_map")
 	_expect(
-		map.is_open() and map.is_live(),
-		"the bare map key lays the live one over the world",
+		map.is_open() and not map.is_live() and PauseGate.held(),
+		"the bare map key stops the world and reads, as it always did",
 	)
 	_expect(
-		not PauseGate.held(),
-		"and the world keeps running under it",
+		is_equal_approx(map._canvas.modulate.a, 1.0) and map.layer > 10,
+		"the reading map is the screen: full strength and on top",
+	)
+	# The paused one works its forecast out once, because nothing is
+	# moving while it is up.
+	var held: Vector2 = map.forecast()[0]
+	ship.global_position = Vector2(20000.0, 5000.0)
+	for _frame: int in range(SystemMap.LIVE_EVERY * 2):
+		map._process(1.0 / 60.0)
+	_expect(
+		map.forecast()[0].is_equal_approx(held),
+		"a paused map works its forecast out once",
+	)
+	var rung: int = map.zoom_level()
+	_push_action_key(&"camera_zoom_in")
+	_expect(map.zoom_level() == rung + 1, "and answers the zoom keys itself")
+	# And a peek is refused while it is up: that world has already
+	# stopped, so there is nothing live to lay over it.
+	_push_action_key(&"peek_map")
+	_expect(
+		map.is_open() and not map.is_live(),
+		"a peek over the reading map changes nothing",
+	)
+	_release_action_key(&"peek_map")
+	_expect(
+		map.is_open() and PauseGate.held(),
+		"and letting the peek go does not shut the map that was already open",
+	)
+	_push_action_key(&"toggle_map")
+	_expect(not map.is_open() and not PauseGate.held(), "M again puts it away")
+
+	# Now the watching one, which is a hold.
+	ship.global_position = Vector2(80000.0, 10000.0)
+	_push_action_key(&"peek_map")
+	_expect(
+		map.is_open() and map.is_live() and not PauseGate.held(),
+		"shift and the map key lays the live one over a world that keeps running",
 	)
 	_expect(
 		is_equal_approx(map._canvas.modulate.a, SystemMap.LIVE_ALPHA)
@@ -7857,15 +8104,15 @@ func _check_the_live_map_does_not_stop_the_world() -> void:
 		],
 	)
 
-	# The keys the paused map owns belong to the game while the live one
-	# is up. Zoom is the one to try: the map answers it, the camera
-	# answers it, and only one of them should while the ship is flying.
+	# The keys the paused map owns belong to the game while this one is
+	# up. Zoom is the one to try: the map answers it, the camera answers
+	# it, and only one of them should while the ship is flying.
 	map.set_zoom_level(2)
-	var rung: int = map.zoom_level()
+	rung = map.zoom_level()
 	_push_action_key(&"camera_zoom_in")
 	_expect(
 		map.zoom_level() == rung,
-		"the live map does not eat the zoom keys (rung %d)" % map.zoom_level(),
+		"the watching map does not eat the zoom keys (rung %d)" % map.zoom_level(),
 	)
 
 	# The whole reason it exists: the track is re-flown as the ship
@@ -7880,43 +8127,120 @@ func _check_the_live_map_does_not_stop_the_world() -> void:
 		"the live track re-flies itself from where the ship has got to",
 	)
 
-	# Shift switches rather than shutting: a pilot who wants to stop and
-	# read is not asking to close the overlay first.
-	_push_action_key(&"toggle_map_full")
-	_expect(
-		map.is_open() and not map.is_live() and PauseGate.held(),
-		"shift and the map key stops the world and reads",
-	)
-	_expect(
-		is_equal_approx(map._canvas.modulate.a, 1.0) and map.layer > 10,
-		"the paused map is the screen again, full and on top",
-	)
-	# And the paused one is the one that holds still and takes the keys.
-	var held: Vector2 = map.forecast()[0]
-	ship.global_position = Vector2(20000.0, 5000.0)
-	for _frame: int in range(SystemMap.LIVE_EVERY * 2):
-		map._process(1.0 / 60.0)
-	_expect(
-		map.forecast()[0].is_equal_approx(held),
-		"a paused map works its forecast out once",
-	)
-	rung = map.zoom_level()
-	_push_action_key(&"camera_zoom_in")
-	_expect(map.zoom_level() == rung + 1, "and answers the zoom keys itself")
-
-	_push_action_key(&"toggle_map")
-	_expect(
-		map.is_open() and map.is_live() and not PauseGate.held(),
-		"the bare key goes back to flying with the map up",
-	)
-	_push_action_key(&"toggle_map")
+	# Let go and it goes. The shift may come up before the M does, so
+	# the release is answered whichever of them arrives.
+	_release_action_key(&"peek_map")
 	_expect(
 		not map.is_open() and not PauseGate.held(),
-		"and pressing it on the same map shuts it",
+		"letting the key go puts the watching map away",
 	)
 
 	map.free()
 	_discard(ship)
+
+
+## Mapa trzymana: przyblizenie samo laduje na ciele, przy ktorym jestesmy.
+##
+## The framing is the half of this instrument that cannot be seen from a
+## screenshot taken at the system scale, which is exactly the view it
+## exists to replace: down a planet's well the ship, the ground under it
+## and the moon it is aiming past are three pixels in the same place.
+##
+## And it hands the framing **back**. The zoom is a setting the pilot
+## made (`SystemMap._zoom`), so a peek that re-set it would be spending
+## somebody else's: the pair of claims here is that the peek moves it
+## and that the release puts it back.
+func _check_the_peek_frames_the_body_it_is_at() -> void:
+	var system: StarSystem = StarSystem.generate(20261012)
+	var ground: SystemBody = null
+	for body: SystemBody in system.bodies:
+		if body.kind != SystemBody.Kind.STAR and body.well_radius > 0.0:
+			ground = body
+			break
+	var ship: Ship = _spawn_ship()
+	var map: SystemMap = SystemMap.new()
+	root.add_child(map)
+	map.bind(system, ship, null)
+	_expect(ground != null, "the test system has a body with a well of its own")
+	if ground == null:
+		map.free()
+		_discard(ship)
+		return
+
+	# Out between the orbits first: nothing to frame, and the pilot's
+	# own zoom is the whole point of the view.
+	ship.global_position = Vector2(ground.extent() * 4.0 + 50000.0, 0.0)
+	map.set_zoom_level(1)
+	_expect(
+		map.near_body(ship.global_position) == null,
+		"out in the open the peek has no body to frame",
+	)
+	_push_action_key(&"peek_map")
+	_expect(
+		map.zoom_level() == 1,
+		"so it opens on the rung the pilot set (%d)" % map.zoom_level(),
+	)
+	_release_action_key(&"peek_map")
+
+	# And now from just above the body.
+	var at: Vector2 = ground.position_at(0.0) + Vector2(ground.radius * 1.2, 0.0)
+	ship.global_position = at
+	_expect(
+		map.near_body(at) == ground,
+		"inside its well the peek knows which body it is at (%s)" % [
+			"none" if map.near_body(at) == null else map.near_body(at).display_name,
+		],
+	)
+	var wanted: int = map.rung_for(ground, at)
+	_push_action_key(&"peek_map")
+	_expect(
+		map.zoom_level() == wanted and wanted > 0,
+		"and opens zoomed to it rather than on the whole system (rung %d of %d)" % [
+			map.zoom_level(), SystemMap.ZOOM_REACH.size() - 1,
+		],
+	)
+	# Tight enough to be a view of that planet, and wide enough that the
+	# ship looking at it is on the map at all.
+	var reach: float = SystemMap.ZOOM_REACH[map.zoom_level()]
+	_expect(
+		reach >= at.distance_to(ground.position_at(0.0))
+		and reach >= ground.radius,
+		"the rung holds the body and the ship both (reach %.0f, radius %.0f)" % [
+			reach, ground.radius,
+		],
+	)
+	# The middle is the body, not the star, or the zoom would be a view
+	# of empty space next to it.
+	var plan: Dictionary = map.layout(map.view_size())
+	_expect(
+		Vector2(plan["focus"]).distance_to(ground.position_at(0.0)) < 1.0,
+		"with that body in the middle of it",
+	)
+	_release_action_key(&"peek_map")
+	_expect(
+		map.zoom_level() == 1 and not map.is_open(),
+		"and the pilot's own rung is handed back when the key comes up (%d)" % [
+			map.zoom_level(),
+		],
+	)
+
+	map.free()
+	_discard(ship)
+
+
+## Lets the key go again, for an action that is held rather than
+## toggled. Same event, `pressed` false: a handler that only answered
+## presses would leave a held map on screen for ever, and that is a bug
+## no press-only check can see.
+func _release_action_key(action: StringName) -> void:
+	for event: InputEvent in InputMap.action_get_events(action):
+		var key: InputEventKey = event as InputEventKey
+		if key == null:
+			continue
+		var up: InputEventKey = key.duplicate()
+		up.pressed = false
+		root.get_viewport().push_input(up)
+		return
 
 
 ## Presses the key an action is bound to, through the viewport.

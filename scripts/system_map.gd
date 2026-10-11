@@ -1,15 +1,23 @@
 class_name SystemMap
 extends CanvasLayer
-## The system, seen from above. `M` live, `Shift+M` to read.
+## The system, seen from above. `M` to read, `Shift+M` held to watch.
 ##
 ## **Two modes, and the difference is whether the world is running.**
-## Shift+M is the map as it was: the world stops, the field goes nearly
-## black, clicks pick bodies and the pilot reads. M lays the same
-## picture over the running game at a fraction of its opacity, pauses
-## nothing, takes no input and covers nothing -- so a burn can be
-## watched bending the track while it is still being made. That is the
-## one thing the reading map cannot do, because the thing it does
-## first is stop time.
+## `M` is the map as it always was: the world stops, the field goes
+## nearly black, clicks pick bodies and the pilot reads. **`Shift+M`
+## held** lays the same picture over the running game at a fraction of
+## its opacity -- it pauses nothing, takes no input and covers nothing,
+## so a burn can be watched bending the track while it is still being
+## made. That is the one thing the reading map cannot do, because the
+## thing it does first is stop time.
+##
+## The watching one is a **hold**, not a toggle, and that is what makes
+## the pair work: the pilot keeps one hand on the key and the other on
+## the drive, and what they are doing is looking up from the
+## instruments for a second rather than opening a screen. A toggle
+## would have been a second screen to remember to close -- and the
+## first draft had it on the bare M, which put the map a pilot reads
+## behind a modifier for the one they glance at.
 ##
 ## Drawn from the **model**, not from what happens to be in the scene. That
 ## is the whole reason it can exist: the streaming manager keeps one planet
@@ -157,6 +165,12 @@ const ZOOM_REACH: Array[float] = [0.0, 30000.0, 7500.0, 2000.0]
 ## to hold the system with an edge round it.
 const LOCK_HEADROOM: float = 1.35
 
+## How much past a body -- and past the ship looking at it -- the
+## watching map's automatic framing reaches. Two and a half, so a
+## planet sits in the middle third of the view with its moons around
+## it rather than filling the frame edge to edge.
+const FRAME_HEADROOM: float = 2.5
+
 signal teleport_requested(body: SystemBody)
 
 var _system: StarSystem = null
@@ -224,6 +238,14 @@ enum Mode { SHUT, LIVE, FULL }
 var _mode: int = Mode.SHUT
 var _ticks: int = 0
 
+## What the zoom and the middle were before a peek framed a planet, so
+## releasing the key hands the reading map back exactly as the pilot
+## left it. The zoom is a setting (see `_zoom`), and an overlay that
+## quietly re-set it would be an overlay spending somebody else's.
+var _was_zoom: int = -1
+var _was_focus: Vector2 = Vector2.ZERO
+var _was_following: bool = true
+
 
 func is_open() -> bool:
 	return _mode != Mode.SHUT
@@ -258,6 +280,8 @@ func toggle(mode: int = Mode.FULL) -> void:
 		PauseGate.release(self, get_tree())
 	else:
 		PauseGate.hold_exclusive(self, get_tree())
+	if is_live():
+		_frame_whatever_is_near()
 	_forecast()
 	_canvas.queue_redraw()
 
@@ -265,19 +289,109 @@ func toggle(mode: int = Mode.FULL) -> void:
 func close() -> void:
 	_mode = Mode.SHUT
 	_canvas.hide()
+	_restore_framing()
 	PauseGate.release(self, get_tree())
 
 
+## Puts the watching map on the body the ship is at, if it is at one.
+##
+## A peek taken in a planet's well is a peek about **that planet**: the
+## whole system at a glance is what `M` is for, and at system scale the
+## ship, the ground it is about to touch and the moon it is aiming past
+## are three pixels in the same place. So the rung is the tightest one
+## that still holds both the body and the ship, and the middle goes on
+## the body.
+##
+## Out between the orbits nothing is framed and the map stays as the
+## pilot set it -- there is nothing to frame, and the thing they are
+## watching is the shape of the whole crossing.
+func _frame_whatever_is_near() -> void:
+	if _system == null or _ship == null or not is_instance_valid(_ship):
+		return
+	var near: SystemBody = near_body(_ship.global_position)
+	if near == null:
+		return
+	_was_zoom = _zoom
+	_was_focus = _focus
+	_was_following = _focus_follows
+	_zoom = rung_for(near, _ship.global_position)
+	_focus = _position_of(near)
+	_focus_follows = false
+
+
+## Hands the framing back, if a peek took it.
+func _restore_framing() -> void:
+	if _was_zoom < 0:
+		return
+	_zoom = _was_zoom
+	_focus = _was_focus
+	_focus_follows = _was_following
+	_was_zoom = -1
+
+
+## The body whose well the ship is inside, or null out in the open.
+##
+## The star is left out on purpose: its well is the whole system, so
+## "near the star" is true everywhere and framing it would mean framing
+## everything, which is the view `M` already gives. A body with no well
+## of its own -- a station -- is left out for the same reason in
+## reverse: there is nothing to be inside.
+func near_body(point: Vector2) -> SystemBody:
+	if _system == null:
+		return null
+	var best: SystemBody = null
+	var nearest: float = INF
+	for body: SystemBody in _system.bodies:
+		if body.kind == SystemBody.Kind.STAR or body.well_radius <= 0.0:
+			continue
+		var away: float = point.distance_to(_position_of(body))
+		if away < body.well_radius and away < nearest:
+			nearest = away
+			best = body
+	return best
+
+
+## The tightest zoom rung that still holds a body and the ship looking
+## at it, or the whole system when none of them do.
+##
+## The body needs room round it rather than exactly its own radius --
+## a planet drawn edge to edge is a planet with nowhere for its moons
+## -- and the ship has to be inside the reach or the one thing the
+## watching map is for would be off the edge of it.
+func rung_for(body: SystemBody, point: Vector2) -> int:
+	var wanted: float = maxf(
+		body.radius * FRAME_HEADROOM,
+		point.distance_to(_position_of(body)) * FRAME_HEADROOM,
+	)
+	var best: int = 0
+	for rung: int in range(1, ZOOM_REACH.size()):
+		if ZOOM_REACH[rung] < wanted:
+			continue
+		if best == 0 or ZOOM_REACH[rung] < ZOOM_REACH[best]:
+			best = rung
+	return best
+
+
 func _unhandled_key_input(event: InputEvent) -> void:
-	# The reading map first: `toggle_map` is bound to a bare M and
-	# matches Shift+M as well, because Godot ignores modifiers unless
-	# asked not to. Checking the fuller one first is cheaper than
-	# asking every call for an exact match.
-	if event.is_action_pressed(&"toggle_map_full"):
-		toggle(Mode.FULL)
+	# The held one first: `toggle_map` is a bare M and matches Shift+M
+	# as well, because Godot ignores modifiers unless it is asked not
+	# to. So Shift+M has to be answered before the plain key gets a
+	# look at it, or peeking would also toggle the map underneath.
+	if event.is_action_pressed(&"peek_map"):
+		# Not while the reading map is up: that one has already stopped
+		# the world, and there is nothing live left to lay over it.
+		if not is_open():
+			toggle(Mode.LIVE)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_released(&"peek_map"):
+		# Let go and it goes. The release has to be taken whatever the
+		# mode is -- the shift can come up before the M does, and a
+		# release nobody answered is a map that stays on screen.
+		if is_live():
+			close()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"toggle_map"):
-		toggle(Mode.LIVE)
+		toggle(Mode.FULL)
 		get_viewport().set_input_as_handled()
 	elif is_live():
 		# Everything else belongs to the game underneath. The live map
@@ -579,13 +693,9 @@ func _draw_map() -> void:
 			"SYSTEM %s" % _system.display_name,
 			LABEL,
 		)
-		# What shuts this one is the key that opened it, and M now does
-		# something else: it drops back to flying with the map still up.
-		# A screen that names the wrong exit is worse than one that names
-		# none, which is the rule in UI_STYLE section 11.
 		var hints: String = (
-			"%s or Esc closes,  M flies on,  click picks,  right click marks,  + / - zooms"
-			% HelpScreen.keys_for(&"toggle_map_full")
+			"%s or Esc closes,  %s watches while flying,  click picks,  right click marks,  + / - zooms"
+			% [HelpScreen.keys_for(&"toggle_map"), HelpScreen.keys_for(&"peek_map")]
 		)
 		if _picked != null:
 			hints += ",  Enter teleports (dev)"

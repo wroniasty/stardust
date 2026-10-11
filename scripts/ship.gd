@@ -955,6 +955,15 @@ func load_units(kind: Stores.Kind, units: int) -> int:
 	return taken
 
 
+## Takes what will fit out of a box of units, leaving the rest in it.
+## Returns how many went aboard.
+func take_cache(cache: StoresCache) -> int:
+	var taken: int = hold.take_cache(cache, cargo_capacity())
+	if taken > 0:
+		_hold_shifted()
+	return taken
+
+
 ## Turns raw ore into what it is for, as much of it as the hold can take
 ## the result of.
 ##
@@ -1070,14 +1079,39 @@ func mend_engine(engine: EngineInstance) -> int:
 ## turns it back into a crate in the world is the world's business, and a
 ## jettison that annihilates the cargo is not a tactical decision, it is
 ## tidying up.
-## How fast a jettisoned module leaves the ship, relative to the ship.
+## How hard a jettisoned module leaves the ship: out of the doors,
+## across the hull, and away from whatever the ship is standing on.
 ##
-## Enough to be clear of the hull long before the crate will answer a pilot
-## again: the hull is some twenty-five px long and the crate is deaf for two
-## seconds, so at this speed it is eighty px astern by the time it can be
-## picked back up. Throwing something overboard has to be a decision that
-## takes effect, not a module that follows the ship around.
-const EJECT_SPEED: float = 40.0
+## **Three components, because forty px/s straight aft was not enough
+## and the reason was the ground.** In open space any shove works --
+## nothing stops, so the gap only grows. Landed, the crate went aft at
+## forty, fell the two pixels out of the bay and settled a hull's
+## length behind the legs; taxiing anywhere drove straight back over
+## it, which turns throwing something overboard into picking it up
+## again. Reported by the pilot, from the ground.
+##
+## So: a harder shove aft, a push **across** the hull, and a lift
+## **away from the ground**. The lift is what buys the distance -- it
+## is the only one of the three that is not fighting the surface -- and
+## at a surface gravity around 30 px/s^2 seventy px/s is a four second
+## arc, which puts the box some two hundred pixels off. The sideways
+## push alternates sides (`_eject_side`), so emptying a hold scatters
+## the crates instead of stacking them in one place.
+const EJECT_SPEED: float = 70.0
+const EJECT_SIDEWAYS: float = 50.0
+const EJECT_LIFT: float = 140.0
+
+## Pull below which there is no "up" worth throwing something towards,
+## in px/s^2. Out between the orbits the star's patched well is a
+## fraction of this, and out there the lift would only be a third
+## direction nobody asked for: nothing settles in the open, so the
+## shove alone does the whole job.
+const EJECT_GRAVITY_FLOOR: float = 1.0
+
+## Which side the next one goes out. Flipped by every jettison rather
+## than rolled, so emptying a hold scatters predictably -- and so a
+## test can say which side it expects.
+var _eject_side: float = 1.0
 
 
 func jettison() -> Resource:
@@ -1086,8 +1120,35 @@ func jettison() -> Resource:
 	var item: Resource = carried
 	var rarity: int = carried_rarity
 	release()
+	_eject_side = -_eject_side
 	jettisoned.emit(item, rarity)
 	return item
+
+
+## Throws a counted store overboard -- spare parts, stardust, ore -- as
+## one container holding however many went out.
+##
+## **Why this exists at all.** Modules could be dumped from the first
+## day and stores could not, so a hold filled with two hundred spare
+## parts was a hold that could not be emptied anywhere but a refinery.
+## The units are the pilot's to throw away, and a crate that holds a
+## count is the one piece that was missing (`StoresCache`).
+##
+## All of one kind, not a batch size: "how many of these do I keep" is
+## a question with no instrument to answer it in flight, and a hold is
+## emptied to make room for a thing whose bulk the pilot is looking at.
+## Hands back what it made, or null when there was nothing of that kind
+## aboard.
+func jettison_units(kind: Stores.Kind) -> StoresCache:
+	var cache: StoresCache = hold.dump(kind)
+	if cache == null:
+		return null
+	_eject_side = -_eject_side
+	# The same door and the same signal as a module: one jettison path,
+	# and one place the world hears about it.
+	jettisoned.emit(cache, 0)
+	_hold_shifted()
+	return cache
 
 
 ## Where a jettisoned module leaves the hull: the cargo bay itself, in world
@@ -1104,7 +1165,20 @@ func eject_point() -> Vector2:
 ## difference between the two, and it is the difference that has to clear
 ## the hull.
 func eject_velocity() -> Vector2:
-	return linear_velocity + transform.basis_xform(Vector2.DOWN).normalized() * EJECT_SPEED
+	var shove: Vector2 = (
+		transform.basis_xform(Vector2.DOWN).normalized() * EJECT_SPEED
+		+ transform.basis_xform(Vector2.RIGHT).normalized()
+		* EJECT_SIDEWAYS * _eject_side
+	)
+	# Up is away from whatever is pulling, asked of the tree rather than
+	# read off `_gravity`: that one is a cache filled during integration,
+	# and a landed ship is exactly the case where integration returns
+	# early -- so the one state this was reported from is the state the
+	# cache cannot be trusted in.
+	var pull: Vector2 = gravity_acceleration_at(global_position)
+	if pull.length() > EJECT_GRAVITY_FLOOR:
+		shove -= pull.normalized() * EJECT_LIFT
+	return linear_velocity + shove
 
 
 ## Empties the whole hold and hands back what was in it, for whoever is

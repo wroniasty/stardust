@@ -42,12 +42,18 @@ enum Verdict { NONE, ON_COURSE, OFF_COURSE, AWAY, OVERSHOOT }
 
 ## Inside this, the crossing is over and the instrument goes away.
 ##
-## Ten thousand pixels is about where the scanner's own marker contact
-## takes the job over -- it has drawn the pin on the edge ring all along
-## -- and it is roughly four planet radii, so the body being aimed at is
-## a disc on screen rather than a point. A ring saying "that way" about
-## something filling a third of the view is a ring in the way.
-const ARRIVED: float = 10000.0
+## **Five hundred pixels: close enough to see the thing.** The first
+## figure here was ten thousand, on the argument that the scanner's own
+## marker contact takes the job over and that ten thousand is four
+## planet radii, so whatever is being aimed at is a disc rather than a
+## point. The pilot flew it and disagreed, and they are right: a pin is
+## a place, not a planet, and most of them are in open space with
+## nothing to see -- so the instrument switched itself off a long way
+## out and left the last stretch, the one where the braking burn
+## actually happens, with nothing on it. At five hundred the pin is
+## inside the same screen as the ship and the ring has nothing left to
+## say.
+const ARRIVED: float = 500.0
 
 ## How far off the line still counts as straight at it, in degrees.
 ##

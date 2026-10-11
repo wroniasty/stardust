@@ -686,11 +686,19 @@ Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 
 Cel: widzieć, jak odpalenie silnika zagina tor, w chwili, w której się je robi.
 
-- [x] **Dwa tryby jednej mapy, nie druga mapa.** `M` kładzie ten sam rysunek na
-  lecącym świecie, `Shift+M` otwiera mapę taką, jaka była. Jeden rysunek, jeden
-  układ, jeden prognostyk — wszystko, co je różni, to `Mode.LIVE` i `Mode.FULL`.
-  Poproszenie o drugi tryb **przełącza**, nie zamyka: pilot, który chce stanąć
-  i poczytać, nie prosi o zamknięcie nakładki.
+- [x] **Dwa tryby jednej mapy, nie druga mapa.** `M` otwiera mapę taką, jaka
+  była (pauza, kurtyna, klikanie), **`Shift+M` trzymane** kładzie ten sam
+  rysunek na lecącym świecie. Jeden rysunek, jeden układ, jeden prognostyk —
+  wszystko, co je różni, to `Mode.LIVE` i `Mode.FULL`.
+- [x] **Nakładka jest trzymana, nie przełączana.** Na nakładkę się zerka: jedna
+  ręka na klawiszu, druga na drążku. Przełącznik byłby drugim ekranem do
+  pamiętania, żeby go zamknąć. Pierwsza wersja miała klawisze odwrotnie —
+  nakładka na gołym `M`, ekran za modyfikatorem — czyli za modyfikatorem
+  stała mapa, którą się czyta. Zgłoszone przez pilota.
+- [x] **Zerknięcie samo się kadruje na ciele, przy którym jesteśmy** (`near_body`
+  — wewnątrz jego studni; gwiazda nie, bo jej studnia to cały układ).
+  Najciaśniejszy szczebel, który trzyma i ciało, i statek, środek na ciele —
+  a puszczenie klawisza **oddaje kadr**, bo zoom to nastawa pilota.
 - [x] **Nakładka niczego nie zatrzymuje i niczego nie zasłania.** Bez pauzy
   (`PauseGate` puszczony, nie trzymany), bez kurtyny pod spodem, alfa 0.33,
   warstwa 9 — nad światem i welonami, **pod przyrządami**. Przy jednej trzeciej
@@ -747,11 +755,58 @@ Cel: w przelocie widać, czy dolecę — i kiedy zacząć hamować.
 - [x] **Ostrzeżenia w tym samym pasmie, co HULL i FUEL**, bursztynowe, na końcu
   listy, bez pulsu: `WRONG DIRECTION`, `OFF COURSE`, `OVERSHOOT`. Stan przelotu
   nikogo nie zabija, więc czeka za wszystkim, co zabija.
-- [x] **Poniżej 10 000 px przyrząd znika** — przejmuje znacznik skanera, a
-  pierścień mówiący „tam" o czymś, co zajmuje trzecią część widoku, jest
-  pierścieniem w drodze. W studni planety nie pokazuje się wcale.
+- [x] **Poniżej 500 px przyrząd znika.** Pierwsza liczba to było 10 000 —
+  „dalej przejmuje znacznik skanera, a to i tak cztery promienie planety".
+  Pilot to przeleciał i miał rację: szpilka jest **miejscem**, nie planetą,
+  najczęściej w pustce, gdzie nie ma czego zobaczyć — więc przyrząd gasł
+  daleko i zostawiał bez niczego dokładnie tę końcówkę, w której wypada
+  wypał hamujący. Przy 500 px szpilka jest na tym samym ekranie, co statek.
+  W studni planety nie pokazuje się wcale.
 
 Gotowe, gdy: dolatuję do szpilki bez zgadywania, kiedy zawrócić i zahamować.
+
+---
+
+## MAUX9: Co można wyrzucić
+
+Cel: hold da się opróżnić wszędzie, a wyrzucone rzeczy zostają za nami.
+
+- [x] **Wyrzut ma trzy składowe, nie jedną.** Czterdzieści px/s prosto w tył
+  wystarczało w pustce — tam nic się nie zatrzymuje, więc odstęp tylko rośnie —
+  a na gruncie skrzynka szła w tył, spadała te dwa piksele z luku i siadała
+  długość kadłuba za podwoziem. Dojechanie gdziekolwiek to było podniesienie
+  jej z powrotem. Zgłoszone z gruntu, przez pilota. Teraz: **70 w tył, 50 w bok,
+  140 w górę** (od tego, co ciągnie), a boki **naprzemiennie**, więc opróżnianie
+  luku rozsypuje skrzynki, a nie składa je w jednym miejscu.
+- [x] **Winda musi pokonać drzwi.** Statek na gruncie stoi dziobem w górę, więc
+  „w tył" to prosto w ziemię: wyrzut z luku strzela skrzynką w grunt, a winda
+  jest jedyną składową, która pokazuje gdziekolwiek indziej. Dlatego 140 przy
+  70 w tył — zmierzone: skrzynka siada **151 px** od statku, wobec **47 px**
+  starym sposobem, przy kadłubie długości 13 px.
+- [x] **`StoresCache`: skrzynka, która trzyma liczbę.** Moduł dawał się wyrzucić
+  od pierwszego dnia, a liczonych zapasów nie — więc luk pełny rudy albo części
+  dawał się opróżnić wyłącznie w rafinerii, czyli był lukiem bez miejsca na
+  napęd, który właśnie się znalazł. `Hold.spill` wskazywał na tę dziurę od
+  miesięcy: „typ skrzynki, który jeszcze nie istnieje".
+- [x] **Nie jest losowana i nie ma jej w żadnej tabeli łupów.** Istnieje, bo
+  ktoś ją wyrzucił — i później, bo coś zginęło, trzymając ją. Generator
+  rozsypujący je po planetach rozsypywałby wyroby na światach bez przemysłu,
+  czyli dokładnie na odwrót niż ekonomia gry: ruda wychodzi z ziemi, części
+  i pył z rafinerii.
+- [x] **Drzwi `OUT` przy każdym wierszu zapasów** w edytorze (jedna lista
+  `STORE_ROWS` czytana przez rysowanie, guziki i obsługę). Cały zapas jednego
+  rodzaju na raz: „ile zostawić" to pytanie, na które w locie nie ma przyrządu,
+  a luk opróżnia się pod rzecz, której gabaryt pilot ma przed oczami.
+- [x] **Podniesienie bierze tyle, ile wejdzie, a resztę zostawia w skrzynce**
+  (`Hold.take_cache`). Czterdzieści części do miejsca na dwanaście to dwanaście
+  na pokładzie i dwadzieścia osiem dalej na ziemi — transakcja jest w luku,
+  świat decyduje tylko, czy skrzynka jeszcze stoi.
+- [x] Kolor skrzynki z zawartości, nie z klasy, której pudło z liczbą nie ma:
+  części w kanale statku (`accent`), pył w `value`, ruda w `inert`. Skaner
+  pyta o **kolor**, a nie o numer klasy, bo inaczej to były dwie skrzynki —
+  turkusowa w świecie i najbledsza szara na skanerze.
+
+Gotowe, gdy: luk opróżnia się wszędzie, a wyrzucone leży tam, gdzie je zostawiono.
 
 ---
 

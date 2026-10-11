@@ -71,6 +71,14 @@ const ICON_STEP: float = ICON + 3.0
 ## pressed is the same size as everything else that can be pressed, so
 ## "clickable" is a shape rather than something you find by trying.
 const BUTTON_HEIGHT: float = 11.0
+
+## Which counted stores get a row in the stores panel, in order.
+##
+## One list, because three things read it: the rows, the button beside
+## each row and what the button does. Ore is not here -- it has no row
+## yet, and the day it gets one it gets the button with it, because the
+## button is drawn from this list rather than written out beside it.
+const STORE_ROWS: Array[int] = [Stores.Kind.SPARE_PARTS, Stores.Kind.STARDUST]
 const BUTTON_GAP: float = 3.0
 
 ## The grab box at the end of a hardpoint's rest direction.
@@ -754,7 +762,9 @@ func _panels() -> Dictionary:
 	# Two rows of readings and a button under them: enough that the
 	# panel says something and can be acted on, little enough that the
 	# hold keeps the column it needs for icons.
-	var stores: float = ROW * 2.0 + BUTTON_HEIGHT + PAD * 3.0
+	var stores: float = (
+		BUTTON_HEIGHT * float(STORE_ROWS.size()) + BUTTON_HEIGHT + PAD * 3.0
+	)
 
 	var hold: Rect2 = Rect2(edge, edge, left, top - edge - stores - edge * 0.5)
 	var plan_x: float = hold.end.x + edge
@@ -930,20 +940,21 @@ func _draw_hold_icon(entry: Dictionary, box: Rect2, picked: bool) -> void:
 ## own -- the hold is their capacity, and it is already drawn above
 ## them. A bar with no end is a bar that lies about where the end is.
 func _draw_stores(font: Font, rect: Rect2) -> void:
-	var width: float = rect.size.x - PAD * 2.0
-	var y: float = rect.position.y + PAD + float(FONT_SIZE)
-	for kind: int in [Stores.Kind.SPARE_PARTS, Stores.Kind.STARDUST]:
+	for index: int in range(STORE_ROWS.size()):
+		var kind: int = STORE_ROWS[index]
+		var row: Rect2 = store_row(rect, index)
+		# The reading stops where the button starts, or the count would
+		# be right-aligned underneath it.
 		UiDraw.row(
 			_canvas,
 			font,
-			Vector2(rect.position.x + PAD, y),
-			width,
+			Vector2(row.position.x, row.position.y + float(FONT_SIZE)),
+			row.size.x - dump_width() - BUTTON_GAP,
 			Stores.kind_name(kind),
 			"%d" % _ship.carrying(kind as Stores.Kind),
 			_ink.value if _ship.carrying(kind as Stores.Kind) > 0 else _ink.inert,
 			_ink.label,
 		)
-		y += ROW
 	# What breaking the picked thing down would give, beside the button
 	# that does it -- the figure and the lever in one place, because the
 	# figure is the whole of the decision. The button itself is drawn
@@ -1119,6 +1130,22 @@ func buttons() -> Array[Dictionary]:
 		"on": worth > 0,
 	})
 
+	# One door per store row. Throwing units out is the only way to
+	# empty a hold of them away from a refinery: a module can always go
+	# overboard, and until this existed two hundred spare parts could
+	# not, which is a hold with no room for the drive you just found.
+	for index: int in range(STORE_ROWS.size()):
+		var row: Rect2 = store_row(panels["stores"] as Rect2, index)
+		out.append({
+			"id": "dump%d" % index,
+			"rect": Rect2(
+				Vector2(row.end.x - dump_width(), row.position.y),
+				Vector2(dump_width(), BUTTON_HEIGHT),
+			),
+			"label": "OUT",
+			"on": _ship.carrying(STORE_ROWS[index] as Stores.Kind) > 0,
+		})
+
 	out.append({
 		"id": "swap",
 		"rect": panels["swap"] as Rect2,
@@ -1168,6 +1195,32 @@ func _text_width(text: String) -> float:
 ## How wide the scrap button is. Its own function because the figure
 ## beside it has to start where the button ends, and two places working
 ## that out separately is how a label comes to sit on a button.
+## One store's row inside the panel, and the door at the end of it.
+##
+## Worked out here and read by the draw, by `buttons()` and so by the
+## hit test -- the rule this project keeps relearning. A row drawn in
+## one function and hit-tested in another is a button that works until
+## somebody changes the padding.
+func store_row(panel: Rect2, index: int) -> Rect2:
+	return Rect2(
+		Vector2(
+			panel.position.x + PAD,
+			panel.position.y + PAD + float(index) * BUTTON_HEIGHT,
+		),
+		Vector2(panel.size.x - PAD * 2.0, BUTTON_HEIGHT),
+	)
+
+
+## How wide the little door at the end of a store row is.
+##
+## `OUT` rather than a word, because it is the narrowest thing on this
+## screen that has to say something: three letters is the switch
+## primitive's own form (UI_STYLE section 6), and the row it sits on
+## already says which store it is about.
+func dump_width() -> float:
+	return _text_width("OUT") + PAD
+
+
 func scrap_button_width() -> float:
 	return _text_width("scrap") + PAD * 2.0
 
@@ -1214,6 +1267,8 @@ func press(id: String) -> bool:
 			_fit()
 		"scrap":
 			_scrap_picked()
+		"dump0", "dump1":
+			_dump_store(int(id.right(1)))
 		"group0", "group1":
 			_set_trigger(int(id.right(1)))
 		"hold":
@@ -1251,6 +1306,23 @@ func _draw_buttons(font: Font) -> void:
 			label,
 			_ink.value if on or lit else _ink.inert,
 		)
+
+
+## Throws every unit of one store overboard, as one box.
+##
+## All of it, because "how many do I keep" has no instrument to answer
+## it in flight and the room is what the pilot is looking at. The box
+## is a real crate: it can be flown back into, which is what makes this
+## throwing something away rather than deleting it.
+func _dump_store(index: int) -> void:
+	if index < 0 or index >= STORE_ROWS.size():
+		return
+	var kind: int = STORE_ROWS[index]
+	var cache: StoresCache = _ship.jettison_units(kind as Stores.Kind)
+	if cache == null:
+		_notice = "no %s aboard" % Stores.kind_name(kind)
+		return
+	_notice = "%s overboard" % cache.title()
 
 
 ## Puts the module in a socket back in the hold, or over the side.

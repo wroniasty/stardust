@@ -292,7 +292,12 @@ func loot_contacts(to_screen: Transform2D, view: Vector2) -> Array[Dictionary]:
 			"at": centre + _on_ring(from_centre, extent) if off_screen else screen_point,
 			"direction": from_centre.normalized() if off_screen else Vector2.ZERO,
 			"distance": distance,
-			"rarity": crate.rarity(),
+			# The colour, not the grade it is worked out from: a box of
+			# units has no grade, and the crate is the one thing that
+			# knows what it is painted. Asking for the number and
+			# looking the colour up again was two crates -- teal in the
+			# world and the dullest grey on the scanner.
+			"ink": crate.rarity_color_of(),
 			"on_ring": off_screen,
 		})
 
@@ -394,9 +399,7 @@ func _draw_pin(font: Font, contact: Dictionary) -> void:
 ## is on screen -- the same mark in two states rather than two marks.
 func _draw_loot(font: Font, contact: Dictionary) -> void:
 	var at: Vector2 = contact["at"]
-	var colour: Color = LootCrate.RARITY_COLORS[
-		clampi(int(contact["rarity"]), 0, LootCrate.RARITY_COLORS.size() - 1)
-	]
+	var colour: Color = contact["ink"]
 
 	if not bool(contact["on_ring"]):
 		var points: PackedVector2Array = _diamond(at, Vector2.UP, LOOT_BRACKET)

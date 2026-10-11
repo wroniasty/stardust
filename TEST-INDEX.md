@@ -45,8 +45,10 @@ camera, chords, energy, shot mods, energy balance, engine failures, hull
 outline, allocator, gimbal, gear module, ship fit-outs, workbench, creative
 tool, galaxy, jump (arming, balks, clearance, lane, kit, HUD, sequence,
 misjump), transit veil, save, system model, streaming, system tour, star,
-system map and the live overlay, the crossing to a pin (states, closest
-approach, braking burn) and the ring that draws it,
+system map and the live overlay (both keys, the held peek and its
+automatic framing), the crossing to a pin (states, closest approach,
+braking burn) and the ring that draws it, what a thrown crate does on
+the ground and the box of units that can be thrown,
 boost, input bindings, sprite sheets, the dock's skin still.
 
 ## Failures vs. warnings

@@ -535,17 +535,35 @@ Wspólna reguła dla wszystkich trzech: **klawisze wypisane na dole ekranu**,
 zawsze, tą samą metryką. Ekran modalny, który nie mówi, jak z niego wyjść, jest
 błędem, a nie stylem.
 
-**Mapa systemu ma drugi tryb i on nie jest ekranem.** `M` kładzie ten sam
-rysunek na lecącym świecie przy alfie 0.33, pod warstwą przyrządów (9, czyli
-nad światem i pod HUD-em), `Shift+M` otwiera ekran opisany wyżej. Różnica jest
-jedna i jest nią czas: ekran go zatrzymuje, nakładka nie. Dlatego nakładka
-**nie pisze nic przy krawędziach** — tytuł, skala, odczyt wybranego ciała i
-linijka z klawiszami trafiłyby dokładnie w paski, w róg przyrządów i w kolumnę
-przycisków — **nie bierze myszy** (mysz celuje i naciska przyciski) i **nie
-bierze klawiszy** poza swoim własnym. Zostają ciała, orbity i tor, przeliczany
-co cztery klatki, żeby odpalenie silnika było widać na torze w chwili, w której
-się je robi. Nakładka nie jest modalna, więc reguła o wypisanych klawiszach jej
-nie dotyczy: nie ma z czego wychodzić, a `M` jest w ekranie pomocy.
+**Mapa systemu ma drugi tryb i on nie jest ekranem.** `M` otwiera ekran
+opisany wyżej — zatrzymuje świat i czyta się go. **`Shift+M` trzymane** kładzie
+ten sam rysunek na lecącym świecie przy alfie 0.33, pod warstwą przyrządów
+(9, czyli nad światem i pod HUD-em). Różnica jest jedna i jest nią czas: ekran
+go zatrzymuje, nakładka nie.
+
+**Nakładka jest trzymana, nie przełączana**, i to jest cała różnica
+w gestach: ekran się otwiera i zamyka, a na nakładkę się **zerka** — jedna ręka
+na klawiszu, druga na drążku, tak jak się podnosi wzrok z przyrządów. Pierwsza
+wersja miała to odwrotnie (nakładka na gołym `M`, ekran za modyfikatorem), co
+stawiało za modyfikatorem mapę, którą się czyta.
+
+Dlatego nakładka **nie pisze nic przy krawędziach** — tytuł, skala, odczyt
+wybranego ciała i linijka z klawiszami trafiłyby dokładnie w paski, w róg
+przyrządów i w kolumnę przycisków — **nie bierze myszy** (mysz celuje i naciska
+przyciski) i **nie bierze klawiszy** poza swoim własnym. Zostają ciała, orbity
+i tor, przeliczany co cztery klatki, żeby odpalenie silnika było widać na torze
+w chwili, w której się je robi. Nakładka nie jest modalna, więc reguła
+o wypisanych klawiszach jej nie dotyczy: nie ma z czego wychodzić, a oba
+klawisze są w ekranie pomocy (który pisze teraz modyfikatory, bo inaczej oba
+wiersze mówiłyby „M").
+
+**I sama się kadruje.** Zerknięcie w studni planety jest zerknięciem o **tej
+planecie**: w skali układu statek, grunt, na który schodzi, i księżyc, który
+mija, to trzy piksele w jednym miejscu. Więc nakładka otwiera się na
+najciaśniejszym szczeblu, który trzyma i ciało, i statek, ze środkiem na ciele
+— a puszczenie klawisza **oddaje kadr**, bo zoom to nastawa pilota, nie stan
+lotu. Między orbitami nie kadruje nic: nie ma czego, a tym, co się wtedy
+oglada, jest kształt całego przelotu.
 
 ---
 
