@@ -40,7 +40,7 @@ const DEFAULT_LEVEL: int = 1
 ## the two in series -- deliberately slower than a press of H, because this
 ## turn was not asked for and a view that snaps on its own is a view that
 ## startles.
-const LOCK_ALTITUDE: float = 500.0
+const LOCK_ALTITUDE: float = 600.0
 const LOCK_RATE: float = 2.5
 
 ## Speed at which the camera has pulled all the way back, in pixels per second.
@@ -245,7 +245,11 @@ func level_view() -> void:
 func _level_target() -> float:
 	if _target == null:
 		return 0.0
-	var planet: Planet = Planet.nearest(get_tree(), _target.global_position)
+	# The body whose **ground** is closest, which is the same one the
+	# approach weight is measured against. Two readers of one question,
+	# and they must not pick different worlds to put at the bottom of
+	# the screen.
+	var planet: Planet = below()
 	if planet == null:
 		return 0.0
 	var up: Vector2 = _target.global_position - planet.global_position
@@ -256,29 +260,66 @@ func _level_target() -> float:
 	return up.angle() + PI * 0.5
 
 
+## Which body the ship is over: the one whose **ground** is nearest,
+## not the one whose centre is.
+##
+## `Planet.nearest` answers by centre distance, which is the wrong
+## question whenever a small body is beside a big one. A ship a hundred
+## pixels over a moon can easily be nearer the centre of the planet the
+## moon goes round, and a camera that framed the planet while the pilot
+## was landing on the moon would be putting the wrong world at the
+## bottom of the screen on exactly the approach that needs it.
+##
+## Taking the minimum over all of them also answers the two-body case
+## without a second rule: whichever ground is closer wins, whether the
+## other is 1200 px away or 12.
+func below() -> Planet:
+	if _target == null:
+		return null
+	var best: Planet = null
+	var lowest: float = INF
+	for source: Node in get_tree().get_nodes_in_group(Planet.GROUP):
+		var planet: Planet = source as Planet
+		if planet == null:
+			continue
+		var altitude: float = planet.height_above_terrain(_target.global_position)
+		if altitude < lowest:
+			lowest = altitude
+			best = planet
+	return best
+
+
+## How high the ship is over whatever is below it, or INF over nothing.
+func altitude() -> float:
+	var planet: Planet = below()
+	if planet == null or _target == null:
+		return INF
+	return planet.height_above_terrain(_target.global_position)
+
+
 ## How much of the view the approach has taken over, 0 to 1.
 ##
-## Two conditions, saying different things. **The gear is the pilot declaring
-## an intention to land** -- flying low over a ridge with the legs up is not
-## an approach, and a camera that rolled every time the ground came close
-## would be seasick. **The altitude is how far along that intention is**, so
-## the weight is continuous rather than a switch: at three hundred the lock
-## barely leans on the view, on short finals it holds it.
+## **Altitude alone.** It used to need the gear down as well, on the
+## argument that the gear is the pilot declaring an intention to land
+## and that flying low over a ridge is not an approach. That is a fair
+## description of flying and a poor one of what the camera is for: being
+## six hundred pixels over rock is when the view has to be readable,
+## whether the legs are out, whether the pilot meant to be there, and
+## especially when they did not. The gear condition also meant the
+## camera stayed level through every emergency descent, which is the
+## one it was worth having for.
 ##
-## Measured against the terrain, not the nominal radius, because that is the
-## altitude the pilot is reading off the landing panel while deciding.
+## Continuous rather than a switch, as before: at six hundred it barely
+## leans on the view, on short finals it holds it.
+##
+## Measured against the terrain, not the nominal radius, because that is
+## the altitude the pilot is reading off the landing panel while
+## deciding.
 func lock_weight() -> float:
-	var ship: Ship = _target as Ship
-	if ship == null or ship.gear == null or not ship.gear.is_deployed():
+	var high: float = altitude()
+	if is_inf(high):
 		return 0.0
-	var planet: Planet = Planet.nearest(get_tree(), ship.global_position)
-	if planet == null:
-		return 0.0
-	return clampf(
-		inverse_lerp(LOCK_ALTITUDE, 0.0, planet.height_above_terrain(ship.global_position)),
-		0.0,
-		1.0,
-	)
+	return clampf(inverse_lerp(LOCK_ALTITUDE, 0.0, high), 0.0, 1.0)
 
 
 ## Turns the view towards "planet down" by however much the approach has

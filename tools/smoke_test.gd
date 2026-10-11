@@ -175,6 +175,12 @@ var _auto_kill_ticks: int = -1
 ## can ask where the nose ended up against the direction the pilot could
 ## see on the HUD.
 var _orbit_travel: Vector2 = Vector2.ZERO
+
+## Ticks the ride spent on the ground, and how many of those the hull
+## temperature did not move on at all.
+var _ride_was_heat: float = -1.0
+var _ride_landed_ticks: int = 0
+var _ride_frozen_ticks: int = 0
 var _peak_turn_during_brake: float = 0.0
 var _peak_speed: float = 0.0
 
@@ -303,6 +309,8 @@ func _physics_process(delta: float) -> bool:
 				engine.throttle = 1.0
 				engine.target_throttle = 1.0
 			_ride_lit = _ship.engines.size()
+			# Put down hot, so the ground has something to cool.
+			_ship.hull_heat = 0.6
 			# Forced rather than taken from the seed, and only once the ship is
 			# down, so the check means the same thing on every planet.
 			_planet.spin_rate = TEST_SPIN
@@ -310,6 +318,22 @@ func _physics_process(delta: float) -> bool:
 			_ride_start_polar = (
 				_ship.global_position - _planet.global_position
 			).angle() - _planet.global_rotation
+		# Counted per tick rather than sampled twice, and the reason is
+		# two failed attempts: the ship leaves LANDED for a few ticks
+		# while it settles, it cools on exactly those ticks, and both
+		# earlier versions passed on that -- 0.017 of cooling that
+		# happened while it was briefly not on the ground at all.
+		#
+		# So the claim is made tick by tick: while the ship is landed,
+		# does the heat move?
+		if _ship.flight_mode == Ship.FlightMode.LANDED:
+			if _ride_was_heat >= 0.0:
+				_ride_landed_ticks += 1
+				if is_equal_approx(_ship.hull_heat, _ride_was_heat):
+					_ride_frozen_ticks += 1
+			_ride_was_heat = _ship.hull_heat
+		else:
+			_ride_was_heat = -1.0
 		if _ticks == RIDE_TICKS - 20:
 			_ride_moved = _ship.global_position.distance_to(_ride_start_world)
 			_ride_slip = absf(angle_difference(
@@ -1385,6 +1409,17 @@ func _evaluate_phase() -> void:
 			)
 		Phase.LANDED_RIDE:
 			_expect(_ride_moved > 1.0, "a spinning planet carries the landed ship with it (%.1f px)" % _ride_moved)
+			# Reported from the game: the hull does not cool down on the
+			# ground. `_integrate_forces` returns the moment the ship is
+			# LANDED and the heat step is inside it, so a ship that came
+			# down hot stayed hot for ever -- and a ship parked next to
+			# the star never took the burn damage either.
+			_expect(
+				_ride_landed_ticks > 30 and _ride_frozen_ticks == 0,
+				"and a hot hull cools on every tick it spends on the ground (%d of %d still)" % [
+					_ride_frozen_ticks, _ride_landed_ticks,
+				],
+			)
 			# The ground frame still exists where there is ground. The
 			# heading assist stopped using it above the air because out
 			# there it pointed the ship backwards -- this is the case it
@@ -1946,6 +1981,57 @@ func _check_weapons() -> void:
 		"a refused weapon is handed straight back and changes nothing",
 	)
 	probe.queue_free()
+
+
+## Kamera patrzy na najblizszy **grunt**, nie na najblizszy srodek.
+##
+## `Planet.nearest` answers by centre distance, and a planet's centre is
+## a thousand pixels under its own surface. So a ship a hundred pixels
+## over the ground with a small moon seven hundred away is, by that
+## measure, nearer the moon -- and the camera would put the moon at the
+## bottom of the screen during the landing.
+##
+## The rule is therefore the lowest ground of all of them, which also
+## answers "what if two bodies are close together" without a second
+## rule: whichever ground is nearer wins, at any separation.
+func _check_the_camera_watches_the_nearest_ground(
+	camera: ShipCamera, ship: Ship, first: Planet
+) -> void:
+	# Borrowed and put back. The first version moved the shared planet
+	# and the shared ship and left them there, and three later checks --
+	# the contact set, the rush veil and the smear -- failed against a
+	# world that had been teleported out from under them.
+	var planet_was: Vector2 = first.global_position
+	var ship_was: Vector2 = ship.global_position
+	var second: Planet = _spawn_planet()
+	# Put the ship a long way from both, then place them so that it is
+	# plainly lower over one than the other, and swap which.
+	for nearer_first: bool in [true, false]:
+		var low: float = 300.0
+		var high_up: float = 2000.0
+		ship.global_position = Vector2(0.0, 0.0)
+		first.global_position = Vector2(
+			first.surface_radius + (low if nearer_first else high_up), 0.0
+		)
+		second.global_position = Vector2(
+			-(second.surface_radius + (high_up if nearer_first else low)), 0.0
+		)
+		var over_first: float = first.height_above_terrain(ship.global_position)
+		var over_second: float = second.height_above_terrain(ship.global_position)
+		var wanted: Planet = first if over_first < over_second else second
+		_expect(
+			camera.below() == wanted,
+			"the camera picks the ground it is lowest over (%.0f against %.0f px)" % [
+				minf(over_first, over_second), maxf(over_first, over_second),
+			],
+		)
+		_expect(
+			is_equal_approx(camera.altitude(), minf(over_first, over_second)),
+			"and reads that one's altitude, not the other's (%.0f)" % camera.altitude(),
+		)
+	second.free()
+	first.global_position = planet_was
+	ship.global_position = ship_was
 
 
 ## The loot generator, reached as a script because the smoke test has no
@@ -2974,13 +3060,19 @@ func _check_camera(planet: Planet) -> void:
 	# change: 18 px, and those are the camera drifting as the ship falls.
 	sky.queue_free()
 
-	# The approach lock. Two conditions that say different things: the gear
-	# is an intention to land, the altitude is how far along it is.
+	# The approach lock, and it is altitude alone now. It used to want
+	# the gear down as well, on the argument that the legs are the pilot
+	# declaring an intention to land -- which describes flying well and
+	# the camera's job badly. Being six hundred pixels over rock is when
+	# the view has to be readable, and it is most worth having on the
+	# descent nobody intended.
 	ship.global_position = planet.global_position + Vector2(planet.surface_radius + 100.0, 0.0)
 	ship.gear.stow_instantly()
 	_expect(
-		is_zero_approx(camera.lock_weight()),
-		"low over the ground with the legs up is not an approach",
+		camera.lock_weight() > 0.5,
+		"low over the ground is an approach whether or not the legs are out (%.2f)" % [
+			camera.lock_weight(),
+		],
 	)
 
 	ship.gear.set_deployed(true)
@@ -2993,8 +3085,9 @@ func _check_camera(planet: Planet) -> void:
 	ship.global_position = planet.global_position + high
 	_expect(
 		is_zero_approx(camera.lock_weight()),
-		"gear down above %.0f px is still flying, not landing" % ShipCamera.LOCK_ALTITUDE,
+		"and above %.0f px it is still flying, not landing" % ShipCamera.LOCK_ALTITUDE,
 	)
+	_check_the_camera_watches_the_nearest_ground(camera, ship, planet)
 
 	# Continuous, not a switch: the weight has to grow on the way down, or
 	# the view would snap the moment the threshold was crossed.
@@ -3029,14 +3122,21 @@ func _check_camera(planet: Planet) -> void:
 		"on short finals the planet ends up at the bottom of the screen by itself",
 	)
 
-	# Nothing happens when the gate is shut, whatever the camera is pointing
-	# at: the pilot's framing is theirs until an approach earns it.
-	ship.gear.stow_instantly()
+	# Nothing happens when the gate is shut, whatever the camera is
+	# pointing at: the pilot's framing is theirs until an approach earns
+	# it. The gate is the altitude now and not the gear, so this flies
+	# the ship **up** rather than stowing the legs -- which is the same
+	# claim about the same gate, asked of the thing that still closes
+	# it.
+	ship.global_position = planet.global_position + Vector2(
+		planet.surface_radius_at(ship.global_position) + ShipCamera.LOCK_ALTITUDE * 2.0,
+		0.0,
+	)
 	camera.rotation = 2.0
 	camera.hold_planet_down(1.0)
 	_expect(
 		is_equal_approx(camera.rotation, 2.0),
-		"with the legs up the camera leaves the pilot's framing alone",
+		"well above the ground the camera leaves the pilot's framing alone",
 	)
 
 	camera.queue_free()

@@ -1609,6 +1609,15 @@ func projectile_container() -> Node:
 
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
 	if flight_mode == FlightMode.LANDED:
+		# Heat first, and then nothing else. A landed ship has no forces
+		# to integrate -- that is what this early return is for -- but
+		# it does have a temperature, and the temperature was the one
+		# thing in here that is not about motion. Reported from the
+		# game: a hull that came down hot stayed hot for ever, measured
+		# at 42 ticks on the ground without the figure moving once. The
+		# other half of the same omission is that a ship parked in front
+		# of the star never took the burn damage it was earning.
+		_update_heat(state.step)
 		return
 
 	_resolve_commands(state)
