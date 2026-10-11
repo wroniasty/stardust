@@ -43,11 +43,14 @@ const BARS: Array[StringName] = [&"hull", &"heat", &"energy", &"fuel", &"jump"]
 
 ## How many bars the ship panel is allowed to grow to.
 ##
-## Five today, with room kept for three more. The tape below reserves
+## Five today, with room kept for one more. The tape below reserves
 ## against **this** rather than against what is on screen, so a bar
 ## arriving -- heat coming up, a drive charging -- does not shove the
 ## altitude scale down the screen at the moment it is being read.
-const BARS_ROOM: int = 8
+##
+## Every one of them costs the scale twelve pixels, which is why the
+## reserve is a decision rather than a generous round number.
+const BARS_ROOM: int = 6
 
 const BAR_HEIGHT: float = 11.0
 
@@ -179,7 +182,7 @@ const PANEL_OPACITY: float = 0.86
 ## The same width as the figures under the tape, because they stand in
 ## the same column of the screen and two stacks of boxes an unequal
 ## width apart read as two things with nothing to do with each other.
-const CONTROL_HEIGHT: float = 12.0
+const CONTROL_HEIGHT: float = 11.0
 const CONTROL_GAP: float = 1.0
 
 ## How solid the ground under an available button is. Barely there, in

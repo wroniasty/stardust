@@ -552,11 +552,12 @@ leci za pilota, kiedy pilot robi coś innego.
   niezwiązane rzeczy. Rosą **w górę** od rogu, więc ośmiu mieści się jako
   kolumna przy szerokości, którą oko czyta, a nie jako siatka kwadratow, której
   nie czyta.
-- [x] Taśma ustępuje im od dołu i zostawia nad sobą miejsce na **osiem**
+- [x] Taśma ustępuje im od dołu i zostawia nad sobą miejsce na **sześć**
   pasków statusu, choć jest ich pięć — rezerwa jest względem tego, do ilu panel
   **może** urośnąć, bo taśma zjeżdżająca w dół, gdy kadłub się nagrzeje, to
-  taśma, której oko szuka od nowa w chwili, gdy ją czyta. Cena: podziałka ma
-  93 px zamiast 164.
+  taśma, której oko szuka od nowa w chwili, gdy ją czyta. Każdy zarezerwowany
+  pasek kosztuje podziałkę 12 px, więc rezerwa jest decyzją, a nie okrągłą
+  liczbą: przy sześciu i guzikach po 11 px podziałka ma **125 px** ze 169.
 - [x] **Kursor** zmienia się w łapkę nad czymkolwiek klikalnym, a celownik tam
   nie rysuje. Jedna flaga, którą statek i tak musi mieć, żeby wstrzymać spust.
 - [ ] ~~Panel u góry z prawej~~ — był: chip, który go rozwija, i siedem kwadratów
