@@ -3149,6 +3149,42 @@ ustawia też `rarity` ani `affixes`, jak żaden z sześciu plików obok: jedno i
 drugie jest faktem o **rzucie**, a nie o rzeczy, i karta i tak mówi, co
 pudełko robi, bo `stat_rows()` wypisuje każdą funkcję jako 0/1.
 
+### Prograde/retrograde: rama gruntu konczy sie tam, gdzie konczy sie powietrze
+
+Zgłoszone z gry: prograde kierował statek **w złą stronę**. Zmierzone:
+`_apply_heading_hold` liczył prędkość względem gruntu zawsze, a
+`Planet.surface_velocity_at` to `spin_rate * ramię` — rośnie **liniowo z
+odległością od planety** i nie ma żadnego ograniczenia, bo `nearest_planet()`
+też go nie ma.
+
+Na seryjnej planecie (`spin_rate` 0.0075, promień 1025, prędkość kołowa 179.5
+przy gruncie) wychodzi tak:
+
+| promień | v orbitalna | v „gruntu" | błąd |
+|---|---|---|---|
+| 1025 (grunt) | 179.5 | 7.7 | 0° |
+| 2425 (+1400) | 116.7 | 18.2 | 0° |
+| 5025 (+4000) | 81.1 | 37.8 | 0° |
+| 13025 (+12000) | 50.4 | 97.9 | **180°** |
+
+Powyżej orbity synchronicznej (tu ~8400 px promienia) człon współobrotowy
+przewyższa orbitalny i wektor się odwraca. W locie: **172° od kierunku lotu**
+przy dwunastu promieniach. Tuż przy samej orbicie synchronicznej oba się
+znoszą, więc asysta w ogóle nic nie robiła — `HEADING_MIN_SPEED`.
+
+Poprawka: rama gruntu obowiązuje tam, gdzie **jest grunt albo powietrze** —
+`flight_mode == LANDED` albo `air_density_at > 0`. Powietrze obraca się z
+planetą i to jest cały powód, dla którego rama gruntu cokolwiek znaczy dla
+czegoś, co leci. Poza atmosferą nic się z planetą nie obraca.
+
+Nie mieszane gęstością, choć to się prosło: `SHELL_PROFILE` to schodek
+(1.0 / 0.5 / 0.15), więc mieszanie dawałoby trzy skoki kierunku zamiast
+jednego na granicy powietrza — a ten jeden to około 4° (10 px/s „gruntu"
+przeciw 150 px/s lotu).
+
+Stara notatka mówiła, że błąd to „kilka stopni najwyżej". To prawda na niskiej
+orbicie, czyli tam, gdzie na to patrzono.
+
 ### Automatyczne wygaszanie obrotu (`has_rotation_kill`)
 
 Nie komenda, i to jest cała różnica. Klawisz `kill_rotation` to prośba pilota

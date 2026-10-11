@@ -2624,6 +2624,19 @@ func nearest_planet() -> Planet:
 	return Planet.nearest(get_tree(), global_position)
 
 
+## Whether the ship is carried along by this planet's rotation.
+##
+## On the ground it plainly is. In the air it is near enough: the air
+## turns with the planet, which is the whole reason a ground frame means
+## anything to something that is flying. Above the air nothing turns
+## with it, and treating the co-rotating frame as real out there is what
+## pointed prograde backwards (see `point_nose_along`).
+func _rides_with(planet: Planet) -> bool:
+	if flight_mode == FlightMode.LANDED:
+		return true
+	return planet.air_density_at(global_position) > 0.0
+
+
 ## Whether a planet is close enough to be pulling on the ship.
 ##
 ## The sphere of influence, not the air and not the ground. A star does not
@@ -2927,12 +2940,25 @@ func _something_is_steering() -> bool:
 
 ## Swings the nose onto the direction of travel, or onto its opposite.
 ##
-## Velocity is measured against the ground, the same frame the landing check
-## and the contact solver use, so a ship parked on a turning planet reads as
-## stopped rather than as drifting east at eight pixels a second. In orbit
-## that differs from the true orbital prograde by the surface speed, a few
-## degrees at most; when M2's auto-orbit needs better it will work from the
-## orbital elements rather than from this.
+## Velocity is measured against the ground **where there is ground to
+## measure against** -- on it, or in the air above it, which turns with
+## it. That is the case this was written for: a ship parked on a turning
+## planet reads as stopped rather than as drifting east at eight pixels
+## a second.
+##
+## Everywhere else it is measured against the world, and the reason is
+## reported from the game: prograde pointed the ship backwards.
+## `surface_velocity_at` is `spin_rate * arm`, which **grows without
+## limit with the distance from the planet**, and `nearest_planet` has
+## no range at all. So above the synchronous radius the co-rotating
+## speed overtakes the orbital one and the ground-relative velocity
+## reverses; measured on the stock world, 172 degrees off at twelve
+## radii, and exactly 180 for a circular orbit. Near the synchronous
+## radius itself the two cancel and the assist simply gave up, under
+## `HEADING_MIN_SPEED`.
+##
+## The old note said the error was "a few degrees at most". It is a few
+## degrees in low orbit, which is where it was looked at.
 ##
 ## Bang-bang rather than a pair of tuned gains: aim for the fastest spin that
 ## can still be stopped by the time the nose arrives, which is the same
@@ -2941,7 +2967,7 @@ func _something_is_steering() -> bool:
 func _apply_heading_hold(state: PhysicsDirectBodyState2D) -> void:
 	var travel: Vector2 = state.linear_velocity
 	var planet: Planet = nearest_planet()
-	if planet != null:
+	if planet != null and _rides_with(planet):
 		travel -= planet.surface_velocity_at(global_position)
 	if travel.length() < HEADING_MIN_SPEED:
 		return

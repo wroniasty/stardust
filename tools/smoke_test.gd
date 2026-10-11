@@ -139,7 +139,7 @@ const DEATH_TICKS: int = 900
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
-	ROTATE_DAMAGED, KILL_ROTATION, AUTO_KILL, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, BRAKE_IN_GRAVITY,
+	ROTATE_DAMAGED, KILL_ROTATION, AUTO_KILL, POINT_IN_ORBIT, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, BRAKE_IN_GRAVITY,
 	STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_DAMAGED, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
@@ -170,6 +170,11 @@ var _clean_turn_spin: float = 0.0
 var _damaged_turn_spin: float = 0.0
 var _kill_ticks: int = -1
 var _auto_kill_ticks: int = -1
+
+## The velocity the orbiting heading test started with, so the verdict
+## can ask where the nose ended up against the direction the pilot could
+## see on the HUD.
+var _orbit_travel: Vector2 = Vector2.ZERO
 var _peak_turn_during_brake: float = 0.0
 var _peak_speed: float = 0.0
 
@@ -563,7 +568,7 @@ func _phase_ticks() -> int:
 			return KILL_TICKS
 		Phase.AUTO_KILL:
 			return AUTO_KILL_TICKS
-		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
+		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE, Phase.POINT_IN_ORBIT:
 			return HEADING_TICKS
 		Phase.AUTO_ORBIT:
 			return AUTO_ORBIT_TICKS
@@ -668,6 +673,24 @@ func _begin_phase() -> void:
 			_ship.auto_orbit_command = true
 			_orbit_min = INF
 			_orbit_max = 0.0
+		Phase.POINT_IN_ORBIT:
+			# The same assist, with a planet under it. `_apply_heading_hold`
+			# measures velocity against the **ground**, which is right on a
+			# runway and is not a frame at all out here: the co-rotating
+			# speed is `spin_rate * radius` and grows with the radius, so
+			# somewhere above the synchronous orbit it overtakes the orbital
+			# speed and the ground-relative velocity points the other way.
+			# Well above the synchronous radius, which is where the
+			# ground frame stops being even approximately right: at this
+			# planet the co-rotating speed passes the orbital one around
+			# 8400 px and the two velocities end up **antiparallel**.
+			var height: float = _planet.surface_radius * 12.0
+			_ship.global_position = _planet.global_position + Vector2.UP * height
+			_ship.linear_velocity = Vector2.RIGHT * _planet.circular_orbit_speed(height)
+			_ship.global_rotation = 2.5
+			_ship.angular_velocity = 0.0
+			_ship.heading_command = ControlChords.Chord.PROGRADE
+			_orbit_travel = _ship.linear_velocity
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
 			# Pointing the wrong way to start with, so the assist has most of
 			# a turn to make and cannot pass by accident.
@@ -995,6 +1018,16 @@ func _evaluate_phase() -> void:
 				_nose_at_stop.dot(-_brake_heading) > 0.95,
 				"a %s run is turned into a retro burn like any other (%.3f)" % [
 					label, _nose_at_stop.dot(-_brake_heading),
+				],
+			)
+		Phase.POINT_IN_ORBIT:
+			var nose_now: Vector2 = Ship.FORWARD.rotated(_ship.global_rotation)
+			var travelling: Vector2 = _ship.linear_velocity.normalized()
+			var on_it: float = nose_now.dot(travelling)
+			_expect(
+				on_it > 0.99,
+				"prograde in orbit points along the way the ship is going (%.4f, %.0f deg off)" % [
+					on_it, rad_to_deg(acos(clampf(on_it, -1.0, 1.0))),
 				],
 			)
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
@@ -1352,6 +1385,25 @@ func _evaluate_phase() -> void:
 			)
 		Phase.LANDED_RIDE:
 			_expect(_ride_moved > 1.0, "a spinning planet carries the landed ship with it (%.1f px)" % _ride_moved)
+			# The ground frame still exists where there is ground. The
+			# heading assist stopped using it above the air because out
+			# there it pointed the ship backwards -- this is the case it
+			# was written for and the one the narrowing must not take:
+			# a parked ship is carried east by the surface and must not
+			# read as travelling east.
+			_expect(
+				_ship._rides_with(_planet)
+				and (
+					_ship.linear_velocity
+					- _planet.surface_velocity_at(_ship.global_position)
+				).length() < Ship.HEADING_MIN_SPEED,
+				"and prograde still measures it against that ground (%.1f px/s of its own)" % [
+					(
+						_ship.linear_velocity
+						- _planet.surface_velocity_at(_ship.global_position)
+					).length(),
+				],
+			)
 			_expect(
 				_ride_slip < 0.001,
 				"the ship stays on the same patch of ground (%.5f rad of slip)" % _ride_slip,
