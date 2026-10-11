@@ -609,10 +609,15 @@ Cel: na podejściu widać **ile zostało**, bez czytania liczby.
 - [x] Bez tła. Każdy inny odczyt leży na przyciemnionej płycie, bo jest blokiem
   tekstu; to jest kreska i kilka ząbków, a dwieście pikseli płyty wzdłuż boku
   ekranu byłoby najcięższym elementem interfejsu trzymającym najlżejszy.
-- [x] W rogu przyrządów zostają **SPD**, **V/S**, **GEAR** i **ORE**. Wiersz
-  `ALT` znikąd nie wrócił — taśma jest wysokościomierzem — a **SLOPE wypadł**:
-  kąt gruntu czyta się z **gruntu**, który na podejściu jest tuż pod statkiem,
-  a liczba obok była cyfrą, na którą nikt nie patrzy, patrząc na to, co opisuje.
+- [x] **SPD i V/S stoją na taśmie**, pod jej własnym zerem. Wysokość, prędkość
+  i tempo, w jakim ta pierwsza się zmienia, to jeden odczyt wzięty na trzy
+  sposoby — pilot na finale patrzy w jedno miejsce, nie w dwa rogi. Pasmo jest
+  **tak szerokie, jak jego najszersza zawartość**, nie jak sama podziałka:
+  liczone tylko z drabinki miało 56 px i „V/S -9999.0" wystawało z niego o 7.
+- [x] W rogu przyrządów zostają **GEAR** i **ORE**. Wiersz `ALT` znikąd nie
+  wrócił — taśma jest wysokościomierzem — a **SLOPE wypadł**: kąt gruntu czyta
+  się z **gruntu**, który na podejściu jest tuż pod statkiem, a liczba obok była
+  cyfrą, na którą nikt nie patrzy, patrząc na to, co opisuje.
 
 Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 

@@ -78,6 +78,16 @@ const TAPE_MAJOR: int = 4
 const SPEED_FORMAT: String = "%.0f"
 const DESCENT_FORMAT: String = "%+.1f"
 
+## The largest each of those can ever have to print.
+##
+## Facts about flying rather than about the strings: a ship can be
+## doing tens of thousands of pixels a second out of a well, and a
+## descent rate past four digits is a crash that has already happened.
+## The band is sized from them, so a format that prints wider gets a
+## wider band instead of running off the side of one.
+const SPEED_WIDEST: float = 99999.0
+const DESCENT_WIDEST: float = -9999.0
+
 ## The orbit dial. Forty-six rather than sixty-six, because the
 ## untouchable field leaves a corner 116 px wide and the apsides have
 ## to stand beside the picture rather than under it.
@@ -707,37 +717,19 @@ func _draw_instrument_corner(font: Font, at: Rect2, planet: GravityWell) -> void
 		_text(font, Vector2(x, y), "in transit", _ink.label)
 		return
 
-	# Height is the tape's, down the left-hand edge. What is left here
-	# is the rest of the descent -- how fast, how fast down, how steep
-	# the ground is -- and the two states a pilot has to be able to see
-	# without asking.
-	UiDraw.row(
-		_canvas, font, Vector2(at.position.x, y), at.size.x, "SPD",
-		SPEED_FORMAT % _speed.stepped(), _ink.value, _ink.label,
-	)
-	y += ROW
-	# The colour off the smoothed value rather than the printed one: a
-	# descent rate sitting on a threshold would otherwise swap colours
-	# every frame, which is the loudest thing a HUD can do.
-	UiDraw.row(
-		_canvas, font, Vector2(at.position.x, y), at.size.x, "V/S",
-		DESCENT_FORMAT % -_descent.stepped(), _descent_colour(_descent.smooth()), _ink.label,
-	)
-	y += ROW
-	# The last two rows are about touching down and there is nothing to
-	# touch down on over a star.
+	# How high, how fast and how fast down are one instrument now and
+	# live together on the tape. What is left here is the pair of
+	# states a pilot has to be able to see without asking: what the
+	# legs are doing, and what is under them.
 	#
-	# The slope used to be the first of them and is gone: the ground's
-	# angle is something a pilot reads off the **ground**, which is
-	# right there under the ship on an approach, and a number for it
-	# was a figure nobody looked at while looking at the thing it
-	# described.
+	# The gear whether or not there is ground, because a star is
+	# exactly where leaving the legs out is a mistake worth seeing.
+	UiDraw.row(
+		_canvas, font, Vector2(at.position.x, y), at.size.x, "GEAR",
+		_gear_text(), _gear_colour(), _ink.label,
+	)
+	y += ROW
 	if planet.has_ground():
-		UiDraw.row(
-			_canvas, font, Vector2(at.position.x, y), at.size.x, "GEAR",
-			_gear_text(), _gear_colour(), _ink.label,
-		)
-		y += ROW
 		_draw_ore(font, Vector2(at.position.x, y), at.size.x)
 	_draw_warning(font, Rect2(at.position - Vector2(UiFrame.PAD, UiFrame.PAD), at.size))
 
@@ -773,15 +765,37 @@ func _tape_label(value: float) -> String:
 ## two hundred pixels of slab down the side of the screen would be the
 ## heaviest thing in the interface, holding the lightest.
 func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
-	if well == null or not well.has_ground():
+	if well == null:
 		return
 	var box: Rect2 = tape_box(font, view)
 	if box.size.y <= 0.0:
 		return
-	UiDraw.ladder(
-		_canvas, font, box, _altitude.stepped(),
-		Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
-		_ink.value, _ink.accent, _ink.label, _tape_label,
+
+	# The two figures at the foot of the scale, where its own zero is.
+	# They belong to the same instrument: height, speed and the rate
+	# the first is changing are one reading taken three ways, and a
+	# pilot on finals is looking at one place rather than two corners.
+	var figures: float = ROW * 2.0
+	if well.has_ground():
+		UiDraw.ladder(
+			_canvas, font,
+			Rect2(box.position, Vector2(box.size.x, box.size.y - figures)),
+			_altitude.stepped(), Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
+			_ink.value, _ink.accent, _ink.label, _tape_label,
+		)
+	var y: float = box.end.y - figures + float(UiFont.BODY)
+	UiDraw.row(
+		_canvas, font, Vector2(box.position.x, y), box.size.x, "SPD",
+		SPEED_FORMAT % _speed.stepped(), _ink.value, _ink.label,
+	)
+	y += ROW
+	# The colour off the smoothed value rather than the printed one: a
+	# descent rate sitting on a threshold would otherwise swap colours
+	# every frame, which is the loudest thing a HUD can do.
+	UiDraw.row(
+		_canvas, font, Vector2(box.position.x, y), box.size.x, "V/S",
+		DESCENT_FORMAT % -_descent.stepped(),
+		_descent_colour(_descent.smooth()), _ink.label,
 	)
 
 
@@ -794,12 +808,27 @@ func tape_box(font: Font, view: Vector2) -> Rect2:
 	var top: Rect2 = UiFrame.slot(view, UiFrame.Slot.SHIP)
 	var bottom: Rect2 = UiFrame.slot(view, UiFrame.Slot.CONTEXT)
 	var gap: float = UiFrame.PAD * 2.0
+	# As wide as the widest thing in it, which is not always the scale:
+	# the figures underneath are a label, a gap and a number, and a
+	# band sized only from the ladder let "V/S -9999.0" hang seven
+	# pixels off the side of it.
+	var wide: float = maxf(
+		UiDraw.ladder_width(font, Vector2(0.0, TAPE_TOP), "99999", _tape_label),
+		figures_width(font),
+	)
 	return Rect2(
 		Vector2(top.position.x, top.end.y + gap),
-		Vector2(
-			UiDraw.ladder_width(font, Vector2(0.0, TAPE_TOP), "99999", _tape_label),
-			bottom.position.y - top.end.y - gap * 2.0,
-		),
+		Vector2(wide, bottom.position.y - top.end.y - gap * 2.0),
+	)
+
+
+## How much room the two figures under the scale need at their widest.
+func figures_width(font: Font) -> float:
+	return maxf(
+		UiDraw.text_width(font, "SPD") + 3.0
+		+ UiDraw.text_width(font, SPEED_FORMAT % SPEED_WIDEST),
+		UiDraw.text_width(font, "V/S") + 3.0
+		+ UiDraw.text_width(font, DESCENT_FORMAT % DESCENT_WIDEST),
 	)
 
 

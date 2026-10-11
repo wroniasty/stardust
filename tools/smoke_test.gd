@@ -9903,28 +9903,45 @@ func _check_the_altitude_tape_is_out_of_the_way() -> void:
 		],
 	)
 
-	# The figures that stayed in the corner, at their widest. A value is
-	# right-aligned into the panel, so what has to fit is the label, a
-	# gap and the value -- `UiDraw.row` promises only that the two will
-	# not collide, so a panel too narrow does not clip, it overruns.
-	var corner: float = UiFrame.inside(
-		UiFrame.slot(view, UiFrame.Slot.INSTRUMENTS)
-	).size.x
+	# Speed and descent rate live **on** the tape, under its own zero,
+	# because height, speed and the rate the first is changing are one
+	# reading taken three ways -- so the band has to be wide enough for
+	# them as well as for the scale. A value is right-aligned into its
+	# width and `UiDraw.row` promises only that it will not collide
+	# with the label, so a column one pixel short does not clip or
+	# wrap: it overruns.
 	var tight: Array[String] = []
 	for row: Array in [
 		["SPD", FlightHud.SPEED_FORMAT % 99999.0],
 		["V/S", FlightHud.DESCENT_FORMAT % -9999.0],
-		["GEAR", "  MOVING"],
 	]:
 		var needs: float = (
 			UiDraw.text_width(font, row[0]) + 3.0 + UiDraw.text_width(font, row[1])
 		)
-		if needs > corner:
+		if needs > box.size.x:
 			tight.append("%s %s needs %.0f" % [row[0], row[1], needs])
 	_expect(
 		tight.is_empty(),
-		"the figures left in the corner fit it (%.0f px, %s)" % [
-			corner, "all of them" if tight.is_empty() else str(tight),
+		"the figures under the scale fit its band (%.0f px, %s)" % [
+			box.size.x, "both of them" if tight.is_empty() else str(tight),
+		],
+	)
+	# And the corner keeps what the tape did not take.
+	var corner: float = UiFrame.inside(
+		UiFrame.slot(view, UiFrame.Slot.INSTRUMENTS)
+	).size.x
+	_expect(
+		UiDraw.text_width(font, "GEAR") + 3.0 + UiDraw.text_width(font, "  MOVING")
+		<= corner,
+		"and the gear still fits the corner it stayed in (%.0f px)" % corner,
+	)
+	# The scale gives up exactly those two rows and no more: a band
+	# that kept its whole height would draw the ladder straight through
+	# the figures.
+	_expect(
+		box.size.y > FlightHud.ROW * 2.0 + 100.0,
+		"with the scale still getting the rest of the band (%.0f px)" % [
+			box.size.y - FlightHud.ROW * 2.0,
 		],
 	)
 
