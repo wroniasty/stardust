@@ -72,7 +72,7 @@ na swoje piksele.
 ## 3. Paleta
 
 Jeden zasób, `resources/ui/palette.tres`. **Zrobione**: `flight_hud.gd`,
-`ship_editor.gd` i `loadout_screen.gd` czytają go przez `Palette.current()`
+`ship_editor.gd` i `flight_hud.gd` czytają go przez `Palette.current()`
 i nie trzymają już żadnego własnego koloru — pilnuje tego test, który czyta
 ich źródło. Rozjazd, który to kończy, był policzony: te same cztery role
 jako jedenaście kolorów, w tym trzy bursztyny o piksel od siebie.
@@ -390,7 +390,7 @@ scripts/ui/ui_glow.gd         warstwa poświaty, jeden wyłącznik
 
 Migracja istniejących ekranów to wymiana lokalnych stałych na paletę i wymiana
 ręcznego `draw_*` na pomocniki: `landing_hud.gd`, `scanner_hud.gd`,
-`loadout_screen.gd`, `ship_editor.gd`, `configuration_report.gd`. Żaden z nich
+`ship_editor.gd`, `configuration_report.gd`. Żaden z nich
 nie zmienia tego, co liczy — tylko to, czym rysuje.
 
 Sprawdzanie: każdy widget ląduje w `tools/gallery.tscn` jako dwa PNG (stan

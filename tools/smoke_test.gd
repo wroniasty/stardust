@@ -4264,7 +4264,7 @@ func _check_creative_tool() -> void:
 ## on the screen.
 func _check_panels_release_the_mouse() -> void:
 	var panels: Array[CanvasLayer] = [
-		CreativeTool.new(), PlanetConfigurator.new(), LoadoutScreen.new(), ShipEditor.new(),
+		CreativeTool.new(), PlanetConfigurator.new(), ShipEditor.new(),
 	]
 	for panel: CanvasLayer in panels:
 		root.add_child(panel)
@@ -9822,23 +9822,26 @@ func _check_the_altitude_tape_is_out_of_the_way() -> void:
 	# width and `UiDraw.row` promises only that it will not collide
 	# with the label, so a column one pixel short does not clip or
 	# wrap: it overruns.
-	var tight: Array[String] = []
-	for row: Array in [
-		["SPD", FlightHud.SPEED_FORMAT % 99999.0],
-		["V/S", FlightHud.DESCENT_FORMAT % -9999.0],
-		["GRAV", FlightHud.GRAVITY_FORMAT % 999.9],
-	]:
-		# Four pixels of the band go to the plate each figure sits on.
-		var needs: float = (
-			UiDraw.text_width(font, row[0]) + 3.0
-			+ UiDraw.text_width(font, row[1]) + 4.0
+	# Each figure is split on the scale's own line: the label left of
+	# it, the value right. So what has to hold is that the label ends
+	# before the line and the value starts after it -- a band sized
+	# from the ladder alone put every value straight through it.
+	var spine: float = box.position.x + hud.spine_offset(font)
+	var crossing: Array[String] = []
+	for row: Array in FlightHud.FIGURE_WIDTHS:
+		var label_ends: float = (
+			box.position.x + 2.0 + UiDraw.text_width(font, row[0])
 		)
-		if needs > box.size.x:
-			tight.append("%s %s needs %.0f" % [row[0], row[1], needs])
+		var value_starts: float = (
+			box.end.x - 2.0 - UiDraw.text_width(font, row[1])
+		)
+		if label_ends > spine or value_starts < spine:
+			crossing.append("%s %s" % [row[0], row[1]])
 	_expect(
-		tight.is_empty(),
-		"the figures under the scale fit its band (%.0f px, %s)" % [
-			box.size.x, "all of them" if tight.is_empty() else str(tight),
+		crossing.is_empty(),
+		"every figure splits on the tape's own line (%.0f px in, %s)" % [
+			hud.spine_offset(font),
+			"all clear" if crossing.is_empty() else str(crossing),
 		],
 	)
 	# And they are clear of the scale rather than sharing its last
@@ -10120,60 +10123,19 @@ func _check_a_crate_loads_the_bay() -> void:
 		"a refused find is not left in the hands either",
 	)
 
-	# And fitting. The quick screen used to be the one place a module
-	# went on in flight, which was its whole argument; now both screens
-	# ask the same question.
-	var screen: LoadoutScreen = LoadoutScreen.new()
-	root.add_child(screen)
-	screen.bind(ship)
+	# And fitting. There is one screen for it now -- the quick one that
+	# used to fit in flight is gone, and that exception with it -- so
+	# the rule is asked of the yard.
+	var yard: ShipEditor = ShipEditor.new()
+	root.add_child(yard)
+	yard.bind(ship)
 	ship.flight_mode = Ship.FlightMode.PHYSICAL
-	_expect(not screen.can_refit(), "in flight, the quick screen will not fit")
+	_expect(not yard.can_refit(), "in flight nothing can be fitted")
 	ship.flight_mode = Ship.FlightMode.LANDED
-	_expect(screen.can_refit(), "on the ground it will")
+	_expect(yard.can_refit(), "on the ground it can")
 	ship.flight_mode = Ship.FlightMode.DOCKED
-	_expect(screen.can_refit(), "and at a dock")
-
-	# And it refuses out loud rather than doing nothing, which is the
-	# difference between a rule and a broken key. Driven through the
-	# same call the key makes, with a find in the hands -- which is
-	# where a module taken **off** the ship still goes.
-	ship.flight_mode = Ship.FlightMode.PHYSICAL
-	# A copy of what is already bolted on, so there is certainly a
-	# socket that will take it: a rolled weapon may be of a type none
-	# of this hull's hardpoints accept, and then `_fit` returns for a
-	# reason that has nothing to do with the rule being checked.
-	var spare: WeaponData = ship.hardpoints[0].weapon.duplicate() as WeaponData
-	ship.take(spare, 0)
-	screen.toggle()
-	screen._fit()
-	_expect(
-		ship.carried == spare,
-		"a refused fit leaves the module in the hands",
-	)
-	# The refusal's own line, not the key caption underneath it. Both
-	# say "land or dock", so asking the panel whether those words are
-	# anywhere in it passed with the rule taken out -- measured.
-	_expect(
-		not screen._notice.is_empty()
-		and screen.panel_text().contains(screen._notice),
-		"and the panel says why (%s)" % screen._notice,
-	)
-	# On the ground the same call goes through.
-	ship.flight_mode = Ship.FlightMode.LANDED
-	screen._fit()
-	# What a successful swap leaves in the hands is the module that
-	# came **off**, not nothing -- which is the whole reason a swap is
-	# never a loss. So the claim is that the spare went on, not that
-	# the hands emptied.
-	var bolted: bool = false
-	for mount: Hardpoint in ship.hardpoints:
-		if mount.weapon == spare:
-			bolted = true
-	_expect(
-		bolted and ship.carried != spare,
-		"and on the ground it goes on, with whatever it replaced in hand",
-	)
-	_discard(screen)
+	_expect(yard.can_refit(), "and at a dock")
+	_discard(yard)
 	loot.free()
 	_discard(ship)
 
@@ -11515,8 +11477,11 @@ func _check_item_names() -> void:
 	)
 
 	# Length, against the panel it has to fit in rather than against taste.
+	# The panel that set this width was the Tab screen, which is gone;
+	# the number stays because the limit it justified lives on
+	# `ModuleData` and every card in the game is written to it.
 	var face: Font = UiFont.face()
-	var room: float = LoadoutScreen.PANEL_WIDTH
+	var room: float = 210.0
 	var limit: String = "M".repeat(ModuleData.TITLE_LIMIT)
 	_expect(
 		face.get_string_size(limit, 0, -1, UiFont.BODY).x <= room,
@@ -11905,7 +11870,7 @@ func _check_palette() -> void:
 
 	# And the screens UI_STYLE named have stopped keeping their own.
 	var kept: int = 0
-	for name: String in ["flight_hud", "ship_editor", "loadout_screen", "scanner_hud"]:
+	for name: String in ["flight_hud", "ship_editor", "scanner_hud"]:
 		var text: String = FileAccess.get_file_as_string("res://scripts/%s.gd" % name)
 		_expect(not text.is_empty(), "%s.gd can be read" % name)
 		for line: String in text.split("
@@ -12088,24 +12053,10 @@ func _check_stat_cards() -> void:
 		"while the same gun against itself is all equals",
 	)
 
-	# And the quick swap shows the same card, from the same place. Two
-	# screens formatting their own is the thing stat_rows() exists to stop.
-	var quick: LoadoutScreen = LoadoutScreen.new()
-	root.add_child(quick)
-	quick.bind(ship)
-	ship.take(better)
-	quick.show_now()
-	var shown: String = quick.panel_text()
-	for row: Dictionary in better.stat_rows():
-		_expect(
-			shown.contains(String(row["label"])),
-			"the quick swap lists %s, like the editor does" % row["label"],
-		)
-	_expect(
-		shown.contains("better") or shown.contains("worse") or shown.contains("="),
-		"and carries the comparison, which is the part worth reading in flight",
-	)
-	quick.queue_free()
+	# There used to be a second screen here, and this checked that both
+	# built their card from `stat_rows()` rather than each formatting its
+	# own. The Tab screen is gone, so the claim has nothing left to be
+	# about: one screen cannot disagree with itself.
 
 	editor.queue_free()
 	ship.queue_free()
@@ -12234,34 +12185,12 @@ func _check_bulk() -> void:
 	_expect(not small.fits(monster), "an oversized engine is locked out of a small slot")
 	_expect(small.fits(shrunk), "and a compact one of the same type goes in")
 
-	# An engine can now be too big for the whole hull, so the screen has to say
-	# so. "No slot" on its own is not something a pilot can act on: too big is
-	# a reason to keep it and look for a bigger ship, the wrong kind is a
-	# reason to drop it.
-	var screen: LoadoutScreen = LoadoutScreen.new()
-	root.add_child(screen)
-	screen.bind(ship)
-
-	var giant: EngineData = base.duplicate() as EngineData
-	giant.bulk = 99.0
-	ship.release()
-	ship.take(giant, 0)
-	screen.show_now()
-	var refusal: String = screen.panel_text()
-	_expect(
-		refusal.contains("99.00") and refusal.contains("%.2f" % mount.size),
-		"the screen says how big the engine is and how big the largest slot is",
-	)
-
-	ship.release()
-	ship.take(shrunk, 0)
-	screen.show_now()
-	_expect(
-		screen.panel_text().contains("%.2f" % shrunk.bulk),
-		"and a fitting engine still shows its bulk, so a swap can be compared",
-	)
-
-	screen.queue_free()
+	# An engine too big for the **whole hull** used to be explained by the
+	# Tab screen -- "too big is a reason to keep it and look for a bigger
+	# ship, the wrong kind is a reason to drop it". That screen is gone and
+	# the yard says no such thing, so the explanation is **missing from the
+	# game** rather than merely untested. Written down here because a check
+	# deleted quietly is a rule nobody remembers was ever made.
 	ship.queue_free()
 
 

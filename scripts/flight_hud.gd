@@ -535,7 +535,11 @@ func _draw_hud() -> void:
 	var view: Vector2 = _canvas.size
 	var well: GravityWell = host()
 
-	_draw_ship_corner(font, _panel(view, UiFrame.Slot.SHIP))
+	# No slab behind the bars. Each one is already a filled rectangle
+	# with a border, so a panel under them was a box inside a box --
+	# and four of them fill the corner, which leaves the backing
+	# showing only as a dark seam between bars.
+	_draw_ship_corner(font, UiFrame.inside(UiFrame.slot(view, UiFrame.Slot.SHIP)))
 	if well != null:
 		_draw_world_corner(font, _panel(view, UiFrame.Slot.WORLD), well)
 	# The instruments get the only full border in the interface: at
@@ -1014,13 +1018,30 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 	var figures: float = (
 		float(stats.size()) * TAPE_FIGURE_ROW + TAPE_FIGURE_GAP
 	)
+	# The scale takes only as much width as it needs; the band is wider
+	# so that a figure has somewhere to sit past the line.
+	var scale: Rect2 = Rect2(
+		box.position,
+		Vector2(
+			spine_offset(font)
+			+ UiDraw.ladder_label_room(font, Vector2(0.0, TAPE_TOP), _tape_label),
+			box.size.y - figures,
+		),
+	)
 	if well.has_ground():
 		UiDraw.ladder(
-			_canvas, font,
-			Rect2(box.position, Vector2(box.size.x, box.size.y - figures)),
+			_canvas, font, scale,
 			_altitude.stepped(), Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
 			_ink.value, _ink.accent, _ink.label, _tape_label,
 		)
+	# Split on the scale's own line: the label to its left, the value
+	# to its right. Two readouts stacked under one another want one
+	# vertical to share, and the only honest one available is the line
+	# that is already drawn -- so the figures ask the ladder where it
+	# put its spine rather than both guessing at the same fraction.
+	var spine: float = UiDraw.ladder_spine(
+		font, scale, Vector2(0.0, TAPE_TOP), _tape_label
+	)
 	var y: float = box.end.y - float(stats.size()) * TAPE_FIGURE_ROW
 	for one: Dictionary in stats:
 		var cell: Rect2 = Rect2(
@@ -1032,13 +1053,31 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 		# costs (UI_STYLE section 5).
 		_canvas.draw_rect(cell, _ink.over(_ink.panel, TAPE_FIGURE_FILL), true)
 		UiDraw.bracket(_canvas, cell, _ink.grid)
-		UiDraw.row(
-			_canvas, font,
-			Vector2(cell.position.x + 2.0, cell.position.y + float(UiFont.BODY)),
-			cell.size.x - 4.0, String(one["label"]), String(one["says"]),
-			one["ink"], _ink.label,
+		_canvas.draw_string(
+			font,
+			UiDraw.snap(Vector2(
+				cell.position.x + 2.0, cell.position.y + float(UiFont.BODY)
+			)),
+			String(one["label"]),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, _ink.label,
+		)
+		var says: String = String(one["says"])
+		_canvas.draw_string(
+			font,
+			UiDraw.snap(Vector2(
+				cell.end.x - 2.0 - UiDraw.text_width(font, says),
+				cell.position.y + float(UiFont.BODY),
+			)),
+			says,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, one["ink"],
 		)
 		y += TAPE_FIGURE_ROW
+	_tape_spine = spine
+
+
+## Where the scale's line fell on the last draw, so a check can ask
+## whether the figures under it are split on the same vertical.
+var _tape_spine: float = 0.0
 
 
 ## The figures under the scale, top to bottom.
@@ -1077,37 +1116,54 @@ func tape_box(font: Font, view: Vector2) -> Rect2:
 	var top: Rect2 = UiFrame.slot(view, UiFrame.Slot.SHIP)
 	var bottom: Rect2 = UiFrame.slot(view, UiFrame.Slot.CONTEXT)
 	var gap: float = UiFrame.PAD * 2.0
-	# As wide as the widest thing in it, which is not always the scale:
-	# the figures underneath are a label, a gap and a number, and a
-	# band sized only from the ladder let "V/S -9999.0" hang seven
-	# pixels off the side of it.
-	var wide: float = maxf(
-		UiDraw.ladder_width(font, Vector2(0.0, TAPE_TOP), "99999", _tape_label),
-		figures_width(font),
-	)
 	return Rect2(
 		Vector2(top.position.x, top.end.y + gap),
-		Vector2(wide, bottom.position.y - top.end.y - gap * 2.0),
+		Vector2(band_width(font), bottom.position.y - top.end.y - gap * 2.0),
 	)
 
 
-## How much room the figures under the scale need at their widest.
+## How far from the band's left edge the scale's line stands.
 ##
-## Four pixels of it go to the plate they sit on, which insets the row
-## by two at each end.
-func figures_width(font: Font) -> float:
-	var widest: float = 0.0
-	for pair: Array in [
-		["SPD", SPEED_FORMAT % SPEED_WIDEST],
-		["V/S", DESCENT_FORMAT % DESCENT_WIDEST],
-		["GRAV", GRAVITY_FORMAT % GRAVITY_WIDEST],
-	]:
-		widest = maxf(
-			widest,
-			UiDraw.text_width(font, pair[0]) + 3.0
-			+ UiDraw.text_width(font, pair[1]),
-		)
-	return widest + 4.0
+## The figures under the scale are split on that line -- label left of
+## it, value right -- so it has to clear the wider of two things: the
+## room the cursor's own figure needs on the ladder's left, and the
+## widest label a figure can carry.
+func spine_offset(font: Font) -> float:
+	var band: Vector2 = Vector2(0.0, TAPE_TOP)
+	var cursor_side: float = (
+		UiDraw.ladder_width(font, band, "99999", _tape_label)
+		- UiDraw.ladder_label_room(font, band, _tape_label)
+	)
+	var widest_label: float = 0.0
+	for one: Array in FIGURE_WIDTHS:
+		widest_label = maxf(widest_label, UiDraw.text_width(font, one[0]) + 3.0)
+	return maxf(cursor_side, widest_label)
+
+
+## How wide the whole thing is: the scale's line, plus whichever needs
+## more room to the right of it -- the scale's own labels or a figure.
+##
+## Sized from both rather than from the ladder alone, which is what let
+## a value cross the line it is supposed to start after.
+func band_width(font: Font) -> float:
+	var band: Vector2 = Vector2(0.0, TAPE_TOP)
+	var widest_value: float = 0.0
+	for one: Array in FIGURE_WIDTHS:
+		widest_value = maxf(widest_value, UiDraw.text_width(font, one[1]))
+	return spine_offset(font) + maxf(
+		UiDraw.ladder_label_room(font, band, _tape_label), widest_value + 4.0
+	)
+
+
+## Every figure under the scale at its widest: the label, and the
+## largest thing its format can print.
+##
+## One table, because three things size themselves from it -- where the
+## line stands, how wide the band is, and the check that both are
+## right.
+const FIGURE_WIDTHS: Array[Array] = [
+	["SPD", "99999"], ["V/S", "-9999.0"], ["GRAV", "999.9"],
+]
 
 
 ## What is in the ground here, in one row.

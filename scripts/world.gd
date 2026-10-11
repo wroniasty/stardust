@@ -57,7 +57,6 @@ var planet: Planet = null
 ## The dev tool on F6, and which shelf it last put the ship on.
 var _configurator: PlanetConfigurator = null
 var _landing_site: int = 0
-var _loadout: LoadoutScreen = null
 var _scanner: ScannerHud = null
 var _jump_hud: JumpHud = null
 var _jump: JumpController = null
@@ -96,7 +95,6 @@ func _ready() -> void:
 	if ship != null:
 		ship.destroyed.connect(_on_ship_destroyed)
 	_build_configurator()
-	_build_loadout()
 	_build_editor()
 	_build_map()
 	_build_chart()
@@ -473,13 +471,6 @@ func _finish_resume() -> void:
 	])
 
 
-func _build_loadout() -> void:
-	_loadout = LoadoutScreen.new()
-	add_child(_loadout)
-	var ship: Ship = (player as Player).ship
-	_loadout.bind(ship)
-	if ship != null:
-		ship.jettisoned.connect(_on_jettisoned)
 
 
 ## A module thrown overboard becomes a crate where the ship was, so it can be

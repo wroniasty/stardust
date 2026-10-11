@@ -157,9 +157,7 @@ static func ladder(
 ) -> void:
 	if canvas == null or font == null or span.y <= span.x or step <= 0.0:
 		return
-	var top_label: String = _ladder_label(label_of, span.y)
-	var label_room: float = text_width(font, top_label) + LADDER_MAJOR + 2.0
-	var spine: float = roundf(box.end.x - label_room)
+	var spine: float = ladder_spine(font, box, span, label_of)
 	canvas.draw_line(
 		snap(Vector2(spine, box.position.y)), snap(Vector2(spine, box.end.y)), dim, 1.0
 	)
@@ -204,6 +202,25 @@ static func ladder(
 		says,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, ink,
 	)
+
+
+## How much of a ladder's width goes to the labels on its right.
+static func ladder_label_room(
+	font: Font, span: Vector2, label_of: Callable = Callable()
+) -> float:
+	return text_width(font, _ladder_label(label_of, span.y)) + LADDER_MAJOR + 2.0
+
+
+## Where the scale's own line falls, in the same coordinates as `box`.
+##
+## Public because anything drawn under a tape has to line up with it,
+## and the only honest way to line up with a line is to ask where it
+## is. Worked out from the right, like the rest of the widget: the
+## widest label the scale can produce decides the geometry.
+static func ladder_spine(
+	font: Font, box: Rect2, span: Vector2, label_of: Callable = Callable()
+) -> float:
+	return roundf(box.end.x - ladder_label_room(font, span, label_of))
 
 
 ## Where the cursor sits for a value, parked at the end it has run off.

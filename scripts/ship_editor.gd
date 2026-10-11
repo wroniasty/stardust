@@ -254,12 +254,11 @@ func _input(event: InputEvent) -> void:
 ## written down here as a promise before there was anything to dock to, and
 ## now there is.
 ##
-## The quick swap on Tab is deliberately **not** gated the same way, and the
-## difference is the point of having both screens. That one is a single
-## carried module into a single compatible slot, with the world still
-## running -- a decision made while something is going wrong, which is the
-## whole reason LoadoutScreen does not pause. This one is every slot at
-## once, on a paused schematic, and that is yard work.
+## There used to be a second screen, on Tab, that was deliberately **not**
+## gated this way: one carried module into one slot, with the world still
+## running. That exception is gone with the screen, so this is the only
+## answer in the game -- every slot at once, on a paused schematic, and
+## nothing fitted anywhere else.
 func can_refit() -> bool:
 	if _ship == null:
 		return false

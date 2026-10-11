@@ -614,6 +614,11 @@ Cel: na podejściu widać **ile zostało**, bez czytania liczby.
   więc nawias mówi, gdzie odczyt się kończy, nie wydając czterech linii na
   ramkę. Między podziałką a liczbami jest **cała wysokość czcionki** przerwy:
   bez niej zero pasma i pierwsza liczba były w tych samych pikselach.
+- [x] Liczby **dzielą się na osi samej podziałki**: etykieta na lewo od niej,
+  wartość na prawo. Dwa odczyty jeden pod drugim potrzebują wspólnej pionowej,
+  a jedyna uczciwa to ta, która już jest narysowana — więc pytają drabinkę
+  (`UiDraw.ladder_spine`), zamiast obie zgadywać ten sam ułamek. Pasmo jest
+  przez to szersze niż sama podziałka: musi zmieścić liczbę **za** linią.
 - [x] `GRAV` to przyciąganie w px/s2 — ta sama jednostka, w której jest ciąg
   na masę, więc „napęd daje 40, ten świat ciągnie 12" to rachunek, który pilot
   może zrobić przed lądowaniem.
@@ -629,8 +634,11 @@ Cel: na podejściu widać **ile zostało**, bez czytania liczby.
 
 Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 
-### Panel statku: cztery paski
+### Panel statku: pięć pasków
 
+- [x] **Bez tła pod paskami.** Każdy jest już wypełnionym prostokątem z
+  obrysem, więc panel pod nimi był pudełkiem w pudelku — a pięć wypełnia róg,
+  więc widaz było z niego tylko ciemny szew między paskami.
 - [x] Bez podpisów, 11 px wysokości, wartość wyśrodkowana **na pasku**, na
   własnej ciemnej płytce. Stała kolejność od góry: **kadłub, ciepło, energia,
   paliwo, napęd skokowy** — bez słów kolejność jest jedyną tożsamością paska,
