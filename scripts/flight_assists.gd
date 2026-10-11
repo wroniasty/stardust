@@ -40,35 +40,35 @@ enum Kind {
 ## where assists live, not because the computer grants them.
 const ALL: Array[Dictionary] = [
 	{
-		"kind": Kind.PROGRADE, "requires": &"",
+		"kind": Kind.PROGRADE, "code": "PRG", "requires": &"",
 		"caption": "prograde", "latches": &"heading", "tint": &"nav",
 	},
 	{
-		"kind": Kind.RETROGRADE, "requires": &"",
+		"kind": Kind.RETROGRADE, "code": "RTG", "requires": &"",
 		"caption": "retrograde", "latches": &"heading", "tint": &"nav",
 	},
 	{
-		"kind": Kind.ORBIT, "requires": &"has_auto_orbit",
+		"kind": Kind.ORBIT, "code": "ORB", "requires": &"has_auto_orbit",
 		"caption": "auto-orbit", "latches": &"", "tint": &"accent",
 	},
 	{
-		"kind": Kind.DEORBIT, "requires": &"has_deorbit",
+		"kind": Kind.DEORBIT, "code": "DEO", "requires": &"has_deorbit",
 		"caption": "deorbit", "latches": &"", "tint": &"accent",
 	},
 	{
-		"kind": Kind.LEVEL, "requires": &"has_auto_level",
+		"kind": Kind.LEVEL, "code": "LVL", "requires": &"has_auto_level",
 		"caption": "auto-level", "latches": &"", "tint": &"ok",
 	},
 	{
-		"kind": Kind.ALTITUDE, "requires": &"has_altitude_hold",
+		"kind": Kind.ALTITUDE, "code": "AHD", "requires": &"has_altitude_hold",
 		"caption": "altitude hold", "latches": &"", "tint": &"ok",
 	},
 	{
-		"kind": Kind.SPIN_KILL, "requires": &"has_rotation_kill",
+		"kind": Kind.SPIN_KILL, "code": "SAS", "requires": &"has_rotation_kill",
 		"caption": "spin kill", "latches": &"", "tint": &"value",
 	},
 	{
-		"kind": Kind.TRAJECTORY, "requires": &"has_trajectory_view",
+		"kind": Kind.TRAJECTORY, "code": "TRJ", "requires": &"has_trajectory_view",
 		"caption": "trajectory", "latches": &"", "tint": &"label",
 		"starts_on": true,
 	},
@@ -86,6 +86,18 @@ const ALL: Array[Dictionary] = [
 ## stock has trajectory view, and it does not show".
 static func starts_on(kind: int) -> bool:
 	return bool(entry(kind).get("starts_on", false))
+
+
+## The three letters a control is labelled with.
+##
+## Aviation shorthand where there is any -- `SAS` for the thing that
+## holds an attitude, `AHD` for an altitude hold, `PRG` and `RTG` for
+## the two ways to point along the velocity. Three letters because the
+## button is as wide as the figures above it and a word is not the
+## thing to learn: the code is, and it is short enough to be learned
+## once.
+static func code(kind: int) -> String:
+	return String(entry(kind).get("code", "---"))
 
 
 ## Which palette colour a switch wears while it is on.

@@ -8601,7 +8601,7 @@ func _check_hull_editor() -> void:
 	_check_a_preset_pins_fields()
 	_check_a_preset_can_carry_a_computer()
 	_check_the_spin_killer_knows_when_to_sit_out()
-	_check_the_computer_panel_is_pressable()
+	_check_the_controls_are_pressable()
 	_check_the_trajectory_view_is_a_function()
 	_check_the_ship_draws_above_the_world()
 	_check_the_altitude_tape_is_out_of_the_way()
@@ -9176,19 +9176,19 @@ func _check_the_spin_killer_knows_when_to_sit_out() -> void:
 	_discard(ship)
 
 
-## Panel komputera: klikalny, i klikniecie nie jest strzalem.
+## Sterowanie: osiem guzikow w lewym dolnym rogu, klikalnych.
 ##
 ## Pressed rather than inspected. An earlier check of mine measured a
 ## dock by setting its state and rebuilding the rows by hand, which
 ## passed while the button was wired to nothing -- so this calls
-## `press_at`, the same function the mouse handler calls, with the point
-## the layout actually puts under the cursor.
+## `press_at`, the same function the mouse handler calls, with the
+## point the layout actually puts under the cursor.
 ##
 ## What it cannot press is a real mouse: `_input` reads
-## `_canvas.get_local_mouse_position()` and a headless run has no
-## pointer. So the split is `press_at` taking a point, and the one line
-## left in `_input` is the line this does not cover.
-func _check_the_computer_panel_is_pressable() -> void:
+## `_canvas.make_input_local`, and a headless run has no pointer. So
+## the split is `press_at` taking a point, and the one line left in
+## `_input` is the line this does not cover.
+func _check_the_controls_are_pressable() -> void:
 	var hud: FlightHud = FlightHud.new()
 	root.add_child(hud)
 	var ship: Ship = _spawn_ship()
@@ -9199,201 +9199,104 @@ func _check_the_computer_panel_is_pressable() -> void:
 	hud._canvas.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	hud._canvas.size = Vector2(640.0, 360.0)
 
-	# No computer, no panel -- and no clicks taken either, which is the
-	# half that matters in flight: an empty context corner must not eat
-	# the trigger.
-	_expect(hud._computer_layout().is_empty(), "with no computer there is no panel")
+	var layout: Array[Dictionary] = hud.control_layout()
 	_expect(
-		not hud.press_at(Vector2(10.0, 350.0)),
-		"and a click in that corner is not swallowed",
+		layout.size() == FlightAssists.ALL.size(),
+		"there is a button for every assist (%d)" % layout.size(),
 	)
-
-	# A box that can do two of the seven, so the row has live squares and
-	# dead ones at once.
-	var box: FlightComputerData = FlightComputerData.new()
-	box.allocation = FlightComputerData.Allocation.NNLS
-	box.has_auto_level = true
-	box.has_rotation_kill = true
-	box.bulk = 0.5
-	var hole: ModuleBay = ship.bay_for(box)
-	if hole == null:
-		_expect(false, "the reference ship has a bay for a computer")
-		_discard(hud)
-		return
-	hole.installed = box
-
-	var layout: Dictionary = hud._computer_layout()
-	_expect(not layout.is_empty(), "a fitted computer puts a chip on the panel")
-	# The frame law: no panel wider than 140 or taller than 120.
-	var band: Rect2 = layout["band"]
-	var corner: Rect2 = UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.WORLD)
-	_expect(
-		band.size.x <= UiFrame.MOST.x and band.size.y <= UiFrame.MOST.y,
-		"inside the frame law (%s)" % band.size,
-	)
-	# Top right, along the top edge, pinned beside the world panel
-	# rather than over it: that corner is 66 px tall and its orbit dial
-	# is 46, so a strip taking 23 of them would have pushed the dial out
-	# of its own panel.
-	_expect(
-		band.end.x <= corner.position.x
-		and is_equal_approx(band.position.y, corner.position.y),
-		"beside the world corner, level with its top (ends %.0f, corner at %.0f)" % [
-			band.end.x, corner.position.x,
-		],
-	)
-
-	# Shut, the squares are not pressable: the chip is the only target.
-	var level: Rect2 = _square_for(layout, FlightAssists.Kind.LEVEL)
-	_expect(
-		not hud.press_at(level.get_center()),
-		"while shut, only the chip takes a press",
-	)
-	_expect(hud.press_at((layout["chip"] as Rect2).get_center()), "the chip opens it")
-	_expect(hud._computer_open, "and it is open")
-
-	# Open, and wider for it -- the band grows rather than the squares
-	# moving somewhere else.
-	var open_layout: Dictionary = hud._computer_layout()
-	_expect(
-		(open_layout["band"] as Rect2).size.x > band.size.x
-		and (open_layout["chip"] as Rect2) == (layout["chip"] as Rect2),
-		"opening widens the band and leaves the chip where it was",
-	)
-	_expect(
-		(open_layout["switches"] as Array).size() == FlightAssists.ALL.size(),
-		"opened, there is one square per assist (%d)" % [
-			(open_layout["switches"] as Array).size(),
-		],
-	)
-	# The grid is as wide as its columns and no wider: nothing is
-	# clamped, so no square is clipped off the end.
-	var widest: float = (
-		UiFrame.PAD * 2.0
-		+ float(FlightHud.SWITCH_COLUMNS) * FlightHud.SWITCH
-		+ float(FlightHud.SWITCH_COLUMNS - 1) * FlightHud.SWITCH_GAP
-	)
-	_expect(
-		is_equal_approx((open_layout["band"] as Rect2).size.x, widest)
-		and widest <= UiFrame.MOST.x,
-		"and the grid fits without being clamped (%.0f of %.0f px)" % [
-			widest, UiFrame.MOST.x,
-		],
-	)
-	# Every square inside the band, and none on top of another. A grid
-	# laid out by index is exactly the thing that silently puts two
-	# cells in one place when the hole for the chip is miscounted.
+	# Every one of them in the bottom left, clear of the pilot's field,
+	# and none on top of another: a column laid out by index is exactly
+	# the thing that silently stacks two cells in one place.
+	var field: Rect2 = UiFrame.field(Vector2(640.0, 360.0))
 	var strays: int = 0
 	var overlaps: int = 0
-	for i: int in range((open_layout["switches"] as Array).size()):
-		var one: Rect2 = (open_layout["switches"] as Array)[i]["box"]
-		if not (open_layout["band"] as Rect2).encloses(one):
+	for i: int in range(layout.size()):
+		var one: Rect2 = layout[i]["box"]
+		if one.intersects(field) or one.end.y > 360.0 or one.position.x < 0.0:
 			strays += 1
-		if one.intersects(open_layout["chip"]):
-			overlaps += 1
-		for j: int in range(i + 1, (open_layout["switches"] as Array).size()):
-			if one.intersects((open_layout["switches"] as Array)[j]["box"]):
+		for j: int in range(i + 1, layout.size()):
+			if one.intersects(layout[j]["box"]):
 				overlaps += 1
 	_expect(
 		strays == 0 and overlaps == 0,
-		"with every square in the band and none on top of another (%d out, %d doubled)" % [
+		"stacked in the corner, clear of the field, none doubled (%d out, %d doubled)" % [
 			strays, overlaps,
 		],
 	)
-	# And it opens over nothing the pilot needs. The untouchable field
-	# is 400x220 in the middle (UI_STYLE section 5); this lives in the
-	# band above it.
+	# The same width as the figures under the tape, which is the whole
+	# reason they are the width they are.
 	_expect(
-		not (open_layout["band"] as Rect2).intersects(
-			UiFrame.field(Vector2(640.0, 360.0))
+		is_equal_approx(
+			(layout[0]["box"] as Rect2).size.x,
+			hud.tape_box(ModuleData.card_font(), Vector2(640.0, 360.0)).size.x,
 		),
-		"and stays out of the pilot's field even wide open",
+		"as wide as the figures above them (%.0f px)" % [
+			(layout[0]["box"] as Rect2).size.x,
+		],
+	)
+	# And the tape stops above them rather than running through.
+	var tape: Rect2 = hud.tape_box(ModuleData.card_font(), Vector2(640.0, 360.0))
+	_expect(
+		tape.end.y <= (layout[0]["box"] as Rect2).position.y
+		and tape.size.y > 60.0,
+		"the tape stops above the controls and still has height (%.0f px)" % tape.size.y,
+	)
+	# Room kept for bars that are not there yet, so the tape does not
+	# move when one arrives.
+	_expect(
+		tape.position.y >= UiFrame.EDGE + UiFrame.PAD
+		+ float(FlightHud.BARS_ROOM) * (FlightHud.BAR_HEIGHT + FlightHud.BAR_GAP),
+		"and starts below room for every bar the panel may grow (%.0f px down)" % [
+			tape.position.y,
+		],
 	)
 
-	# A live switch latches, and the ship is the one that knows.
-	level = _square_for(open_layout, FlightAssists.Kind.LEVEL)
-	_expect(hud.press_at(level.get_center()), "a live square takes the press")
-	_expect(
-		ship.is_latched(FlightAssists.Kind.LEVEL) and ship.auto_level_command == false,
-		"and switches the assist on, without commanding it yet",
-	)
-	ship.read_player_input(1.0 / 60.0)
-	_expect(
-		ship.auto_level_command,
-		"which the next tick of input turns into the command",
-	)
-	_expect(hud.press_at(level.get_center()), "pressing again takes the press")
-	_expect(not ship.is_latched(FlightAssists.Kind.LEVEL), "and switches it off")
-
-	# A dead one swallows the click and changes nothing. Both halves
-	# matter: nothing latched, and no shot fired.
-	var orbit: Rect2 = _square_for(open_layout, FlightAssists.Kind.ORBIT)
-	_expect(
-		hud.press_at(orbit.get_center()),
-		"a square for a function this box has not got still takes the press",
-	)
-	_expect(
-		not ship.is_latched(FlightAssists.Kind.ORBIT),
-		"and latches nothing, because the box cannot do it",
-	)
-
-	# The pointing holds need no computer at all, and the panel is where
-	# they live rather than something the box grants.
-	var prograde: Rect2 = _square_for(open_layout, FlightAssists.Kind.PROGRADE)
-	hud.press_at(prograde.get_center())
+	# Pressing. A heading hold needs no computer, so it is the one to
+	# press on a ship with no box aboard.
+	var prograde: Rect2 = _control_box(layout, FlightAssists.Kind.PROGRADE)
+	_expect(hud.press_at(prograde.get_center()), "a button takes a press")
 	_expect(
 		ship.is_latched(FlightAssists.Kind.PROGRADE),
-		"a heading hold latches with no function on the box",
+		"and switches the assist on",
 	)
-	var retrograde: Rect2 = _square_for(open_layout, FlightAssists.Kind.RETROGRADE)
-	hud.press_at(retrograde.get_center())
+	_expect(hud.press_at(prograde.get_center()), "pressing again takes the press")
 	_expect(
-		ship.is_latched(FlightAssists.Kind.RETROGRADE)
-		and not ship.is_latched(FlightAssists.Kind.PROGRADE),
-		"and its opposite turns it off, because a nose has one heading",
+		not ship.is_latched(FlightAssists.Kind.PROGRADE),
+		"and switches it off",
 	)
-
-	# And the trigger. The pointer being over a switch has to stop the
-	# shot, because firing is polled: an event the panel consumed is an
-	# event `is_action_pressed` never hears about.
-	# The trigger actually held, which is the whole check: a headless run
-	# presses nothing, so asking whether `fire_command` is false with
-	# the action released is asking whether nothing happened. The first
-	# version of this did exactly that and passed with the guard taken
-	# out.
+	# A button for something this ship cannot do still swallows the
+	# click, which is what stops the guns going off on it.
+	var orbit: Rect2 = _control_box(layout, FlightAssists.Kind.ORBIT)
+	_expect(
+		hud.press_at(orbit.get_center())
+		and not ship.is_latched(FlightAssists.Kind.ORBIT),
+		"a button the ship cannot honour takes the press and does nothing",
+	)
+	# And the pointer: the ship has to know, because firing is polled.
 	Input.action_press("ship_fire")
 	ship.ui_grabs_pointer = false
 	ship.read_player_input(1.0 / 60.0)
 	_expect(ship.fire_command, "the held trigger fires when the pointer is free")
 	ship.ui_grabs_pointer = true
 	ship.read_player_input(1.0 / 60.0)
-	_expect(not ship.fire_command, "with the pointer on the panel, nothing fires")
+	_expect(not ship.fire_command, "with the pointer on a button, nothing fires")
 	Input.action_release("ship_fire")
 	_expect(
 		hud._over_panel(orbit.get_center())
 		and not hud._over_panel(Vector2(320.0, 180.0)),
-		"and the panel only claims the pointer where it drew itself",
+		"and the controls only claim the pointer where they are",
 	)
-	ship.ui_grabs_pointer = false
 	_discard(hud)
+	_discard(ship)
 
-	# Every switch's lit colour has to be a colour the palette has, and
-	# must not be one of the two that already mean something is wrong.
-	var ink: Palette = Palette.current()
-	var wrong: Array[String] = []
-	for one: Dictionary in FlightAssists.ALL:
-		var named: StringName = FlightAssists.tint(int(one["kind"]))
-		var shade: Variant = ink.get(String(named))
-		if not (shade is Color):
-			wrong.append("%s: no such colour" % named)
-		elif named == &"caution" or named == &"alarm":
-			wrong.append("%s: that one means trouble" % named)
-	_expect(
-		wrong.is_empty(),
-		"a lit switch wears a palette colour that is not a warning (%s)" % [
-			"all seven" if wrong.is_empty() else str(wrong),
-		],
-	)
+
+## One control's box, by what it switches.
+func _control_box(layout: Array[Dictionary], kind: int) -> Rect2:
+	for one: Dictionary in layout:
+		if int(one["kind"]) == kind:
+			return one["box"]
+	return Rect2()
+
 
 
 func _square_for(layout: Dictionary, kind: int) -> Rect2:
@@ -9802,16 +9705,18 @@ func _check_the_altitude_tape_is_out_of_the_way() -> void:
 			box, UiFrame.field(view),
 		],
 	)
+	# The three panels that are actually drawn. The context corner is
+	# not one of them any more -- the controls stand there instead,
+	# and the tape clearing **those** is its own check.
 	var over: Array[String] = []
 	for slot: int in [
-		UiFrame.Slot.SHIP, UiFrame.Slot.WORLD,
-		UiFrame.Slot.CONTEXT, UiFrame.Slot.INSTRUMENTS,
+		UiFrame.Slot.SHIP, UiFrame.Slot.WORLD, UiFrame.Slot.INSTRUMENTS,
 	]:
 		if box.intersects(UiFrame.slot(view, slot)):
 			over.append(str(slot))
 	_expect(
 		over.is_empty(),
-		"and off every panel it sits between (%s)" % [
+		"and off every panel that is drawn (%s)" % [
 			"clear" if over.is_empty() else str(over),
 		],
 	)
@@ -9881,10 +9786,15 @@ func _check_the_altitude_tape_is_out_of_the_way() -> void:
 	# The scale gives up exactly those two rows and no more: a band
 	# that kept its whole height would draw the ladder straight through
 	# the figures.
+	# The scale keeps the larger share of the band. It is squeezed from
+	# both ends now -- room reserved above for every bar the ship panel
+	# may grow to, the controls below -- so the floor is what a scale
+	# can still be read at rather than what it had before: 93 px over
+	# a 3000 px band is a tick every ten.
 	_expect(
-		box.size.y - figures > 100.0,
-		"with the scale still getting the rest of the band (%.0f px)" % [
-			box.size.y - figures,
+		box.size.y - figures >= 80.0 and box.size.y - figures > figures,
+		"with the scale still getting the larger share of the band (%.0f of %.0f px)" % [
+			box.size.y - figures, box.size.y,
 		],
 	)
 

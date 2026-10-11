@@ -97,6 +97,17 @@ func cursor_at() -> Vector2:
 func _draw_cursor() -> void:
 	if _ship == null or not is_instance_valid(_ship):
 		return
+	# Not over a button. The crosshair answers "will firing here do
+	# anything", and over a control the answer is that firing is not
+	# what the click will do -- the ship already knows, because it has
+	# to stop the trigger as well (`Ship.ui_grabs_pointer`).
+	#
+	# The shape is handed to the window rather than drawn, so the thing
+	# under the hand is the pointer every other program would show.
+	if _ship.ui_grabs_pointer:
+		Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND)
+		return
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	var at: Vector2 = cursor_at()
 
 	for trigger: int in [0, 1]:

@@ -545,7 +545,21 @@ leci za pilota, kiedy pilot robi coś innego.
   pyta przy odczycie, czy zamontowane pudełko w ogóle to potrafi, więc
   przełącznik osierocony przez refit przestaje czytać się jako włączony
   wszędzie naraz, bez czyszczenia czegokolwiek.
-- [x] Panel **u góry z prawej**: chip, który go rozwija, i siedem kwadratów
+- [x] **Sterowanie przeniosło się w lewy dolny róg jako kolumna guzików** z
+  trzyliterowymi kodami (`PRG`, `RTG`, `ORB`, `DEO`, `LVL`, `AHD`, `SAS`,
+  `TRJ`), szerokich tyle, co liczby pod taśmą — stoją w tej samej kolumnie
+  ekranu, a dwa stosy pudełek o różnej szerokości czytają się jak dwie
+  niezwiązane rzeczy. Rosą **w górę** od rogu, więc ośmiu mieści się jako
+  kolumna przy szerokości, którą oko czyta, a nie jako siatka kwadratow, której
+  nie czyta.
+- [x] Taśma ustępuje im od dołu i zostawia nad sobą miejsce na **osiem**
+  pasków statusu, choć jest ich pięć — rezerwa jest względem tego, do ilu panel
+  **może** urośnąć, bo taśma zjeżdżająca w dół, gdy kadłub się nagrzeje, to
+  taśma, której oko szuka od nowa w chwili, gdy ją czyta. Cena: podziałka ma
+  93 px zamiast 164.
+- [x] **Kursor** zmienia się w łapkę nad czymkolwiek klikalnym, a celownik tam
+  nie rysuje. Jedna flaga, którą statek i tak musi mieć, żeby wstrzymać spust.
+- [ ] ~~Panel u góry z prawej~~ — był: chip, który go rozwija, i siedem kwadratów
   15 px (UI_STYLE prymityw 7), świecących kolorem swojej roboty. Stoi
   **obok** rogu ŚWIAT, nie w nim: róg ma 66 px wysokości, pasek chce 23, a
   tarcza orbity ma 46 — więc odczyt, dla którego ten róg istnieje, wisiałby

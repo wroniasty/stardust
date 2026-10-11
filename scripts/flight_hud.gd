@@ -41,6 +41,14 @@ const CAUTION_FRACTION: float = 0.6
 ## number to keep in step with it by hand.
 const BARS: Array[StringName] = [&"hull", &"heat", &"energy", &"fuel", &"jump"]
 
+## How many bars the ship panel is allowed to grow to.
+##
+## Five today, with room kept for three more. The tape below reserves
+## against **this** rather than against what is on screen, so a bar
+## arriving -- heat coming up, a drive charging -- does not shove the
+## altitude scale down the screen at the moment it is being read.
+const BARS_ROOM: int = 8
+
 const BAR_HEIGHT: float = 11.0
 
 ## One pixel between them, which is what five bars in a sixty pixel
@@ -159,20 +167,25 @@ const ARROW_DIAL: float = 40.0
 ## How much world shows through a panel.
 const PANEL_OPACITY: float = 0.86
 
-## The computer panel: the chip that opens it and the squares inside.
+## The controls, down the bottom left: one labelled button per thing
+## the pilot can switch.
 ##
-## Fifteen px a square, in a grid five wide. One row was the first
-## shape and it ran out: eight switches plus the chip is nine cells,
-## which at fifteen comes to 157 px against the 140 the frame law
-## allows a panel to be (UI_STYLE section 5). The choice was a smaller
-## square or a second row, and the square is the thing that was asked
-## to get bigger.
+## Words rather than drawn glyphs. A seven-pixel square can carry a
+## symbol a pilot has to learn; three letters they already know carry
+## themselves, and `SAS`, `PRG`, `DEO` are the shorthand the subject
+## comes with. The glyphs were the earlier answer and they were asked
+## to go.
 ##
-## Five columns because that is what keeps the band under the ceiling
-## with room left: `2 * PAD + 5 * SWITCH + 4 * SWITCH_GAP` is 89.
-const SWITCH: float = 15.0
-const SWITCH_GAP: float = 2.0
-const SWITCH_COLUMNS: int = 5
+## The same width as the figures under the tape, because they stand in
+## the same column of the screen and two stacks of boxes an unequal
+## width apart read as two things with nothing to do with each other.
+const CONTROL_HEIGHT: float = 12.0
+const CONTROL_GAP: float = 1.0
+
+## How solid the ground under an available button is. Barely there, in
+## the same way the figures under the tape are: these sit on the
+## world, not in a panel.
+const CONTROL_FILL: float = 0.10
 
 ## How big a glyph is drawn inside a switch: a little over a third of
 ## the square either side of centre, so the stroke never touches the
@@ -239,11 +252,6 @@ var _canvas: Control = null
 ## went hunting for it would be a panel with no tests.
 var _jump: JumpController = null
 
-## Whether the computer panel is open. Shut by default: a pilot who has
-## not asked for it gets the empty context corner the frame law wants
-## (UI_STYLE section 5), and the chip alone says there is something to
-## open.
-var _computer_open: bool = false
 
 
 
@@ -335,119 +343,10 @@ func _process(delta: float) -> void:
 		_ship.ui_grabs_pointer = _over_panel(_canvas.get_local_mouse_position())
 
 
-## Where the computer panel's parts are, in canvas pixels.
-##
-## Worked out here and nowhere else. The draw uses it to draw, the press
-## uses it to hit-test and `_process` uses it to tell the ship the
-## pointer is busy -- three readers, which is exactly how many copies of
-## a layout it takes for one of them to drift. Empty when there is no
-## computer aboard, which is the same answer all three want.
-##
-## `{band, chip, switches: [{kind, box, offered}]}`. The switches are
-## present whether or not the panel is open, because what "open" changes
-## is the band's width and what gets drawn, not where the seventh square
-## would be.
-func _computer_layout() -> Dictionary:
-	if _ship == null or not is_instance_valid(_ship) or _canvas == null:
-		return {}
-	var box: FlightComputerData = _ship.computer()
-	if box == null:
-		return {}
-	# Top right, along the top edge and **beside** the world corner
-	# rather than inside it.
-	#
-	# Inside was the first try and it costs too much: the corner is 66
-	# px tall, the strip wants 23 of them, and the orbit dial is 46 --
-	# so the readout that corner exists for would have hung 9 px out of
-	# its own panel. Beside it there is nothing to take. The top band of
-	# the screen, from the field's right edge to the world panel, is
-	# empty: the pilot's untouchable 400x220 starts 70 px down (UI_STYLE
-	# section 5), and this sits at 4.
-	var slot: Rect2 = UiFrame.slot(_canvas.size, UiFrame.Slot.WORLD)
-	# The chip takes the last cell of the top row, so it is in the same
-	# place on screen whether the panel is shut or open: the band is
-	# pinned by its top right corner and that cell is that corner.
-	var cells: int = FlightAssists.ALL.size() + 1
-	var columns: int = SWITCH_COLUMNS if _computer_open else 1
-	var rows: int = int(ceil(float(cells) / float(columns))) if _computer_open else 1
-	var step: float = SWITCH + SWITCH_GAP
-	var band: Rect2 = Rect2(Vector2.ZERO, Vector2(
-		UiFrame.PAD * 2.0 + float(columns) * SWITCH + float(columns - 1) * SWITCH_GAP,
-		UiFrame.PAD * 2.0 + float(rows) * SWITCH + float(rows - 1) * SWITCH_GAP,
-	))
-	band.position = Vector2(
-		slot.position.x - UiFrame.PAD - band.size.x, slot.position.y
-	)
-	var inside: Rect2 = UiFrame.inside(band)
-	var chip: Rect2 = Rect2(
-		Vector2(inside.end.x - SWITCH, inside.position.y), Vector2(SWITCH, SWITCH)
-	)
-	var switches: Array[Dictionary] = []
-	if _computer_open:
-		var cell: int = 0
-		for one: Dictionary in FlightAssists.ALL:
-			# Skipping the chip's cell rather than laying the switches
-			# out around it: one sequence, one hole, and the hole is
-			# where the chip already is.
-			if cell == columns - 1:
-				cell += 1
-			var kind: int = int(one["kind"])
-			switches.append({
-				"kind": kind,
-				"box": Rect2(
-					inside.position + Vector2(
-						float(cell % columns) * step, float(cell / columns) * step
-					),
-					Vector2(SWITCH, SWITCH),
-				),
-				"offered": FlightAssists.offered_by(kind, box),
-			})
-			cell += 1
-	return {"band": band, "chip": chip, "switches": switches}
 
 
-## Whether a point is over something on this panel that can be clicked.
-func _over_panel(at: Vector2) -> bool:
-	var layout: Dictionary = _computer_layout()
-	if layout.is_empty():
-		return false
-	if (layout["chip"] as Rect2).has_point(at):
-		return true
-	if not _computer_open:
-		return false
-	for switch: Dictionary in layout["switches"]:
-		if (switch["box"] as Rect2).has_point(at):
-			return true
-	return false
 
 
-## A press at a point on the canvas, and whether the panel took it.
-##
-## Split from `_input` so a test can press the thing a pilot presses.
-## The first version of this was the hit test inside the input handler,
-## which a headless check can only exercise by moving a mouse it has
-## not got -- so the check would have measured the layout and called it
-## a button.
-func press_at(at: Vector2) -> bool:
-	var layout: Dictionary = _computer_layout()
-	if layout.is_empty():
-		return false
-	if (layout["chip"] as Rect2).has_point(at):
-		_computer_open = not _computer_open
-		return true
-	if not _computer_open:
-		return false
-	for switch: Dictionary in layout["switches"]:
-		if not (switch["box"] as Rect2).has_point(at):
-			continue
-		# A square for a function this box has not got is still a square
-		# a click lands on: it keeps its slot so the row cannot reshuffle
-		# (UI_STYLE section 12, trap 3), `toggle_assist` refuses it, and
-		# taking the click anyway is what stops the guns going off on a
-		# dead switch.
-		_ship.toggle_assist(int(switch["kind"]))
-		return true
-	return false
 
 
 ## Clicks on the computer panel, and nothing else on this layer.
@@ -551,79 +450,128 @@ func _draw_hud() -> void:
 	# teaches the eye to skip that part of the screen, which is the one
 	# habit an interface must not train.
 	_draw_altitude_tape(font, view, well)
-	_draw_computer()
+	_draw_controls(font)
 	_draw_warning_band(font, view)
 
 
-## The flight computer: a chip to press, and what the box can do.
-##
-## In the context corner, which the frame law gives to "momentary: the
-## module picked up, the mode, the message" -- and which assists are
-## engaged is the mode this ship is being flown in.
-##
-## Nothing at all without a computer aboard, and that is the law's own
-## answer rather than a shortcut: a control that is not there cannot be
-## mistaken for one that does nothing, because there is nothing to
-## press, and UI_STYLE section 12 puts "you built a ship with no
-## instruments" in the configuration report rather than in a permanent
-## `NO MOD` in a corner that otherwise means "nothing here can kill
-## you".
-func _draw_computer() -> void:
-	var layout: Dictionary = _computer_layout()
-	if layout.is_empty():
-		return
 
-	var engaged: int = 0
+
+## Where the controls are, in canvas pixels.
+##
+## Worked out here and nowhere else, which is the rule this panel keeps
+## learning: the draw uses it to draw, the press uses it to hit-test,
+## and `_process` uses it to tell the ship the pointer is busy. Three
+## readers is exactly how many copies of a layout it takes for one to
+## drift.
+##
+## They grow **upwards** from the bottom left corner. That corner is
+## the one the frame law gives to the momentary, and what the ship is
+## being made to do is exactly that -- and growing up rather than along
+## is what lets eight of them be a column at a width the eye can read,
+## instead of a grid of squares at a width it cannot.
+func control_layout() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _ship == null or not is_instance_valid(_ship) or _canvas == null:
+		return out
+	var font: Font = ModuleData.card_font()
+	var wide: float = band_width(font)
+	var box: FlightComputerData = _ship.computer()
+	var step: float = CONTROL_HEIGHT + CONTROL_GAP
+	var at: float = controls_top(_canvas.size)
 	for one: Dictionary in FlightAssists.ALL:
-		if _ship.is_latched(int(one["kind"])):
-			engaged += 1
+		var kind: int = int(one["kind"])
+		out.append({
+			"kind": kind,
+			"box": Rect2(Vector2(UiFrame.EDGE, at), Vector2(wide, CONTROL_HEIGHT)),
+			"offered": FlightAssists.offered_by(kind, box),
+			"says": FlightAssists.code(kind),
+		})
+		at += step
+	return out
 
-	UiDraw.panel(
-		_canvas,
-		layout["band"],
-		_ink.over(_ink.panel, PANEL_OPACITY),
-		_ink.grid,
-		UiFrame.corner(UiFrame.Slot.WORLD),
-		false,
+
+## How far up the screen the controls reach, so the tape knows where to
+## stop.
+## Takes the view rather than reading the canvas, because `tape_box`
+## takes one too and the two have to agree about how big the screen
+## is: asked one way and answered the other, the tape ran down over
+## the controls in every check that passed a size by hand.
+func controls_top(view: Vector2) -> float:
+	return (
+		view.y - UiFrame.EDGE
+		- float(FlightAssists.ALL.size()) * (CONTROL_HEIGHT + CONTROL_GAP)
 	)
-	# Lit while anything is engaged, which is the one thing the shut
-	# panel still has to say: a pilot who closed it has to be able to
-	# see that the ship is being flown for them.
-	UiGlyph.chip(
-		_canvas,
-		(layout["chip"] as Rect2).get_center(),
-		SWITCH_GLYPH,
-		_ink.accent if engaged > 0 else _ink.label,
-	)
-	if not _computer_open:
-		return
-	for switch: Dictionary in layout["switches"]:
-		_draw_switch(switch["box"], int(switch["kind"]), bool(switch["offered"]))
 
 
-## One switch, in one of three states the eye has to tell apart.
+## Whether a point is over something that can be clicked.
+func _over_panel(at: Vector2) -> bool:
+	for one: Dictionary in control_layout():
+		if (one["box"] as Rect2).has_point(at):
+			return true
+	return false
+
+
+## A press at a point on the canvas, and whether the controls took it.
 ##
-## Those three are the law's three (UI_STYLE section 12, trap 2) read as
-## controls rather than readings: the box cannot do this, the box can and
-## it is off, the box can and it is on. A dead switch is dim and keeps
-## its place, because a row that closes up over a missing function is a
-## row whose fourth square means something different on every ship.
-func _draw_switch(square: Rect2, kind: int, offered: bool) -> void:
-	var on: bool = offered and _ship.is_latched(kind)
-	var border: Color = _ink.grid
-	var ink: Color = _ink.inert
-	if on:
-		# Its own colour, by what kind of job it is: `FlightAssists.tint`
-		# says which, and the whole point is that a lit switch reads as
-		# lit from across the screen rather than as a slightly brighter
-		# grey.
-		ink = _ink.get(String(FlightAssists.tint(kind)))
-		border = ink
-	elif offered:
-		border = _ink.edge
-		ink = _ink.label
-	_canvas.draw_rect(UiDraw.snap_rect(square), border, false, 1.0)
-	UiGlyph.assist(_canvas, kind, square.get_center(), SWITCH_GLYPH, ink)
+## Split from `_input` so a test can press the thing a pilot presses.
+## The first version of this was the hit test inside the input handler,
+## which a headless check can only exercise by moving a mouse it has
+## not got -- so the check would have measured the layout and called it
+## a button.
+func press_at(at: Vector2) -> bool:
+	for one: Dictionary in control_layout():
+		if not (one["box"] as Rect2).has_point(at):
+			continue
+		# A button for something this ship cannot do is still a button
+		# a click lands on: it keeps its place so the column cannot
+		# reshuffle, `toggle_assist` refuses it, and taking the click
+		# anyway is what stops the guns going off on a dead control.
+		_ship.toggle_assist(int(one["kind"]))
+		return true
+	return false
+
+
+## The controls themselves: one labelled button each.
+##
+## Three states, and they are the law's three read as controls rather
+## than as readings (UI_STYLE section 12, trap 2): the ship cannot do
+## this, it can and it is off, it can and it is on. A button for
+## something the fitted box has not got keeps its place rather than
+## being dropped, so the column means the same thing on every ship.
+func _draw_controls(font: Font) -> void:
+	for one: Dictionary in control_layout():
+		var cell: Rect2 = one["box"]
+		var offered: bool = bool(one["offered"])
+		var on: bool = offered and _ship.is_latched(int(one["kind"]))
+		var ink: Color = _ink.inert
+		var edge: Color = _ink.grid
+		if on:
+			# Yellow on green, which is the one place in the interface
+			# those two appear as a pair. A lone amber **value** means
+			# trouble and still does; a filled green chip with a bright
+			# legend on it is a switch that is down, and nothing else
+			# on screen looks like it.
+			_canvas.draw_rect(cell, _ink.over(_ink.ok, 0.85), true)
+			ink = _ink.caution
+			edge = _ink.caution
+		elif offered:
+			_canvas.draw_rect(cell, _ink.over(_ink.panel, CONTROL_FILL), true)
+			ink = _ink.value
+			edge = _ink.edge
+		UiDraw.bracket(_canvas, cell, edge)
+		var says: String = String(one["says"])
+		_canvas.draw_string(
+			font,
+			UiDraw.snap(Vector2(
+				cell.position.x + (cell.size.x - UiDraw.text_width(font, says)) * 0.5,
+				cell.position.y + (cell.size.y + float(UiFont.BODY)) * 0.5 - 1.0,
+			)),
+			says,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, ink,
+		)
+
+
+
 
 
 ## One panel in its slot, handing back the room left inside it.
@@ -1113,12 +1061,20 @@ func tape_figures() -> Array[Dictionary]:
 ## entirely where it is -- clear of both panels and clear of the
 ## pilot's field.
 func tape_box(font: Font, view: Vector2) -> Rect2:
-	var top: Rect2 = UiFrame.slot(view, UiFrame.Slot.SHIP)
-	var bottom: Rect2 = UiFrame.slot(view, UiFrame.Slot.CONTEXT)
 	var gap: float = UiFrame.PAD * 2.0
+	var inside: Rect2 = UiFrame.inside(UiFrame.slot(view, UiFrame.Slot.SHIP))
+	# Below room for every bar the ship panel is allowed to grow to,
+	# not below the bars it happens to be showing: a tape that moved
+	# down when the hull got hot would be a tape the eye has to find
+	# again at the moment it is being read.
+	var under_bars: float = (
+		inside.position.y + float(BARS_ROOM) * (BAR_HEIGHT + BAR_GAP) + gap
+	)
+	# And above the controls, which grow up from the bottom corner.
+	var over_controls: float = controls_top(view) - gap
 	return Rect2(
-		Vector2(top.position.x, top.end.y + gap),
-		Vector2(band_width(font), bottom.position.y - top.end.y - gap * 2.0),
+		Vector2(UiFrame.EDGE, under_bars),
+		Vector2(band_width(font), maxf(over_controls - under_bars, 0.0)),
 	)
 
 

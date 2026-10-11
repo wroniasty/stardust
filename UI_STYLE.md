@@ -272,10 +272,14 @@ skrzynia na ekranie. Czyta się natychmiast i kosztuje osiem kresek.
 lądowaniu: 1 px, `nav`, rysowane w przestrzeni świata, nie w warstwie panelu.
 Wskaźnik ma przecinać obraz, bo mówi o obrazie.
 
-**7. Przełącznik.** Kwadrat **15 px** z obrysem 1 px i glifem `UiGlyph` w
-środku, w rzędzie co **2 px**. Jedyny prymityw, który przyjmuje kliknięcie, i
-jedyny, który czegoś nie pokazuje, tylko czymś steruje — stąd osobna pozycja,
-a nie wariant paska.
+**7. Przełącznik.** Prostokąt **12 px** wysokości z czterema narożnikami i
+**trzyliterowym kodem** w środku, w kolumnie co 1 px, szeroki tyle, co liczby
+nad nim. Jedyny prymityw, który przyjmuje kliknięcie, i jedyny, który czegoś
+nie pokazuje, tylko czymś steruje — stąd osobna pozycja, a nie wariant paska.
+
+**Słowo, nie glif.** Siła siedmiopikselowego kwadratu to symbol, którego pilot
+musi się nauczyć; trzy litery, które już zna, niosą się same — `SAS`, `PRG`,
+`DEO` to skróty, które temat ma gotowe. Glify były wcześniejszą odpowiedzią.
 
 Piętnaście to nie upodobanie, tylko wybór między wielkością a jednym rzędem.
 Dziewięć komórek (główka plus osiem) w jednym rzędzie to `2*PAD + 9*15 + 8*2` =
@@ -288,22 +292,17 @@ ekranu zwinięta i rozwinięta.
 Trzy stany, i to są trzy stany z sekcji 12 przeczytane jako sterowanie, nie
 jako odczyt:
 
-| stan | obrys | glif |
-|---|---|---|
-| moduł tego nie potrafi | `grid` | `inert` |
-| potrafi, wyłączone | `edge` | `label` |
-| potrafi, włączone | kolor roboty | kolor roboty |
+| stan | tło | obrys | napis |
+|---|---|---|---|
+| statek tego nie potrafi | — | `grid` | `inert` |
+| potrafi, wyłączone | `panel` alfa 0.10 | `edge` | `value` |
+| potrafi, włączone | `ok` alfa 0.85 | `caution` | `caution` |
 
-**Włączony świeci kolorem swojej roboty**, nie jednym akcentem: `nav` dla tych,
-które trzymają kurs, `accent` dla tych, które lecą orbitę, `ok` dla tych, które
-trzymają statek spokojnie nad gruntem, `value` dla wygaszania obrotu, które nie
-należy do żadnej z tych grup i jako jedyne działa w pustce. Cztery kolory na
-siedem przełączników znaczą, że rzut oka mówi **jakiego rodzaju** rzecz jest
-włączona, zanim oko przeczyta kształt.
-
-`caution` i `alarm` są tu zakazane. Sekcja 3 daje im znaczenie — coś idzie źle
-— a panel świecący bursztynem dlatego, że pilot włączył asystę, to pasek
-ostrzegawczy wołający „wilk".
+**Włączony to żółty na zielonym** i jest to jedyne miejsce w interfejsie, gdzie
+te dwa występują **parą**. Zakaz z sekcji 3 dotyczy samotnej bursztynowej
+**wartości**, która znaczy kłopot, i dalej obowiązuje; wypełniony zielony
+prostokąt z jasnym napisem to przełącznik wciśnięty i nic innego na ekranie tak
+nie wygląda.
 
 **Martwy przełącznik zostaje na swoim miejscu** i dalej połyka kliknięcie. To
 jest pułapka 3 z sekcji 12 zastosowana do rzędu guzików: rząd, który zasklepia
@@ -311,6 +310,12 @@ się nad brakującą funkcją, to rząd, w którym czwarty kwadrat znaczy co inn
 każdym statku. Połknięcie kliknięcia nie jest uprzejmością — spust jest
 **odpytywany**, nie zdarzeniowy, więc panel, który nie zająłby wskaźnika,
 strzelałby z dział przy każdym naciśnięciu guzika.
+
+**Kursor mówi, że coś jest klikalne.** Nad guzikiem okno dostaje
+`CURSOR_POINTING_HAND`, a celownik się nie rysuje — odpowiada on na pytanie
+„czy strzał tutaj coś da", a nad guzikiem odpowiedź brzmi, że kliknięcie nie
+będzie strzałem. Statek i tak musi o tym wiedzieć, bo spust jest odpytywany
+(`Ship.ui_grabs_pointer`), więc pyta o to jedna flaga, a nie dwie.
 
 Przełącznik **sterujący** startuje wyłączony, przełącznik **pokazujący** —
 włączony, gdy moduł go daje. Różnica jest w tym, co się dzieje po włączeniu:
