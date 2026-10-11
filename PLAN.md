@@ -629,9 +629,14 @@ Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
   więc jest zapisana raz w `BARS` i to jej pilnuje test. Pięć po `11 + 1` to
   równe 60 px, czyli cały róg; szósty pasek wywala sprawdzenie, zanim kogokolwiek
   zaskoczy na ekranie.
-- [x] **Energia i paliwo pokazują ilość, nie procent.** Kadłub i ciepło nie mają
-  jednostki, na którą dałoby się zareagować; te dwa mają, a pytania brzmią „czy
-  starczy na strzał" i „czy dolecę".
+- [x] **Energia i paliwo pokazują ilość, nie procent** — energia do 0.1,
+  paliwo do 0.01. Kadłub i ciepło nie mają jednostki, na którą dałoby się
+  zareagować; te dwa mają, a pytania brzmią „czy starczy na strzał" i „czy
+  dolecę" — i obie rozstrzygają się na ostatniej cyfrze.
+- [x] Nie da się zmniejszyć napisów i to nie jest ustawienie: krój to bitmapa
+  8 px ze skalowaniem całkowitym, więc 5, 6, 7 i 8 renderują się identycznie
+  (zmierzone). Odchudzona została płytka pod cyfrą — alfa 0.55 zamiast 0.85 i
+  piksel mniej oddechu.
 - [x] **Energia przeniosła się z dołu ekranu**, z karbami i czerwoną ramką
   odmowy. `EnergyHud` zniknieł — jeden właściciel tego rogu zamiast dwóch
   warstw rysujących w jedno miejsce. Karby zostają, bo to reguła sekcji 6 dla

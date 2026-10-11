@@ -10048,11 +10048,25 @@ func _check_the_ship_panel_is_four_bars() -> void:
 	# more shot, or far enough to get there. Neither is a share of
 	# anything a pilot acts on.
 	_expect(
-		String(says[&"energy"]) == "%.0f" % ship.energy
-		and String(says[&"fuel"]) == "%.0f" % ship.fuel
+		String(says[&"energy"]) == FlightHud.ENERGY_FORMAT % ship.energy
+		and String(says[&"fuel"]) == FlightHud.FUEL_FORMAT % ship.fuel
 		and not String(says[&"energy"]).ends_with("%")
 		and not String(says[&"fuel"]).ends_with("%"),
 		"energy and fuel say how much there is (%s, %s)" % [
+			says[&"energy"], says[&"fuel"],
+		],
+	)
+	# To a tenth and a hundredth: both are read while deciding whether
+	# there is enough for one more of something.
+	#
+	# Counted rather than split on the dot. The first version indexed
+	# `split(".")[1]`, which on a figure with no dot is out of range --
+	# so taking the decimal away made this check **error** instead of
+	# fail, and the run reported neither an ok nor a FAIL for it.
+	_expect(
+		_decimals(String(says[&"energy"])) == 1
+		and _decimals(String(says[&"fuel"])) == 2,
+		"energy to a tenth and fuel to a hundredth (%s, %s)" % [
 			says[&"energy"], says[&"fuel"],
 		],
 	)
@@ -10104,16 +10118,25 @@ func _check_the_ship_panel_is_four_bars() -> void:
 	)
 	# And the figure's plate fits on one, at its widest.
 	var font: Font = ModuleData.card_font()
+	# The widest figure either format can produce, plus its plate.
+	var widest: float = maxf(
+		UiDraw.text_width(font, FlightHud.ENERGY_FORMAT % 99999.0),
+		UiDraw.text_width(font, FlightHud.FUEL_FORMAT % 99999.0),
+	) + FlightHud.BAR_TEXT_PAD * 2.0
 	_expect(
-		UiDraw.text_width(font, "99999") + FlightHud.BAR_TEXT_PAD * 2.0
-		<= inside.size.x,
+		widest <= inside.size.x,
 		"and the widest figure's plate fits on a bar (%.0f of %.0f px)" % [
-			UiDraw.text_width(font, "99999") + FlightHud.BAR_TEXT_PAD * 2.0,
-			inside.size.x,
+			widest, inside.size.x,
 		],
 	)
 	_discard(hud)
 	_discard(ship)
+
+
+## How many digits a printed figure has after the point, or none.
+func _decimals(text: String) -> int:
+	var dot: int = text.find(".")
+	return 0 if dot < 0 else text.length() - dot - 1
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

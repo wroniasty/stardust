@@ -50,8 +50,23 @@ const BAR_HEIGHT: float = 11.0
 const BAR_GAP: float = 1.0
 
 ## How much air the figure gets either side of itself, inside the plate
-## it is written on.
-const BAR_TEXT_PAD: float = 2.0
+## it is written on, and how solid that plate is.
+##
+## The glyphs themselves cannot be made smaller, which is worth writing
+## down because it looks like a setting and is not: the face is a
+## bitmap at eight pixels with `FIXED_SIZE_SCALE_INTEGER_ONLY`
+## (`UiFont`), so 5, 6, 7 and 8 all render identically -- measured --
+## and the next size down from eight is nothing. What the figure can
+## give back is the weight of what it sits on, so the plate is thin
+## and see-through rather than a black box.
+const BAR_TEXT_PAD: float = 1.0
+const BAR_PLATE_OPACITY: float = 0.55
+
+## How energy and fuel are printed. Finer than whole units because
+## both are read while deciding whether there is enough for one more
+## of something, and the last one is where that question lives.
+const ENERGY_FORMAT: String = "%.1f"
+const FUEL_FORMAT: String = "%.2f"
 
 ## The warning band: where it sits, and how much air it gets.
 ##
@@ -673,7 +688,7 @@ func _draw_bar(
 				Vector2(left - BAR_TEXT_PAD, box.position.y + 1.0),
 				Vector2(wide + BAR_TEXT_PAD * 2.0, box.size.y - 2.0),
 			),
-			_ink.over(_ink.scrim, 0.85),
+			_ink.over(_ink.scrim, BAR_PLATE_OPACITY),
 			true,
 		)
 		_canvas.draw_string(
@@ -738,7 +753,7 @@ func ship_bars() -> Array[Dictionary]:
 		out.append({
 			"kind": &"energy", "fill": charge,
 			"ink": _ink.inert if _ship.energy_waiting() else _ink.nav,
-			"says": "%.0f" % _ship.energy,
+			"says": ENERGY_FORMAT % _ship.energy,
 		})
 
 	var tank: float = _ship.fuel_capacity()
@@ -746,7 +761,7 @@ func ship_bars() -> Array[Dictionary]:
 		out.append({
 			"kind": &"fuel", "fill": clampf(_ship.fuel / tank, 0.0, 1.0),
 			"ink": _ink.caution if _ship.fuel < tank * 0.2 else _ink.ok,
-			"says": "%.0f" % _ship.fuel,
+			"says": FUEL_FORMAT % _ship.fuel,
 		})
 
 	if _jump != null and is_instance_valid(_jump):

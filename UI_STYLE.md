@@ -231,10 +231,17 @@ liczbę, żeby wywołujący mógł oddać resztę panelu czemuś innemu.
 **3. Pasek z podziałką znaczącą.** Wysoki na **11 px**, bez podpisu, z własną
 wartością wypisaną **na nim**, wyśrodkowaną, na własnej ciemnej płytce. Etykieta
 i pasek obok siebie były dwoma odczytami jednej liczby jedno pod drugim; został
-ten, który odpowiada rzutem oka, a liczba weszła do środka. Płytka kosztuje
-jeden prostokąt i czyta się nad czymkolwiek — pierwsza wersja dobierała kolor
+ten, który odpowiada rzutem oka, a liczba weszła do środka. Płytka jest **czarna i prześwitująca** (alfa 0.55), nie
+czarnym pudełkiem: ma odciążyć cyfrę od paska, a nie zrobić w nim dziury.
+Kosztuje jeden prostokąt i czyta się nad czymkolwiek — pierwsza wersja dobierała kolor
 cyfry od tego, czy wypełnienie już pod nią doszło, co daje bladą cyfrę na jasnym
 pasku i liczbę zmieniającą kolor w trakcie napełniania.
+
+**Napisów nie da się zmniejszyć i to nie jest ustawienie.** Krój to bitmapa
+ośmiopikselowa z `FIXED_SIZE_SCALE_INTEGER_ONLY` (`UiFont`), więc 5, 6, 7 i 8
+renderują się **identycznie** — zmierzone — a następny rozmiar w dół od ośmiu to
+żaden. Odchudzić można tylko to, na czym cyfra siedzi; mniejszy tekst wymagałby
+innego kroju, czyli decyzji z sekcji 4, a nie poprawki w panelu.
 
 **Procent czy ilość — zależy od decyzji, którą pilot podejmuje.** Kadłub i
 ciepło nie mają jednostki, na którą dałoby się zareagować, więc mówią udział.
