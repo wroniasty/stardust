@@ -122,6 +122,32 @@ const DESCENT_FORMAT: String = "%+.1f"
 const SPEED_WIDEST: float = 99999.0
 const DESCENT_WIDEST: float = -9999.0
 
+## And the pull, which is the third figure under the tape.
+##
+## Acceleration in design pixels per second squared, which is the unit
+## everything else about flying is already in: thrust against mass
+## comes out in it, and so does the descent rate's own rate of change.
+## A pilot reading "my drive gives 40 and this world pulls 12" can do
+## the arithmetic that decides whether they are going to be able to
+## lift off again.
+const GRAVITY_FORMAT: String = "%.1f"
+const GRAVITY_WIDEST: float = 999.9
+
+## How much air the figures get below the scale, and how tall each of
+## their boxes is.
+##
+## The gap is the whole font, because the scale's own bottom label sits
+## on its last tick: without it the zero of the altitude band and the
+## first figure were in the same pixels, which is what this was
+## reported as.
+const TAPE_FIGURE_GAP: float = 8.0
+const TAPE_FIGURE_ROW: float = 12.0
+
+## How solid the plate behind a figure is. Barely there on purpose: it
+## is a hint of a panel rather than a panel, because this one sits on
+## the starfield rather than in a corner.
+const TAPE_FIGURE_FILL: float = 0.10
+
 ## The orbit dial. Forty-six rather than sixty-six, because the
 ## untouchable field leaves a corner 116 px wide and the apsides have
 ## to stand beside the picture rather than under it.
@@ -980,11 +1006,14 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 	if box.size.y <= 0.0:
 		return
 
-	# The two figures at the foot of the scale, where its own zero is.
-	# They belong to the same instrument: height, speed and the rate
-	# the first is changing are one reading taken three ways, and a
-	# pilot on finals is looking at one place rather than two corners.
-	var figures: float = ROW * 2.0
+	# The figures at the foot of the scale. They belong to the same
+	# instrument: height, speed, the rate the first is changing and
+	# what is pulling on it are one reading taken four ways, and a
+	# pilot on finals is looking at one place rather than four corners.
+	var stats: Array[Dictionary] = tape_figures()
+	var figures: float = (
+		float(stats.size()) * TAPE_FIGURE_ROW + TAPE_FIGURE_GAP
+	)
 	if well.has_ground():
 		UiDraw.ladder(
 			_canvas, font,
@@ -992,20 +1021,51 @@ func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
 			_altitude.stepped(), Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
 			_ink.value, _ink.accent, _ink.label, _tape_label,
 		)
-	var y: float = box.end.y - figures + float(UiFont.BODY)
-	UiDraw.row(
-		_canvas, font, Vector2(box.position.x, y), box.size.x, "SPD",
-		SPEED_FORMAT % _speed.stepped(), _ink.value, _ink.label,
-	)
-	y += ROW
+	var y: float = box.end.y - float(stats.size()) * TAPE_FIGURE_ROW
+	for one: Dictionary in stats:
+		var cell: Rect2 = Rect2(
+			Vector2(box.position.x, y), Vector2(box.size.x, TAPE_FIGURE_ROW - 1.0)
+		)
+		# A hint of a plate and four corners, because this one sits on
+		# the starfield rather than in a panel: the brackets say where
+		# the reading ends without spending the four lines a frame
+		# costs (UI_STYLE section 5).
+		_canvas.draw_rect(cell, _ink.over(_ink.panel, TAPE_FIGURE_FILL), true)
+		UiDraw.bracket(_canvas, cell, _ink.grid)
+		UiDraw.row(
+			_canvas, font,
+			Vector2(cell.position.x + 2.0, cell.position.y + float(UiFont.BODY)),
+			cell.size.x - 4.0, String(one["label"]), String(one["says"]),
+			one["ink"], _ink.label,
+		)
+		y += TAPE_FIGURE_ROW
+
+
+## The figures under the scale, top to bottom.
+##
+## A list for the same reason the ship panel's bars are one: the order
+## is fixed and the box has to be tall enough for all of them, which is
+## a fact about this list rather than a number kept in step with it.
+func tape_figures() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _ship == null or not is_instance_valid(_ship):
+		return out
+	out.append({
+		"label": "SPD", "says": SPEED_FORMAT % _speed.stepped(), "ink": _ink.value,
+	})
 	# The colour off the smoothed value rather than the printed one: a
 	# descent rate sitting on a threshold would otherwise swap colours
 	# every frame, which is the loudest thing a HUD can do.
-	UiDraw.row(
-		_canvas, font, Vector2(box.position.x, y), box.size.x, "V/S",
-		DESCENT_FORMAT % -_descent.stepped(),
-		_descent_colour(_descent.smooth()), _ink.label,
-	)
+	out.append({
+		"label": "V/S", "says": DESCENT_FORMAT % -_descent.stepped(),
+		"ink": _descent_colour(_descent.smooth()),
+	})
+	out.append({
+		"label": "GRAV",
+		"says": GRAVITY_FORMAT % _ship.get_applied_gravity().length(),
+		"ink": _ink.label,
+	})
+	return out
 
 
 ## Where the tape goes: the left edge, between the two panels on it.
@@ -1031,14 +1091,23 @@ func tape_box(font: Font, view: Vector2) -> Rect2:
 	)
 
 
-## How much room the two figures under the scale need at their widest.
+## How much room the figures under the scale need at their widest.
+##
+## Four pixels of it go to the plate they sit on, which insets the row
+## by two at each end.
 func figures_width(font: Font) -> float:
-	return maxf(
-		UiDraw.text_width(font, "SPD") + 3.0
-		+ UiDraw.text_width(font, SPEED_FORMAT % SPEED_WIDEST),
-		UiDraw.text_width(font, "V/S") + 3.0
-		+ UiDraw.text_width(font, DESCENT_FORMAT % DESCENT_WIDEST),
-	)
+	var widest: float = 0.0
+	for pair: Array in [
+		["SPD", SPEED_FORMAT % SPEED_WIDEST],
+		["V/S", DESCENT_FORMAT % DESCENT_WIDEST],
+		["GRAV", GRAVITY_FORMAT % GRAVITY_WIDEST],
+	]:
+		widest = maxf(
+			widest,
+			UiDraw.text_width(font, pair[0]) + 3.0
+			+ UiDraw.text_width(font, pair[1]),
+		)
+	return widest + 4.0
 
 
 ## What is in the ground here, in one row.

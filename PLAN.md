@@ -609,6 +609,14 @@ Cel: na podejściu widać **ile zostało**, bez czytania liczby.
 - [x] Bez tła. Każdy inny odczyt leży na przyciemnionej płycie, bo jest blokiem
   tekstu; to jest kreska i kilka ząbków, a dwieście pikseli płyty wzdłuż boku
   ekranu byłoby najcięższym elementem interfejsu trzymającym najlżejszy.
+- [x] **Trzy liczby pod taśmą: SPD, V/S i GRAV**, każda na własnej płytce
+  (alfa 0.10) z czterema narożnikami — taśma stoi na gwiazdach, nie w panelu,
+  więc nawias mówi, gdzie odczyt się kończy, nie wydając czterech linii na
+  ramkę. Między podziałką a liczbami jest **cała wysokość czcionki** przerwy:
+  bez niej zero pasma i pierwsza liczba były w tych samych pikselach.
+- [x] `GRAV` to przyciąganie w px/s2 — ta sama jednostka, w której jest ciąg
+  na masę, więc „napęd daje 40, ten świat ciągnie 12" to rachunek, który pilot
+  może zrobić przed lądowaniem.
 - [x] **SPD i V/S stoją na taśmie**, pod jej własnym zerem. Wysokość, prędkość
   i tempo, w jakim ta pierwsza się zmienia, to jeden odczyt wzięty na trzy
   sposoby — pilot na finale patrzy w jedno miejsce, nie w dwa rogi. Pasmo jest
