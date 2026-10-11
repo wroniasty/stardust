@@ -8692,6 +8692,7 @@ func _check_hull_editor() -> void:
 	_check_a_preset_can_carry_a_computer()
 	_check_the_spin_killer_knows_when_to_sit_out()
 	_check_the_computer_panel_is_pressable()
+	_check_the_trajectory_view_is_a_function()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
@@ -9307,13 +9308,7 @@ func _check_the_computer_panel_is_pressable() -> void:
 	hole.installed = box
 
 	var layout: Dictionary = hud._computer_layout()
-	_expect(
-		not layout.is_empty()
-		and (layout["switches"] as Array).size() == FlightAssists.ALL.size(),
-		"a fitted computer puts one square per assist on the panel (%d)" % [
-			0 if layout.is_empty() else (layout["switches"] as Array).size(),
-		],
-	)
+	_expect(not layout.is_empty(), "a fitted computer puts a chip on the panel")
 	# The frame law: no panel wider than 140 or taller than 120.
 	var band: Rect2 = layout["band"]
 	var corner: Rect2 = UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.WORLD)
@@ -9350,19 +9345,44 @@ func _check_the_computer_panel_is_pressable() -> void:
 		and (open_layout["chip"] as Rect2) == (layout["chip"] as Rect2),
 		"opening widens the band and leaves the chip where it was",
 	)
-	# The open row is the widest this panel ever gets, and `SWITCH` is
-	# picked so that it lands on the law's ceiling exactly rather than
-	# being clamped and clipping its last square.
+	_expect(
+		(open_layout["switches"] as Array).size() == FlightAssists.ALL.size(),
+		"opened, there is one square per assist (%d)" % [
+			(open_layout["switches"] as Array).size(),
+		],
+	)
+	# The grid is as wide as its columns and no wider: nothing is
+	# clamped, so no square is clipped off the end.
 	var widest: float = (
 		UiFrame.PAD * 2.0
-		+ float(FlightAssists.ALL.size() + 1) * FlightHud.SWITCH
-		+ float(FlightAssists.ALL.size()) * FlightHud.SWITCH_GAP
+		+ float(FlightHud.SWITCH_COLUMNS) * FlightHud.SWITCH
+		+ float(FlightHud.SWITCH_COLUMNS - 1) * FlightHud.SWITCH_GAP
 	)
 	_expect(
 		is_equal_approx((open_layout["band"] as Rect2).size.x, widest)
 		and widest <= UiFrame.MOST.x,
-		"and the open row fits without being clamped (%.0f of %.0f px)" % [
+		"and the grid fits without being clamped (%.0f of %.0f px)" % [
 			widest, UiFrame.MOST.x,
+		],
+	)
+	# Every square inside the band, and none on top of another. A grid
+	# laid out by index is exactly the thing that silently puts two
+	# cells in one place when the hole for the chip is miscounted.
+	var strays: int = 0
+	var overlaps: int = 0
+	for i: int in range((open_layout["switches"] as Array).size()):
+		var one: Rect2 = (open_layout["switches"] as Array)[i]["box"]
+		if not (open_layout["band"] as Rect2).encloses(one):
+			strays += 1
+		if one.intersects(open_layout["chip"]):
+			overlaps += 1
+		for j: int in range(i + 1, (open_layout["switches"] as Array).size()):
+			if one.intersects((open_layout["switches"] as Array)[j]["box"]):
+				overlaps += 1
+	_expect(
+		strays == 0 and overlaps == 0,
+		"with every square in the band and none on top of another (%d out, %d doubled)" % [
+			strays, overlaps,
 		],
 	)
 	# And it opens over nothing the pilot needs. The untouchable field
@@ -9490,7 +9510,7 @@ func _check_the_computer_table_rolls_every_function() -> void:
 	var rolls: int = 4000
 	var fields: Array[StringName] = [
 		&"has_rotation_kill", &"has_auto_level", &"has_altitude_hold",
-		&"has_auto_orbit", &"has_deorbit",
+		&"has_auto_orbit", &"has_trajectory_view", &"has_deorbit",
 	]
 	## The rarity each function is not supposed to appear below.
 	# Rarity by number rather than by name, because the enum lives on
@@ -9499,7 +9519,7 @@ func _check_the_computer_table_rolls_every_function() -> void:
 	var floors: Dictionary = {
 		&"has_rotation_kill": 1, &"has_auto_level": 1,
 		&"has_altitude_hold": 2, &"has_auto_orbit": 2,
-		&"has_deorbit": 3,
+		&"has_trajectory_view": 2, &"has_deorbit": 3,
 	}
 	var seen: Dictionary = {}
 	var leaked: Array[String] = []
@@ -9526,7 +9546,7 @@ func _check_the_computer_table_rolls_every_function() -> void:
 	_expect(
 		never.is_empty(),
 		"every function the computer has is reachable from the loot table (%s)" % [
-			"all five" if never.is_empty() else str(never),
+			"all of them" if never.is_empty() else str(never),
 		],
 	)
 	_expect(
@@ -9594,6 +9614,101 @@ func _check_the_computer_table_rolls_every_function() -> void:
 	# the gate reads "resources still in use at exit" as an error --
 	# which it did, on this check's first green run.
 	loot.free()
+
+
+## Podglad trajektorii jako funkcja komputera, a nie wizualizacja debug.
+##
+## Three separate claims and they fail in different ways. **Who asks**:
+## the pilot through the switch, or F7, and neither may switch the other
+## off -- the predictor used to be in the debug group, whose `visible`
+## the overlay writes, so the debug key would have quietly cancelled a
+## function the pilot had turned on. **What colour**: four states a
+## pilot acts on differently. **How it stripes**: a dash walker is a
+## loop with a modulo in it, and a pattern that drifts out of step
+## across segments or swallows a short one does not show in a
+## screenshot.
+func _check_the_trajectory_view_is_a_function() -> void:
+	var ship: Ship = _spawn_ship()
+	var seer: TrajectoryPredictor = (
+		load("res://scenes/trajectory_predictor.tscn") as PackedScene
+	).instantiate() as TrajectoryPredictor
+	root.add_child(seer)
+	seer._ship = ship
+
+	DebugOverlay.showing = false
+	_expect(not seer.wanted(), "with nothing asking, no line is drawn")
+
+	var box: FlightComputerData = FlightComputerData.new()
+	box.has_trajectory_view = true
+	box.bulk = 0.5
+	var hole: ModuleBay = ship.bay_for(box)
+	if hole != null:
+		hole.installed = box
+	ship.toggle_assist(FlightAssists.Kind.TRAJECTORY)
+	_expect(
+		ship.is_latched(FlightAssists.Kind.TRAJECTORY) and seer.wanted(),
+		"the pilot's switch asks for it",
+	)
+
+	# And the debug key cannot take it away, which is the whole reason
+	# this stopped being a debug visual rather than gaining a second
+	# flag beside one.
+	DebugOverlay.showing = false
+	_expect(seer.wanted(), "and the debug key being off does not cancel it")
+	ship.toggle_assist(FlightAssists.Kind.TRAJECTORY)
+	DebugOverlay.showing = true
+	_expect(
+		not ship.is_latched(FlightAssists.Kind.TRAJECTORY) and seer.wanted(),
+		"while the debug key still shows it with no computer switch at all",
+	)
+	DebugOverlay.showing = false
+
+	# The stripes. A straight path of a known length, cut up.
+	var straight: PackedVector2Array = PackedVector2Array()
+	for i: int in range(21):
+		straight.append(Vector2(float(i) * 20.0, 0.0))
+	var length: float = 400.0
+	var marks: PackedVector2Array = TrajectoryPredictor.dashes(straight)
+	_expect(marks.size() > 0 and marks.size() % 2 == 0, "the path comes back in pairs")
+	var inked: float = 0.0
+	var longest: float = 0.0
+	var off_line: int = 0
+	for i: int in range(0, marks.size(), 2):
+		var run: float = marks[i].distance_to(marks[i + 1])
+		inked += run
+		longest = maxf(longest, run)
+		if not is_zero_approx(marks[i].y) or not is_zero_approx(marks[i + 1].y):
+			off_line += 1
+	var share: float = inked / length
+	var wanted_share: float = TrajectoryPredictor.DASH / (
+		TrajectoryPredictor.DASH + TrajectoryPredictor.DASH_GAP
+	)
+	_expect(
+		absf(share - wanted_share) < 0.05 and off_line == 0,
+		"and about %.0f%% of it is inked, on the line (%.0f%%, %d strays)" % [
+			wanted_share * 100.0, share * 100.0, off_line,
+		],
+	)
+	# No dash longer than a dash. A walker that loses its place across a
+	# segment boundary runs two together, which is how a dashed line
+	# turns into a solid one halfway along.
+	_expect(
+		longest <= TrajectoryPredictor.DASH + 0.001,
+		"with no dash longer than one dash (%.2f of %.2f)" % [
+			longest, TrajectoryPredictor.DASH,
+		],
+	)
+	# A path shorter than one dash is still drawn, rather than falling
+	# through the loop and showing nothing.
+	var stub: PackedVector2Array = PackedVector2Array([
+		Vector2.ZERO, Vector2(TrajectoryPredictor.DASH * 0.4, 0.0),
+	])
+	_expect(
+		TrajectoryPredictor.dashes(stub).size() == 2,
+		"and a path shorter than one dash still gets one",
+	)
+	_discard(seer)
+	_discard(ship)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

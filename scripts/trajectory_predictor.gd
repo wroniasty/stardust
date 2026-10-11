@@ -2,6 +2,13 @@ class_name TrajectoryPredictor
 extends Node2D
 ## Draws where the ship is going if it does nothing.
 ##
+## No longer only a debug visual. It is a flight computer function now
+## (`FlightComputerData.has_trajectory_view`), switched from the panel
+## in the corner, and F7 still brings it up with the rest of the
+## instruments whether or not a box is fitted -- so it asks both rather
+## than belonging to the debug group, which would have let the overlay
+## write over the pilot's switch.
+##
 ## Forward-integrates the same gravity function the ship uses, with the same
 ## semi-implicit Euler, so the line is not an approximation of the physics: it
 ## is the physics, run ahead. Drag and thrust are left out on purpose, because
@@ -28,7 +35,24 @@ extends Node2D
 
 const MARKER_RADIUS: float = 3.0
 
-@onready var _line: Line2D = $Line
+## How the path is drawn: a broad, faint, dashed ribbon rather than the
+## one-pixel line it was on the debug layer.
+##
+## Wide because it is read at a glance against terrain and starfield,
+## and faint for the same reason the panels are -- a line through the
+## middle of the screen that hides what is behind it is a line that has
+## to be switched off to fly. Dashed because a solid band of colour over
+## the world reads as a wall; gaps say "this is a path, not a thing".
+const PATH_WIDTH: float = 5.0
+const PATH_ALPHA: float = 0.40
+const DASH: float = 10.0
+const DASH_GAP: float = 7.0
+
+## Where the predicted path is, in this node's own frame, kept for the
+## draw. It used to live in a `Line2D` child; a dashed ribbon whose
+## colour says what the orbit is doing is not something `Line2D` draws,
+## and two copies of the path would be one too many.
+var _path: PackedVector2Array = PackedVector2Array()
 
 var _ship: Ship = null
 var _ticks: int = 0
@@ -38,20 +62,32 @@ var _impact: Vector2 = Vector2.INF
 
 
 func _ready() -> void:
-	# On the debug layer rather than always on. M1.5 built it as a HUD element,
-	# but a permanent line through the middle of the screen is clutter when you
-	# are not reading it; F7 brings it back with the rest of the instruments.
-	add_to_group(DebugOverlay.DEBUG_GROUP)
+	# **Not** in the debug group, though F7 still shows it. A group
+	# member has its `visible` written by the overlay, which would mean
+	# the debug key quietly switching off a function the pilot had
+	# turned on. Asking both questions here instead leaves one owner of
+	# the answer.
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
+
+
+## Whether anybody is asking for the path: the pilot through the
+## computer, or the debug layer.
+func wanted() -> bool:
+	if _ship == null or not is_instance_valid(_ship):
+		return false
+	if _ship.is_latched(FlightAssists.Kind.TRAJECTORY):
+		return true
+	return DebugOverlay.showing
 
 
 func _physics_process(_delta: float) -> void:
 	if _ship == null:
 		return
+	visible = wanted()
 	if not visible:
-		if _line.get_point_count() > 0:
-			_line.clear_points()
+		if not _path.is_empty():
+			_path = PackedVector2Array()
 		return
 	_ticks += 1
 	if _ticks < recompute_interval:
@@ -133,7 +169,7 @@ func _predict() -> void:
 		for point: Vector2 in path:
 			radii.append(point.distance_to(reference.global_position))
 
-	_line.points = path
+	_path = path
 	_find_extremes(path, radii)
 	queue_redraw()
 
@@ -162,7 +198,36 @@ func _find_extremes(path: PackedVector2Array, radii: PackedFloat32Array) -> void
 			return
 
 
+## What the path is doing, as the colour it is drawn in.
+##
+## Four answers, and they are the four a pilot acts on differently: a
+## closed orbit that clears the air is fine, one that dips into it is a
+## clock running, an open path is simply going somewhere, and a path
+## that ends in rock is the only one that needs doing something about
+## now. The last beats the rest, because `orbit_state` can call a path
+## SUBORBITAL while the impact is still off the end of the prediction.
+func path_ink() -> Color:
+	var ink: Palette = Palette.current()
+	if _impact.is_finite():
+		return ink.alarm
+	var planet: Planet = null
+	if _ship != null and is_instance_valid(_ship):
+		planet = Planet.nearest(get_tree(), _ship.global_position)
+	if planet == null:
+		return ink.nav
+	match planet.orbit_state(_ship.global_position, _ship.linear_velocity):
+		GravityWell.OrbitState.ORBIT:
+			return ink.ok
+		GravityWell.OrbitState.DECAYING:
+			return ink.caution
+		GravityWell.OrbitState.SUBORBITAL:
+			return ink.caution
+		_:
+			return ink.nav
+
+
 func _draw() -> void:
+	_draw_path()
 	if _apoapsis.is_finite():
 		_draw_marker(_apoapsis, apoapsis_color)
 	if _periapsis.is_finite():
@@ -175,3 +240,51 @@ func _draw() -> void:
 
 func _draw_marker(point: Vector2, color: Color) -> void:
 	draw_arc(point, MARKER_RADIUS, 0.0, TAU, 12, color, 1.0)
+
+
+## The path as dashes of a fixed length on the ground, not per step.
+##
+## Per step would stripe it by how fast the ship is going -- the
+## predictor's points are a fixed time apart, so they crowd at apoapsis
+## and spread at periapsis -- and a pattern that changes with speed
+## reads as the line meaning something it does not. Walking the arc
+## length keeps every dash the same size on screen.
+func _draw_path() -> void:
+	var ink: Color = path_ink()
+	ink.a *= PATH_ALPHA
+	var marks: PackedVector2Array = dashes(_path)
+	for i: int in range(0, marks.size(), 2):
+		draw_line(marks[i], marks[i + 1], ink, PATH_WIDTH)
+
+
+## The path cut into dashes, as pairs of points.
+##
+## Separated from the drawing so the pattern can be measured: a dash
+## walker is a loop with a modulo in it and two ways to be subtly wrong
+## -- dashes that drift out of step across segments, or a gap that eats
+## a whole segment -- and neither shows in a screenshot.
+static func dashes(path: PackedVector2Array) -> PackedVector2Array:
+	var out: PackedVector2Array = PackedVector2Array()
+	if path.size() < 2:
+		return out
+	var period: float = DASH + DASH_GAP
+	var walked: float = 0.0
+	for i: int in range(1, path.size()):
+		var from: Vector2 = path[i - 1]
+		var to: Vector2 = path[i]
+		var span: float = from.distance_to(to)
+		if span <= 0.0:
+			continue
+		var at: float = 0.0
+		while at < span:
+			var into: float = fmod(walked + at, period)
+			if into >= DASH:
+				# In a gap: step to where the next dash starts.
+				at += period - into
+				continue
+			var run: float = minf(DASH - into, span - at)
+			out.append(from.lerp(to, at / span))
+			out.append(from.lerp(to, (at + run) / span))
+			at += run
+		walked += span
+	return out

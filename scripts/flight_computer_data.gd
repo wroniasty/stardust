@@ -54,6 +54,15 @@ enum Allocation {
 ## halfway to where it was going.
 @export var has_rotation_kill: bool = false
 
+## Draws where the ship is going if it does nothing.
+##
+## The one function here that steers nothing: it is a **readout**, and
+## it is on the computer because working out where a coasting ship ends
+## up is arithmetic, which is what the box is for. It was a debug visual
+## on F7 until this -- the prediction was always there, nothing in the
+## game let a pilot see it.
+@export var has_trajectory_view: bool = false
+
 ## Constant draw while any assist is engaged, in energy per second.
 ##
 ## Subtracted from the recharge rate rather than resetting the silence: an
@@ -66,6 +75,7 @@ func stat_rows() -> Array[Dictionary]:
 	return [
 		row("thrust split", 1.0 if allocation == Allocation.NNLS else 0.0, 0, 1),
 		row("spin kill", 1.0 if has_rotation_kill else 0.0, 0, 1),
+		row("trajectory", 1.0 if has_trajectory_view else 0.0, 0, 1),
 		row("auto-level", 1.0 if has_auto_level else 0.0, 0, 1),
 		row("auto-orbit", 1.0 if has_auto_orbit else 0.0, 0, 1),
 		row("altitude hold", 1.0 if has_altitude_hold else 0.0, 0, 1),

@@ -25,7 +25,9 @@ extends RefCounted
 ## pointing holds first because they are what a pilot reaches for most,
 ## then the two that fly the ship somewhere, then the two that hold it
 ## steady.
-enum Kind { PROGRADE, RETROGRADE, ORBIT, DEORBIT, LEVEL, ALTITUDE, SPIN_KILL }
+enum Kind {
+	PROGRADE, RETROGRADE, ORBIT, DEORBIT, LEVEL, ALTITUDE, SPIN_KILL, TRAJECTORY,
+}
 
 ## Which field on `FlightComputerData` has to be true for an assist to be
 ## offered, and what it is called.
@@ -65,10 +67,19 @@ const ALL: Array[Dictionary] = [
 		"kind": Kind.SPIN_KILL, "requires": &"has_rotation_kill",
 		"caption": "spin kill", "latches": &"", "tint": &"value",
 	},
+	{
+		"kind": Kind.TRAJECTORY, "requires": &"has_trajectory_view",
+		"caption": "trajectory", "latches": &"", "tint": &"label",
+	},
 ]
 
 
 ## Which palette colour a switch wears while it is on.
+##
+## The trajectory view is the odd one and wears `label` for it: it is
+## the only switch here that changes nothing about how the ship flies,
+## so it gets the panel's plain foreground rather than a colour that
+## would read as "something is being done to the ship".
 ##
 ## By **job**, not one per assist: blue for the two that hold a heading,
 ## teal for the two that fly an orbit, green for the two that hold the

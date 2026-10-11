@@ -465,6 +465,7 @@ func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
 	box.has_auto_level = rolled >= Rarity.UNCOMMON and rng.randf() < 0.7
 	box.has_altitude_hold = rolled >= Rarity.RARE and rng.randf() < 0.55
 	box.has_auto_orbit = rolled >= Rarity.RARE and rng.randf() < 0.6
+	box.has_trajectory_view = rolled >= Rarity.RARE and rng.randf() < 0.6
 	box.has_deorbit = rolled >= Rarity.EPIC and rng.randf() < 0.7
 	box.bulk = rng.randf_range(0.4, 1.2)
 	box.idle_draw = rng.randf_range(0.5, 3.0)
@@ -492,6 +493,8 @@ func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
 		found.append(&"hovering")
 	if box.has_auto_orbit:
 		found.append(&"orbital")
+	if box.has_trajectory_view:
+		found.append(&"plotting")
 	if box.has_deorbit:
 		found.append(&"reentry")
 	# A box that does nothing clever still has to be called something, and

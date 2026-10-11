@@ -225,10 +225,13 @@ Wskaźnik ma przecinać obraz, bo mówi o obrazie.
 jedyny, który czegoś nie pokazuje, tylko czymś steruje — stąd osobna pozycja,
 a nie wariant paska.
 
-Piętnaście nie jest upodobaniem, tylko sufitem. Rząd ośmiu kwadratów — główka
-plus siedem — mierzy `2*PAD + 8*S + 7*2`, co przy piętnastu daje **równe 140 px**
-z sekcji 5. Szesnaście to 148 i trzeba by za nie zapłacić albo funkcją zdjętą
-z rzędu, albo złamaną regułą.
+Piętnaście to nie upodobanie, tylko wybór między wielkością a jednym rzędem.
+Dziewięć komórek (główka plus osiem) w jednym rzędzie to `2*PAD + 9*15 + 8*2` =
+**157 px** przeciw 140 z sekcji 5 — więc albo mniejszy kwadrat, albo drugi
+wiersz. **Siatka pięć kolumn**: 89 px szerokości, dwa wiersze, kwadrat zostaje
+duży. Główka siedzi w ostatniej komórce górnego wiersza, czyli w tym samym
+rogu, którym panel jest zakotwiczony — dzięki temu leży w tym samym miejscu
+ekranu zwinięta i rozwinięta.
 
 Trzy stany, i to są trzy stany z sekcji 12 przeczytane jako sterowanie, nie
 jako odczyt:

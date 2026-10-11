@@ -64,14 +64,18 @@ const PANEL_OPACITY: float = 0.86
 
 ## The computer panel: the chip that opens it and the squares inside.
 ##
-## Fifteen, and the number is not a preference -- it is the ceiling. The
-## open row is the chip plus seven squares, so the band measures
-## `2 * PAD + 8 * SWITCH + 7 * SWITCH_GAP`, which at fifteen is exactly
-## the 140 px the frame law allows a panel to be (UI_STYLE section 5).
-## Sixteen would be 148 and would have to be paid for by taking a
-## function off the row or by breaking the law.
+## Fifteen px a square, in a grid five wide. One row was the first
+## shape and it ran out: eight switches plus the chip is nine cells,
+## which at fifteen comes to 157 px against the 140 the frame law
+## allows a panel to be (UI_STYLE section 5). The choice was a smaller
+## square or a second row, and the square is the thing that was asked
+## to get bigger.
+##
+## Five columns because that is what keeps the band under the ceiling
+## with room left: `2 * PAD + 5 * SWITCH + 4 * SWITCH_GAP` is 89.
 const SWITCH: float = 15.0
 const SWITCH_GAP: float = 2.0
+const SWITCH_COLUMNS: int = 5
 
 ## How big a glyph is drawn inside a switch: a little over a third of
 ## the square either side of centre, so the stroke never touches the
@@ -236,31 +240,45 @@ func _computer_layout() -> Dictionary:
 	# empty: the pilot's untouchable 400x220 starts 70 px down (UI_STYLE
 	# section 5), and this sits at 4.
 	var slot: Rect2 = UiFrame.slot(_canvas.size, UiFrame.Slot.WORLD)
-	var wide: float = SWITCH + UiFrame.PAD * 2.0
-	if _computer_open:
-		wide += float(FlightAssists.ALL.size()) * (SWITCH + SWITCH_GAP)
-	wide = minf(wide, UiFrame.MOST.x)
-	# Right edge pinned beside the world panel, so opening grows the row
-	# leftwards and the chip never moves. A chip that slid along as the
-	# row opened would be a button to be found again every time.
-	var band: Rect2 = Rect2(
-		Vector2(slot.position.x - UiFrame.PAD - wide, slot.position.y),
-		Vector2(wide, SWITCH + UiFrame.PAD * 2.0),
+	# The chip takes the last cell of the top row, so it is in the same
+	# place on screen whether the panel is shut or open: the band is
+	# pinned by its top right corner and that cell is that corner.
+	var cells: int = FlightAssists.ALL.size() + 1
+	var columns: int = SWITCH_COLUMNS if _computer_open else 1
+	var rows: int = int(ceil(float(cells) / float(columns))) if _computer_open else 1
+	var step: float = SWITCH + SWITCH_GAP
+	var band: Rect2 = Rect2(Vector2.ZERO, Vector2(
+		UiFrame.PAD * 2.0 + float(columns) * SWITCH + float(columns - 1) * SWITCH_GAP,
+		UiFrame.PAD * 2.0 + float(rows) * SWITCH + float(rows - 1) * SWITCH_GAP,
+	))
+	band.position = Vector2(
+		slot.position.x - UiFrame.PAD - band.size.x, slot.position.y
 	)
 	var inside: Rect2 = UiFrame.inside(band)
 	var chip: Rect2 = Rect2(
 		Vector2(inside.end.x - SWITCH, inside.position.y), Vector2(SWITCH, SWITCH)
 	)
 	var switches: Array[Dictionary] = []
-	var at: float = inside.position.x
-	for one: Dictionary in FlightAssists.ALL:
-		var kind: int = int(one["kind"])
-		switches.append({
-			"kind": kind,
-			"box": Rect2(Vector2(at, inside.position.y), Vector2(SWITCH, SWITCH)),
-			"offered": FlightAssists.offered_by(kind, box),
-		})
-		at += SWITCH + SWITCH_GAP
+	if _computer_open:
+		var cell: int = 0
+		for one: Dictionary in FlightAssists.ALL:
+			# Skipping the chip's cell rather than laying the switches
+			# out around it: one sequence, one hole, and the hole is
+			# where the chip already is.
+			if cell == columns - 1:
+				cell += 1
+			var kind: int = int(one["kind"])
+			switches.append({
+				"kind": kind,
+				"box": Rect2(
+					inside.position + Vector2(
+						float(cell % columns) * step, float(cell / columns) * step
+					),
+					Vector2(SWITCH, SWITCH),
+				),
+				"offered": FlightAssists.offered_by(kind, box),
+			})
+			cell += 1
 	return {"band": band, "chip": chip, "switches": switches}
 
 

@@ -9,6 +9,7 @@ allocation = 1
 has_auto_orbit = true
 has_auto_level = true
 has_rotation_kill = true
+has_trajectory_view = true
 has_altitude_hold = true
 has_deorbit = true
 idle_draw = 3.0

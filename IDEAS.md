@@ -3223,6 +3223,7 @@ bardzo brzmi efektownie:
 | auto-poziom | uncommon | 0.7 | `levelling` |
 | hold wysokości | rare | 0.55 | `hovering` |
 | auto-orbita | rare | 0.6 | `orbital` |
+| podgląd trajektorii | rare | 0.6 | `plotting` |
 | deorbit | epic | 0.7 | `reentry` |
 
 Ułożenie obrotu i wypoziomowanie dzioba robi też spokojna ręka, więc

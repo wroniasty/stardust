@@ -7,6 +7,14 @@ extends CanvasLayer
 ## here because this is the node that owns the toggle.
 const DEBUG_GROUP: StringName = &"debug_visuals"
 
+## Whether the debug layer is up.
+##
+## Static because one visual is no longer only a debug visual: the
+## trajectory predictor is a flight computer function now and has to
+## know whether F7 is also asking for it, without being in the group
+## whose `visible` this writes.
+static var showing: bool = false
+
 @export var ship_path: NodePath
 
 @onready var _label: Label = $Label
@@ -32,6 +40,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## debug added later joins by calling add_to_group.
 func set_debug_visible(shown: bool) -> void:
 	visible = shown
+	showing = shown
 	for node: Node in get_tree().get_nodes_in_group(DEBUG_GROUP):
 		var visual: CanvasItem = node as CanvasItem
 		if visual != null:

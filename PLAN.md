@@ -564,6 +564,21 @@ leci za pilota, kiedy pilot robi coś innego.
   naciska pilot. Bieg bez okna nie ma myszy, więc check, który zostałby w
   `_input`, mierzyłby układ i nazywał go guzikiem.
 
+- [x] **Podgląd trajektorii jako funkcja** (`has_trajectory_view`), ósmy
+  przełącznik. Przewidywanie było w grze od M1.5 i tylko na F7 — nic w samej
+  grze nie pozwalało pilotowi go zobaczyć. Kreska: 5 px, alfa 0.40, przążkowana
+  co 10/7 px, a kolor mówi, co ta ścieżka robi: `ok` orbita, `caution` orbita
+  schodząca albo suborbitalna, `nav` otwarta, `alarm` kończąca się w skale.
+  Zderzenie bije resztę, bo `orbit_state` potrafi powiedzieć SUBORBITAL, gdy
+  uderzenie jest jeszcze za horyzontem przewidywania.
+- [x] Predyktor **wyszedł z grupy debug**. Grupie overlay nadpisuje `visible`,
+  więc F7 po cichu wyłączałby funkcję, którą pilot włączył. Teraz pyta o
+  jedno i drugie sam (`wanted()`), a `DebugOverlay.showing` jest statyczne,
+  żeby miał kogo zapytać.
+- [x] Przążki liczone po **długości łuku**, nie po kroku predykcji: kroki są
+  co stały czas, więc gęstnieją w apocentrum, a wzór zmieniający się z
+  prędkością czyta się jak informacja, którą nie jest.
+
 Gotowe, gdy: włączam auto-poziom jednym kliknięciem, widzę że jest włączony, i
 nie strzelam przy tym z dział.
 
