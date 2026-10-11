@@ -545,8 +545,12 @@ leci za pilota, kiedy pilot robi coś innego.
   pyta przy odczycie, czy zamontowane pudełko w ogóle to potrafi, więc
   przełącznik osierocony przez refit przestaje czytać się jako włączony
   wszędzie naraz, bez czyszczenia czegokolwiek.
-- [x] Panel w rogu KONTEKST: chip, który go rozwija, i siedem kwadratów
-  (UI_STYLE prymityw 7). Brak komputera to **brak panelu**, bo to jest
+- [x] Panel **u góry z prawej**: chip, który go rozwija, i siedem kwadratów
+  15 px (UI_STYLE prymityw 7), świecących kolorem swojej roboty. Stoi
+  **obok** rogu ŚWIAT, nie w nim: róg ma 66 px wysokości, pasek chce 23, a
+  tarcza orbity ma 46 — więc odczyt, dla którego ten róg istnieje, wisiałby
+  9 px poza własnym panelem. Obok nie ma czego zabierać: górne pasmo ekranu
+  jest puste, bo nietykalne 400x220 zaczyna się 70 px niżej. Brak komputera to **brak panelu**, bo to jest
   odpowiedź sekcji 12: sterowania, którego nie ma, nie da się pomylić ze
   sterowaniem, które nic nie robi, a „statek bez przyrządów" należy do raportu
   konfiguracji, nie do rogu, który inaczej znaczy „nic cię tu nie zabije".

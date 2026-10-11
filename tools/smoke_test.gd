@@ -9162,14 +9162,23 @@ func _check_the_computer_panel_is_pressable() -> void:
 			0 if layout.is_empty() else (layout["switches"] as Array).size(),
 		],
 	)
-	# The frame law: no panel wider than 140 or taller than 120, and
-	# inside the corner it was given.
+	# The frame law: no panel wider than 140 or taller than 120.
 	var band: Rect2 = layout["band"]
-	var corner: Rect2 = UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.CONTEXT)
+	var corner: Rect2 = UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.WORLD)
 	_expect(
-		band.size.x <= UiFrame.MOST.x and band.size.y <= UiFrame.MOST.y
-		and corner.encloses(band),
-		"inside its corner and inside the frame law (%s in %s)" % [band.size, corner],
+		band.size.x <= UiFrame.MOST.x and band.size.y <= UiFrame.MOST.y,
+		"inside the frame law (%s)" % band.size,
+	)
+	# Top right, along the top edge, pinned beside the world panel
+	# rather than over it: that corner is 66 px tall and its orbit dial
+	# is 46, so a strip taking 23 of them would have pushed the dial out
+	# of its own panel.
+	_expect(
+		band.end.x <= corner.position.x
+		and is_equal_approx(band.position.y, corner.position.y),
+		"beside the world corner, level with its top (ends %.0f, corner at %.0f)" % [
+			band.end.x, corner.position.x,
+		],
 	)
 
 	# Shut, the squares are not pressable: the chip is the only target.
@@ -9188,6 +9197,30 @@ func _check_the_computer_panel_is_pressable() -> void:
 		(open_layout["band"] as Rect2).size.x > band.size.x
 		and (open_layout["chip"] as Rect2) == (layout["chip"] as Rect2),
 		"opening widens the band and leaves the chip where it was",
+	)
+	# The open row is the widest this panel ever gets, and `SWITCH` is
+	# picked so that it lands on the law's ceiling exactly rather than
+	# being clamped and clipping its last square.
+	var widest: float = (
+		UiFrame.PAD * 2.0
+		+ float(FlightAssists.ALL.size() + 1) * FlightHud.SWITCH
+		+ float(FlightAssists.ALL.size()) * FlightHud.SWITCH_GAP
+	)
+	_expect(
+		is_equal_approx((open_layout["band"] as Rect2).size.x, widest)
+		and widest <= UiFrame.MOST.x,
+		"and the open row fits without being clamped (%.0f of %.0f px)" % [
+			widest, UiFrame.MOST.x,
+		],
+	)
+	# And it opens over nothing the pilot needs. The untouchable field
+	# is 400x220 in the middle (UI_STYLE section 5); this lives in the
+	# band above it.
+	_expect(
+		not (open_layout["band"] as Rect2).intersects(
+			UiFrame.field(Vector2(640.0, 360.0))
+		),
+		"and stays out of the pilot's field even wide open",
 	)
 
 	# A live switch latches, and the ship is the one that knows.
@@ -9256,6 +9289,24 @@ func _check_the_computer_panel_is_pressable() -> void:
 	)
 	ship.ui_grabs_pointer = false
 	_discard(hud)
+
+	# Every switch's lit colour has to be a colour the palette has, and
+	# must not be one of the two that already mean something is wrong.
+	var ink: Palette = Palette.current()
+	var wrong: Array[String] = []
+	for one: Dictionary in FlightAssists.ALL:
+		var named: StringName = FlightAssists.tint(int(one["kind"]))
+		var shade: Variant = ink.get(String(named))
+		if not (shade is Color):
+			wrong.append("%s: no such colour" % named)
+		elif named == &"caution" or named == &"alarm":
+			wrong.append("%s: that one means trouble" % named)
+	_expect(
+		wrong.is_empty(),
+		"a lit switch wears a palette colour that is not a warning (%s)" % [
+			"all seven" if wrong.is_empty() else str(wrong),
+		],
+	)
 
 
 func _square_for(layout: Dictionary, kind: int) -> Rect2:

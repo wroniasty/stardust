@@ -220,10 +220,15 @@ skrzynia na ekranie. Czyta się natychmiast i kosztuje osiem kresek.
 lądowaniu: 1 px, `nav`, rysowane w przestrzeni świata, nie w warstwie panelu.
 Wskaźnik ma przecinać obraz, bo mówi o obrazie.
 
-**7. Przełącznik.** Kwadrat **13 px** z obrysem 1 px i glifem `UiGlyph` w
+**7. Przełącznik.** Kwadrat **15 px** z obrysem 1 px i glifem `UiGlyph` w
 środku, w rzędzie co **2 px**. Jedyny prymityw, który przyjmuje kliknięcie, i
 jedyny, który czegoś nie pokazuje, tylko czymś steruje — stąd osobna pozycja,
 a nie wariant paska.
+
+Piętnaście nie jest upodobaniem, tylko sufitem. Rząd ośmiu kwadratów — główka
+plus siedem — mierzy `2*PAD + 8*S + 7*2`, co przy piętnastu daje **równe 140 px**
+z sekcji 5. Szesnaście to 148 i trzeba by za nie zapłacić albo funkcją zdjętą
+z rzędu, albo złamaną regułą.
 
 Trzy stany, i to są trzy stany z sekcji 12 przeczytane jako sterowanie, nie
 jako odczyt:
@@ -232,7 +237,18 @@ jako odczyt:
 |---|---|---|
 | moduł tego nie potrafi | `grid` | `inert` |
 | potrafi, wyłączone | `edge` | `label` |
-| potrafi, włączone | `accent` | `accent` |
+| potrafi, włączone | kolor roboty | kolor roboty |
+
+**Włączony świeci kolorem swojej roboty**, nie jednym akcentem: `nav` dla tych,
+które trzymają kurs, `accent` dla tych, które lecą orbitę, `ok` dla tych, które
+trzymają statek spokojnie nad gruntem, `value` dla wygaszania obrotu, które nie
+należy do żadnej z tych grup i jako jedyne działa w pustce. Cztery kolory na
+siedem przełączników znaczą, że rzut oka mówi **jakiego rodzaju** rzecz jest
+włączona, zanim oko przeczyta kształt.
+
+`caution` i `alarm` są tu zakazane. Sekcja 3 daje im znaczenie — coś idzie źle
+— a panel świecący bursztynem dlatego, że pilot włączył asystę, to pasek
+ostrzegawczy wołający „wilk".
 
 **Martwy przełącznik zostaje na swoim miejscu** i dalej połyka kliknięcie. To
 jest pułapka 3 z sekcji 12 zastosowana do rzędu guzików: rząd, który zasklepia

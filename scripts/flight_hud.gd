@@ -64,17 +64,19 @@ const PANEL_OPACITY: float = 0.86
 
 ## The computer panel: the chip that opens it and the squares inside.
 ##
-## Thirteen is the smallest square that holds a readable glyph with a
-## pixel of air round it, and the gap is two so the row reads as separate
-## switches rather than as one strip. Seven of them plus the chip comes
-## to 125 px, inside the 140 the frame law allows a panel to be
-## (UI_STYLE section 5).
-const SWITCH: float = 13.0
+## Fifteen, and the number is not a preference -- it is the ceiling. The
+## open row is the chip plus seven squares, so the band measures
+## `2 * PAD + 8 * SWITCH + 7 * SWITCH_GAP`, which at fifteen is exactly
+## the 140 px the frame law allows a panel to be (UI_STYLE section 5).
+## Sixteen would be 148 and would have to be paid for by taking a
+## function off the row or by breaking the law.
+const SWITCH: float = 15.0
 const SWITCH_GAP: float = 2.0
 
-## How big a glyph is drawn inside a switch: half the square, so the
-## stroke never touches the border that carries the state.
-const SWITCH_GLYPH: float = 4.0
+## How big a glyph is drawn inside a switch: a little over a third of
+## the square either side of centre, so the stroke never touches the
+## border that carries the state.
+const SWITCH_GLYPH: float = 5.5
 
 ## How the planet is drawn in the diagram, and the apsis dots.
 const PLANET_DOT: float = 2.5
@@ -223,18 +225,34 @@ func _computer_layout() -> Dictionary:
 	var box: FlightComputerData = _ship.computer()
 	if box == null:
 		return {}
-	var slot: Rect2 = UiFrame.slot(_canvas.size, UiFrame.Slot.CONTEXT)
+	# Top right, along the top edge and **beside** the world corner
+	# rather than inside it.
+	#
+	# Inside was the first try and it costs too much: the corner is 66
+	# px tall, the strip wants 23 of them, and the orbit dial is 46 --
+	# so the readout that corner exists for would have hung 9 px out of
+	# its own panel. Beside it there is nothing to take. The top band of
+	# the screen, from the field's right edge to the world panel, is
+	# empty: the pilot's untouchable 400x220 starts 70 px down (UI_STYLE
+	# section 5), and this sits at 4.
+	var slot: Rect2 = UiFrame.slot(_canvas.size, UiFrame.Slot.WORLD)
 	var wide: float = SWITCH + UiFrame.PAD * 2.0
 	if _computer_open:
 		wide += float(FlightAssists.ALL.size()) * (SWITCH + SWITCH_GAP)
+	wide = minf(wide, UiFrame.MOST.x)
+	# Right edge pinned beside the world panel, so opening grows the row
+	# leftwards and the chip never moves. A chip that slid along as the
+	# row opened would be a button to be found again every time.
 	var band: Rect2 = Rect2(
-		Vector2(slot.position.x, slot.end.y - SWITCH - UiFrame.PAD * 2.0),
-		Vector2(minf(wide, UiFrame.MOST.x), SWITCH + UiFrame.PAD * 2.0),
+		Vector2(slot.position.x - UiFrame.PAD - wide, slot.position.y),
+		Vector2(wide, SWITCH + UiFrame.PAD * 2.0),
 	)
 	var inside: Rect2 = UiFrame.inside(band)
-	var chip: Rect2 = Rect2(inside.position, Vector2(SWITCH, SWITCH))
+	var chip: Rect2 = Rect2(
+		Vector2(inside.end.x - SWITCH, inside.position.y), Vector2(SWITCH, SWITCH)
+	)
 	var switches: Array[Dictionary] = []
-	var at: float = chip.end.x + SWITCH_GAP
+	var at: float = inside.position.x
 	for one: Dictionary in FlightAssists.ALL:
 		var kind: int = int(one["kind"])
 		switches.append({
@@ -411,7 +429,7 @@ func _draw_computer() -> void:
 		layout["band"],
 		_ink.over(_ink.panel, PANEL_OPACITY),
 		_ink.grid,
-		UiFrame.corner(UiFrame.Slot.CONTEXT),
+		UiFrame.corner(UiFrame.Slot.WORLD),
 		false,
 	)
 	# Lit while anything is engaged, which is the one thing the shut
@@ -441,8 +459,12 @@ func _draw_switch(square: Rect2, kind: int, offered: bool) -> void:
 	var border: Color = _ink.grid
 	var ink: Color = _ink.inert
 	if on:
-		border = _ink.accent
-		ink = _ink.accent
+		# Its own colour, by what kind of job it is: `FlightAssists.tint`
+		# says which, and the whole point is that a lit switch reads as
+		# lit from across the screen rather than as a slightly brighter
+		# grey.
+		ink = _ink.get(String(FlightAssists.tint(kind)))
+		border = ink
 	elif offered:
 		border = _ink.edge
 		ink = _ink.label

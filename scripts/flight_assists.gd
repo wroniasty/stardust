@@ -39,33 +39,50 @@ enum Kind { PROGRADE, RETROGRADE, ORBIT, DEORBIT, LEVEL, ALTITUDE, SPIN_KILL }
 const ALL: Array[Dictionary] = [
 	{
 		"kind": Kind.PROGRADE, "requires": &"",
-		"caption": "prograde", "latches": &"heading",
+		"caption": "prograde", "latches": &"heading", "tint": &"nav",
 	},
 	{
 		"kind": Kind.RETROGRADE, "requires": &"",
-		"caption": "retrograde", "latches": &"heading",
+		"caption": "retrograde", "latches": &"heading", "tint": &"nav",
 	},
 	{
 		"kind": Kind.ORBIT, "requires": &"has_auto_orbit",
-		"caption": "auto-orbit", "latches": &"",
+		"caption": "auto-orbit", "latches": &"", "tint": &"accent",
 	},
 	{
 		"kind": Kind.DEORBIT, "requires": &"has_deorbit",
-		"caption": "deorbit", "latches": &"",
+		"caption": "deorbit", "latches": &"", "tint": &"accent",
 	},
 	{
 		"kind": Kind.LEVEL, "requires": &"has_auto_level",
-		"caption": "auto-level", "latches": &"",
+		"caption": "auto-level", "latches": &"", "tint": &"ok",
 	},
 	{
 		"kind": Kind.ALTITUDE, "requires": &"has_altitude_hold",
-		"caption": "altitude hold", "latches": &"",
+		"caption": "altitude hold", "latches": &"", "tint": &"ok",
 	},
 	{
 		"kind": Kind.SPIN_KILL, "requires": &"has_rotation_kill",
-		"caption": "spin kill", "latches": &"",
+		"caption": "spin kill", "latches": &"", "tint": &"value",
 	},
 ]
+
+
+## Which palette colour a switch wears while it is on.
+##
+## By **job**, not one per assist: blue for the two that hold a heading,
+## teal for the two that fly an orbit, green for the two that hold the
+## ship steady over a surface, and plain bright for the spin killer,
+## which belongs to none of those and is the only one that works in
+## empty space. Four colours for seven switches means a glance tells the
+## eye what kind of thing is engaged before it has read the shape.
+##
+## `caution` and `alarm` are deliberately absent. UI_STYLE section 3
+## gives those two a meaning -- something is going wrong -- and a panel
+## that lights amber because the pilot switched an assist on would be
+## the warning band crying wolf.
+static func tint(kind: int) -> StringName:
+	return entry(kind).get("tint", &"accent")
 
 
 ## The entry for one kind, or an empty dictionary.
