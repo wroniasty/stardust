@@ -168,6 +168,17 @@ się nie przecinają.
   w `ShipSkin` — dock maluje ten sam stos bez tworzenia jednego węzła, a dwie
   kolejności jednego stosu to sposób, w jaki dock pokazuje płomień nad
   kadłubem, pod którym gra go rysuje.
+- [x] **Te głębokości są względem kadłuba, więc kadłub musi stać wyżej niż
+  świat.** Zgłoszone z gry: silniki rysowały się pod atmosferą. Kadłub miał
+  `z_index` zero, pióropusz więc minus dwadzieścia, a planeta rysuje atmosferę,
+  teren i chmury na zerze. Mylące było to, że **kadłub wyglądał dobrze**: przy
+  równym z wygrywa późniejszy węzeł drzewa, a statek stoi w `world.tscn` za
+  planetami — więc pod świat szło tylko to, co jest **za** kadłubem.
+  `ShipLook.Z_SHIP` = `-Z_PLUME + 5` = 25, wyprowadzone z najgłębszej części, a
+  nie wpisane — żeby coś głębszego od pióropusza nie wróciło po cichu pod
+  planetę. Test pyta o **całe poddrzewo** statku, nie o te pięć stałych: iskry
+  wylotowe niosą własne `z_index` z `engine_mount.tscn` i siedziały pod
+  atmosferą z tego samego powodu, nie będąc nigdzie wymienione.
 - [x] **Szew**: `Ship.configuration_changed`, emitowane po przebudowie
   grup sterowania. Skórka przebudowuje się z tego, zamiast porównywać
   scenę ze sobą co klatkę.

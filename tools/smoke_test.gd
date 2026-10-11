@@ -8693,6 +8693,7 @@ func _check_hull_editor() -> void:
 	_check_the_spin_killer_knows_when_to_sit_out()
 	_check_the_computer_panel_is_pressable()
 	_check_the_trajectory_view_is_a_function()
+	_check_the_ship_draws_above_the_world()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
@@ -9771,6 +9772,89 @@ func _check_the_trajectory_view_is_a_function() -> void:
 	)
 	_discard(seer)
 	_discard(ship)
+
+
+## Nic, co rysuje statek, nie moze wyladowac pod planeta.
+##
+## Reported from the game: the engines render underneath the
+## atmosphere. The skin's depths are relative to the hull and should be
+## -- a plume belongs behind its own ship whatever else is on screen --
+## but the hull itself sat at zero, so the plume sat at minus twenty
+## and a planet draws its atmosphere, its terrain and its clouds at
+## zero.
+##
+## What hid the fault is that the hull looked right: at equal z the
+## later node in the tree wins and the ship comes after the planets, so
+## everything at or above zero was fine and only the things **behind**
+## the hull went under the world.
+##
+## Asked of the whole subtree rather than of the five constants,
+## because the exhaust particles carry their own `z_index` from
+## `engine_mount.tscn` and were under the atmosphere for the same
+## reason without being named anywhere.
+func _check_the_ship_draws_above_the_world() -> void:
+	var planet: Planet = _spawn_planet()
+	var ship: Ship = _spawn_ship()
+	ship.global_position = planet.global_position + Vector2.UP * (
+		planet.surface_radius + 200.0
+	)
+	var skin: ShipSkin = ship.get_node_or_null("Presentation") as ShipSkin
+	if skin != null:
+		skin.rebuild()
+
+	var lowest: int = 99999
+	var deepest: String = ""
+	for item: CanvasItem in _canvas_items_under(ship):
+		var depth: int = _effective_z(item)
+		if depth < lowest:
+			lowest = depth
+			deepest = item.name
+	var highest: int = -99999
+	for item: CanvasItem in _canvas_items_under(planet):
+		highest = maxi(highest, _effective_z(item))
+
+	_expect(
+		lowest > highest,
+		"the deepest thing the ship draws (%s at %d) is above the planet (%d)" % [
+			deepest, lowest, highest,
+		],
+	)
+	# And the stack still reads the way it was written: flames behind
+	# the hull, guns in front. Lifting the ship must not flatten it.
+	_expect(
+		ShipLook.Z_PLUME < ShipLook.Z_NOZZLE
+		and ShipLook.Z_NOZZLE < ShipLook.Z_HULL
+		and ShipLook.Z_HULL < ShipLook.Z_GEAR
+		and ShipLook.Z_GEAR < ShipLook.Z_GUN,
+		"with the skin still stacked flames-first and guns last",
+	)
+	_discard(ship)
+	planet.free()
+
+
+## Every `CanvasItem` at or below `where`.
+func _canvas_items_under(where: Node) -> Array[CanvasItem]:
+	var out: Array[CanvasItem] = []
+	var item: CanvasItem = where as CanvasItem
+	if item != null:
+		out.append(item)
+	for child: Node in where.get_children():
+		out.append_array(_canvas_items_under(child))
+	return out
+
+
+## What a node's `z_index` actually comes to, following `z_as_relative`
+## up the tree the way the renderer does.
+func _effective_z(item: CanvasItem) -> int:
+	var depth: int = item.z_index
+	var at: Node = item.get_parent()
+	while at != null and item.z_as_relative:
+		item = at as CanvasItem
+		if item == null:
+			break
+		depth += item.z_index
+		at = item.get_parent()
+	return depth
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

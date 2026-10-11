@@ -814,6 +814,10 @@ func bay_for(data: ModuleData) -> ModuleBay:
 
 
 func _ready() -> void:
+	# High enough that the deepest thing the skin draws -- the plume,
+	# twenty below the hull -- is still above a planet. See
+	# `ShipLook.Z_SHIP`.
+	z_index = ShipLook.Z_SHIP
 	collect_parts()
 	_build_from_resources()
 	# Set once here rather than at every landing: it never changes, and writing

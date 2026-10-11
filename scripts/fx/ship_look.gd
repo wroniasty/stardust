@@ -32,6 +32,24 @@ const Z_HULL: int = 0
 const Z_GEAR: int = 5
 const Z_GUN: int = 10
 
+## What the hull's own `z_index` has to be for the whole of that stack
+## to clear the world it is flying over.
+##
+## The five above are **relative to the hull**, which is the right way
+## to write them -- a plume belongs behind its own ship whatever else
+## is on screen. What that leaves is a hull at zero putting its flames
+## at -20, and a planet draws its atmosphere, its terrain and its
+## clouds at zero. Reported as the engines rendering underneath the
+## atmosphere, which is exactly what it was: the hull was visible over
+## the planet only because the ship comes later in the tree, and tree
+## order settles nothing between different z levels.
+##
+## Derived from the deepest part rather than written down, so adding
+## something deeper than a plume cannot quietly put it under a planet
+## again. Five of margin, so the stack sits clear rather than tying
+## with the world and falling back on tree order.
+const Z_SHIP: int = -Z_PLUME + 5
+
 const HULL_TABLE: String = "res://resources/fx/looks/hull.tres"
 const NOZZLE_TABLE: String = "res://resources/fx/looks/engine_nozzle.tres"
 const PLUME_TABLE: String = "res://resources/fx/looks/engine_plume.tres"
