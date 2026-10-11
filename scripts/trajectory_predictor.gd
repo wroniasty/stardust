@@ -44,7 +44,7 @@ const MARKER_RADIUS: float = 3.0
 ## to be switched off to fly. Dashed because a solid band of colour over
 ## the world reads as a wall; gaps say "this is a path, not a thing".
 const PATH_WIDTH: float = 5.0
-const PATH_ALPHA: float = 0.40
+const PATH_ALPHA: float = 0.20
 const DASH: float = 10.0
 const DASH_GAP: float = 7.0
 
@@ -81,6 +81,33 @@ func wanted() -> bool:
 	return DebugOverlay.showing
 
 
+## Keeps the picture on the ship the renderer is drawing, not the one
+## the solver last integrated.
+##
+## The same fault the beams, the sparks and the crosshair all had, and
+## it shows here as the path twitching. With physics interpolation on
+## -- project-wide -- the hull is drawn between its last two physics
+## transforms while `global_position` hands back the newer of the two,
+## so a path built from that number starts up to a full tick of travel
+## ahead of the ship it belongs to. At sixty ticks and a render rate
+## above it, that error is a different size every frame, which is seen
+## as a line shivering against a hull that is moving smoothly.
+##
+## Moving the **node** rather than the points puts the markers and the
+## dashes under the same correction, and keeps the prediction itself in
+## world coordinates where it belongs. The offset is at most one tick
+## of travel, so the far end of the path is out by an amount nothing
+## can see, and the near end -- the end joined to the ship -- is exact.
+##
+## In `_process` because it has to be redone every **frame**: that is
+## what `get_physics_interpolation_fraction` changes between.
+func _process(_delta: float) -> void:
+	if _ship == null or not is_instance_valid(_ship) or _path.is_empty():
+		position = Vector2.ZERO
+		return
+	position = _ship.drawn_transform().origin - _path[0]
+
+
 func _physics_process(_delta: float) -> void:
 	if _ship == null:
 		return
@@ -88,6 +115,7 @@ func _physics_process(_delta: float) -> void:
 	if not visible:
 		if not _path.is_empty():
 			_path = PackedVector2Array()
+			position = Vector2.ZERO
 		return
 	_ticks += 1
 	if _ticks < recompute_interval:

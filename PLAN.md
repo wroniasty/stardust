@@ -575,6 +575,13 @@ leci za pilota, kiedy pilot robi coś innego.
   więc F7 po cichu wyłączałby funkcję, którą pilot włączył. Teraz pyta o
   jedno i drugie sam (`wanted()`), a `DebugOverlay.showing` jest statyczne,
   żeby miał kogo zapytać.
+- [x] Kreska przyklejona do **rysowanej** pozycji statku, nie do fizycznej.
+  Ten sam błąd, który miały wiązki, iskry i celownik: przy włączonej
+  interpolacji fizyki kadłub rysuje się między dwiema ostatnimi
+  transformacjami, a `global_position` oddaje nowszą — więc ścieżka startowała
+  do ticka lotu przed statkiem, co klatkę inaczej. Widziane jako **drganie**.
+  Przesuwany jest węzeł, nie punkty, więc znaczniki apo/peri dostają tę samą
+  poprawkę, a sama predykcja zostaje w świecie.
 - [x] Przążki liczone po **długości łuku**, nie po kroku predykcji: kroki są
   co stały czas, więc gęstnieją w apocentrum, a wzór zmieniający się z
   prędkością czyta się jak informacja, którą nie jest.

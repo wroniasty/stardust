@@ -9694,6 +9694,37 @@ func _check_the_trajectory_view_is_a_function() -> void:
 	)
 	DebugOverlay.showing = false
 
+	# The line has to sit on the ship the **renderer** is drawing, not
+	# the one the solver last integrated: with physics interpolation on
+	# those are up to a tick of travel apart, and the gap is a
+	# different size every frame, which is seen as the path twitching
+	# against a hull that is moving smoothly.
+	seer._path = PackedVector2Array([
+		ship.global_position, ship.global_position + Vector2(100.0, 0.0),
+	])
+	ship._was_at = ship.global_position - Vector2(30.0, 0.0)
+	ship._now_at = ship.global_position
+	ship._was_facing = ship.global_rotation
+	ship._now_facing = ship.global_rotation
+	seer._process(0.0)
+	_expect(
+		seer.position.is_equal_approx(
+			ship.drawn_transform().origin - seer._path[0]
+		)
+		and (seer.position + seer._path[0]).is_equal_approx(
+			ship.drawn_transform().origin
+		),
+		"the path starts where the ship is drawn, not where it has got to",
+	)
+	# And a tick of travel is the most it ever corrects by, so the far
+	# end of the prediction is not dragged anywhere visible.
+	_expect(
+		seer.position.length() <= ship._was_at.distance_to(ship._now_at) + 0.001,
+		"by no more than one tick of travel (%.1f of %.1f px)" % [
+			seer.position.length(), ship._was_at.distance_to(ship._now_at),
+		],
+	)
+
 	# The stripes. A straight path of a known length, cut up.
 	var straight: PackedVector2Array = PackedVector2Array()
 	for i: int in range(21):
