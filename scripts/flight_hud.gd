@@ -69,16 +69,14 @@ const TAPE_TOP: float = 3000.0
 const TAPE_STEP: float = 250.0
 const TAPE_MAJOR: int = 4
 
-## How each figure beside the tape is printed.
+## How each figure in the instrument corner is printed.
 ##
-## Constants rather than literals at the call site, because the column
-## they share is what is left of 110 px after the tape -- fifty-one --
-## and the check that they fit has to be able to ask for the widest
-## thing each format can produce. A format changed in place and not
-## here is how a value ends up printed over the tape.
+## Constants rather than literals at the call site, because the check
+## that they fit their panel has to be able to ask for the widest thing
+## each one can produce. A format changed in place and not here is one
+## the fit check goes on measuring the old version of.
 const SPEED_FORMAT: String = "%.0f"
-const DESCENT_FORMAT: String = "%+.0f"
-const SLOPE_FORMAT: String = "%.0f"
+const DESCENT_FORMAT: String = "%+.1f"
 
 ## The orbit dial. Forty-six rather than sixty-six, because the
 ## untouchable field leaves a corner 116 px wide and the apsides have
@@ -192,7 +190,6 @@ var _hull: UiValue = UiValue.new(1.0)
 var _speed: UiValue = UiValue.new(1.0)
 var _altitude: UiValue = UiValue.new(1.0)
 var _descent: UiValue = UiValue.new(0.1)
-var _slope: UiValue = UiValue.new(deg_to_rad(0.1))
 
 
 func _ready() -> void:
@@ -225,7 +222,6 @@ func bind(ship: Ship) -> void:
 	_speed = UiValue.new(1.0)
 	_altitude = UiValue.new(1.0)
 	_descent = UiValue.new(0.1)
-	_slope = UiValue.new(deg_to_rad(0.1))
 
 
 func _process(delta: float) -> void:
@@ -405,8 +401,6 @@ func _read(delta: float) -> void:
 		_ship.global_position
 	)
 	_descent.feed(-relative.dot(up), delta)
-	if planet.has_ground():
-		_slope.feed((planet as Planet).slope_at(_ship.global_position), delta)
 
 
 ## The body whose well the ship is actually in, or null out in the dark.
@@ -449,17 +443,11 @@ func _draw_hud() -> void:
 	# landing they lie over terrain, which is the messiest ground the
 	# game owns, and corner brackets vanish into it.
 	_draw_instrument_corner(font, _panel(view, UiFrame.Slot.INSTRUMENTS, true), well)
-	# The context corner carries what the ship is **doing** rather than
-	# what it is flying through: the gear, and what is under the legs.
-	# Both used to sit in the instruments corner, which the altitude
-	# tape now fills -- and this is where the frame law puts them
-	# anyway (UI_STYLE section 5: "chwilowe: podniesiony modul, tryb").
-	#
-	# Still nothing drawn when there is nothing to say. An empty panel
-	# is not restraint -- it is a box that teaches the eye to skip that
-	# part of the screen, which is the one habit an interface must not
-	# train.
-	_draw_state_corner(font, view)
+	# The context corner is left undrawn while there is nothing to put
+	# in it. An empty panel is not restraint -- it is a box that
+	# teaches the eye to skip that part of the screen, which is the one
+	# habit an interface must not train.
+	_draw_altitude_tape(font, view, well)
 	_draw_computer()
 	_draw_warning_band(font, view)
 
@@ -711,62 +699,46 @@ func _draw_instrument_corner(font: Font, at: Rect2, planet: GravityWell) -> void
 			"%.0f" % _speed.stepped(), _ink.ok, _ink.label,
 		)
 		y += ROW
+		UiDraw.row(
+			_canvas, font, Vector2(x, y), width, "GEAR",
+			_gear_text(), _gear_colour(), _ink.label,
+		)
+		y += ROW
 		_text(font, Vector2(x, y), "in transit", _ink.label)
 		return
 
-	# The altitude as a tape down the right-hand side, and what the
-	# descent is doing beside it. The tape is given exactly the width
-	# its own widest label needs, so the figures to its left get
-	# everything that is left over rather than a share picked by hand.
-	var tape: float = UiDraw.ladder_width(
-		font, Vector2(0.0, TAPE_TOP), "99999", _tape_label
-	)
-	var column: float = at.size.x - tape - UiFrame.PAD
-	if planet.has_ground():
-		UiDraw.ladder(
-			_canvas, font,
-			Rect2(Vector2(at.end.x - tape, at.position.y), Vector2(tape, at.size.y)),
-			_altitude.stepped(), Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
-			_ink.value, _ink.accent, _ink.label, _tape_label,
-		)
-	else:
-		# Nothing to be above. The column takes the whole panel rather
-		# than leaving a scale of heights over a star, which would be a
-		# working instrument reading zero.
-		column = at.size.x
-
+	# Height is the tape's, down the left-hand edge. What is left here
+	# is the rest of the descent -- how fast, how fast down, how steep
+	# the ground is -- and the two states a pilot has to be able to see
+	# without asking.
 	UiDraw.row(
-		_canvas, font, Vector2(at.position.x, y), column, "SPD",
+		_canvas, font, Vector2(at.position.x, y), at.size.x, "SPD",
 		SPEED_FORMAT % _speed.stepped(), _ink.value, _ink.label,
 	)
 	y += ROW
 	# The colour off the smoothed value rather than the printed one: a
 	# descent rate sitting on a threshold would otherwise swap colours
 	# every frame, which is the loudest thing a HUD can do.
-	# Whole pixels a second, for the same reason as the slope below: the
-	# column is what is left after the tape, and a tenth of a pixel a
-	# second is under what a pilot can fly to.
 	UiDraw.row(
-		_canvas, font, Vector2(at.position.x, y), column, "V/S",
+		_canvas, font, Vector2(at.position.x, y), at.size.x, "V/S",
 		DESCENT_FORMAT % -_descent.stepped(), _descent_colour(_descent.smooth()), _ink.label,
 	)
 	y += ROW
-	# Slope is about touching down and there is nothing to touch down on
-	# over a star. Left blank rather than filled with zeros: a slope of
-	# 0.0 degrees over a star reads as flat ground, which is a worse
-	# answer than no answer.
+	# The last two rows are about touching down and there is nothing to
+	# touch down on over a star.
 	#
-	# Whole degrees, and the unit gone with them. Both are the column
-	# being 48 px wide: "SLOPE" is 30 of it and " d" would be another
-	# 12. A tenth of a degree is under what a pilot can fly to and well
-	# under what the gear is checked against, so the digit that went is
-	# the one nobody was using.
+	# The slope used to be the first of them and is gone: the ground's
+	# angle is something a pilot reads off the **ground**, which is
+	# right there under the ship on an approach, and a number for it
+	# was a figure nobody looked at while looking at the thing it
+	# described.
 	if planet.has_ground():
 		UiDraw.row(
-			_canvas, font, Vector2(at.position.x, y), column, "SLOPE",
-			SLOPE_FORMAT % rad_to_deg(_slope.stepped()),
-			_slope_colour(absf(_slope.smooth())), _ink.label,
+			_canvas, font, Vector2(at.position.x, y), at.size.x, "GEAR",
+			_gear_text(), _gear_colour(), _ink.label,
 		)
+		y += ROW
+		_draw_ore(font, Vector2(at.position.x, y), at.size.x)
 	_draw_warning(font, Rect2(at.position - Vector2(UiFrame.PAD, UiFrame.PAD), at.size))
 
 
@@ -782,20 +754,53 @@ func _tape_label(value: float) -> String:
 	return "%.0f" % value
 
 
-## Bottom left: what the ship is doing about the ground.
+## The altitude tape, down the left edge between the two panels there.
 ##
-## The gear always, because it is a state with consequences a pilot has
-## to be able to see -- and what is under the legs when there is
-## anything, which `_draw_ore` decides for itself.
-func _draw_state_corner(font: Font, view: Vector2) -> void:
-	var box: Rect2 = _panel(view, UiFrame.Slot.CONTEXT)
-	var y: float = box.position.y + float(UiFont.BODY)
-	UiDraw.row(
-		_canvas, font, Vector2(box.position.x, y), box.size.x, "GEAR",
-		_gear_text(), _gear_colour(), _ink.label,
+## Not in a corner, and that is what it is for. The four corners answer
+## four questions in a fixed place; height on an approach is not a
+## figure to be looked up but a thing to be watched, and the band
+## between the ship panel and the context panel is two hundred pixels
+## of screen edge that answers nothing. A tape wants height far more
+## than it wants width.
+##
+## Anchored to the edge rather than to where it was sketched, which was
+## a few pixels further right: the pilot's untouchable 400x220 starts
+## at x 120, and an instrument leaning into it is the one thing
+## UI_STYLE section 5 forbids outright.
+##
+## No panel behind it. Every other readout sits on a dimmed slab
+## because it is a block of text; this is a line and some ticks, and
+## two hundred pixels of slab down the side of the screen would be the
+## heaviest thing in the interface, holding the lightest.
+func _draw_altitude_tape(font: Font, view: Vector2, well: GravityWell) -> void:
+	if well == null or not well.has_ground():
+		return
+	var box: Rect2 = tape_box(font, view)
+	if box.size.y <= 0.0:
+		return
+	UiDraw.ladder(
+		_canvas, font, box, _altitude.stepped(),
+		Vector2(0.0, TAPE_TOP), TAPE_STEP, TAPE_MAJOR,
+		_ink.value, _ink.accent, _ink.label, _tape_label,
 	)
-	y += ROW
-	_draw_ore(font, Vector2(box.position.x, y), box.size.x)
+
+
+## Where the tape goes: the left edge, between the two panels on it.
+##
+## Public so a check can ask, because what matters about this one is
+## entirely where it is -- clear of both panels and clear of the
+## pilot's field.
+func tape_box(font: Font, view: Vector2) -> Rect2:
+	var top: Rect2 = UiFrame.slot(view, UiFrame.Slot.SHIP)
+	var bottom: Rect2 = UiFrame.slot(view, UiFrame.Slot.CONTEXT)
+	var gap: float = UiFrame.PAD * 2.0
+	return Rect2(
+		Vector2(top.position.x, top.end.y + gap),
+		Vector2(
+			UiDraw.ladder_width(font, Vector2(0.0, TAPE_TOP), "99999", _tape_label),
+			bottom.position.y - top.end.y - gap * 2.0,
+		),
+	)
 
 
 ## What is in the ground here, in one row.
@@ -1091,12 +1096,6 @@ func _gear_colour() -> Color:
 	return _ink.value if _ship.gear.is_stowed() else _ink.caution
 
 
-func _slope_colour(slope: float) -> Color:
-	if _ship.gear == null:
-		return _ink.value
-	if slope > _ship.gear.slope_limit():
-		return _ink.alarm
-	return _ink.caution if slope > _ship.gear.slope_limit() * CAUTION_FRACTION else _ink.ok
 
 
 func _descent_colour(descent: float) -> Color:

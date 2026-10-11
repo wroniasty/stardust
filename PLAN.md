@@ -600,17 +600,19 @@ Cel: na podejściu widać **ile zostało**, bez czytania liczby.
   ruchomym kursorem; wartość poza pasmem parkuje na końcu i dalej wypisuje
   prawdziwy odczyt. Układ liczony od prawej, więc o szerokości decyduje
   najszersza etykieta, a `ladder_width()` oddaje tę samą liczbę wywołującemu.
-- [x] Zastępuje wiersz `ALT` w prawym dolnym rogu; obok niej **SPD**, **V/S**
-  i **SLOPE**. Róg ma 110 px i mieści taśmę (56) plus kolumnę (51) — dokładnie,
-  więc formaty tych trzech liczb są stałymi, a test pyta panel, jak drukuje, i
-  liczy najszersze, co te formaty potrafią wyprodukować.
-- [x] **GEAR i ORE przeniosły się do rogu KONTEKST**, bo taśma zajęła ich
-  miejsce — i bo tam prawo ramy je stawia od początku: „chwilowe: podniesiony
-  moduł, tryb, komunikat". Ten róg był pusty, odkąd panel komputera przeniósł
-  się na górę.
-- [x] V/S i nachylenie w pełnych jednostkach. To jest cena kolumny 51 px i
-  zarazem uczciwość: dziesiąta piksela na sekundę i dziesiąta stopnia są poniżej
-  tego, czym da się lecieć, i poniżej tego, czym mierzone jest podwozie.
+- [x] **W lewym paśmie**, między panelem STATEK a KONTEKST: 56 x 208 px,
+  jedyna rzecz w interfejsie poza czterema rogami. Powód jest taki, że
+  wysokości na podejściu się **pilnuje**, a nie sprawdza — a to pasmo to dwieście
+  pikseli krawędzi, które nie odpowiada na nic. Zakotwiczona do krawędzi, nie
+  tam, gdzie była naszkicowana (kilka pikseli dalej w prawo): nietykalne
+  400x220 zaczyna się na x 120.
+- [x] Bez tła. Każdy inny odczyt leży na przyciemnionej płycie, bo jest blokiem
+  tekstu; to jest kreska i kilka ząbków, a dwieście pikseli płyty wzdłuż boku
+  ekranu byłoby najcięższym elementem interfejsu trzymającym najlżejszy.
+- [x] W rogu przyrządów zostają **SPD**, **V/S**, **GEAR** i **ORE**. Wiersz
+  `ALT` znikąd nie wrócił — taśma jest wysokościomierzem — a **SLOPE wypadł**:
+  kąt gruntu czyta się z **gruntu**, który na podejściu jest tuż pod statkiem,
+  a liczba obok była cyfrą, na którą nikt nie patrzy, patrząc na to, co opisuje.
 
 Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 

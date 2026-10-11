@@ -8694,7 +8694,7 @@ func _check_hull_editor() -> void:
 	_check_the_computer_panel_is_pressable()
 	_check_the_trajectory_view_is_a_function()
 	_check_the_ship_draws_above_the_world()
-	_check_the_altitude_tape_fits_its_corner()
+	_check_the_altitude_tape_is_out_of_the_way()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
@@ -9858,80 +9858,96 @@ func _effective_z(item: CanvasItem) -> int:
 	return depth
 
 
-## Tasma wysokosci: czy miesci sie w rogu i czy kursor parkuje.
+## Tasma wysokosci: gdzie stoi i czy kursor parkuje.
 ##
-## The instruments corner is 110 px wide and holds a tape beside three
-## rows of figures, which does not fit by much -- so what this measures
-## is the arithmetic that decides it, against the **widest strings the
-## panel can actually produce** rather than the ones it happens to show
-## while the test looks. `UiDraw.row` right-aligns its value and only
-## guarantees it will not collide with the label, so a column too
-## narrow does not wrap or clip: it quietly runs into the tape.
+## What matters about this instrument is **where** it is. It is the
+## only thing in the interface that is not in one of the four corners,
+## and the reason is that height on an approach is watched rather than
+## looked up: the band down the left edge between the ship panel and
+## the context panel is two hundred pixels that answer nothing, and a
+## tape wants height far more than width.
 ##
-## The cursor parking is the other half, and it is the one claim a
-## screenshot cannot settle: a ship above the top of the band has to
-## read as above the top rather than as missing.
-func _check_the_altitude_tape_fits_its_corner() -> void:
+## So the checks are the two ways that can be wrong -- leaning into the
+## pilot's untouchable field, or over one of the panels it sits between
+## -- and the one claim no screenshot settles: that a ship above the
+## top of the band reads as above it rather than as missing.
+func _check_the_altitude_tape_is_out_of_the_way() -> void:
 	var font: Font = ModuleData.card_font()
 	var hud: FlightHud = FlightHud.new()
 	root.add_child(hud)
-	var inside: Rect2 = UiFrame.inside(
-		UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.INSTRUMENTS)
-	)
+	var view: Vector2 = Vector2(640.0, 360.0)
+	var box: Rect2 = hud.tape_box(font, view)
 	var band: Vector2 = Vector2(0.0, FlightHud.TAPE_TOP)
-	# Five digits, because a ship in orbit over a world is nineteen
-	# thousand pixels up and the cursor prints the real figure rather
-	# than the top of the band.
-	var tape: float = UiDraw.ladder_width(font, band, "99999", hud._tape_label)
-	var column: float = inside.size.x - tape - UiFrame.PAD
+
 	_expect(
-		tape > 0.0 and column > 0.0 and tape + column + UiFrame.PAD <= inside.size.x,
-		"the tape and the figures together fit the corner (%.0f + %.0f of %.0f px)" % [
-			tape, column, inside.size.x,
+		box.size.x > 0.0 and box.size.y > 100.0,
+		"the tape gets the height it is for (%.0f x %.0f px)" % [box.size.x, box.size.y],
+	)
+	_expect(
+		not box.intersects(UiFrame.field(view)),
+		"and stays out of the pilot's field (%s against %s)" % [
+			box, UiFrame.field(view),
+		],
+	)
+	var over: Array[String] = []
+	for slot: int in [
+		UiFrame.Slot.SHIP, UiFrame.Slot.WORLD,
+		UiFrame.Slot.CONTEXT, UiFrame.Slot.INSTRUMENTS,
+	]:
+		if box.intersects(UiFrame.slot(view, slot)):
+			over.append(str(slot))
+	_expect(
+		over.is_empty(),
+		"and off every panel it sits between (%s)" % [
+			"clear" if over.is_empty() else str(over),
 		],
 	)
 
-	# Every row at its widest. A value is right-aligned into `column`,
-	# so what has to fit is the label, a gap, and the value.
+	# The figures that stayed in the corner, at their widest. A value is
+	# right-aligned into the panel, so what has to fit is the label, a
+	# gap and the value -- `UiDraw.row` promises only that the two will
+	# not collide, so a panel too narrow does not clip, it overruns.
+	var corner: float = UiFrame.inside(
+		UiFrame.slot(view, UiFrame.Slot.INSTRUMENTS)
+	).size.x
 	var tight: Array[String] = []
-	# The values formatted the way the panel formats them, at figures
-	# nothing can exceed: a format widened in the panel has to widen
-	# here too, or this check would go on measuring the old one.
 	for row: Array in [
 		["SPD", FlightHud.SPEED_FORMAT % 99999.0],
 		["V/S", FlightHud.DESCENT_FORMAT % -9999.0],
-		["SLOPE", FlightHud.SLOPE_FORMAT % -90.0],
+		["GEAR", "  MOVING"],
 	]:
 		var needs: float = (
 			UiDraw.text_width(font, row[0]) + 3.0 + UiDraw.text_width(font, row[1])
 		)
-		if needs > column:
+		if needs > corner:
 			tight.append("%s %s needs %.0f" % [row[0], row[1], needs])
 	_expect(
 		tight.is_empty(),
-		"and every figure fits the column beside it (%.0f px, %s)" % [
-			column, "all of them" if tight.is_empty() else str(tight),
+		"the figures left in the corner fit it (%.0f px, %s)" % [
+			corner, "all of them" if tight.is_empty() else str(tight),
 		],
 	)
 
 	# The cursor: bottom at the floor, top at the ceiling, and parked
 	# rather than lost when the ship is outside the band.
-	var box: Rect2 = Rect2(Vector2(0.0, 0.0), Vector2(40.0, 60.0))
+	var scale: Rect2 = Rect2(Vector2(0.0, 0.0), Vector2(40.0, 60.0))
 	_expect(
-		is_equal_approx(UiDraw.ladder_mark(box, 0.0, band), box.end.y)
-		and is_equal_approx(UiDraw.ladder_mark(box, FlightHud.TAPE_TOP, band), box.position.y),
+		is_equal_approx(UiDraw.ladder_mark(scale, 0.0, band), scale.end.y)
+		and is_equal_approx(
+			UiDraw.ladder_mark(scale, FlightHud.TAPE_TOP, band), scale.position.y
+		),
 		"the cursor runs the whole height of the tape",
 	)
 	_expect(
 		is_equal_approx(
-			UiDraw.ladder_mark(box, FlightHud.TAPE_TOP * 0.5, band),
-			roundf((box.position.y + box.end.y) * 0.5),
+			UiDraw.ladder_mark(scale, FlightHud.TAPE_TOP * 0.5, band),
+			roundf((scale.position.y + scale.end.y) * 0.5),
 		),
 		"half way up the band is half way up the tape",
 	)
 	_expect(
-		is_equal_approx(UiDraw.ladder_mark(box, 90000.0, band), box.position.y)
-		and is_equal_approx(UiDraw.ladder_mark(box, -500.0, band), box.end.y),
+		is_equal_approx(UiDraw.ladder_mark(scale, 90000.0, band), scale.position.y)
+		and is_equal_approx(UiDraw.ladder_mark(scale, -500.0, band), scale.end.y),
 		"and off either end it parks rather than leaving the tape",
 	)
 

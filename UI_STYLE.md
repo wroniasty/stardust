@@ -176,7 +176,12 @@ czytania:
 +---------------------------+  +-----------------------------+
 ```
 
-Pierścień krawędzi ekranu zostaje skanerowi (jest, działa).
+Pierścień krawędzi ekranu zostaje skanerowi (jest, działa) — z jednym
+wyjątkiem i jest on świadomy. **Taśma wysokości** stoi w lewym paśmie, między
+panelem STATEK a KONTEKST, bo przyrząd, który się **pilnuje**, a nie sprawdza,
+potrzebuje wysokości bardziej niż szerokości, a róg daje odwrotnie. Dwieście
+pikseli krawędzi między tymi panelami nie odpowiadało dotąd na nic. Granica
+zostaje ta sama: nietykalne 400x220 obowiązuje i taśma jest po jego lewej.
 
 Metryka, jedna dla wszystkiego: **4 px od krawędzi ekranu, 3 px wyściółki
 wewnątrz panelu, 1 px odstępu między wierszami, panel nie szerszy niż 140 px i
