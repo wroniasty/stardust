@@ -3422,7 +3422,9 @@ func _check_energy() -> void:
 		"a container can hold any kind of module",
 	)
 
-	var hud: EnergyHud = EnergyHud.new()
+	# The energy bar lives in the flight panel now, with the other
+	# three, so the two things it owns are asked of that.
+	var hud: FlightHud = FlightHud.new()
 	root.add_child(hud)
 	hud.bind(ship)
 	var cheapest: float = 0.0
@@ -3434,11 +3436,17 @@ func _check_energy() -> void:
 		"the bar is notched at the cost of a shot (%.1f)" % hud.shot_cost(),
 	)
 	var refusals: Array[int] = []
-	hud.bind(ship)
 	ship.shot_refused.connect(func() -> void: refusals.append(1))
 	ship.energy = 0.0
 	ship.shot_refused.emit()
 	_expect(refusals.size() == 1, "and a refusal is announced rather than swallowed")
+	# And the panel heard it too, which is what puts the red frame
+	# round the bar -- the signal reaching a listener in the test is
+	# not the same as it reaching the thing that draws.
+	_expect(
+		hud._refused_for > 0.0,
+		"and the panel is the one that flashes for it (%.2f s)" % hud._refused_for,
+	)
 	hud.queue_free()
 
 	loot.free()
@@ -8695,6 +8703,7 @@ func _check_hull_editor() -> void:
 	_check_the_trajectory_view_is_a_function()
 	_check_the_ship_draws_above_the_world()
 	_check_the_altitude_tape_is_out_of_the_way()
+	_check_the_ship_panel_is_four_bars()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
@@ -9979,6 +9988,95 @@ func _check_the_altitude_tape_is_out_of_the_way() -> void:
 		],
 	)
 	_discard(hud)
+
+
+## Panel statku: cztery paski, bez podpisow, w stalej kolejnosci.
+##
+## The labels are gone and the figure is written on the bar, which is
+## what pays for the height -- and it makes the **order** the only
+## thing identifying a bar. So the order is the thing to pin: a panel
+## whose second bar means heat on one ship and energy on another is a
+## panel that has to be read before it can be used, which is exactly
+## what taking the words off was meant to avoid.
+##
+## The other half is which bars are there at all. Hull and energy
+## always, because UI_STYLE section 12 trap 1 forbids a build hiding
+## what can kill you; heat and the jump drive only when they have
+## something to say.
+func _check_the_ship_panel_is_four_bars() -> void:
+	var ship: Ship = _spawn_ship()
+	var hud: FlightHud = FlightHud.new()
+	root.add_child(hud)
+	hud.bind(ship)
+	ship.hull_heat = 0.0
+	hud._read(1.0)
+
+	var kinds: Array[StringName] = []
+	for one: Dictionary in hud.ship_bars():
+		kinds.append(one["kind"])
+	var cool: Array[StringName] = [&"hull", &"energy"]
+	_expect(
+		kinds == cool,
+		"a cool ship with no drive charging shows hull and energy (%s)" % str(kinds),
+	)
+
+	# Heat appears between them, not at the end: the order is fixed, so
+	# a bar arriving must push the ones below it down rather than
+	# landing wherever there was room.
+	ship.hull_heat = 0.5
+	kinds = []
+	for one: Dictionary in hud.ship_bars():
+		kinds.append(one["kind"])
+	var hot: Array[StringName] = [&"hull", &"heat", &"energy"]
+	_expect(
+		kinds == hot,
+		"heat arrives in its own place, second (%s)" % str(kinds),
+	)
+
+	# And the figures are percentages of their own bar rather than raw
+	# numbers, which is the whole reason the words could go.
+	var says: Dictionary = {}
+	for one: Dictionary in hud.ship_bars():
+		says[one["kind"]] = String(one["says"])
+	_expect(
+		String(says[&"heat"]) == "50%",
+		"each bar carries its own figure as a percentage (%s)" % says[&"heat"],
+	)
+	var fills_wrong: Array[String] = []
+	for one: Dictionary in hud.ship_bars():
+		var fill: float = float(one["fill"])
+		if fill < 0.0 or fill > 1.0:
+			fills_wrong.append("%s at %.2f" % [one["kind"], fill])
+	_expect(
+		fills_wrong.is_empty(),
+		"and a fill that stays inside the bar (%s)" % [
+			"all of them" if fills_wrong.is_empty() else str(fills_wrong),
+		],
+	)
+
+	# Four of them have to fit the panel, which is 60 px tall. This is
+	# the ceiling the bar height was chosen against.
+	var inside: Rect2 = UiFrame.inside(
+		UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.SHIP)
+	)
+	_expect(
+		4.0 * (FlightHud.BAR_HEIGHT + FlightHud.BAR_GAP) <= inside.size.y,
+		"four bars fit the ship panel (%.0f of %.0f px)" % [
+			4.0 * (FlightHud.BAR_HEIGHT + FlightHud.BAR_GAP), inside.size.y,
+		],
+	)
+	# And the figure fits on one, with its padding, at its widest.
+	var font: Font = ModuleData.card_font()
+	_expect(
+		UiDraw.text_width(font, "100%") + FlightHud.BAR_TEXT_PAD * 2.0
+		<= inside.size.x,
+		"and the figure fits on a bar (%.0f of %.0f px)" % [
+			UiDraw.text_width(font, "100%") + FlightHud.BAR_TEXT_PAD * 2.0,
+			inside.size.x,
+		],
+	)
+	_discard(hud)
+	_discard(ship)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

@@ -24,15 +24,20 @@ const ROW: float = 10.0
 ## Slope and descent turn amber at this fraction of what the gear will take.
 const CAUTION_FRACTION: float = 0.6
 
-## The hull bar, across the top. Wide enough to read a few per cent off at
-## a glance, which is the only thing a bar is better at than a number.
-## Narrow enough to sit between the debug overlay's two columns, which is
-## where the top of the screen is free even with F7 on.
-const BAR_HEIGHT: float = 5.0
+## The bars in the ship corner: hull, heat, energy, jump drive.
+##
+## Eleven tall, which is the font plus a pixel of air either side --
+## the figure is written **on** the bar now rather than in a row under
+## it, which is what pays for the height. A labelled row and a bar were
+## two readouts of one number sitting one above the other; the bar is
+## the one that answers at a glance, so the number moved into it and
+## the label went. Four unlabelled bars in a fixed order are learned
+## once, and after that a colour at a height is the reading.
+const BAR_HEIGHT: float = 11.0
+const BAR_GAP: float = 2.0
 
-## The heat bar under it, thinner because it is the second question.
-const HEAT_HEIGHT: float = 3.0
-const HEAT_GAP: float = 2.0
+## How far the figure sits from the bar's right-hand end.
+const BAR_TEXT_PAD: float = 3.0
 
 ## The warning band: where it sits, and how much air it gets.
 ##
@@ -174,6 +179,11 @@ var _ship: Ship = null
 var _rig: MiningRig = null
 var _canvas: Control = null
 
+## The drive, for the charge bar. Handed in rather than looked up: the
+## controller belongs to the world, not to the ship, and a panel that
+## went hunting for it would be a panel with no tests.
+var _jump: JumpController = null
+
 ## Whether the computer panel is open. Shut by default: a pilot who has
 ## not asked for it gets the empty context corner the frame law wants
 ## (UI_STYLE section 5), and the chip alone says there is something to
@@ -196,6 +206,15 @@ var _ink: Palette = Palette.current()
 ## not tidiness -- a draw can run twice for one frame or not at all for
 ## a skipped one, so a smoothing fed from inside it would advance at
 ## whatever rate the renderer happened to feel like.
+## How long the energy bar stays framed in red after a refused shot,
+## and how many notches it will draw before they stop being countable.
+## Both came up here with the bar from `EnergyHud`.
+const REFUSAL_FLASH: float = 0.35
+const MAX_NOTCHES: int = 24
+
+## Seconds left of that flash.
+var _refused_for: float = 0.0
+
 var _hull: UiValue = UiValue.new(1.0)
 var _speed: UiValue = UiValue.new(1.0)
 var _altitude: UiValue = UiValue.new(1.0)
@@ -222,8 +241,18 @@ func watch_ground(rig: MiningRig) -> void:
 	_rig = rig
 
 
+## The jump drive this panel watches charge. Allowed to be null: a
+## world without one simply never grows the fourth bar.
+func watch_jump(jump: JumpController) -> void:
+	_jump = jump
+
+
 func bind(ship: Ship) -> void:
+	if _ship != null and is_instance_valid(_ship) and _ship.shot_refused.is_connected(_on_refused):
+		_ship.shot_refused.disconnect(_on_refused)
 	_ship = ship
+	if _ship != null:
+		_ship.shot_refused.connect(_on_refused)
 	# Fresh readings for a fresh hull. Kept across the swap they would
 	# spend the first tenth of a second easing over from whatever the
 	# last ship was doing, which is a readout lying during the one
@@ -234,7 +263,12 @@ func bind(ship: Ship) -> void:
 	_descent = UiValue.new(0.1)
 
 
+func _on_refused() -> void:
+	_refused_for = REFUSAL_FLASH
+
+
 func _process(delta: float) -> void:
+	_refused_for = maxf(_refused_for - delta, 0.0)
 	_read(delta)
 	if _canvas != null:
 		_canvas.queue_redraw()
@@ -562,19 +596,16 @@ func _draw_ship_corner(font: Font, at: Rect2) -> void:
 		colour = _ink.caution
 
 	var y: float = at.position.y
-	var bar: Rect2 = Rect2(Vector2(at.position.x, y), Vector2(at.size.x, BAR_HEIGHT))
-	_canvas.draw_rect(
-		Rect2(bar.position, Vector2(roundf(at.size.x * health), BAR_HEIGHT)), colour, true
-	)
-	_canvas.draw_rect(bar, _ink.edge, false, 1.0)
-	y += BAR_HEIGHT + 2.0
-	y = _draw_heat(at.position.x, y, at.size.x)
-
-	UiDraw.row(
-		_canvas, font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x,
-		"HULL", "%.0f" % _hull.stepped(), colour, _ink.label, "%",
-	)
-	y += ROW
+	for one: Dictionary in ship_bars():
+		var box: Rect2 = Rect2(
+			Vector2(at.position.x, y), Vector2(at.size.x, BAR_HEIGHT)
+		)
+		y = _draw_bar(font, box, float(one["fill"]), one["ink"], String(one["says"]))
+		match StringName(one["kind"]):
+			&"heat":
+				_draw_burn_mark(box)
+			&"energy":
+				_draw_notches(box)
 
 	# Emergency power up here rather than down in the instruments: it
 	# is the one reading a pilot wants while looking at the ground
@@ -589,6 +620,150 @@ func _draw_ship_corner(font: Font, at: Rect2) -> void:
 		)
 		y += ROW
 	_draw_dock(font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x)
+
+
+## One bar with its figure on it, and where the next one starts.
+##
+## The figure is right-aligned inside the bar and takes its colour from
+## **what is under it**: the panel's own dark where the fill has
+## reached it, the bar's colour where it has not. One comparison, and
+## it is what keeps a number legible at both ends of a bar that is
+## bright at one end and nearly black at the other.
+func _draw_bar(
+	font: Font, box: Rect2, filled: float, ink: Color, says: String
+) -> float:
+	_canvas.draw_rect(box, _ink.over(_ink.scrim, 0.75), true)
+	var across: float = roundf(box.size.x * clampf(filled, 0.0, 1.0))
+	if across > 0.0:
+		_canvas.draw_rect(
+			Rect2(box.position, Vector2(across, box.size.y)), ink, true
+		)
+	_canvas.draw_rect(box, _ink.edge, false, 1.0)
+	if not says.is_empty():
+		var wide: float = UiDraw.text_width(font, says)
+		var left: float = box.end.x - BAR_TEXT_PAD - wide
+		_canvas.draw_string(
+			font,
+			UiDraw.snap(Vector2(
+				left, box.position.y + (box.size.y + float(UiFont.BODY)) * 0.5 - 1.0
+			)),
+			says,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY,
+			_ink.scrim if box.position.x + across > left else ink,
+		)
+	return box.end.y + BAR_GAP
+
+
+
+
+## Which bars the ship panel is showing, top to bottom.
+##
+## A list rather than four calls in a row, because what is worth
+## checking about them is exactly what a list says and a sequence of
+## draws does not: that the order is fixed, and that the two
+## conditional ones come up when they should. Each entry is
+## `{kind, fill, ink, says}`.
+##
+## Hull and energy are always there -- they are the two that can end
+## the flight, and UI_STYLE section 12 forbids a build hiding either.
+## Heat is absent at zero, because a gauge reading nothing through
+## ordinary flight is a gauge the pilot learns to skip. The drive is
+## absent unless it is charging, which is the only time it has
+## anything to say.
+func ship_bars() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _ship == null or not is_instance_valid(_ship):
+		return out
+
+	var health: float = clampf(_hull.smooth() * 0.01, 0.0, 1.0)
+	var hull_ink: Color = _ink.ok
+	if health < 0.25:
+		hull_ink = _ink.alarm
+	elif health < CAUTION_FRACTION:
+		hull_ink = _ink.caution
+	out.append({
+		"kind": &"hull", "fill": health, "ink": hull_ink,
+		"says": "%.0f%%" % _hull.stepped(),
+	})
+
+	var heat: float = clampf(_ship.hull_heat, 0.0, 1.0)
+	if heat > 0.01:
+		out.append({
+			"kind": &"heat", "fill": heat,
+			"ink": _ink.alarm if heat >= Ship.BURN_HEAT else _ink.caution,
+			"says": "%.0f%%" % (heat * 100.0),
+		})
+
+	var capacity: float = _ship.energy_capacity()
+	if capacity > 0.0:
+		var charge: float = clampf(_ship.energy / capacity, 0.0, 1.0)
+		out.append({
+			"kind": &"energy", "fill": charge,
+			"ink": _ink.inert if _ship.energy_waiting() else _ink.nav,
+			"says": "%.0f%%" % (charge * 100.0),
+		})
+
+	if _jump != null and is_instance_valid(_jump):
+		if _jump.phase == JumpController.Phase.CHARGING:
+			out.append({
+				"kind": &"jump", "fill": _jump.progress(), "ink": _ink.accent,
+				"says": "%.0f%%" % (_jump.progress() * 100.0),
+			})
+	return out
+
+
+## The line on the heat bar where the hull starts burning.
+func _draw_burn_mark(box: Rect2) -> void:
+	var mark: float = roundf(box.position.x + box.size.x * Ship.BURN_HEAT)
+	_canvas.draw_line(
+		Vector2(mark, box.position.y - 1.0), Vector2(mark, box.end.y + 1.0),
+		_ink.alarm, 1.0,
+	)
+
+
+## The energy bar notched at the cost of a shot, and framed in red when
+## one has just been refused.
+##
+## The notches are the rule UI_STYLE section 6 makes for this one bar,
+## and the reason it is not merely a percentage: a pilot reads "three
+## left" off them and decides whether to hold the trigger. The figure
+## written on it is the pool, which is a different question.
+func _draw_notches(box: Rect2) -> void:
+	var capacity: float = _ship.energy_capacity()
+	var cost: float = shot_cost()
+	if capacity > 0.0 and cost > 0.0:
+		var notches: int = int(capacity / cost)
+		if notches <= MAX_NOTCHES:
+			for i: int in range(1, notches + 1):
+				var x: float = box.position.x + box.size.x * (cost * float(i) / capacity)
+				if x < box.end.x - 0.5:
+					_canvas.draw_line(
+						Vector2(x, box.position.y), Vector2(x, box.end.y),
+						_ink.scrim, 1.0,
+					)
+	if _refused_for <= 0.0:
+		return
+	# A second frame outside the first: a colour change alone is easy
+	# to miss in a firefight.
+	_canvas.draw_rect(box, _ink.alarm, false, 1.0)
+	_canvas.draw_rect(
+		box.grow(2.0), Color(_ink.alarm, _refused_for / REFUSAL_FLASH), false, 1.0
+	)
+
+
+## The cost of one shot from the cheapest gun aboard, which is what a
+## notch is worth. The cheapest rather than the first, so the notches
+## never promise fewer shots than the ship can actually take.
+func shot_cost() -> float:
+	var cheapest: float = 0.0
+	for hardpoint: Hardpoint in _ship.hardpoints:
+		if hardpoint.weapon == null or hardpoint.weapon.energy_cost <= 0.0:
+			continue
+		if cheapest <= 0.0 or hardpoint.weapon.energy_cost < cheapest:
+			cheapest = hardpoint.weapon.energy_cost
+	return cheapest
+
+
 
 
 ## Whether a dock will have you, and which of the two numbers is being
@@ -607,33 +782,6 @@ func _draw_dock(font: Font, at: Vector2, width: float) -> void:
 	UiDraw.row(_canvas, font, at, width, "DOCK", says, colour, _ink.label)
 
 
-## Heat, as a second bar under the hull, and only when there is any.
-## Returns where the next thing starts.
-##
-## Hidden at zero deliberately. In ordinary flight it would be an empty
-## box that never moves, and a gauge the pilot has learned to ignore is
-## worse than no gauge at all. It appears on the first hot air or the
-## first sunlight and brings its own threshold mark, so "how close am I
-## to burning" is answered by looking rather than by remembering a
-## number.
-func _draw_heat(left: float, top: float, width: float) -> float:
-	var heat: float = clampf(_ship.hull_heat, 0.0, 1.0)
-	if heat <= 0.01:
-		return top
-	var frame: Rect2 = Rect2(left, top, width, HEAT_HEIGHT)
-	var burning: bool = heat >= Ship.BURN_HEAT
-	var colour: Color = _ink.alarm if burning else _ink.caution
-	_canvas.draw_rect(
-		Rect2(frame.position, Vector2(roundf(width * heat), HEAT_HEIGHT)), colour, true
-	)
-	_canvas.draw_rect(frame, _ink.edge, false, 1.0)
-	var mark: float = roundf(left + width * Ship.BURN_HEAT)
-	_canvas.draw_line(Vector2(mark, top - 1.0), Vector2(mark, frame.end.y + 1.0), _ink.alarm, 1.0)
-	# No word here. Heat used to label itself the moment it passed the
-	# mark, which put one warning in one place and every other warning
-	# somewhere else, so a pilot had to know the screen rather than
-	# know the spot. The band owns that case now and calls it BURN.
-	return frame.end.y + 2.0
 
 
 ## Top right: where I am. The conic, the two apsides, and when the next

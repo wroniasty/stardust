@@ -621,6 +621,23 @@ Cel: na podejściu widać **ile zostało**, bez czytania liczby.
 
 Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 
+### Panel statku: cztery paski
+
+- [x] Bez podpisów, 11 px wysokości, wartość wypisana **na pasku**. Stała
+  kolejność od góry: **kadłub, ciepło, energia, napęd skokowy** — bez słów
+  kolejność jest jedyną tożsamością paska, więc jest tym, czego pilnuje test.
+- [x] **Energia przeniosła się z dołu ekranu**, z karbami i czerwoną ramką
+  odmowy. `EnergyHud` zniknieł — jeden właściciel tego rogu zamiast dwóch
+  warstw rysujących w jedno miejsce. Karby zostają, bo to reguła sekcji 6 dla
+  tego jednego paska: pilot czyta z nich „zostały trzy strzały", a nie „62%".
+- [x] **Napęd skokowy jako czwarty pasek**, tylko gdy się ładuje (trzymane `J`).
+  Kontroler należy do świata, nie do statku, więc panel dostaje go przez
+  `watch_jump()` — panel, który sam by go szukał, to panel bez testów.
+- [x] **Overlay debugowy startuje wyłączony.** Wstawał razem z grą, co jest złą
+  wartością domyślną dla warstwy, którą włącza się, żeby w coś zajrzeć: pilot
+  zaczynający lot czytał dwie kolumny liczb, o które nie prosił, na wierzchu
+  paneli, które są interfejsem.
+
 ---
 
 ## M3: System gwiezdny i streaming

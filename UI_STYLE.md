@@ -228,7 +228,21 @@ decyduje najszersza etykieta, jaką ta podziałka potrafi wyprodukować, i nikom
 nie trzeba mówić, ile ma piksel cyfra. `UiDraw.ladder_width()` zwraca tę samą
 liczbę, żeby wywołujący mógł oddać resztę panelu czemuś innemu.
 
-**3. Pasek z podziałką znaczącą.** Energia: **komórki, nie gładkie
+**3. Pasek z podziałką znaczącą.** Wysoki na **11 px**, bez podpisu, z własną
+wartością wypisaną **na nim**, do prawej. Etykieta i pasek obok siebie były dwoma
+odczytami jednej liczby jedno pod drugim; został ten, który odpowiada rzutem
+oka, a liczba weszła do środka. Cyfra bierze kolor z tego, **co jest pod nią**:
+ciemne tło panelu tam, gdzie wypełnienie do niej doszło, kolor paska tam, gdzie
+nie — jedno porównanie, i tyle wystarczy, żeby liczba była czytelna na obu
+końcach paska jasnego z jednej strony i prawie czarnego z drugiej.
+
+Bez podpisów **kolejność jest jedyną tożsamością paska**, więc jest stała:
+kadłub, ciepło, energia, napęd skokowy. Kadłub i energia są zawsze (pułapka 1
+z sekcji 12: nie wolno ukryć tego, co zabija), ciepło pojawia się dopiero, gdy
+jest, a napęd — gdy się ładuje. Pasek, który się pojawia, **spycha niższe w
+dół** zamiast lądować tam, gdzie akurat było miejsce.
+
+ Energia: **komórki, nie gładkie
 wypełnienie**, a podziałka jest co koszt jednego strzału. Pilot widzi „mam trzy
 strzały", nie „mam 62%". Gdy trwa timeout, komórki są obrysowane w `grid` i
 puste; gdy się doładowują, wypełniają się w `accent`. Różnica jest widoczna bez

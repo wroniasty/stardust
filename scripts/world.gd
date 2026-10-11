@@ -70,7 +70,6 @@ var _garrisons: GarrisonSpawner = null
 var _mining: MiningRig = null
 var _help: HelpScreen = null
 var _flight: FlightHud = null
-var _energy: EnergyHud = null
 var _creative: CreativeTool = null
 var _aim: AimHud = null
 
@@ -107,7 +106,6 @@ func _ready() -> void:
 	_build_flight_hud()
 	_build_creative()
 	_build_aim_hud()
-	_build_energy_hud()
 	_build_scanner()
 	_build_jump_hud()
 	_finish_resume()
@@ -242,10 +240,6 @@ func _build_aim_hud() -> void:
 	_aim.bind((player as Player).ship)
 
 
-func _build_energy_hud() -> void:
-	_energy = EnergyHud.new()
-	add_child(_energy)
-	_energy.bind((player as Player).ship)
 
 
 func _build_scanner() -> void:
@@ -267,6 +261,11 @@ func _build_jump_hud() -> void:
 		ship, Galaxy.current(), Galaxy.map, Galaxy.here, Galaxy, Galaxy.at,
 		StreamingManager.visit_time,
 	)
+	# The flight panel draws the charge as its fourth bar, so it needs
+	# the drive. Here rather than in `_build_flight_hud`, which runs
+	# before this one exists.
+	if _flight != null:
+		_flight.watch_jump(_jump)
 	_jump.crossed.connect(_on_crossed)
 	_jump.refused.connect(_on_jump_refused)
 	_jump.balked.connect(_on_jump_balked)

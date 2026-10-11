@@ -26,6 +26,12 @@ var _ship: Ship = null
 func _ready() -> void:
 	if not ship_path.is_empty():
 		_ship = get_node_or_null(ship_path) as Ship
+	# Off until asked for. It used to come up with the game, which is
+	# the wrong default for a layer that exists to be switched on when
+	# something is being looked into: a pilot starting a run was
+	# reading two columns of figures they had not asked for, over the
+	# panels that are the interface.
+	set_debug_visible(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
