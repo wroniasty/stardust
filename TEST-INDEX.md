@@ -5,8 +5,9 @@ Every check we run. Times were measured headless on this machine on 2026-10-10
 
 ## Regular checks (run before finishing a task)
 
-`powershell -File tools/check.ps1` runs import, idle run and smoke test in
-order, plus a dock check in the editor (~40 s in all) and fails on any engine error in their output.
+`powershell -File tools/check.ps1` runs import, idle run, menu walk and smoke
+test in order, plus a dock check in the editor (~45 s in all) and fails on any
+engine error in their output.
 
 | Name | Command | What it checks | Time |
 |---|---|---|---|
@@ -15,7 +16,7 @@ order, plus a dock check in the editor (~40 s in all) and fails on any engine er
 | Idle run | `godot --headless --path . --quit-after 120` | The game boots and runs 120 frames with no script errors. | ~2 s |
 | Smoke test | `godot --headless --fixed-fps 60 --path . --script res://tools/smoke_test.gd` | The big one: gravity, atmosphere, terrain, flight phases, landing, weapons, energy, engines, cargo, galaxy, jumps, streaming, save, the editor docks and more. Prints `smoke test: OK`. | ~25 s |
 | Fire check | `godot --headless --path . res://tools/fire_check.tscn` | Each armed hardpoint fires from its own position, not a fixed point on the hull. | ~1 s |
-| Menu check | `godot --headless --path . res://tools/menu_check.tscn` | Walks the main menu like a player and checks the world it produces. | ~1 s |
+| Menu check | `godot --headless --path . res://tools/menu_check.tscn` | Walks the main menu like a player and checks the world it produces -- including the whole path from a jettison to a crate on the ground. **In `check.ps1`**, because `World` reads autoloads and the smoke test cannot build one, so this is the only place that path is checked at all. | ~2 s |
 | Sound check | `godot --headless --path . tools/soundcheck.tscn --quit-after 2` | Plays every sound and prints the vacuum/atmosphere rule table (read the output; it does not assert). | ~1 s |
 
 ## Benchmarks and measurements (run on demand)
@@ -48,7 +49,8 @@ misjump), transit veil, save, system model, streaming, system tour, star,
 system map and the live overlay (both keys, the held peek and its
 automatic framing), the crossing to a pin (states, closest approach,
 braking burn) and the ring that draws it, what a thrown crate does on
-the ground and the box of units that can be thrown,
+the ground and the box of units that can be thrown, every `_on_*`
+handler being connected to something,
 boost, input bindings, sprite sheets, the dock's skin still.
 
 ## Failures vs. warnings

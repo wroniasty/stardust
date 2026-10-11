@@ -21,6 +21,8 @@ Dlatego reguła brzmi: **każdy** zasób pod `scripts/` ma mieć `@tool`, nie ty
 
 ---
 
+9. **Czego smoke test nie obejmie: świata.** `World` czyta autoloady, a autoloady nie istnieją w biegu `godot --script` — więc suita nie potrafi zbudować świata i cała droga od „wyrzuć to za burtę" do „leży skrzynka" nie miała sprawdzenia. Kosztowało to trzy commity: usunięcie ekranu luku zabrało ze sobą `_build_loadout`, a w niej jedną linię, o której nikt nie myślał (`ship.jettisoned.connect(_on_jettisoned)`). Handler został, sygnał został, wyrzucone rzeczy emitowały w nic — i **nic nie padło**, bo sygnał bez słuchacza nie jest błędem w żadnym języku. Zgłosił pilot. Dwie odpowiedzi, obie w bramce: `tools/menu_check.tscn` (scena, czyli autoloady są) przechodzi tę drogę do końca i stoi teraz w `check.ps1`, a smoke test skanuje skrypty i scenki — **każda funkcja `_on_*`, której nazwa nie pojawia się nigdzie indziej, to niepodłączony przewód**. Zmierzone, zanim powstało: w całym projekcie był dokładnie jeden taki. Komentarze są przy skanowaniu **wycinane** — pierwsza wersja ich nie wycinała, a komentarz, którym opisałem przywrócony przewód, cytuje to wywołanie, więc po ponownym przecięciu przewodu test świecił na zielono.
+
 ## 1. Architektura
 
 ```

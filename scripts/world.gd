@@ -94,6 +94,13 @@ func _ready() -> void:
 	var ship: Ship = (player as Player).ship
 	if ship != null:
 		ship.destroyed.connect(_on_ship_destroyed)
+		# Here rather than wherever the hold happens to be shown. This
+		# wire used to live in `_build_loadout`, and when that screen
+		# was deleted the wire went with it: the handler stayed, nothing
+		# called it, and for three commits everything thrown overboard
+		# simply ceased to exist. A ship-wide signal belongs with the
+		# ship, beside the other one.
+		ship.jettisoned.connect(_on_jettisoned)
 	_build_configurator()
 	_build_editor()
 	_build_map()

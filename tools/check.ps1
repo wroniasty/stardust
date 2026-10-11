@@ -107,6 +107,23 @@ if ($dockBad -or ($dockOut -notmatch "DOCK all checks passed")) {
 
 Invoke-Stage "Running $Frames frames headless..." @("--headless", "--path", $root, "--quit-after", $Frames) | Out-Null
 
+# The menu, and the world it produces, in a scene rather than a --script.
+#
+# In the gate because of what it caught: the wire turning a jettison into a
+# crate lived on `World`, `World` reads autoloads, and autoloads do not exist
+# under `--script` -- so the smoke test cannot build one and the whole path
+# from "throw this overboard" to "there is a crate" had no check at all. It
+# was deleted with the screen that happened to hold the connection and nobody
+# noticed for three commits. Two seconds to run.
+$menu = Invoke-Stage "Walking the menu into a world..." @(
+    "--headless", "--path", $root, "res://tools/menu_check.tscn"
+)
+if ($menu -notmatch "menu check: ok") {
+    Write-Host "FAILED: the menu check did not report ok" -ForegroundColor Red
+    Write-Host (($menu -split "`n" | Where-Object { $_ -match "FAIL" }) -join "`n") -ForegroundColor Red
+    exit 1
+}
+
 # --fixed-fps 60: the flight phases are counted in physics ticks, and without
 # it a headless loop runs them in real time (about five minutes). The step the
 # physics sees is the same 1/60 s either way; only the pace changes.

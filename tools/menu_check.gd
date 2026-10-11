@@ -37,8 +37,57 @@ func _process(_delta: float) -> void:
 			var ship: Ship = (world.player as Player).ship
 			_check(ship != null and ship.hull != null and ship.hull.id == &"interceptor", "the picked ship was built (%s)" % [ship.hull.id if ship != null and ship.hull != null else "none"])
 			_check(ship != null and ship.hardpoints.size() >= 2, "and it has its guns")
+		_check_a_jettison_becomes_a_crate(world)
 		print("menu check: ", "FAILED" if _failed else "ok")
 		get_tree().quit(1 if _failed else 0)
+
+
+## The whole way through, in the one harness that has a real world.
+##
+## This is where the missing wire would have been caught. The unit
+## tests check that `jettison()` hands the module back and that a crate
+## falls properly once something ejects it; what neither of them can
+## see is that nothing in the game was listening, because the listener
+## is on `World` and `World` needs autoloads -- so it only exists in a
+## scene run like this one.
+##
+## The claim is end to end on purpose: throw something, and there is a
+## crate in the world holding it.
+func _check_a_jettison_becomes_a_crate(world: World) -> void:
+	if world == null:
+		return
+	var ship: Ship = (world.player as Player).ship
+	if ship == null:
+		return
+	var before: int = get_tree().get_nodes_in_group(LootCrate.LOOT_GROUP).size()
+	# A gun of its own, held by identity rather than by type: this world
+	# already has crates on its shelves and some of them hold guns, so
+	# "a crate with a WeaponData in it" found one of those and reported
+	# a crate three thousand pixels away as the one just thrown.
+	var mine: WeaponData = WeaponData.new()
+	_check(ship.take(mine), "a module goes into the hold")
+	ship.jettison()
+	var crates: Array[Node] = get_tree().get_nodes_in_group(LootCrate.LOOT_GROUP)
+	_check(
+		crates.size() == before + 1,
+		"and throwing it overboard leaves a crate in the world (%d, was %d)" % [
+			crates.size(), before,
+		],
+	)
+	var thrown: LootCrate = null
+	for node: Node in crates:
+		var crate: LootCrate = node as LootCrate
+		if crate != null and crate.item == mine:
+			thrown = crate
+	_check(
+		thrown != null and thrown.loose
+		and thrown.global_position.distance_to(ship.global_position) < 200.0,
+		"with the module in it, loose, and next to the ship (%s)" % [
+			"missing" if thrown == null else "%.0f px" % [
+				thrown.global_position.distance_to(ship.global_position),
+			],
+		],
+	)
 
 
 func _check(condition: bool, what: String) -> void:

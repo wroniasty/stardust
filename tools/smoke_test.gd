@@ -9053,6 +9053,7 @@ func _check_hull_editor() -> void:
 	_check_the_crossing_ring_knows_its_place()
 	_check_the_ship_panel_is_four_bars()
 	_check_every_action_a_script_asks_for_exists()
+	_check_every_handler_has_a_wire()
 	_check_a_crate_loads_the_bay()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
@@ -10783,6 +10784,104 @@ func _check_a_crate_loads_the_bay() -> void:
 	_discard(yard)
 	loot.free()
 	_discard(ship)
+
+
+## Kazda funkcja `_on_*` musi byc gdzies podlaczona.
+##
+## Found by the pilot, three commits after I caused it: deleting the
+## hold screen took `_build_loadout` with it, and the one line in that
+## function nobody was thinking about was
+## `ship.jettisoned.connect(_on_jettisoned)`. The handler stayed. The
+## signal stayed. Everything thrown overboard emitted into nothing and
+## no crate ever appeared, and **nothing failed** -- every unit test
+## still passed, because a signal with no listener is not an error in
+## any language.
+##
+## So: a `_on_*` function whose name appears **nowhere else** in the
+## project is a wire that is not connected. Measured before it was
+## written -- the whole project has exactly one, which is the bug this
+## exists for, so it is a check with no tolerance to tune.
+##
+## Scenes are read too, because a connection made in the editor lives
+## in the `.tscn` as `method="_on_thing"` and is just as real as one
+## made in code.
+##
+## **Comments are stripped first**, and that is not tidiness: the first
+## version of this counted them, and the comment I wrote above the
+## restored wire quotes the call it is about -- so cutting the wire
+## again left the name mentioned twice and the check went green on the
+## exact bug it was written for. Caught by cutting the wire and running
+## it, which is the only way that kind of mistake is ever caught.
+func _check_every_handler_has_a_wire() -> void:
+	var defines: RegEx = RegEx.new()
+	defines.compile("(?m)^func (_on_[a-z0-9_]+)\\(")
+	var mentions: Dictionary = {}
+	var where: Dictionary = {}
+	var texts: Array[String] = []
+	for folder: String in ["res://scripts", "res://scenes", "res://tools"]:
+		for path: String in _files_under(folder, [".gd", ".tscn"]):
+			var text: String = FileAccess.get_file_as_string(path)
+			texts.append(_without_comments(text) if path.ends_with(".gd") else text)
+			if not path.ends_with(".gd"):
+				continue
+			for found: RegExMatch in defines.search_all(text):
+				var named: String = found.get_string(1)
+				mentions[named] = 0
+				where[named] = path.get_file()
+
+	for named: String in mentions:
+		var total: int = 0
+		for text: String in texts:
+			total += text.count(named)
+		mentions[named] = total
+
+	var dangling: Array[String] = []
+	for named: String in mentions:
+		if int(mentions[named]) <= 1:
+			dangling.append("%s in %s" % [named, where[named]])
+	_expect(
+		mentions.size() > 20 and dangling.is_empty(),
+		"every handler is connected to something (%d of them, %s)" % [
+			mentions.size(), "all wired" if dangling.is_empty() else str(dangling),
+		],
+	)
+
+
+## A script with its comments taken out, for a scan that must not be
+## fooled by prose. Everything from a `#` to the end of the line goes,
+## which also eats a `#` inside a string -- that can only lose a
+## mention, never invent one, and this project has none on a line that
+## also connects a signal.
+func _without_comments(text: String) -> String:
+	var out: PackedStringArray = PackedStringArray()
+	for line: String in text.split("
+"):
+		var hash_at: int = line.find("#")
+		out.append(line if hash_at < 0 else line.substr(0, hash_at))
+	return "
+".join(out)
+
+
+## Every file of these kinds under a folder, recursively.
+func _files_under(where: String, kinds: Array[String]) -> PackedStringArray:
+	var out: PackedStringArray = PackedStringArray()
+	var directory: DirAccess = DirAccess.open(where)
+	if directory == null:
+		return out
+	directory.list_dir_begin()
+	var entry: String = directory.get_next()
+	while not entry.is_empty():
+		var path: String = "%s/%s" % [where, entry]
+		if directory.current_is_dir():
+			out.append_array(_files_under(path, kinds))
+		else:
+			for kind: String in kinds:
+				if entry.ends_with(kind):
+					out.append(path)
+					break
+		entry = directory.get_next()
+	directory.list_dir_end()
+	return out
 
 
 ## Kazda akcja, o ktora pyta skrypt, musi byc w mapie wejscia.
