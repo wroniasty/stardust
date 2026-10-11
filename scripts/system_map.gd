@@ -1,6 +1,15 @@
 class_name SystemMap
 extends CanvasLayer
-## The system, seen from above. Key `M`.
+## The system, seen from above. `M` live, `Shift+M` to read.
+##
+## **Two modes, and the difference is whether the world is running.**
+## Shift+M is the map as it was: the world stops, the field goes nearly
+## black, clicks pick bodies and the pilot reads. M lays the same
+## picture over the running game at a fraction of its opacity, pauses
+## nothing, takes no input and covers nothing -- so a burn can be
+## watched bending the track while it is still being made. That is the
+## one thing the reading map cannot do, because the thing it does
+## first is stop time.
 ##
 ## Drawn from the **model**, not from what happens to be in the scene. That
 ## is the whole reason it can exist: the streaming manager keeps one planet
@@ -30,6 +39,30 @@ const PAD: float = 8.0
 ## thin lines on a dark field, and at 0.86 the flight HUD read straight
 ## through it and the two sets of numbers fought.
 const SCRIM: Color = Color(0.0, 0.0, 0.02, 0.96)
+
+## How much of the live map comes through, and how often it re-flies
+## the forecast.
+##
+## A third, because it has to be legible against a starfield **and**
+## never win an argument with the HUD on top of it. The reading map
+## gets 0.96 for the opposite reason: there, the map is the screen.
+##
+## Re-flown every few frames rather than every one: the forecast is a
+## three-hundred step integration, and the track it draws does not
+## change faster than the hand on the throttle.
+const LIVE_ALPHA: float = 0.33
+const LIVE_EVERY: int = 4
+
+## Which layer each map draws on.
+##
+## The reading map goes on top of everything because it *is* the screen.
+## The live one goes **under** the HUD: above the world and the veils
+## (8, 9) and below the flight HUD (10), so a faint orbit line crosses
+## the world and stops at the instruments rather than over them. At a
+## third opacity it would not hide a bar, but a bar with a line through
+## it is a bar somebody has to look at twice.
+const LIVE_LAYER: int = 9
+const FULL_LAYER: int = 21
 const ORBIT: Color = Color(0.24, 0.30, 0.40)
 const LABEL: Color = Color(0.56, 0.63, 0.72)
 const TEXT: Color = Color(0.78, 0.80, 0.83)
@@ -167,7 +200,7 @@ var _track: PackedVector2Array = PackedVector2Array()
 var _impact: Vector2 = Vector2.INF
 
 func _ready() -> void:
-	layer = 21
+	layer = FULL_LAYER
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_canvas = Control.new()
 	_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -185,31 +218,72 @@ func bind(system: StarSystem, ship: Node2D, manager: Node = null) -> void:
 	_manager = manager
 
 
+## Which map is up, if either.
+enum Mode { SHUT, LIVE, FULL }
+
+var _mode: int = Mode.SHUT
+var _ticks: int = 0
+
+
 func is_open() -> bool:
-	return _canvas.visible
+	return _mode != Mode.SHUT
 
 
-func toggle() -> void:
-	if is_open():
+## Whether the map is the one laid over a running world.
+func is_live() -> bool:
+	return _mode == Mode.LIVE
+
+
+## Opens the map in one mode, or shuts it if that mode is already up.
+##
+## Asking for the other mode switches rather than closing: a pilot who
+## wants to stop and read is not asking to shut the overlay first.
+func toggle(mode: int = Mode.FULL) -> void:
+	if _mode == mode:
 		close()
 		return
+	_mode = mode
 	_canvas.show()
-	# Exclusive: two paused panels stacked on each other is a trap, because
-	# the lower one looks exactly like a panel that stopped taking input.
-	PauseGate.hold_exclusive(self, get_tree())
+	# The live map lets everything through -- the world, the HUD, the
+	# clicks -- so what is left of it is a picture.
+	layer = LIVE_LAYER if is_live() else FULL_LAYER
+	if is_live():
+		_canvas.modulate = Color(1.0, 1.0, 1.0, LIVE_ALPHA)
+	else:
+		_canvas.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	if is_live():
+		# Nothing is paused and nothing is held. Two paused panels
+		# stacked on each other is a trap; so is one that pauses when
+		# the pilot asked to keep flying.
+		PauseGate.release(self, get_tree())
+	else:
+		PauseGate.hold_exclusive(self, get_tree())
 	_forecast()
 	_canvas.queue_redraw()
 
 
 func close() -> void:
+	_mode = Mode.SHUT
 	_canvas.hide()
 	PauseGate.release(self, get_tree())
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"toggle_map"):
-		toggle()
+	# The reading map first: `toggle_map` is bound to a bare M and
+	# matches Shift+M as well, because Godot ignores modifiers unless
+	# asked not to. Checking the fuller one first is cheaper than
+	# asking every call for an exact match.
+	if event.is_action_pressed(&"toggle_map_full"):
+		toggle(Mode.FULL)
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"toggle_map"):
+		toggle(Mode.LIVE)
+		get_viewport().set_input_as_handled()
+	elif is_live():
+		# Everything else belongs to the game underneath. The live map
+		# is a picture, and a picture that ate the zoom keys would be a
+		# map that stopped the pilot flying by it.
+		return
 	elif not is_open():
 		return
 	elif event.is_action_pressed(&"ui_cancel"):
@@ -232,7 +306,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_open():
+	# Live, the mouse is the pilot's: it aims, it fires, and it presses
+	# the controls in the corner. A map that picked a body out from
+	# under a trigger pull would be the opposite of not covering
+	# anything.
+	if not is_open() or is_live():
 		return
 	var click: InputEventMouseButton = event as InputEventMouseButton
 	if click == null or not click.pressed:
@@ -457,33 +535,69 @@ func from_map(at: Vector2, plan: Dictionary) -> Vector2:
 
 
 func _process(_delta: float) -> void:
-	if is_open():
-		_canvas.queue_redraw()
+	if not is_open():
+		return
+	# The live map re-flies its forecast as the ship flies, which is
+	# the whole reason it exists -- the reading map is looking at a
+	# stopped world and has nothing to re-fly. Neither has this one
+	# while some other panel holds the pause: this node runs while the
+	# tree is paused (it has to, or the reading map would not redraw),
+	# so without that question it would spend four hundred integration
+	# steps a few times a second arriving at the same answer behind the
+	# ship editor.
+	if is_live() and not PauseGate.held():
+		_ticks += 1
+		if _ticks >= LIVE_EVERY:
+			_ticks = 0
+			_forecast()
+	_canvas.queue_redraw()
 
 
 func _draw_map() -> void:
 	if _system == null:
 		return
 	var view: Vector2 = _canvas.size
-	_canvas.draw_rect(Rect2(Vector2.ZERO, view), SCRIM, true)
+	# No scrim on the live one: it is laid over a world that has to go
+	# on being visible, and a field of near-black with the whole thing
+	# faded on top of it is just a dimmer screen.
+	if not is_live():
+		_canvas.draw_rect(Rect2(Vector2.ZERO, view), SCRIM, true)
 	var font: Font = ModuleData.card_font()
 	var plan: Dictionary = layout(view)
+	# Nothing written at the edges while the game runs. Every corner the
+	# map writes in belongs to something on the HUD -- the bars top
+	# left, the readout top right, the controls along the bottom -- and
+	# two layers of small text in one corner is neither of them legible.
+	# What is left is the thing the live map is for: bodies, orbits and
+	# the track.
+	var chrome: bool = not is_live()
 
-	_text(font, Vector2(PAD, PAD + float(FONT_SIZE)), "SYSTEM %s" % _system.display_name, LABEL)
-	var hints: String = (
-		"M closes,  click picks,  right click marks,  wheel or + / - zooms"
-	)
-	if _picked != null:
-		hints += ",  Enter teleports (dev)"
-	_text(font, Vector2(PAD, view.y - PAD), hints, LABEL)
-	# Always, not only when zoomed: a map whose scale you have to infer is
-	# a map you cannot judge a distance on.
-	_text(
-		font,
-		Vector2(PAD, PAD + float(FONT_SIZE) * 2.5),
-		"reach %.0f px" % float(plan["reach"]),
-		LABEL,
-	)
+	if chrome:
+		_text(
+			font,
+			Vector2(PAD, PAD + float(FONT_SIZE)),
+			"SYSTEM %s" % _system.display_name,
+			LABEL,
+		)
+		# What shuts this one is the key that opened it, and M now does
+		# something else: it drops back to flying with the map still up.
+		# A screen that names the wrong exit is worse than one that names
+		# none, which is the rule in UI_STYLE section 11.
+		var hints: String = (
+			"%s or Esc closes,  M flies on,  click picks,  right click marks,  + / - zooms"
+			% HelpScreen.keys_for(&"toggle_map_full")
+		)
+		if _picked != null:
+			hints += ",  Enter teleports (dev)"
+		_text(font, Vector2(PAD, view.y - PAD), hints, LABEL)
+		# Always, not only when zoomed: a map whose scale you have to
+		# infer is a map you cannot judge a distance on.
+		_text(
+			font,
+			Vector2(PAD, PAD + float(FONT_SIZE) * 2.5),
+			"reach %.0f px" % float(plan["reach"]),
+			LABEL,
+		)
 
 	# Where the drive will not light, which is now one bubble per body
 	# rather than one ring round the lot. Before the orbits, because a
@@ -513,7 +627,7 @@ func _draw_map() -> void:
 	for body: SystemBody in _system.bodies:
 		_draw_body(body, to_map(_position_of(body), plan), float(plan["scale"]))
 
-	if _ship != null and is_instance_valid(_ship):
+	if chrome and _ship != null and is_instance_valid(_ship):
 		var holding: SystemBody = _system.holding(_ship.global_position, _clock())
 		var togo: float = _system.clearance_to(_ship.global_position, _clock())
 		_text(
@@ -531,7 +645,7 @@ func _draw_map() -> void:
 	# before the ship, which is the one thing that should sit on top of it.
 	if NavMarker.is_marked():
 		_draw_mark(to_map(NavMarker.marked, plan))
-		if _ship != null and is_instance_valid(_ship):
+		if chrome and _ship != null and is_instance_valid(_ship):
 			_text(
 				font,
 				Vector2(PAD, PAD + float(FONT_SIZE) * 5.5),
@@ -543,7 +657,8 @@ func _draw_map() -> void:
 	if _ship != null and is_instance_valid(_ship):
 		_draw_ship(to_map(_ship.global_position, plan))
 
-	_draw_readout(font, view)
+	if chrome:
+		_draw_readout(font, view)
 
 
 ## Where a body is this visit. Through the manager when there is one, so

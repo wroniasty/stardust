@@ -682,6 +682,43 @@ Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 
 ---
 
+## MAUX7: Mapa na żywo
+
+Cel: widzieć, jak odpalenie silnika zagina tor, w chwili, w której się je robi.
+
+- [x] **Dwa tryby jednej mapy, nie druga mapa.** `M` kładzie ten sam rysunek na
+  lecącym świecie, `Shift+M` otwiera mapę taką, jaka była. Jeden rysunek, jeden
+  układ, jeden prognostyk — wszystko, co je różni, to `Mode.LIVE` i `Mode.FULL`.
+  Poproszenie o drugi tryb **przełącza**, nie zamyka: pilot, który chce stanąć
+  i poczytać, nie prosi o zamknięcie nakładki.
+- [x] **Nakładka niczego nie zatrzymuje i niczego nie zasłania.** Bez pauzy
+  (`PauseGate` puszczony, nie trzymany), bez kurtyny pod spodem, alfa 0.33,
+  warstwa 9 — nad światem i welonami, **pod przyrządami**. Przy jednej trzeciej
+  krycia pasek by się przez nią przebił, ale pasek z kreską w poprzek to pasek,
+  na który trzeba spojrzeć drugi raz.
+- [x] **Nic przy krawędziach, póki świat leci.** Tytuł, skala, „za blisko",
+  odczyt wybranego ciała i linijka z klawiszami trafiają dokładnie w paski, w
+  róg przyrządów i w kolumnę przycisków. Zostają ciała, orbity, znacznik i tor.
+- [x] **Mysz i klawisze należą do pilota.** Nakładka nie wybiera ciał, nie
+  stawia znaczników i nie zjada zoomu — jedynym klawiszem, który bierze, jest
+  jej własny. Mapa, która łapie spust albo `+`, to mapa, która przestała być
+  tym, do czego jest: patrzeniem w czasie lotu.
+- [x] **Tor przeliczany co cztery klatki.** Mapa z pauzą liczy prognozę raz,
+  przy otwarciu, bo świat stoi; ta musi ją przelatywać, bo cały jej sens to
+  zobaczyć zmianę. Cztery klatki, a nie każda: to czterysta kroków całkowania,
+  a tor nie zmienia się szybciej niż ręka na drążku.
+- [x] Test naciska **prawdziwe klawisze z mapy wejścia**, nie wywołuje
+  `toggle()`. `toggle_map` to gołe `M`, a Godot dopasowuje gołe `M` także do
+  `Shift+M`, dopóki się go o to nie zapyta — sprawdzenie wywołujące metodę
+  przeszłoby na `M`, które otwiera mapę z pauzą. Każde twierdzenie jest
+  postawione dwa razy: raz tam, gdzie ma zachodzić, i raz tam, gdzie nie —
+  „tor się nie ruszył" i „nikt go nie przelicza" wyglądają z jednego pomiaru
+  identycznie.
+
+Gotowe, gdy: w locie widzę swój tor i to, co z nim robi silnik.
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.

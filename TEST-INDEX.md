@@ -45,6 +45,7 @@ camera, chords, energy, shot mods, energy balance, engine failures, hull
 outline, allocator, gimbal, gear module, ship fit-outs, workbench, creative
 tool, galaxy, jump (arming, balks, clearance, lane, kit, HUD, sequence,
 misjump), transit veil, save, system model, streaming, system tour, star,
+system map and the live overlay,
 boost, input bindings, sprite sheets, the dock's skin still.
 
 ## Failures vs. warnings

@@ -1315,6 +1315,7 @@ func _evaluate_phase() -> void:
 			_check_streaming()
 			_check_system_tour()
 			_check_system_map()
+			_check_the_live_map_does_not_stop_the_world()
 			_check_nav_marker()
 			_check_galaxy_chart()
 			_check_garrison()
@@ -7815,6 +7816,125 @@ func _check_system_map() -> void:
 
 	map.free()
 	pilot.free()
+
+
+## Mapa na zywo: M nad lecacym swiatem, Shift+M zatrzymana.
+##
+## Driven by pushing the **key events out of the input map** rather than
+## by calling `toggle()`, because the thing worth doubting is the
+## binding: `toggle_map` is a bare M, and Godot matches a bare M action
+## against Shift+M as well unless asked not to. A check that called
+## `toggle(Mode.LIVE)` would pass on an M that opened the paused map.
+##
+## The pair that matters in each assertion is live-and-then-full: every
+## claim about the live map is made twice, once where it should hold and
+## once where it should not, because "the forecast did not move" and
+## "nothing re-flies it" look identical from one measurement.
+func _check_the_live_map_does_not_stop_the_world() -> void:
+	var system: StarSystem = StarSystem.generate(20261011)
+	var ship: Ship = _spawn_ship()
+	ship.global_position = Vector2(80000.0, 10000.0)
+	ship.linear_velocity = Vector2(-150.0, 60.0)
+	var map: SystemMap = SystemMap.new()
+	root.add_child(map)
+	map.bind(system, ship, null)
+
+	_expect(not map.is_open() and not map.is_live(), "no map until a key is pressed")
+	_push_action_key(&"toggle_map")
+	_expect(
+		map.is_open() and map.is_live(),
+		"the bare map key lays the live one over the world",
+	)
+	_expect(
+		not PauseGate.held(),
+		"and the world keeps running under it",
+	)
+	_expect(
+		is_equal_approx(map._canvas.modulate.a, SystemMap.LIVE_ALPHA)
+		and map.layer < 10,
+		"faint, and under the instruments rather than over them (a %.2f, layer %d)" % [
+			map._canvas.modulate.a, map.layer,
+		],
+	)
+
+	# The keys the paused map owns belong to the game while the live one
+	# is up. Zoom is the one to try: the map answers it, the camera
+	# answers it, and only one of them should while the ship is flying.
+	map.set_zoom_level(2)
+	var rung: int = map.zoom_level()
+	_push_action_key(&"camera_zoom_in")
+	_expect(
+		map.zoom_level() == rung,
+		"the live map does not eat the zoom keys (rung %d)" % map.zoom_level(),
+	)
+
+	# The whole reason it exists: the track is re-flown as the ship
+	# flies, so a burn can be watched bending it.
+	var first: Vector2 = map.forecast()[0]
+	ship.global_position = Vector2(60000.0, 30000.0)
+	for _frame: int in range(SystemMap.LIVE_EVERY):
+		map._process(1.0 / 60.0)
+	_expect(
+		map.forecast()[0].is_equal_approx(ship.global_position)
+		and not map.forecast()[0].is_equal_approx(first),
+		"the live track re-flies itself from where the ship has got to",
+	)
+
+	# Shift switches rather than shutting: a pilot who wants to stop and
+	# read is not asking to close the overlay first.
+	_push_action_key(&"toggle_map_full")
+	_expect(
+		map.is_open() and not map.is_live() and PauseGate.held(),
+		"shift and the map key stops the world and reads",
+	)
+	_expect(
+		is_equal_approx(map._canvas.modulate.a, 1.0) and map.layer > 10,
+		"the paused map is the screen again, full and on top",
+	)
+	# And the paused one is the one that holds still and takes the keys.
+	var held: Vector2 = map.forecast()[0]
+	ship.global_position = Vector2(20000.0, 5000.0)
+	for _frame: int in range(SystemMap.LIVE_EVERY * 2):
+		map._process(1.0 / 60.0)
+	_expect(
+		map.forecast()[0].is_equal_approx(held),
+		"a paused map works its forecast out once",
+	)
+	rung = map.zoom_level()
+	_push_action_key(&"camera_zoom_in")
+	_expect(map.zoom_level() == rung + 1, "and answers the zoom keys itself")
+
+	_push_action_key(&"toggle_map")
+	_expect(
+		map.is_open() and map.is_live() and not PauseGate.held(),
+		"the bare key goes back to flying with the map up",
+	)
+	_push_action_key(&"toggle_map")
+	_expect(
+		not map.is_open() and not PauseGate.held(),
+		"and pressing it on the same map shuts it",
+	)
+
+	map.free()
+	_discard(ship)
+
+
+## Presses the key an action is bound to, through the viewport.
+##
+## The event comes out of the input map rather than from a keycode
+## written down here: a test that spells out the key is a second copy of
+## the binding, and the copy is what goes stale. Pushed rather than
+## handed to the handler, because `set_input_as_handled` is only legal
+## inside real input handling.
+func _push_action_key(action: StringName) -> void:
+	for event: InputEvent in InputMap.action_get_events(action):
+		var key: InputEventKey = event as InputEventKey
+		if key == null:
+			continue
+		var press: InputEventKey = key.duplicate()
+		press.pressed = true
+		root.get_viewport().push_input(press)
+		return
 
 
 ## The flight HUD, which is a picture now rather than eight rows of text.

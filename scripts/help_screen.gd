@@ -67,7 +67,8 @@ const LABELS: Array[Dictionary] = [
 	{"block": "VIEW", "action": &"camera_level", "says": "level the view"},
 
 	{"block": "SCREENS", "action": &"toggle_help", "says": "this screen"},
-	{"block": "SCREENS", "action": &"toggle_map", "says": "system map"},
+	{"block": "SCREENS", "action": &"toggle_map", "says": "map over the world"},
+	{"block": "SCREENS", "action": &"toggle_map_full", "says": "map, paused"},
 	{"block": "SCREENS", "action": &"toggle_galaxy_map", "says": "galaxy chart"},
 	{"block": "SCREENS", "action": &"toggle_editor", "says": "ship editor"},
 	{"block": "SCREENS", "action": &"editor_fit", "says": "editor: fit"},
@@ -178,6 +179,12 @@ func lines() -> Array[Dictionary]:
 ## First event only when there are several, plus the count: "Z" is more
 ## use on a crowded screen than "Z / DELETE", and the pilot who wants the
 ## other one can find it in the settings the day there are settings.
+##
+## **With the modifiers**, because two of these are the same key: the map
+## opens live on `M` and paused on `Shift+M`, and a screen that called
+## both of them "M" would be a screen that explains one of them wrongly.
+## `get_physical_keycode_with_modifiers()` renders "Shift+M" and plain
+## keys exactly as before (measured).
 static func keys_for(action: StringName) -> String:
 	if not InputMap.has_action(action):
 		return "?"
@@ -185,7 +192,7 @@ static func keys_for(action: StringName) -> String:
 	for event: InputEvent in InputMap.action_get_events(action):
 		var key: InputEventKey = event as InputEventKey
 		if key != null:
-			names.append(OS.get_keycode_string(key.physical_keycode))
+			names.append(OS.get_keycode_string(key.get_physical_keycode_with_modifiers()))
 			continue
 		var click: InputEventMouseButton = event as InputEventMouseButton
 		if click != null:

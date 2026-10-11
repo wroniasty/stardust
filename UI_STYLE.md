@@ -506,6 +506,18 @@ Wspólna reguła dla wszystkich trzech: **klawisze wypisane na dole ekranu**,
 zawsze, tą samą metryką. Ekran modalny, który nie mówi, jak z niego wyjść, jest
 błędem, a nie stylem.
 
+**Mapa systemu ma drugi tryb i on nie jest ekranem.** `M` kładzie ten sam
+rysunek na lecącym świecie przy alfie 0.33, pod warstwą przyrządów (9, czyli
+nad światem i pod HUD-em), `Shift+M` otwiera ekran opisany wyżej. Różnica jest
+jedna i jest nią czas: ekran go zatrzymuje, nakładka nie. Dlatego nakładka
+**nie pisze nic przy krawędziach** — tytuł, skala, odczyt wybranego ciała i
+linijka z klawiszami trafiłyby dokładnie w paski, w róg przyrządów i w kolumnę
+przycisków — **nie bierze myszy** (mysz celuje i naciska przyciski) i **nie
+bierze klawiszy** poza swoim własnym. Zostają ciała, orbity i tor, przeliczany
+co cztery klatki, żeby odpalenie silnika było widać na torze w chwili, w której
+się je robi. Nakładka nie jest modalna, więc reguła o wypisanych klawiszach jej
+nie dotyczy: nie ma z czego wychodzić, a `M` jest w ekranie pomocy.
+
 ---
 
 ## 12. Przyrząd jest widgetem, a widget wymaga modułu
