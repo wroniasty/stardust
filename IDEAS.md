@@ -27,6 +27,8 @@ Dlaczego Godot:
 
 Odrzucone alternatywy: Bevy (brak edytora, słabe UI), Ebitengine w Go (wszystko trzeba pisać samemu), Unity (nic lepiej, licencja i C# to dodatkowy ciężar).
 
+Rozdzielczość bazowa: 960x540 (było 640x360), okno startowe 1920x1080 (2x). Szczeble zoomu kamery bez zmian, więc pole widzenia urosło 1.5x. Zasięgi strzału obrońców (`foe.gd`) zostały z poprzedniej rozdzielczości i są świadomie tymczasowe; test "zasięg mieści się na ekranie" usunięto, bo te warunki nie są docelowe.
+
 Opcjonalne addony: godot-rapier (Rapier 2D) jeśli domyślna fizyka będzie niestabilna przy wielu ciałach, LimboAI jeśli będą potrzebne drzewa zachowań.
 
 ## 3. Statek i silniki

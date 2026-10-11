@@ -39,7 +39,7 @@ order, plus a dock check in the editor (~40 s in all) and fails on any engine er
 
 `smoke_test.gd` is one script with these check groups (`_check_*`):
 gravity field, atmosphere shells, terrain, weather, landing sites, determinism,
-weapons, weapon arcs, weapon types, scanner, reach vs. screen, foe markers,
+weapons, weapon arcs, weapon types, scanner, foe markers,
 cargo, crate physics, ejection, editor, pause gate, panels releasing the mouse,
 camera, chords, energy, shot mods, energy balance, engine failures, hull
 outline, allocator, gimbal, gear module, ship fit-outs, workbench, creative

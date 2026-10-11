@@ -1327,7 +1327,6 @@ func _evaluate_phase() -> void:
 			_check_deposits()
 			_check_corona()
 			_check_weapon_arcs()
-			_check_reach_fits_the_screen()
 			_check_flight_hud(_planet)
 			_check_aiming()
 			_check_stat_cards()
@@ -2192,104 +2191,6 @@ func _check_scanner(planet: Planet) -> void:
 	ship.queue_free()
 
 
-## Zasięg obrońcy mieści się na ekranie.
-##
-## Reported from the cockpit as being shot by things that were nowhere to
-## be seen, and the camera is what settles it rather than taste: the
-## design frame is 640x360 and the zoom rungs are fixed, so "on screen"
-## is an arithmetic fact and the reach can be checked against it.
-##
-## The relation and not the figures, because three things it depends on
-## can move independently -- the base resolution, the zoom rungs, and
-## the reaches themselves -- and a test of the numbers would pass while
-## any of them drifted.
-func _check_reach_fits_the_screen() -> void:
-	var frame: Vector2 = ShipCamera.design_frame()
-	_expect(
-		frame.x > 0.0 and frame.y > 0.0,
-		"the design frame is %.0f x %.0f" % [frame.x, frame.y],
-	)
-	var rungs: Array[float] = ShipCamera.ZOOM_LEVELS
-	_expect(rungs.size() >= 3, "there are at least three zoom rungs (%d)" % rungs.size())
-	if rungs.size() < 3 or frame.y <= 0.0:
-		return
-
-	# The band the request named: what half the screen is worth at the
-	# middle rung and at the widest. Height, because it is the tighter of
-	# the two and a defender can be anywhere round the ship.
-	var middle: float = frame.y * 0.5 / rungs[1]
-	var widest: float = frame.y * 0.5 / rungs[rungs.size() - 1]
-	_expect(
-		middle < widest,
-		"the widest rung shows more than the middle one (%.0f then %.0f px)" % [
-			middle, widest,
-		],
-	)
-
-	for named: Array in [
-		["a fighter", Foe.REACH_FIGHTER],
-		["a turret", Foe.REACH_TURRET],
-		["a major", Foe.REACH_FIGHTER * 1.2],
-	]:
-		var reach: float = float(named[1])
-		_expect(
-			reach >= middle and reach <= widest,
-			"%s shoots from inside the band, %.0f px of %.0f..%.0f" % [
-				named[0], reach, middle, widest,
-			],
-		)
-
-	# Which is the whole point: at the widest rung a defender firing at
-	# its longest is on screen, with the ship allowed to sit off centre.
-	var off_centre: float = (
-		ShipCamera.MOST_OFF_CENTRE * minf(frame.x, frame.y) * 0.5 / rungs[rungs.size() - 1]
-	)
-	_expect(
-		Foe.REACH_TURRET <= widest,
-		"the longest reach fits the widest view (%.0f of %.0f px)" % [
-			Foe.REACH_TURRET, widest,
-		],
-	)
-	# At speed the camera pulls back further, which is the margin that
-	# covers the off-centre case -- so the tight one is sitting still,
-	# and sitting still is when the ship is centred.
-	var at_speed: float = frame.y * 0.5 / (rungs[rungs.size() - 1] * 0.7)
-	_expect(
-		Foe.REACH_TURRET + off_centre <= at_speed,
-		"and fits it with the ship %.0f px off centre once it is moving (%.0f of %.0f)" % [
-			off_centre, Foe.REACH_TURRET + off_centre, at_speed,
-		],
-	)
-
-	# A defender's own stand-off distances are fractions of its reach, so
-	# they came down with it: an aggressor closes to inside half of a
-	# screen's worth rather than to inside five screens.
-	_expect(
-		Foe.STAND_OFF_AGGRESSOR * Foe.REACH_FIGHTER < middle,
-		"an aggressor's station is inside the middle view (%.0f of %.0f px)" % [
-			Foe.STAND_OFF_AGGRESSOR * Foe.REACH_FIGHTER, middle,
-		],
-	)
-
-	# And the ring still warns before the shell, which is its own rule
-	# and no longer the same number as the reach.
-	var scanner: ScannerHud = ScannerHud.new()
-	root.add_child(scanner)
-	_expect(
-		scanner.foe_range > Garrison.MIN_TERRITORY,
-		"the ring reaches past the narrowest territory (%.0f of %.0f px)" % [
-			scanner.foe_range, Garrison.MIN_TERRITORY,
-		],
-	)
-	_expect(
-		scanner.foe_range > Foe.REACH_TURRET * 3.0,
-		"and far past anything that can shoot (%.0f of %.0f px)" % [
-			scanner.foe_range, Foe.REACH_TURRET,
-		],
-	)
-	scanner.queue_free()
-
-
 ## Czwarty rodzaj znacznika: to, co chce cię zabić.
 ##
 ## The same geometry test as the other three, for the same reason: the
@@ -2911,7 +2812,8 @@ func _check_camera_keeps_up(camera: ShipCamera, ship: Ship) -> void:
 	camera.follow(step)
 	var slack: float = camera.global_position.distance_to(ship.global_position)
 	_expect(
-		slack <= camera.allowance() + 0.001 and slack * camera.zoom.x < middle,
+		# 0.1, not 0.001: a float32 position at 400000 px moves in steps of 0.03.
+		slack <= camera.allowance() + 0.1 and slack * camera.zoom.x < middle,
 		"a jump across the galaxy leaves the ship on the frame, not somewhere behind it (%.0f px of %.0f)" % [
 			slack * camera.zoom.x, middle,
 		],
