@@ -257,6 +257,8 @@ static func _preset_dock(dock: PresetEditor) -> int:
 		],
 	)
 
+	failures += _swapping_a_row(dock)
+
 	failures += _says(filled >= 0, "the preset has a bay with a module in it")
 	if filled >= 0:
 		_press_stats(dock._bay_rows, filled)
@@ -420,6 +422,146 @@ static func _layer_switch(dock: Node, which: String) -> int:
 	switch.select(HullView.Layer.BOTH)
 	switch.item_selected.emit(HullView.Layer.BOTH)
 	return failures
+
+
+## Czy podmiana rzeczy w wierszu przebudowuje ten wiersz.
+##
+## Reported from the editor: an empty bay given a module out of the
+## dropdown kept its override button greyed out. The row had captured
+## `bay.installed` when it was built -- null at the time -- and nothing
+## rebuilt it, so the button, the panel and the pin boxes all still
+## belonged to the module that was not there.
+##
+## The bay is where it showed, and the engine row is where it mattered:
+## there the button stays enabled across a swap, the panel opens, and
+## what it shows is the **previous** engine's fields. A check that only
+## looked at the reported symptom would have left that.
+##
+## Picked through the dropdown's own signal rather than by writing to
+## the fit, because what was broken is the wiring between the two.
+static func _swapping_a_row(dock: PresetEditor) -> int:
+	var failures: int = 0
+	var index: int = -1
+	for i: int in range(dock._editing.bays.size()):
+		if dock._editing.bays[i] != null and dock._editing.bays[i].installed == null:
+			index = i
+			break
+	if index < 0:
+		return _says(false, "the preset has an empty bay to fill")
+
+	var pick: OptionButton = _first_option(dock._bay_rows.get_child(index))
+	var button: Button = _stats_toggle(dock._bay_rows.get_child(index))
+	failures += _says(
+		pick != null and button != null and button.disabled,
+		"an empty bay offers nothing to override",
+	)
+	if pick == null:
+		return failures
+
+	# The second entry: the first is "(pusta)".
+	pick.select(1)
+	pick.item_selected.emit(1)
+	failures += _says(
+		dock._editing.bays[index].installed != null,
+		"picking a module puts it in the bay",
+	)
+	# The same button object, not a new one: nothing was rebuilt, which
+	# is why this needs no waiting for a deferred call and why the
+	# dropdown that emitted is still alive to be clicked again.
+	var after: Button = _stats_toggle(dock._bay_rows.get_child(index))
+	failures += _says(
+		after == button and not after.disabled,
+		"and the override button on that very row wakes up with it",
+	)
+
+	# And the pins. A field the new thing has not got is invisible in
+	# the panel and fatal at `fault_in`, so it goes.
+	var fit: BayFit = dock._editing.bays[index]
+	fit.overrides = {"bulk": 9.0, "no_such_field": 1.0}
+	dock.refresh_stats("bays:%d" % index)
+	failures += _says(
+		after.text.begins_with("override ("),
+		"pinning a field shows on the shut button (%s)" % after.text,
+	)
+	pick.select(0)
+	pick.item_selected.emit(0)
+	failures += _says(
+		fit.overrides.is_empty(),
+		"emptying the bay drops the pins that had nothing to pin to (%s)" % fit.overrides,
+	)
+
+	# And the case nobody reported, because it does not look broken: an
+	# engine row keeps its button enabled across a swap, so the panel
+	# opens and shows fields. Which engine's fields is the question, and
+	# every `EngineData` has the same field **names** -- so this asks the
+	# form what resource it is showing rather than reading its captions,
+	# which would agree with either answer.
+	failures += _engine_row_follows_its_engine(dock)
+	return failures
+
+
+static func _engine_row_follows_its_engine(dock: PresetEditor) -> int:
+	var key: String = "mounts:0"
+	if dock._editing.mounts.is_empty() or not dock._stats_rows.has(key):
+		return _says(false, "the preset has an engine row to swap")
+	# The **second** dropdown. An engine row carries two -- where the
+	# mount goes, then which engine -- and taking the first one changed
+	# the place and left the engine alone, which this check caught by
+	# reporting that the panel had not followed a swap that never
+	# happened.
+	var picks: Array[OptionButton] = _options_under(dock._mount_rows.get_child(0))
+	if picks.size() < 2:
+		return _says(false, "the engine row has a catalogue dropdown (%d)" % picks.size())
+	var pick: OptionButton = picks[1]
+
+	# Opened the way the mouse opens it, so the panel under test is the
+	# one a designer is looking at.
+	_press_stats(dock._mount_rows, 0)
+	var was: Resource = _form_subject(dock._stats_rows[key]["indent"])
+	var failures: int = _says(
+		was != null and was == dock._editing.mounts[0].engine,
+		"an open engine panel shows the engine that is in the mount",
+	)
+
+	# Something else out of the catalogue: whichever entry is not the
+	# one already fitted.
+	var other: int = 1 if pick.selected == 0 else 0
+	pick.select(other)
+	pick.item_selected.emit(other)
+	var now: Resource = _form_subject(dock._stats_rows[key]["indent"])
+	failures += _says(
+		now != null and now == dock._editing.mounts[0].engine and now != was,
+		"and follows the swap instead of showing the one that left",
+	)
+	_press_stats(dock._mount_rows, 0, false)
+	return failures
+
+
+## Which resource the form inside a row's panel is built on.
+static func _form_subject(where: Node) -> Resource:
+	for child: Node in where.get_children():
+		if child is ResourceForm:
+			return child._resource
+		var deeper: Resource = _form_subject(child)
+		if deeper != null:
+			return deeper
+	return null
+
+
+## Every dropdown in a row, in the order they were added.
+static func _options_under(where: Node) -> Array[OptionButton]:
+	var out: Array[OptionButton] = []
+	for child: Node in where.get_children():
+		var pick: OptionButton = child as OptionButton
+		if pick != null:
+			out.append(pick)
+		out.append_array(_options_under(child))
+	return out
+
+
+static func _first_option(where: Node) -> OptionButton:
+	var all: Array[OptionButton] = _options_under(where)
+	return all[0] if not all.is_empty() else null
 
 
 ## Presses the override toggle on one row, the way a mouse would, and

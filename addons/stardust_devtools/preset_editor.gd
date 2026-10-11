@@ -66,6 +66,16 @@ var _balance: Dictionary = {}
 ## Kept across a rebuild, because every edit rebuilds the rows and a
 ## panel that shut itself on each keystroke would be unusable.
 var _open_rows: Dictionary = {}
+
+## Which field holds the thing a row is about, per list on the preset.
+## One table, because three setters and three lookups ask.
+const FIELD_OF: Dictionary = {
+	"mounts": &"engine", "guns": &"weapon", "bays": &"installed",
+}
+
+## Each row's override button and the box its panel goes in, by row key.
+## Rebuilt with the rows.
+var _stats_rows: Dictionary = {}
 var _verdict: Label = null
 
 var _paths: Array[String] = []
@@ -405,6 +415,7 @@ func _fill_form() -> void:
 ## removal shifts every later one: rebuilding is shorter than keeping
 ## the indices honest, and these lists are four rows long.
 func _rebuild_rows() -> void:
+	_stats_rows.clear()
 	for parent: VBoxContainer in [_mount_rows, _gun_rows, _bay_rows]:
 		for child: Node in parent.get_children():
 			parent.remove_child(child)
@@ -454,8 +465,7 @@ func _mount_row(index: int) -> Control:
 	row.add_child(scale)
 
 	return _with_stats(
-		row, "mounts:%d" % index, fit.engine, fit.overrides,
-		func() -> void: _drop(&"mounts", index),
+		row, "mounts:%d" % index, func() -> void: _drop(&"mounts", index),
 	)
 
 
@@ -485,8 +495,7 @@ func _gun_row(index: int) -> Control:
 	))
 
 	return _with_stats(
-		row, "guns:%d" % index, fit.weapon, fit.overrides,
-		func() -> void: _drop(&"guns", index),
+		row, "guns:%d" % index, func() -> void: _drop(&"guns", index),
 	)
 
 
@@ -524,35 +533,102 @@ func _catalogue_pick(
 ## engine row did not. Nothing is freed now, and the panel is built the
 ## first time it is asked for rather than for every row that has one.
 func _with_stats(
-	row: HBoxContainer, row_key: String, what: Resource,
-	overrides: Dictionary, remove: Callable
+	row: HBoxContainer, row_key: String, remove: Callable
 ) -> Control:
 	var holder: VBoxContainer = VBoxContainer.new()
 	var indent: MarginContainer = MarginContainer.new()
 	indent.add_theme_constant_override("margin_left", 16)
-	indent.visible = bool(_open_rows.get(row_key, false))
 
 	var button: Button = Button.new()
 	button.toggle_mode = true
-	button.button_pressed = indent.visible
-	button.text = (
-		"override" if overrides.is_empty() else "override (%d)" % overrides.size()
-	)
 	button.tooltip_text = "nadpisz pojedyncze pola tej czesci w tym presecie"
-	button.disabled = what == null
 	button.toggled.connect(func(on: bool) -> void:
 		_open_rows[row_key] = on
 		if on and indent.get_child_count() == 0:
-			indent.add_child(_stats_form(what, overrides))
+			indent.add_child(
+				_stats_form(_part_of(row_key), _overrides_of(row_key))
+			)
 		indent.visible = on)
 	row.add_child(button)
 	row.add_child(_remover(remove))
 
-	if indent.visible and what != null:
-		indent.add_child(_stats_form(what, overrides))
+	_stats_rows[row_key] = {"button": button, "indent": indent}
 	holder.add_child(row)
 	holder.add_child(indent)
+	refresh_stats(row_key)
 	return holder
+
+
+## The resource a row's override panel is about, looked up **now**.
+##
+## Asked rather than remembered, which is the whole of the fix for a bug
+## reported from the editor: an empty bay given a module out of its
+## dropdown kept a greyed-out override button, because the row had
+## captured `bay.installed` -- null -- when it was built. The bay is
+## where it showed and the engine row is where it would have mattered,
+## since there the button stays enabled across a swap and the panel
+## opens on the **previous** engine's fields.
+##
+## Rebuilding the row on every swap was the other answer and a worse
+## one: it frees the dropdown that is emitting, which is how the stats
+## toggle broke the first time it tried, and it throws away six controls
+## to update one caption.
+func _part_of(row_key: String) -> Resource:
+	var fit: Resource = _fit_of(row_key)
+	if fit == null:
+		return null
+	return fit.get(FIELD_OF[row_key.get_slice(":", 0)])
+
+
+func _overrides_of(row_key: String) -> Dictionary:
+	var fit: Resource = _fit_of(row_key)
+	if fit == null:
+		return {}
+	var pinned: Variant = fit.get(&"overrides")
+	return pinned if pinned is Dictionary else {}
+
+
+func _fit_of(row_key: String) -> Resource:
+	if _editing == null:
+		return null
+	var list: Variant = _editing.get(row_key.get_slice(":", 0))
+	if not (list is Array):
+		return null
+	var index: int = int(row_key.get_slice(":", 1))
+	if index < 0 or index >= (list as Array).size():
+		return null
+	return (list as Array)[index]
+
+
+## Puts a row's override button, and its panel if it is open, back in
+## step with whatever the row is about now.
+##
+## Public because `_set_bay` and its two siblings call it after a
+## dropdown changes the thing, and because the dock check calls it to
+## read what the pilot would see.
+func refresh_stats(row_key: String) -> void:
+	var parts: Dictionary = _stats_rows.get(row_key, {})
+	if parts.is_empty():
+		return
+	var button: Button = parts["button"]
+	var indent: MarginContainer = parts["indent"]
+	var what: Resource = _part_of(row_key)
+	var overrides: Dictionary = _overrides_of(row_key)
+	button.disabled = what == null
+	button.text = (
+		"override" if overrides.is_empty() else "override (%d)" % overrides.size()
+	)
+	# Whatever was in the panel belonged to the old thing, so it goes
+	# whether or not the panel is open -- a shut panel that reopens on
+	# stale rows is the same lie, told later.
+	for child: Node in indent.get_children():
+		indent.remove_child(child)
+		child.queue_free()
+	var open: bool = what != null and bool(_open_rows.get(row_key, false))
+	indent.visible = open
+	button.set_pressed_no_signal(open)
+	if open:
+		indent.add_child(_stats_form(what, overrides))
 
 
 ## The panel itself. The dictionary is held by reference: the form
@@ -641,8 +717,7 @@ func _bay_row(index: int) -> Control:
 	# the hole **and** what the module weighs, so pinning it moves the
 	# centre of mass drawn beside this row.
 	return _with_stats(
-		row, "bays:%d" % index, bay.installed, bay.overrides,
-		func() -> void: _drop(&"bays", index),
+		row, "bays:%d" % index, func() -> void: _drop(&"bays", index),
 	)
 
 
@@ -708,6 +783,7 @@ func _set_mount(index: int, field: StringName, value: Variant) -> void:
 	if _filling or _editing == null or index >= _editing.mounts.size():
 		return
 	_editing.mounts[index].set(field, value)
+	_swapped("mounts:%d" % index, field)
 	_changed()
 
 
@@ -727,6 +803,7 @@ func _set_gun(index: int, field: StringName, value: Variant) -> void:
 	if _filling or _editing == null or index >= _editing.guns.size():
 		return
 	_editing.guns[index].set(field, value)
+	_swapped("guns:%d" % index, field)
 	_changed()
 
 
@@ -734,7 +811,46 @@ func _set_bay(index: int, field: StringName, value: Variant) -> void:
 	if _filling or _editing == null or index >= _editing.bays.size():
 		return
 	_editing.bays[index].set(field, value)
+	_swapped("bays:%d" % index, field)
 	_changed()
+
+
+## Called when a row's dropdown may have changed the **thing** the row
+## is about, rather than one of the numbers beside it.
+##
+## Two things then have to happen. The row's button and panel have to
+## come back into step, which `refresh_stats` does by asking rather than
+## by rebuilding anything.
+##
+## And the pins have to be checked against what is there now. A pin
+## naming a field the new resource has not got is **invisible** -- the
+## form only draws fields the resource declares -- while
+## `ShipFitout.fault_in` refuses the preset over it, so the save button
+## goes dead and points at something nobody can see. Pins the new
+## resource shares are kept, because a designer who swaps one autocannon
+## for another did not ask to lose their tuning.
+func _swapped(row_key: String, field: StringName) -> void:
+	if field != FIELD_OF.get(row_key.get_slice(":", 0), &""):
+		return
+	var fit: Resource = _fit_of(row_key)
+	var overrides: Variant = fit.get(&"overrides") if fit != null else null
+	if overrides is Dictionary:
+		var now: Resource = _part_of(row_key)
+		for key: Variant in (overrides as Dictionary).keys():
+			if now == null or not _has_field(now, StringName(key)):
+				(overrides as Dictionary).erase(key)
+	refresh_stats(row_key)
+
+
+## Whether a resource actually declares this field.
+static func _has_field(what: Resource, named: StringName) -> bool:
+	for property: Dictionary in what.get_property_list():
+		if (
+			StringName(property["name"]) == named
+			and (int(property["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0
+		):
+			return true
+	return false
 
 
 func _add_mount() -> void:

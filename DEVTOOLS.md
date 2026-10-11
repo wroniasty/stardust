@@ -296,6 +296,20 @@ zapis po prawej.
   bo nie ma czego nadpisywać. Moduł dostaje kopię nawet bez przypięć — to
   starsze od nadpisań i celowe: moduł obrywa w locie, a zapis przez
   referencję zmieniłby katalog na resztę sesji.
+- [x] **Wiersz pyta, czym jest, zamiast to pamiętać.** Zgłoszone z edytora:
+  pustej zatoce wybranej z listy moduł zostawał wygaszony guzik „override".
+  Wiersz złapał `bay.installed` przy budowie — wtedy `null` — i nic go potem
+  nie odświeżało. Zatoka to miejsce, w którym było **widać**; wiersz silnika
+  to miejsce, w którym **boliało**, bo tam guzik zostaje aktywny, panel się
+  otwiera i pokazuje pola **poprzedniego** silnika. Teraz `_part_of(klucz)`
+  pyta o zasób na bieżąco, a `refresh_stats` ustawia guzik i przebudowuje
+  otwarty panel — bez odbudowy wiersza, która zwalniałaby listę emitującą
+  sygnał (tak samo, jak raz już się przełącznikowi staty zdarzyło).
+- [x] Przy podmianie **spinają się też przypięcia**: pin na pole, którego nowy
+  zasób nie ma, jest niewidoczny (formularz rysuje tylko pola zasobu), a
+  `fault_in` odrzuca za niego cały preset — więc zapis gasł i wskazywał na
+  coś, czego nikt nie widzi. Wspólne pola zostają: kto podmienia jeden
+  autocannon na drugi, nie prosił o utratę strojenia.
 - [x] Przełącznik „override" na wierszu pokazuje i chowa panel (z licznikiem
   przypięć, żeby zamknięty wiersz też się przyznawał), a w panelu każde pole
   ma checkbox. Zaznaczenie zasiewa wartością z katalogu, więc samo włączenie
