@@ -229,18 +229,25 @@ nie trzeba mówić, ile ma piksel cyfra. `UiDraw.ladder_width()` zwraca tę sam�
 liczbę, żeby wywołujący mógł oddać resztę panelu czemuś innemu.
 
 **3. Pasek z podziałką znaczącą.** Wysoki na **11 px**, bez podpisu, z własną
-wartością wypisaną **na nim**, do prawej. Etykieta i pasek obok siebie były dwoma
-odczytami jednej liczby jedno pod drugim; został ten, który odpowiada rzutem
-oka, a liczba weszła do środka. Cyfra bierze kolor z tego, **co jest pod nią**:
-ciemne tło panelu tam, gdzie wypełnienie do niej doszło, kolor paska tam, gdzie
-nie — jedno porównanie, i tyle wystarczy, żeby liczba była czytelna na obu
-końcach paska jasnego z jednej strony i prawie czarnego z drugiej.
+wartością wypisaną **na nim**, wyśrodkowaną, na własnej ciemnej płytce. Etykieta
+i pasek obok siebie były dwoma odczytami jednej liczby jedno pod drugim; został
+ten, który odpowiada rzutem oka, a liczba weszła do środka. Płytka kosztuje
+jeden prostokąt i czyta się nad czymkolwiek — pierwsza wersja dobierała kolor
+cyfry od tego, czy wypełnienie już pod nią doszło, co daje bladą cyfrę na jasnym
+pasku i liczbę zmieniającą kolor w trakcie napełniania.
 
-Bez podpisów **kolejność jest jedyną tożsamością paska**, więc jest stała:
-kadłub, ciepło, energia, napęd skokowy. Kadłub i energia są zawsze (pułapka 1
-z sekcji 12: nie wolno ukryć tego, co zabija), ciepło pojawia się dopiero, gdy
-jest, a napęd — gdy się ładuje. Pasek, który się pojawia, **spycha niższe w
-dół** zamiast lądować tam, gdzie akurat było miejsce.
+**Procent czy ilość — zależy od decyzji, którą pilot podejmuje.** Kadłub i
+ciepło nie mają jednostki, na którą dałoby się zareagować, więc mówią udział.
+Energia i paliwo mają: pytania brzmią „czy starczy na jeszcze jeden strzał" i
+„czy dolecę", a żadne z nich nie jest ułamkiem czegokolwiek — więc mówią ile.
+
+Bez podpisów **kolejność jest jedyną tożsamością paska**, więc jest stała i
+zapisana w jednym miejscu (`FlightHud.BARS`): kadłub, ciepło, energia, paliwo,
+napęd skokowy. Kadłub, energia i paliwo są zawsze (pułapka 1 z sekcji 12: nie
+wolno ukryć tego, co zabija), ciepło pojawia się dopiero, gdy jest, a napęd —
+gdy się ładuje. Pasek, który się pojawia, **spycha niższe w dół** zamiast
+lądować tam, gdzie akurat było miejsce. Panel musi być wysoki na wszystkie
+naraz: pięć po `11 + 1` to równe sześćdziesiąt, czyli cały róg.
 
  Energia: **komórki, nie gładkie
 wypełnienie**, a podziałka jest co koszt jednego strzału. Pilot widzi „mam trzy

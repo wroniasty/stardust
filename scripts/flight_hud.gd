@@ -33,11 +33,25 @@ const CAUTION_FRACTION: float = 0.6
 ## the one that answers at a glance, so the number moved into it and
 ## the label went. Four unlabelled bars in a fixed order are learned
 ## once, and after that a colour at a height is the reading.
-const BAR_HEIGHT: float = 11.0
-const BAR_GAP: float = 2.0
+## Every bar this panel can show, in the order it shows them.
+##
+## Written down once because without labels the order **is** the
+## identity of a bar, and because the panel has to be tall enough for
+## all of them at once -- which is a fact about this list rather than a
+## number to keep in step with it by hand.
+const BARS: Array[StringName] = [&"hull", &"heat", &"energy", &"fuel", &"jump"]
 
-## How far the figure sits from the bar's right-hand end.
-const BAR_TEXT_PAD: float = 3.0
+const BAR_HEIGHT: float = 11.0
+
+## One pixel between them, which is what five bars in a sixty pixel
+## panel leaves: `5 * (11 + 1)` is exactly sixty. The height went to
+## the bars rather than to the gaps because the height is what holds
+## the figure.
+const BAR_GAP: float = 1.0
+
+## How much air the figure gets either side of itself, inside the plate
+## it is written on.
+const BAR_TEXT_PAD: float = 2.0
 
 ## The warning band: where it sits, and how much air it gets.
 ##
@@ -612,14 +626,20 @@ func _draw_ship_corner(font: Font, at: Rect2) -> void:
 	# coming up. Shown when asked for and refused as well as when
 	# running -- "nothing happened when I pressed it" has to have an
 	# answer on the screen, and the answer is an empty pool.
-	if _ship.boost_command:
+	# The two rows below the bars are conditional and so are two of the
+	# bars, so in the worst case -- hot, charging, boosting, alongside
+	# a dock -- there is no room left for them. Dropped rather than
+	# drawn past the bottom edge, where they would land on the
+	# altitude tape.
+	if _ship.boost_command and y + ROW <= at.end.y:
 		UiDraw.row(
 			_canvas, font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x,
 			"BOOST", "ON" if _ship.boost_active else "--",
 			_ink.caution if _ship.boost_active else _ink.alarm, _ink.label,
 		)
 		y += ROW
-	_draw_dock(font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x)
+	if y + ROW <= at.end.y:
+		_draw_dock(font, Vector2(at.position.x, y + float(UiFont.BODY)), at.size.x)
 
 
 ## One bar with its figure on it, and where the next one starts.
@@ -640,16 +660,29 @@ func _draw_bar(
 		)
 	_canvas.draw_rect(box, _ink.edge, false, 1.0)
 	if not says.is_empty():
+		# Centred, on a plate of its own. The first version put the
+		# figure at the right-hand end and chose its colour from
+		# whether the fill had reached it, which is one comparison and
+		# two ways to be nearly unreadable: pale ink on a bright bar,
+		# and a number that changes colour as the bar fills past it.
+		# A plate costs one rectangle and is legible over anything.
 		var wide: float = UiDraw.text_width(font, says)
-		var left: float = box.end.x - BAR_TEXT_PAD - wide
+		var left: float = roundf(box.position.x + (box.size.x - wide) * 0.5)
+		_canvas.draw_rect(
+			Rect2(
+				Vector2(left - BAR_TEXT_PAD, box.position.y + 1.0),
+				Vector2(wide + BAR_TEXT_PAD * 2.0, box.size.y - 2.0),
+			),
+			_ink.over(_ink.scrim, 0.85),
+			true,
+		)
 		_canvas.draw_string(
 			font,
 			UiDraw.snap(Vector2(
 				left, box.position.y + (box.size.y + float(UiFont.BODY)) * 0.5 - 1.0
 			)),
 			says,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY,
-			_ink.scrim if box.position.x + across > left else ink,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, _ink.value,
 		)
 	return box.end.y + BAR_GAP
 
@@ -664,8 +697,8 @@ func _draw_bar(
 ## conditional ones come up when they should. Each entry is
 ## `{kind, fill, ink, says}`.
 ##
-## Hull and energy are always there -- they are the two that can end
-## the flight, and UI_STYLE section 12 forbids a build hiding either.
+## Hull, energy and fuel are always there -- they are what ends a
+## flight, and UI_STYLE section 12 forbids a build hiding any of them.
 ## Heat is absent at zero, because a gauge reading nothing through
 ## ordinary flight is a gauge the pilot learns to skip. The drive is
 ## absent unless it is charging, which is the only time it has
@@ -694,13 +727,26 @@ func ship_bars() -> Array[Dictionary]:
 			"says": "%.0f%%" % (heat * 100.0),
 		})
 
+	# Energy and fuel say **how much**, not what fraction. A percentage
+	# is the right answer for hull and for heat, which have no units a
+	# pilot acts on; these two have, and the decisions are "can I take
+	# another shot" and "can I get there" -- neither of which is a
+	# share of anything.
 	var capacity: float = _ship.energy_capacity()
 	if capacity > 0.0:
 		var charge: float = clampf(_ship.energy / capacity, 0.0, 1.0)
 		out.append({
 			"kind": &"energy", "fill": charge,
 			"ink": _ink.inert if _ship.energy_waiting() else _ink.nav,
-			"says": "%.0f%%" % (charge * 100.0),
+			"says": "%.0f" % _ship.energy,
+		})
+
+	var tank: float = _ship.fuel_capacity()
+	if tank > 0.0:
+		out.append({
+			"kind": &"fuel", "fill": clampf(_ship.fuel / tank, 0.0, 1.0),
+			"ink": _ink.caution if _ship.fuel < tank * 0.2 else _ink.ok,
+			"says": "%.0f" % _ship.fuel,
 		})
 
 	if _jump != null and is_instance_valid(_jump):

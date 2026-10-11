@@ -623,9 +623,15 @@ Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
 
 ### Panel statku: cztery paski
 
-- [x] Bez podpisów, 11 px wysokości, wartość wypisana **na pasku**. Stała
-  kolejność od góry: **kadłub, ciepło, energia, napęd skokowy** — bez słów
-  kolejność jest jedyną tożsamością paska, więc jest tym, czego pilnuje test.
+- [x] Bez podpisów, 11 px wysokości, wartość wyśrodkowana **na pasku**, na
+  własnej ciemnej płytce. Stała kolejność od góry: **kadłub, ciepło, energia,
+  paliwo, napęd skokowy** — bez słów kolejność jest jedyną tożsamością paska,
+  więc jest zapisana raz w `BARS` i to jej pilnuje test. Pięć po `11 + 1` to
+  równe 60 px, czyli cały róg; szósty pasek wywala sprawdzenie, zanim kogokolwiek
+  zaskoczy na ekranie.
+- [x] **Energia i paliwo pokazują ilość, nie procent.** Kadłub i ciepło nie mają
+  jednostki, na którą dałoby się zareagować; te dwa mają, a pytania brzmią „czy
+  starczy na strzał" i „czy dolecę".
 - [x] **Energia przeniosła się z dołu ekranu**, z karbami i czerwoną ramką
   odmowy. `EnergyHud` zniknieł — jeden właściciel tego rogu zamiast dwóch
   warstw rysujących w jedno miejsce. Karby zostają, bo to reguła sekcji 6 dla

@@ -10014,10 +10014,12 @@ func _check_the_ship_panel_is_four_bars() -> void:
 	var kinds: Array[StringName] = []
 	for one: Dictionary in hud.ship_bars():
 		kinds.append(one["kind"])
-	var cool: Array[StringName] = [&"hull", &"energy"]
+	var cool: Array[StringName] = [&"hull", &"energy", &"fuel"]
 	_expect(
 		kinds == cool,
-		"a cool ship with no drive charging shows hull and energy (%s)" % str(kinds),
+		"a cool ship with no drive charging shows hull, energy and fuel (%s)" % [
+			str(kinds),
+		],
 	)
 
 	# Heat appears between them, not at the end: the order is fixed, so
@@ -10027,7 +10029,7 @@ func _check_the_ship_panel_is_four_bars() -> void:
 	kinds = []
 	for one: Dictionary in hud.ship_bars():
 		kinds.append(one["kind"])
-	var hot: Array[StringName] = [&"hull", &"heat", &"energy"]
+	var hot: Array[StringName] = [&"hull", &"heat", &"energy", &"fuel"]
 	_expect(
 		kinds == hot,
 		"heat arrives in its own place, second (%s)" % str(kinds),
@@ -10040,7 +10042,19 @@ func _check_the_ship_panel_is_four_bars() -> void:
 		says[one["kind"]] = String(one["says"])
 	_expect(
 		String(says[&"heat"]) == "50%",
-		"each bar carries its own figure as a percentage (%s)" % says[&"heat"],
+		"hull and heat say what share they are at (%s)" % says[&"heat"],
+	)
+	# Energy and fuel say how much, because that is the decision: one
+	# more shot, or far enough to get there. Neither is a share of
+	# anything a pilot acts on.
+	_expect(
+		String(says[&"energy"]) == "%.0f" % ship.energy
+		and String(says[&"fuel"]) == "%.0f" % ship.fuel
+		and not String(says[&"energy"]).ends_with("%")
+		and not String(says[&"fuel"]).ends_with("%"),
+		"energy and fuel say how much there is (%s, %s)" % [
+			says[&"energy"], says[&"fuel"],
+		],
 	)
 	var fills_wrong: Array[String] = []
 	for one: Dictionary in hud.ship_bars():
@@ -10059,19 +10073,42 @@ func _check_the_ship_panel_is_four_bars() -> void:
 	var inside: Rect2 = UiFrame.inside(
 		UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.SHIP)
 	)
+	# Five of them have to fit the panel, which is 60 px tall. This is
+	# the ceiling the bar height and the gap were chosen against, and
+	# five is every bar there is.
+	var tall: float = (
+		float(FlightHud.BARS.size()) * (FlightHud.BAR_HEIGHT + FlightHud.BAR_GAP)
+	)
 	_expect(
-		4.0 * (FlightHud.BAR_HEIGHT + FlightHud.BAR_GAP) <= inside.size.y,
-		"four bars fit the ship panel (%.0f of %.0f px)" % [
-			4.0 * (FlightHud.BAR_HEIGHT + FlightHud.BAR_GAP), inside.size.y,
+		tall <= inside.size.y,
+		"every bar there is fits the ship panel at once (%.0f of %.0f px)" % [
+			tall, inside.size.y,
 		],
 	)
-	# And the figure fits on one, with its padding, at its widest.
+	# Whatever is showing is in the order the list declares, with
+	# nothing in it that the list does not name. That is the general
+	# form of the two checks above, and the one that survives a sixth
+	# bar being added.
+	var at: int = -1
+	var astray: Array[String] = []
+	for one: Dictionary in hud.ship_bars():
+		var where: int = FlightHud.BARS.find(one["kind"])
+		if where <= at:
+			astray.append(String(one["kind"]))
+		at = where
+	_expect(
+		astray.is_empty(),
+		"and what shows follows that order (%s)" % [
+			"in order" if astray.is_empty() else str(astray),
+		],
+	)
+	# And the figure's plate fits on one, at its widest.
 	var font: Font = ModuleData.card_font()
 	_expect(
-		UiDraw.text_width(font, "100%") + FlightHud.BAR_TEXT_PAD * 2.0
+		UiDraw.text_width(font, "99999") + FlightHud.BAR_TEXT_PAD * 2.0
 		<= inside.size.x,
-		"and the figure fits on a bar (%.0f of %.0f px)" % [
-			UiDraw.text_width(font, "100%") + FlightHud.BAR_TEXT_PAD * 2.0,
+		"and the widest figure's plate fits on a bar (%.0f of %.0f px)" % [
+			UiDraw.text_width(font, "99999") + FlightHud.BAR_TEXT_PAD * 2.0,
 			inside.size.x,
 		],
 	)
