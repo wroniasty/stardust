@@ -909,6 +909,18 @@ func take(item: Resource, rarity: int = -1) -> bool:
 	return true
 
 
+## Picks a find up into the bay, with no stop in the hands.
+##
+## What flying into a crate does. Mass changed, so the handling has to
+## be told -- which is what `_hold_shifted` is for and what every
+## caller used to have to remember.
+func stash(item: Resource, rarity: int = -1) -> bool:
+	if not hold.stash(item, cargo_capacity(), rarity):
+		return false
+	_hold_shifted()
+	return true
+
+
 ## How big any module is, whichever kind it is. Kept here as well as on
 ## `Hold` because thirteen callers outside this file ask the ship.
 static func module_bulk(item: Resource) -> float:

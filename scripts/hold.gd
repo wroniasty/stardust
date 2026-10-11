@@ -135,6 +135,27 @@ func take(item: Resource, rarity: int = -1) -> bool:
 	return true
 
 
+## Puts a find straight in the bay, which is what picking one up does.
+##
+## The hands used to be the first stop: fly into a crate, hold the
+## module, stow it, and only then fly on. That step asked a question
+## with one answer -- a pilot who flew into a crate wanted the thing in
+## it -- and charged a screen for it. Gone. What is left is the half
+## that is a real decision: whether there is room, and what to drop if
+## there is not.
+##
+## Fails rather than overfilling, and the crate stays where it is when
+## it does. A full hold is the pilot's problem to solve, not a reason
+## to destroy what they flew into.
+func stash(item: Resource, capacity: float, rarity: int = -1) -> bool:
+	if item == null or module_bulk(item) > room_left(capacity):
+		return false
+	if rarity >= 0 and item is ModuleData:
+		(item as ModuleData).rarity = rarity
+	cargo.append({"item": item, "rarity": rarity if rarity >= 0 else 0})
+	return true
+
+
 ## Empties the hands and returns what was in them.
 func release() -> Resource:
 	var item: Resource = carried

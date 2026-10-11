@@ -1,15 +1,16 @@
 class_name LoadoutScreen
 extends CanvasLayer
-## The simple screen for swapping a module in flight (Tab).
+## The simple screen for swapping a module (Tab).
 ##
-## Deliberately does not pause. "In flight" means without landing or docking,
-## not without time passing: a swap that stops the world is a menu, and the
-## interesting version of this decision is the one made while something is
-## going wrong. The screen is small, off to one side, and every action is one
-## key, so it can be used with the other hand.
+## It used to fit in flight, and that was its whole argument: a swap made
+## while something is going wrong, with the world still running. **Fitting
+## now waits for the ground or a dock**, like the yard screen, so what is
+## left here is the quick version of the same job rather than a different
+## one -- one module, one slot, one key, off to one side.
 ##
-## One carried module, one highlighted slot, one key to fit. Everything else
-## about loadouts is M5's business.
+## Still does not pause, because reading what you are carrying is not
+## fitting it, and a screen that stopped the world to be read would be a
+## menu.
 
 ## A floor, not a width: the panel takes whatever the longest card line needs,
 ## and this only keeps an empty hold from collapsing to a sliver.
@@ -21,6 +22,10 @@ const SCREEN_MARGIN: int = 6
 var _ship: Ship = null
 var _panel: PanelContainer = null
 var _text: Label = null
+
+## The last thing a refused key said, shown until the next redraw
+## that has something better to put there.
+var _notice: String = ""
 
 ## Which compatible slot is highlighted. Kept as an index into the list the
 ## screen last built, and clamped on every redraw, so a slot disappearing
@@ -62,9 +67,15 @@ func toggle() -> void:
 	_redraw()
 
 
-## Opens the screen because something was picked up. The pilot asked for the
-## module, not for the screen, so this is the one place it opens itself.
-func announce_pickup() -> void:
+## Opens the screen from outside.
+##
+## It used to be `announce_pickup`, called by the world when a find
+## went into the ship's hands: the pilot had asked for the module, not
+## for the screen, so this was the one place it opened itself. Nothing
+## goes into the hands on a pickup any more -- a crate loads the bay --
+## so what is left is a plain "show this", which is what the name says
+## now.
+func show_now() -> void:
 	_cursor = 0
 	_panel.show()
 	_redraw()
@@ -143,13 +154,36 @@ func _slots() -> Array:
 	return slots
 
 
+## Whether this ship is somewhere a module can be changed.
+##
+## The same question `ShipEditor.can_refit` asks, and the same answer:
+## standing still, however it came to be standing still. Asked here as
+## well because this screen used to be the exception -- fitting in
+## flight was its reason for existing -- and the exception is gone.
+func can_refit() -> bool:
+	if _ship == null:
+		return false
+	return (
+		_ship.flight_mode == Ship.FlightMode.LANDED
+		or _ship.flight_mode == Ship.FlightMode.DOCKED
+	)
+
+
 func _fit() -> void:
 	var slots: Array = _slots()
 	if slots.is_empty() or _ship == null:
 		return
+	if not can_refit():
+		# Refused out loud. A key that does nothing reads as a key that
+		# is broken, and the answer -- land or dock -- is the kind a
+		# pilot can act on.
+		_notice = "land or dock to fit"
+		_redraw()
+		return
 	var slot: Node = slots[_cursor % slots.size()]
 	# Measured before the swap, because the only honest way to say what a
 	# module did is to have measured the ship without it.
+	_notice = ""
 	var before: ConfigurationReport = _ship.configuration()
 	var taken: Resource = _ship.release()
 
@@ -224,8 +258,18 @@ func _redraw() -> void:
 			var marker: String = ">" if i == _cursor else " "
 			lines.append("%s %s  %s" % [marker, slot.name, _fitted_label(slot)])
 		lines.append("")
-		lines.append("F montuje,  Backspace wyrzuca")
+		# What the key will do, which is not the same question as what
+		# the key is: fitting waits for the ground now, and a panel
+		# offering "F montuje" to a pilot in flight is a panel lying
+		# about its own key.
+		lines.append(
+			"F montuje,  Backspace wyrzuca" if can_refit()
+			else "land or dock to fit,  Backspace wyrzuca"
+		)
 
+	if not _notice.is_empty():
+		lines.append("")
+		lines.append(_notice)
 	lines.append_array(_report_lines())
 
 	_text.text = "\n".join(lines)

@@ -3151,6 +3151,30 @@ ustawia też `rarity` ani `affixes`, jak żaden z sześciu plików obok: jedno i
 drugie jest faktem o **rzucie**, a nie o rzeczy, i karta i tak mówi, co
 pudełko robi, bo `stat_rows()` wypisuje każdą funkcję jako 0/1.
 
+### Podnoszenie: skrzynka wprost do ładowni, montaż dopiero na ziemi
+
+Były to dwie rzeczy zrośnięte w jedną mechanikę. Wjechanie w skrzynkę kładło
+znalezisko **w ręce** statku (jedno gniazdo), ręce były jedynym miejscem, z
+którego dało się coś zamontować, a ekran Tab otwierał się sam, żeby to
+umożliwić w locie. Pilot wjeżdżał w skrzynkę, dostawał ekran i przykręcał napęd
+przy dwustu pikselach na sekundę.
+
+**Krok z rękami odpadł.** Pytanie „czy chcesz to, w co właśnie wjechałeś" ma
+jedną odpowiedź i nie potrzebuje ekranu. `Hold.stash` wkłada znalezisko wprost
+do ładowni albo odmawia — i to jest ta połowa, która była prawdziwą decyzją:
+**czy jest miejsce**. Pełna ładownia zostawia skrzynkę tam, gdzie leży; nie jest
+powodem, żeby zniszczyć to, w co się wjechało.
+
+**Montaż czeka na grunt albo dok**, w obu ekranach. Szybki swap miał to
+zapisane jako swój cały sens — „decyzja podjęta, gdy coś idzie źle, przy
+działającym świecie" — i to jest wyjątek, który zniknął. Odmawia **na głos**:
+klawisz, który nic nie robi, czyta się jak zepsuty, a „wyląduj albo zadokuj"
+to odpowiedź, z którą da się coś zrobić.
+
+Ręce **zostają** i nie są już częścią podnoszenia: trafia do nich moduł **zdjęty**
+ze statku przy wymianie, żeby swap nigdy nie był stratą i dało się cofnąć
+decyzję. To jest inna rzecz niż zbieranie i dlatego przetrwała.
+
 ### Prograde/retrograde: rama gruntu konczy sie tam, gdzie konczy sie powietrze
 
 Zgłoszone z gry: prograde kierował statek **w złą stronę**. Zmierzone:

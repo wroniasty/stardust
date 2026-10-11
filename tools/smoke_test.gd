@@ -8606,6 +8606,7 @@ func _check_hull_editor() -> void:
 	_check_the_ship_draws_above_the_world()
 	_check_the_altitude_tape_is_out_of_the_way()
 	_check_the_ship_panel_is_four_bars()
+	_check_a_crate_loads_the_bay()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
@@ -10039,6 +10040,115 @@ func _check_the_ship_panel_is_four_bars() -> void:
 func _decimals(text: String) -> int:
 	var dot: int = text.find(".")
 	return 0 if dot < 0 else text.length() - dot - 1
+
+
+## Wjechanie w skrzynke laduje luk, a montaz czeka na grunt.
+##
+## Two rules that used to be one mechanic. Picking a find up put it in
+## the ship's hands, and the hands were the only place a module could
+## be fitted from -- so a pilot flew into a crate, got a screen, and
+## fitted a drive at two hundred pixels a second.
+##
+## The hands step is gone: a pilot who flies into a crate wants what is
+## in it, which is a question with one answer and no screen. What is
+## left of the decision is the half that is real -- whether there is
+## room -- and that is what this measures, along with the other half of
+## the change: fitting now waits for the ground or a dock, in **both**
+## screens rather than only in the yard.
+func _check_a_crate_loads_the_bay() -> void:
+	var ship: Ship = _spawn_ship()
+	var loot: Node = LOOT_SCRIPT.new()
+	var found: Resource = loot.weapon(4242)
+	var was: int = ship.cargo.size()
+
+	_expect(ship.stash(found, 2), "flying into a crate loads it")
+	_expect(
+		ship.cargo.size() == was + 1 and ship.carried == null,
+		"straight into the bay, with nothing left in the hands (%d, %s)" % [
+			ship.cargo.size(), "empty" if ship.carried == null else "holding",
+		],
+	)
+	var stowed: bool = false
+	for entry: Dictionary in ship.cargo:
+		if entry["item"] == found:
+			stowed = true
+	_expect(stowed, "and it is the thing that was in the crate")
+
+	# The half of the old mechanic that was a real decision: room. A
+	# full hold leaves the crate where it is rather than eating it.
+	var filler: Resource = loot.weapon(99)
+	var guard: int = 0
+	while ship.stash(loot.weapon(500 + guard)) and guard < 200:
+		guard += 1
+	_expect(
+		guard > 0 and guard < 200,
+		"a hold fills up rather than taking everything (%d finds)" % guard,
+	)
+	_expect(
+		not ship.stash(filler),
+		"and then refuses, so the crate stays where it is",
+	)
+	_expect(
+		ship.carried == null,
+		"a refused find is not left in the hands either",
+	)
+
+	# And fitting. The quick screen used to be the one place a module
+	# went on in flight, which was its whole argument; now both screens
+	# ask the same question.
+	var screen: LoadoutScreen = LoadoutScreen.new()
+	root.add_child(screen)
+	screen.bind(ship)
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	_expect(not screen.can_refit(), "in flight, the quick screen will not fit")
+	ship.flight_mode = Ship.FlightMode.LANDED
+	_expect(screen.can_refit(), "on the ground it will")
+	ship.flight_mode = Ship.FlightMode.DOCKED
+	_expect(screen.can_refit(), "and at a dock")
+
+	# And it refuses out loud rather than doing nothing, which is the
+	# difference between a rule and a broken key. Driven through the
+	# same call the key makes, with a find in the hands -- which is
+	# where a module taken **off** the ship still goes.
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	# A copy of what is already bolted on, so there is certainly a
+	# socket that will take it: a rolled weapon may be of a type none
+	# of this hull's hardpoints accept, and then `_fit` returns for a
+	# reason that has nothing to do with the rule being checked.
+	var spare: WeaponData = ship.hardpoints[0].weapon.duplicate() as WeaponData
+	ship.take(spare, 0)
+	screen.toggle()
+	screen._fit()
+	_expect(
+		ship.carried == spare,
+		"a refused fit leaves the module in the hands",
+	)
+	# The refusal's own line, not the key caption underneath it. Both
+	# say "land or dock", so asking the panel whether those words are
+	# anywhere in it passed with the rule taken out -- measured.
+	_expect(
+		not screen._notice.is_empty()
+		and screen.panel_text().contains(screen._notice),
+		"and the panel says why (%s)" % screen._notice,
+	)
+	# On the ground the same call goes through.
+	ship.flight_mode = Ship.FlightMode.LANDED
+	screen._fit()
+	# What a successful swap leaves in the hands is the module that
+	# came **off**, not nothing -- which is the whole reason a swap is
+	# never a loss. So the claim is that the spare went on, not that
+	# the hands emptied.
+	var bolted: bool = false
+	for mount: Hardpoint in ship.hardpoints:
+		if mount.weapon == spare:
+			bolted = true
+	_expect(
+		bolted and ship.carried != spare,
+		"and on the ground it goes on, with whatever it replaced in hand",
+	)
+	_discard(screen)
+	loot.free()
+	_discard(ship)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.
@@ -11957,7 +12067,7 @@ func _check_stat_cards() -> void:
 	root.add_child(quick)
 	quick.bind(ship)
 	ship.take(better)
-	quick.announce_pickup()
+	quick.show_now()
 	var shown: String = quick.panel_text()
 	for row: Dictionary in better.stat_rows():
 		_expect(
@@ -12109,7 +12219,7 @@ func _check_bulk() -> void:
 	giant.bulk = 99.0
 	ship.release()
 	ship.take(giant, 0)
-	screen.announce_pickup()
+	screen.show_now()
 	var refusal: String = screen.panel_text()
 	_expect(
 		refusal.contains("99.00") and refusal.contains("%.2f" % mount.size),
@@ -12118,7 +12228,7 @@ func _check_bulk() -> void:
 
 	ship.release()
 	ship.take(shrunk, 0)
-	screen.announce_pickup()
+	screen.show_now()
 	_expect(
 		screen.panel_text().contains("%.2f" % shrunk.bulk),
 		"and a fitting engine still shows its bulk, so a swap can be compared",

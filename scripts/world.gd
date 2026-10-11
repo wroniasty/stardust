@@ -522,12 +522,14 @@ func _on_crate_touched(crate: LootCrate, body: Node) -> void:
 	var ship: Ship = body as Ship
 	if ship == null or crate.item == null:
 		return
-	if not ship.take(crate.item):
+	# Straight into the bay. There is no step in between any more: the
+	# hands were a question with one answer, since a pilot who flew
+	# into a crate wanted what was in it.
+	if not ship.stash(crate.item, crate.rarity()):
 		# A full hold is the pilot's problem to solve, not a reason to destroy
 		# what they flew into.
 		return
 	print("picked up: %s" % crate.label())
-	_loadout.announce_pickup()
 	# Told, not inferred: the shelf this came off stays empty when the
 	# planet is streamed out and back.
 	StreamingManager.forget_crate(crate)
