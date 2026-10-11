@@ -192,7 +192,7 @@ przy lądowaniu leży na najbardziej zaśmieconym tle, jakie gra ma: terenie.
 
 ## 6. Słownik widgetów
 
-Sześć prymitywów. Wszystko w grze jest zbudowane z nich i tylko z nich — nowy
+Siedem prymitywów. Wszystko w grze jest zbudowane z nich i tylko z nich — nowy
 widget wymaga zmiany w tym pliku, nie w ekranie.
 
 **1. Wiersz odczytu.** `ETYKI` (dim, do lewej, 5 znaków) + wartość (mono, do
@@ -219,6 +219,31 @@ skrzynia na ekranie. Czyta się natychmiast i kosztuje osiem kresek.
 **6. Wskaźnik nałożony na świat.** Linia horyzontu i wektor prędkości przy
 lądowaniu: 1 px, `nav`, rysowane w przestrzeni świata, nie w warstwie panelu.
 Wskaźnik ma przecinać obraz, bo mówi o obrazie.
+
+**7. Przełącznik.** Kwadrat **13 px** z obrysem 1 px i glifem `UiGlyph` w
+środku, w rzędzie co **2 px**. Jedyny prymityw, który przyjmuje kliknięcie, i
+jedyny, który czegoś nie pokazuje, tylko czymś steruje — stąd osobna pozycja,
+a nie wariant paska.
+
+Trzy stany, i to są trzy stany z sekcji 12 przeczytane jako sterowanie, nie
+jako odczyt:
+
+| stan | obrys | glif |
+|---|---|---|
+| moduł tego nie potrafi | `grid` | `inert` |
+| potrafi, wyłączone | `edge` | `label` |
+| potrafi, włączone | `accent` | `accent` |
+
+**Martwy przełącznik zostaje na swoim miejscu** i dalej połyka kliknięcie. To
+jest pułapka 3 z sekcji 12 zastosowana do rzędu guzików: rząd, który zasklepia
+się nad brakującą funkcją, to rząd, w którym czwarty kwadrat znaczy co innego na
+każdym statku. Połknięcie kliknięcia nie jest uprzejmością — spust jest
+**odpytywany**, nie zdarzeniowy, więc panel, który nie zająłby wskaźnika,
+strzelałby z dział przy każdym naciśnięciu guzika.
+
+Główka rzędu (ikona, która go rozwija) świeci `accent`, gdy cokolwiek w rzędzie
+jest włączone. Zwinięty panel musi dalej mówić, że statek jest za pilota
+prowadzony.
 
 ---
 

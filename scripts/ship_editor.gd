@@ -1575,18 +1575,11 @@ func _draw_kind_glyph(
 		)
 		return
 	if kind == Glyph.CHIP:
-		# A chip: a die with legs down both sides.
-		_canvas.draw_rect(Rect2(at - Vector2(GLYPH, GLYPH) * 0.7, Vector2(GLYPH, GLYPH) * 1.4),
-			colour, false, 1.0)
-		for side: float in [-1.0, 1.0]:
-			for step: float in [-0.5, 0.5]:
-				var y: float = at.y + step * GLYPH
-				_canvas.draw_line(
-					Vector2(at.x + side * GLYPH * 0.7, y),
-					Vector2(at.x + side * GLYPH * 1.3, y),
-					colour,
-					1.0,
-				)
+		# A die with legs down both sides, drawn in `UiGlyph` because the
+		# flight HUD opens its computer panel with the same shape: the
+		# thing in the bay and the button on screen have to be
+		# recognisably one object.
+		UiGlyph.chip(_canvas, at, GLYPH, colour)
 		return
 	if kind == Glyph.STRUT:
 		# A strut on a pad, the same shape the legs are drawn on the hull.

@@ -294,9 +294,85 @@ static func _skin(hulls: HullEditor, presets: PresetEditor) -> int:
 		],
 	)
 
+	failures += _computer_form()
 	failures += _layer_switch(hulls, "kadlubow")
 	failures += _layer_switch(presets, "presetow")
 	return failures
+
+
+## Czy komputer pokladowy da sie nadpisac w doku.
+##
+## The bay rows got an override panel with the other two, and a
+## generator's fields are all floats -- so "a bay can be overridden" was
+## measured on the easiest possible module. A flight computer is the
+## awkward one: an **enum** and five **booleans**, which are two row
+## types the float path never exercises. Either the form builds them or
+## the panel opens on a computer with most of it missing, and nothing
+## would say which.
+##
+## Built here rather than through a dock, because no shipped preset
+## carries a computer and the catalogue is what a designer would reach
+## for. What is being checked is the form, and the form is what the dock
+## hands a module to.
+static func _computer_form() -> int:
+	var box: FlightComputerData = load(
+		"res://resources/computers/orbital_pilot.tres"
+	) as FlightComputerData
+	if box == null:
+		return _says(false, "the catalogue has a computer to override")
+
+	var form: ResourceForm = ResourceForm.new()
+	# Parented, because a form sizes its caption column off the theme and
+	# an orphan control has no theme to ask.
+	var holder: Control = Control.new()
+	holder.add_child(form)
+	form.show_overrides(box, {})
+
+	var wanted: Array[String] = [
+		"allocation", "has_rotation_kill", "has_auto_level", "has_auto_orbit",
+		"has_altitude_hold", "has_deorbit", "idle_draw", "bulk",
+	]
+	var seen: Dictionary = {}
+	for label: Label in _labels_under(form):
+		seen[label.text] = true
+	var missing: Array[String] = []
+	for field: String in wanted:
+		if not seen.has(field):
+			missing.append(field)
+	var failures: int = _says(
+		missing.is_empty(),
+		"a computer's own fields are all overridable (%d rows, %s)" % [
+			form.get_child_count(),
+			"none missing" if missing.is_empty() else str(missing),
+		],
+	)
+
+	# And the two row types a generator could not have reached: the
+	# allocation is a dropdown, the functions are checkboxes.
+	var drops: int = 0
+	var ticks: int = 0
+	for child: Node in _everything_under(form):
+		if child is OptionButton:
+			drops += 1
+		elif child is CheckBox:
+			ticks += 1
+	failures += _says(
+		drops >= 1 and ticks >= wanted.size(),
+		"with the enum as a dropdown and a pin box per field (%d dropdowns, %d boxes)" % [
+			drops, ticks,
+		],
+	)
+	holder.queue_free()
+	return failures
+
+
+## Every node below `where`, flattened.
+static func _everything_under(where: Node) -> Array[Node]:
+	var out: Array[Node] = []
+	for child: Node in where.get_children():
+		out.append(child)
+		out.append_array(_everything_under(child))
+	return out
 
 
 ## Picks every layer on one dock and says whether the pictures follow.

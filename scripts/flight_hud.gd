@@ -62,6 +62,20 @@ const ARROW_DIAL: float = 40.0
 ## How much world shows through a panel.
 const PANEL_OPACITY: float = 0.86
 
+## The computer panel: the chip that opens it and the squares inside.
+##
+## Thirteen is the smallest square that holds a readable glyph with a
+## pixel of air round it, and the gap is two so the row reads as separate
+## switches rather than as one strip. Seven of them plus the chip comes
+## to 125 px, inside the 140 the frame law allows a panel to be
+## (UI_STYLE section 5).
+const SWITCH: float = 13.0
+const SWITCH_GAP: float = 2.0
+
+## How big a glyph is drawn inside a switch: half the square, so the
+## stroke never touches the border that carries the state.
+const SWITCH_GLYPH: float = 4.0
+
 ## How the planet is drawn in the diagram, and the apsis dots.
 const PLANET_DOT: float = 2.5
 const APSIS_DOT: float = 1.8
@@ -116,6 +130,14 @@ const ARROW_HEAD: float = 4.0
 var _ship: Ship = null
 var _rig: MiningRig = null
 var _canvas: Control = null
+
+## Whether the computer panel is open. Shut by default: a pilot who has
+## not asked for it gets the empty context corner the frame law wants
+## (UI_STYLE section 5), and the chip alone says there is something to
+## open.
+var _computer_open: bool = false
+
+
 
 
 ## The twelve colours every screen draws from (UI_STYLE section 3). This
@@ -175,6 +197,115 @@ func _process(delta: float) -> void:
 	_read(delta)
 	if _canvas != null:
 		_canvas.queue_redraw()
+	# The ship has to know the pointer is over a switch, because firing
+	# is polled rather than driven by events: `Ship.read_player_input`
+	# asks `Input.is_action_pressed("ship_fire")`, so consuming the click
+	# here would stop the panel's own handler and not the guns.
+	if _ship != null and is_instance_valid(_ship):
+		_ship.ui_grabs_pointer = _over_panel(_canvas.get_local_mouse_position())
+
+
+## Where the computer panel's parts are, in canvas pixels.
+##
+## Worked out here and nowhere else. The draw uses it to draw, the press
+## uses it to hit-test and `_process` uses it to tell the ship the
+## pointer is busy -- three readers, which is exactly how many copies of
+## a layout it takes for one of them to drift. Empty when there is no
+## computer aboard, which is the same answer all three want.
+##
+## `{band, chip, switches: [{kind, box, offered}]}`. The switches are
+## present whether or not the panel is open, because what "open" changes
+## is the band's width and what gets drawn, not where the seventh square
+## would be.
+func _computer_layout() -> Dictionary:
+	if _ship == null or not is_instance_valid(_ship) or _canvas == null:
+		return {}
+	var box: FlightComputerData = _ship.computer()
+	if box == null:
+		return {}
+	var slot: Rect2 = UiFrame.slot(_canvas.size, UiFrame.Slot.CONTEXT)
+	var wide: float = SWITCH + UiFrame.PAD * 2.0
+	if _computer_open:
+		wide += float(FlightAssists.ALL.size()) * (SWITCH + SWITCH_GAP)
+	var band: Rect2 = Rect2(
+		Vector2(slot.position.x, slot.end.y - SWITCH - UiFrame.PAD * 2.0),
+		Vector2(minf(wide, UiFrame.MOST.x), SWITCH + UiFrame.PAD * 2.0),
+	)
+	var inside: Rect2 = UiFrame.inside(band)
+	var chip: Rect2 = Rect2(inside.position, Vector2(SWITCH, SWITCH))
+	var switches: Array[Dictionary] = []
+	var at: float = chip.end.x + SWITCH_GAP
+	for one: Dictionary in FlightAssists.ALL:
+		var kind: int = int(one["kind"])
+		switches.append({
+			"kind": kind,
+			"box": Rect2(Vector2(at, inside.position.y), Vector2(SWITCH, SWITCH)),
+			"offered": FlightAssists.offered_by(kind, box),
+		})
+		at += SWITCH + SWITCH_GAP
+	return {"band": band, "chip": chip, "switches": switches}
+
+
+## Whether a point is over something on this panel that can be clicked.
+func _over_panel(at: Vector2) -> bool:
+	var layout: Dictionary = _computer_layout()
+	if layout.is_empty():
+		return false
+	if (layout["chip"] as Rect2).has_point(at):
+		return true
+	if not _computer_open:
+		return false
+	for switch: Dictionary in layout["switches"]:
+		if (switch["box"] as Rect2).has_point(at):
+			return true
+	return false
+
+
+## A press at a point on the canvas, and whether the panel took it.
+##
+## Split from `_input` so a test can press the thing a pilot presses.
+## The first version of this was the hit test inside the input handler,
+## which a headless check can only exercise by moving a mouse it has
+## not got -- so the check would have measured the layout and called it
+## a button.
+func press_at(at: Vector2) -> bool:
+	var layout: Dictionary = _computer_layout()
+	if layout.is_empty():
+		return false
+	if (layout["chip"] as Rect2).has_point(at):
+		_computer_open = not _computer_open
+		return true
+	if not _computer_open:
+		return false
+	for switch: Dictionary in layout["switches"]:
+		if not (switch["box"] as Rect2).has_point(at):
+			continue
+		# A square for a function this box has not got is still a square
+		# a click lands on: it keeps its slot so the row cannot reshuffle
+		# (UI_STYLE section 12, trap 3), `toggle_assist` refuses it, and
+		# taking the click anyway is what stops the guns going off on a
+		# dead switch.
+		_ship.toggle_assist(int(switch["kind"]))
+		return true
+	return false
+
+
+## Clicks on the computer panel, and nothing else on this layer.
+##
+## On the `CanvasLayer` rather than on a `Control` tree, because the
+## panel is drawn rather than built: UI_STYLE section 12 says a widget
+## has no node of its own, and seven `Button`s would be seven nodes
+## carrying themes, focus and a tab order into a HUD that wants none of
+## it. The cost is this function, which is the hit test the nodes would
+## have done.
+func _input(event: InputEvent) -> void:
+	if _ship == null or not is_instance_valid(_ship) or _canvas == null:
+		return
+	var click: InputEventMouseButton = event as InputEventMouseButton
+	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if press_at(_canvas.get_local_mouse_position()):
+		get_viewport().set_input_as_handled()
 
 
 ## One sample of everything the panel shows, once a frame.
@@ -248,7 +379,75 @@ func _draw_hud() -> void:
 	# in it. An empty panel is not restraint -- it is a box that
 	# teaches the eye to skip that part of the screen, which is the one
 	# habit an interface must not train.
+	_draw_computer()
 	_draw_warning_band(font, view)
+
+
+## The flight computer: a chip to press, and what the box can do.
+##
+## In the context corner, which the frame law gives to "momentary: the
+## module picked up, the mode, the message" -- and which assists are
+## engaged is the mode this ship is being flown in.
+##
+## Nothing at all without a computer aboard, and that is the law's own
+## answer rather than a shortcut: a control that is not there cannot be
+## mistaken for one that does nothing, because there is nothing to
+## press, and UI_STYLE section 12 puts "you built a ship with no
+## instruments" in the configuration report rather than in a permanent
+## `NO MOD` in a corner that otherwise means "nothing here can kill
+## you".
+func _draw_computer() -> void:
+	var layout: Dictionary = _computer_layout()
+	if layout.is_empty():
+		return
+
+	var engaged: int = 0
+	for one: Dictionary in FlightAssists.ALL:
+		if _ship.is_latched(int(one["kind"])):
+			engaged += 1
+
+	UiDraw.panel(
+		_canvas,
+		layout["band"],
+		_ink.over(_ink.panel, PANEL_OPACITY),
+		_ink.grid,
+		UiFrame.corner(UiFrame.Slot.CONTEXT),
+		false,
+	)
+	# Lit while anything is engaged, which is the one thing the shut
+	# panel still has to say: a pilot who closed it has to be able to
+	# see that the ship is being flown for them.
+	UiGlyph.chip(
+		_canvas,
+		(layout["chip"] as Rect2).get_center(),
+		SWITCH_GLYPH,
+		_ink.accent if engaged > 0 else _ink.label,
+	)
+	if not _computer_open:
+		return
+	for switch: Dictionary in layout["switches"]:
+		_draw_switch(switch["box"], int(switch["kind"]), bool(switch["offered"]))
+
+
+## One switch, in one of three states the eye has to tell apart.
+##
+## Those three are the law's three (UI_STYLE section 12, trap 2) read as
+## controls rather than readings: the box cannot do this, the box can and
+## it is off, the box can and it is on. A dead switch is dim and keeps
+## its place, because a row that closes up over a missing function is a
+## row whose fourth square means something different on every ship.
+func _draw_switch(square: Rect2, kind: int, offered: bool) -> void:
+	var on: bool = offered and _ship.is_latched(kind)
+	var border: Color = _ink.grid
+	var ink: Color = _ink.inert
+	if on:
+		border = _ink.accent
+		ink = _ink.accent
+	elif offered:
+		border = _ink.edge
+		ink = _ink.label
+	_canvas.draw_rect(UiDraw.snap_rect(square), border, false, 1.0)
+	UiGlyph.assist(_canvas, kind, square.get_center(), SWITCH_GLYPH, ink)
 
 
 ## One panel in its slot, handing back the room left inside it.

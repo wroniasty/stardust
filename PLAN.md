@@ -526,6 +526,45 @@ ma obie strony na ekranie naraz.
 
 ---
 
+## MAUX5: Panel komputera lotów
+
+Cel: asysty da się **włączyć i zostawić**, a to, które są włączone, widać bez
+pamiętania akordów.
+
+Przed tym każda asysta była komendą **chwilową**: akord albo klawisz czytany co
+tick, czyli coś, co trzeba trzymać. Asysta, którą trzeba trzymać, to asysta,
+której nie da się używać podczas latania — a cały sens komputera jest taki, że
+leci za pilota, kiedy pilot robi coś innego.
+
+- [x] `FlightAssists`: siedem asyst jako **jedna tabela** w stałej kolejności,
+  z polączeniem do pola `has_*` na `FlightComputerData`. Dotąd każda z nich
+  była polem na `Ship`, gałęzią w `_resolve_commands`, wierszem w ekranie pomocy
+  i flagą na module — i nic nigdzie nie mówiło, że to jeden rodzaj rzeczy.
+- [x] `Ship.latched` jako **jedyny** magazyn przełączników, wkładany w komendy
+  na końcu `read_player_input` — po klawiszach i nigdy ponad nimi. `is_latched`
+  pyta przy odczycie, czy zamontowane pudełko w ogóle to potrafi, więc
+  przełącznik osierocony przez refit przestaje czytać się jako włączony
+  wszędzie naraz, bez czyszczenia czegokolwiek.
+- [x] Panel w rogu KONTEKST: chip, który go rozwija, i siedem kwadratów
+  (UI_STYLE prymityw 7). Brak komputera to **brak panelu**, bo to jest
+  odpowiedź sekcji 12: sterowania, którego nie ma, nie da się pomylić ze
+  sterowaniem, które nic nie robi, a „statek bez przyrządów" należy do raportu
+  konfiguracji, nie do rogu, który inaczej znaczy „nic cię tu nie zabije".
+- [x] `Ship.ui_grabs_pointer`: kliknięcie w panel nie jest strzałem. Musi być
+  **jawne**, bo spust jest odpytywany — `is_action_pressed` nigdy się nie
+  dowie, że ktoś zdarzenie pochłonął.
+- [x] Układ panelu policzony w jednym miejscu (`_computer_layout`), bo czytają
+  go trzy rzeczy: rysowanie, trafianie kliknięciem i pytanie „czy wskaźnik jest
+  zajęty". Tyle właśnie kopii układu trzeba, żeby jedna się rozjechała.
+- [x] `press_at(punkt)` oddzielone od `_input`, żeby test naciskał to, co
+  naciska pilot. Bieg bez okna nie ma myszy, więc check, który zostałby w
+  `_input`, mierzyłby układ i nazywał go guzikiem.
+
+Gotowe, gdy: włączam auto-poziom jednym kliknięciem, widzę że jest włączony, i
+nie strzelam przy tym z dział.
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.

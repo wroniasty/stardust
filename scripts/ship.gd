@@ -450,14 +450,28 @@ var active_commands: Dictionary = {}
 ## Assist holds, set from input or by an AI.
 var kill_rotation_command: bool = false
 
-## Whether the computer's own spin killer is switched on.
+## Whether the pointer is over something on the interface that takes a
+## click, so a press there is not also a shot.
 ##
-## Latched rather than momentary, unlike every command beside it: this is
-## a function the pilot turns on and leaves on, which is what makes it
-## worth having. Owned here rather than in the panel that toggles it,
-## because the simulation is what reads it and a switch living in a HUD
-## is a switch that dies with the HUD.
-var auto_kill_engaged: bool = false
+## Set by the HUD every frame and read here. It lives on the ship because
+## the ship is what polls the trigger; it is written by the HUD because
+## the HUD is what knows the rectangle. False whenever no interface is
+## bound, which is the right default -- a ship with no HUD has nothing
+## in the way of its guns.
+var ui_grabs_pointer: bool = false
+
+## Which assists the pilot has switched on and left on, as
+## `FlightAssists.Kind` keys.
+##
+## Latched, unlike every command beside it, which is read fresh from a
+## key or a chord each tick. An assist a pilot has to hold down is an
+## assist they cannot fly while using, and the whole point of the
+## computer is that it flies while they do something else.
+##
+## Owned here rather than in the panel that toggles it, because the
+## simulation is what reads it: a switch living in a HUD is a switch that
+## dies with the HUD, and the HUD is a layer that can be turned off.
+var latched: Dictionary = {}
 var brake_command: bool = false
 
 ## What the ship is tied up to, or null.
@@ -1325,15 +1339,6 @@ func _physics_process(delta: float) -> void:
 
 	if use_player_input:
 		read_player_input(delta)
-		# Through the canvas transform, so aiming survives the camera being
-		# zoomed or turned -- the same reason the scanner takes a transform
-		# rather than working in world angles.
-		aim_point = get_global_mouse_position()
-		fire_command = Input.is_action_pressed("ship_fire")
-		mine_command = Input.is_action_pressed("mine")
-		fire_secondary_command = Input.is_action_pressed("ship_fire_secondary")
-		if Input.is_action_just_pressed("toggle_gear") and gear != null:
-			gear.set_deployed(not gear.is_deployed() and not gear.is_moving())
 
 	if gear != null:
 		gear.advance(delta)
@@ -2723,6 +2728,103 @@ func read_player_input(delta: float) -> void:
 	brake_command = Input.is_action_pressed("brake")
 	boost_command = Input.is_action_pressed("boost")
 
+	# The triggers, the pointer and the gear key, which used to be read
+	# in `_physics_process` a line below the call to this. Moved so that
+	# one function reads the pilot and a test can call it: the first
+	# check of the panel's "a click is not a shot" rule called this and
+	# measured a `fire_command` nothing here was setting, which passed
+	# while the rule was taken out.
+	#
+	# Through the canvas transform, so aiming survives the camera being
+	# zoomed or turned -- the same reason the scanner takes a transform
+	# rather than working in world angles.
+	aim_point = get_global_mouse_position()
+	# Not while the pointer is on a panel the pilot can press. Asked of
+	# the interface rather than worked out here, because the interface
+	# is what knows where it drew itself -- and asked at all because
+	# firing is polled: an event the HUD consumed is an event
+	# `is_action_pressed` never hears about.
+	fire_command = Input.is_action_pressed("ship_fire") and not ui_grabs_pointer
+	mine_command = Input.is_action_pressed("mine")
+	fire_secondary_command = (
+		Input.is_action_pressed("ship_fire_secondary") and not ui_grabs_pointer
+	)
+	if Input.is_action_just_pressed("toggle_gear") and gear != null:
+		gear.set_deployed(not gear.is_deployed() and not gear.is_moving())
+
+	_apply_latched_assists()
+
+
+## Folds the switched-on assists into the commands just read.
+##
+## After the keys and the chords, and never over them: a pilot who takes
+## hold of the controls is answered first, which is the same rule the
+## chord code states one screen up. So a latched heading hold yields to
+## a held key and to kill rotation, and an assist already asked for by a
+## chord is simply asked for twice.
+##
+## Nothing here consults the computer. Whether the box can do a thing is
+## already decided in two places that cannot drift -- `FlightAssists`
+## gates the switch and each `_apply_*` refuses outright without the
+## function -- and a third copy of the question is a third thing to
+## forget.
+func _apply_latched_assists() -> void:
+	if latched.is_empty():
+		return
+	if is_latched(FlightAssists.Kind.ORBIT):
+		auto_orbit_command = true
+	if is_latched(FlightAssists.Kind.DEORBIT):
+		deorbit_command = true
+	if is_latched(FlightAssists.Kind.LEVEL):
+		auto_level_command = true
+	if is_latched(FlightAssists.Kind.ALTITUDE):
+		altitude_hold_command = true
+	# The pointing holds are last and guarded: a key beats the switch,
+	# and asking for a stop beats asking for a heading, which is the
+	# order the momentary code already settled on.
+	if heading_command == ControlChords.Chord.NONE and not kill_rotation_command:
+		if is_latched(FlightAssists.Kind.PROGRADE):
+			heading_command = ControlChords.Chord.PROGRADE
+		elif is_latched(FlightAssists.Kind.RETROGRADE):
+			heading_command = ControlChords.Chord.RETROGRADE
+
+
+## Whether this assist is switched on **and** the fitted box can do it.
+##
+## Both halves at the read, so a stale switch cannot survive a refit:
+## take out the computer that could auto-orbit and the switch for it
+## stops reading as on everywhere at once -- in the solver, on the panel
+## and in a test -- with nothing to remember to clear. The alternative
+## was clearing the switches on every refit, which is a second mechanism
+## that has to be wired to every path that can change what is aboard.
+##
+## The dictionary keeps the switch rather than dropping it, because
+## refitting the same box back should give the pilot their panel back.
+func is_latched(kind: int) -> bool:
+	if not bool(latched.get(kind, false)):
+		return false
+	return FlightAssists.offered_by(kind, computer())
+
+
+## Switches one assist on or off, and hands back what it became.
+##
+## Refused outright when the fitted box cannot do it, rather than
+## latched and then ignored by the solver: a switch that sits down and
+## changes nothing is the worst of the three states UI_STYLE section 12
+## names, because it looks exactly like one that worked.
+func toggle_assist(kind: int) -> bool:
+	if not FlightAssists.offered_by(kind, computer()):
+		return false
+	var now: bool = not is_latched(kind)
+	if now:
+		for other: int in FlightAssists.excludes(kind):
+			latched.erase(other)
+		latched[kind] = true
+	else:
+		latched.erase(kind)
+	return now
+
+
 
 func _strength(action: StringName, taken: Array[StringName]) -> float:
 	return 0.0 if taken.has(action) else Input.get_action_strength(action)
@@ -2800,7 +2902,7 @@ func _auto_kill_wanted() -> bool:
 	var box: FlightComputerData = computer()
 	if box == null or not box.has_rotation_kill:
 		return false
-	if not auto_kill_engaged:
+	if not is_latched(FlightAssists.Kind.SPIN_KILL):
 		return false
 	if (
 		commands.has(ShipControl.Command.CCW)

@@ -650,7 +650,7 @@ func _begin_phase() -> void:
 			# happens in the gap the pilot left.
 			_ship.angular_velocity = KILL_SPIN
 			_fit_computer(_ship, false, true)
-			_ship.auto_kill_engaged = true
+			_ship.toggle_assist(FlightAssists.Kind.SPIN_KILL)
 			_auto_kill_ticks = -1
 		Phase.AUTO_ORBIT:
 			# Thrown along a plainly elliptical path, with a computer that
@@ -8539,6 +8539,7 @@ func _check_hull_editor() -> void:
 	_check_a_preset_pins_fields()
 	_check_a_preset_can_carry_a_computer()
 	_check_the_spin_killer_knows_when_to_sit_out()
+	_check_the_computer_panel_is_pressable()
 	_check_the_computer_catalogue()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
@@ -9052,24 +9053,32 @@ func _check_the_computer_catalogue() -> void:
 ## measured in flight, in `Phase.AUTO_KILL`.
 func _check_the_spin_killer_knows_when_to_sit_out() -> void:
 	var ship: Ship = _spawn_ship()
-	ship.auto_kill_engaged = true
+	# Written rather than toggled, because `toggle_assist` refuses a
+	# function the box has not got -- and the switch surviving in the
+	# dictionary while reading as off is the point of the next two.
+	ship.latched[FlightAssists.Kind.SPIN_KILL] = true
 	_expect(
-		not ship._auto_kill_wanted(),
-		"with no computer aboard, nothing settles the spin",
+		not ship.is_latched(FlightAssists.Kind.SPIN_KILL)
+		and not ship._auto_kill_wanted(),
+		"with no computer aboard, the switch does not read as on",
 	)
 
 	_fit_computer(ship, false, false)
 	_expect(
-		not ship._auto_kill_wanted(),
+		not ship.is_latched(FlightAssists.Kind.SPIN_KILL)
+		and not ship._auto_kill_wanted(),
 		"nor with a computer that has not got the function",
 	)
 
 	_fit_computer(ship, false, true)
 	_expect(ship._auto_kill_wanted(), "with one that has, and switched on, it does")
 
-	ship.auto_kill_engaged = false
-	_expect(not ship._auto_kill_wanted(), "and not while it is switched off")
-	ship.auto_kill_engaged = true
+	_expect(
+		not ship.toggle_assist(FlightAssists.Kind.SPIN_KILL)
+		and not ship._auto_kill_wanted(),
+		"and not while it is switched off",
+	)
+	ship.toggle_assist(FlightAssists.Kind.SPIN_KILL)
 
 	# The pilot is turning. Nothing here may push back, or the ship
 	# fights the hand on the keys.
@@ -9096,6 +9105,163 @@ func _check_the_spin_killer_knows_when_to_sit_out() -> void:
 		)
 		ship.set(steering[1], was)
 	_discard(ship)
+
+
+## Panel komputera: klikalny, i klikniecie nie jest strzalem.
+##
+## Pressed rather than inspected. An earlier check of mine measured a
+## dock by setting its state and rebuilding the rows by hand, which
+## passed while the button was wired to nothing -- so this calls
+## `press_at`, the same function the mouse handler calls, with the point
+## the layout actually puts under the cursor.
+##
+## What it cannot press is a real mouse: `_input` reads
+## `_canvas.get_local_mouse_position()` and a headless run has no
+## pointer. So the split is `press_at` taking a point, and the one line
+## left in `_input` is the line this does not cover.
+func _check_the_computer_panel_is_pressable() -> void:
+	var hud: FlightHud = FlightHud.new()
+	root.add_child(hud)
+	var ship: Ship = _spawn_ship()
+	hud.bind(ship)
+	# Off the full-rect preset first: a `Control` anchored to all four
+	# sides has its size overridden after `_ready`, and setting it
+	# anyway prints a warning into the run this check is read from.
+	hud._canvas.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hud._canvas.size = Vector2(640.0, 360.0)
+
+	# No computer, no panel -- and no clicks taken either, which is the
+	# half that matters in flight: an empty context corner must not eat
+	# the trigger.
+	_expect(hud._computer_layout().is_empty(), "with no computer there is no panel")
+	_expect(
+		not hud.press_at(Vector2(10.0, 350.0)),
+		"and a click in that corner is not swallowed",
+	)
+
+	# A box that can do two of the seven, so the row has live squares and
+	# dead ones at once.
+	var box: FlightComputerData = FlightComputerData.new()
+	box.allocation = FlightComputerData.Allocation.NNLS
+	box.has_auto_level = true
+	box.has_rotation_kill = true
+	box.bulk = 0.5
+	var hole: ModuleBay = ship.bay_for(box)
+	if hole == null:
+		_expect(false, "the reference ship has a bay for a computer")
+		_discard(hud)
+		return
+	hole.installed = box
+
+	var layout: Dictionary = hud._computer_layout()
+	_expect(
+		not layout.is_empty()
+		and (layout["switches"] as Array).size() == FlightAssists.ALL.size(),
+		"a fitted computer puts one square per assist on the panel (%d)" % [
+			0 if layout.is_empty() else (layout["switches"] as Array).size(),
+		],
+	)
+	# The frame law: no panel wider than 140 or taller than 120, and
+	# inside the corner it was given.
+	var band: Rect2 = layout["band"]
+	var corner: Rect2 = UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.CONTEXT)
+	_expect(
+		band.size.x <= UiFrame.MOST.x and band.size.y <= UiFrame.MOST.y
+		and corner.encloses(band),
+		"inside its corner and inside the frame law (%s in %s)" % [band.size, corner],
+	)
+
+	# Shut, the squares are not pressable: the chip is the only target.
+	var level: Rect2 = _square_for(layout, FlightAssists.Kind.LEVEL)
+	_expect(
+		not hud.press_at(level.get_center()),
+		"while shut, only the chip takes a press",
+	)
+	_expect(hud.press_at((layout["chip"] as Rect2).get_center()), "the chip opens it")
+	_expect(hud._computer_open, "and it is open")
+
+	# Open, and wider for it -- the band grows rather than the squares
+	# moving somewhere else.
+	var open_layout: Dictionary = hud._computer_layout()
+	_expect(
+		(open_layout["band"] as Rect2).size.x > band.size.x
+		and (open_layout["chip"] as Rect2) == (layout["chip"] as Rect2),
+		"opening widens the band and leaves the chip where it was",
+	)
+
+	# A live switch latches, and the ship is the one that knows.
+	level = _square_for(open_layout, FlightAssists.Kind.LEVEL)
+	_expect(hud.press_at(level.get_center()), "a live square takes the press")
+	_expect(
+		ship.is_latched(FlightAssists.Kind.LEVEL) and ship.auto_level_command == false,
+		"and switches the assist on, without commanding it yet",
+	)
+	ship.read_player_input(1.0 / 60.0)
+	_expect(
+		ship.auto_level_command,
+		"which the next tick of input turns into the command",
+	)
+	_expect(hud.press_at(level.get_center()), "pressing again takes the press")
+	_expect(not ship.is_latched(FlightAssists.Kind.LEVEL), "and switches it off")
+
+	# A dead one swallows the click and changes nothing. Both halves
+	# matter: nothing latched, and no shot fired.
+	var orbit: Rect2 = _square_for(open_layout, FlightAssists.Kind.ORBIT)
+	_expect(
+		hud.press_at(orbit.get_center()),
+		"a square for a function this box has not got still takes the press",
+	)
+	_expect(
+		not ship.is_latched(FlightAssists.Kind.ORBIT),
+		"and latches nothing, because the box cannot do it",
+	)
+
+	# The pointing holds need no computer at all, and the panel is where
+	# they live rather than something the box grants.
+	var prograde: Rect2 = _square_for(open_layout, FlightAssists.Kind.PROGRADE)
+	hud.press_at(prograde.get_center())
+	_expect(
+		ship.is_latched(FlightAssists.Kind.PROGRADE),
+		"a heading hold latches with no function on the box",
+	)
+	var retrograde: Rect2 = _square_for(open_layout, FlightAssists.Kind.RETROGRADE)
+	hud.press_at(retrograde.get_center())
+	_expect(
+		ship.is_latched(FlightAssists.Kind.RETROGRADE)
+		and not ship.is_latched(FlightAssists.Kind.PROGRADE),
+		"and its opposite turns it off, because a nose has one heading",
+	)
+
+	# And the trigger. The pointer being over a switch has to stop the
+	# shot, because firing is polled: an event the panel consumed is an
+	# event `is_action_pressed` never hears about.
+	# The trigger actually held, which is the whole check: a headless run
+	# presses nothing, so asking whether `fire_command` is false with
+	# the action released is asking whether nothing happened. The first
+	# version of this did exactly that and passed with the guard taken
+	# out.
+	Input.action_press("ship_fire")
+	ship.ui_grabs_pointer = false
+	ship.read_player_input(1.0 / 60.0)
+	_expect(ship.fire_command, "the held trigger fires when the pointer is free")
+	ship.ui_grabs_pointer = true
+	ship.read_player_input(1.0 / 60.0)
+	_expect(not ship.fire_command, "with the pointer on the panel, nothing fires")
+	Input.action_release("ship_fire")
+	_expect(
+		hud._over_panel(orbit.get_center())
+		and not hud._over_panel(Vector2(320.0, 180.0)),
+		"and the panel only claims the pointer where it drew itself",
+	)
+	ship.ui_grabs_pointer = false
+	_discard(hud)
+
+
+func _square_for(layout: Dictionary, kind: int) -> Rect2:
+	for switch: Dictionary in layout["switches"]:
+		if int(switch["kind"]) == kind:
+			return switch["box"]
+	return Rect2()
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.
