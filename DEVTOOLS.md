@@ -285,10 +285,18 @@ zapis po prawej.
   przestroiłaby wszystko naraz. Pierwsza wersja robiła pełną kopię w `.tres`
   presetu i była **błędna**: kopia zamraża wszystkie 23 pola, więc późniejsze
   przestrojenie katalogu nie dochodzi do żadnego z nich, nie tylko do tego
-  jednego, który ktoś chciał zmienić. Teraz `MountFit.overrides` i
-  `GunFit.overrides` trzymają `nazwa pola → wartość`; `ShipFitout.dressed`
-  robi kopię tylko wtedy, gdy coś jest przypięte.
-- [x] Przełącznik „staty" na wierszu pokazuje i chowa panel (z licznikiem
+  jednego, który ktoś chciał zmienić. Teraz `MountFit.overrides`,
+  `GunFit.overrides` i `BayFit.overrides` trzymają `nazwa pola → wartość`;
+  `ShipFitout.dressed` robi kopię tylko wtedy, gdy coś jest przypięte.
+- [x] To samo dla **modułów w zatokach**, i to tam `bulk` zarabia najwięcej:
+  ma dwie prace — jest tym, co musi zmieścić się w dziurze, **i** tym, ile
+  moduł waży. Więc `fault_in` mierzy moduł **ubrany**, nie wpis z katalogu
+  (przypięty `bulk` większy od zatoki jest odrzucany, nie wpuszczany), a
+  `balance_of` ubiera go przed zważeniem. Pusta zatoka ma guzik wyszarzony,
+  bo nie ma czego nadpisywać. Moduł dostaje kopię nawet bez przypięć — to
+  starsze od nadpisań i celowe: moduł obrywa w locie, a zapis przez
+  referencję zmieniłby katalog na resztę sesji.
+- [x] Przełącznik „override" na wierszu pokazuje i chowa panel (z licznikiem
   przypięć, żeby zamknięty wiersz też się przyznawał), a w panelu każde pole
   ma checkbox. Zaznaczenie zasiewa wartością z katalogu, więc samo włączenie
   niczego nie zmienia. Nieprzypięte pola są wyszarzone.

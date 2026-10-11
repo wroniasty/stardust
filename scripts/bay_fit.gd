@@ -24,3 +24,18 @@ extends Resource
 ## Where the hole sits in the ship's own frame. Only the schematic and the
 ## centre-of-mass sum read it, but both of them read it.
 @export var at: Vector2 = Vector2.ZERO
+
+## Pola modulu, ktore ten preset nadpisuje: nazwa pola -> wartosc.
+##
+## The same arrangement `MountFit` and `GunFit` carry, and for the same
+## reason: a preset that wants a weaker cell says `{"capacity": 40.0}`
+## rather than an embedded copy of the cell, because a copy freezes every
+## field at the values they had the day it was made and a later retune of
+## the shared file reaches none of them.
+##
+## It is not merely cosmetic here. `bulk` is both what has to fit the bay
+## and what the module weighs, so pinning it moves the ship's centre of
+## mass and can make the module too big for the hole it is in -- which is
+## why `ShipFitout.fault_in` checks the **dressed** module rather than the
+## catalogue entry.
+@export var overrides: Dictionary = {}

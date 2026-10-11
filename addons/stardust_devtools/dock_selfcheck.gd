@@ -227,9 +227,25 @@ static func _preset_dock(dock: PresetEditor) -> int:
 		_press_stats(dock._gun_rows, 0)
 		failures += _says(
 			_form_rows(dock._gun_rows) > 0,
-			"whose stats panel has rows too (%d)" % _form_rows(dock._gun_rows),
+			"whose override panel has rows too (%d)" % _form_rows(dock._gun_rows),
 		)
 		_press_stats(dock._gun_rows, 0, false)
+
+	# A filled bay, not simply the first: an empty hole has nothing to
+	# override and its button is disabled on purpose.
+	var filled: int = -1
+	for index: int in range(dock._editing.bays.size()):
+		if dock._editing.bays[index] != null and dock._editing.bays[index].installed != null:
+			filled = index
+			break
+	failures += _says(filled >= 0, "the preset has a bay with a module in it")
+	if filled >= 0:
+		_press_stats(dock._bay_rows, filled)
+		failures += _says(
+			_form_rows(dock._bay_rows) > 0,
+			"and the module can be overridden too (%d rows)" % _form_rows(dock._bay_rows),
+		)
+		_press_stats(dock._bay_rows, filled, false)
 	return failures
 
 
@@ -311,7 +327,7 @@ static func _layer_switch(dock: Node, which: String) -> int:
 	return failures
 
 
-## Presses the stats toggle on one row, the way a mouse would, and
+## Presses the override toggle on one row, the way a mouse would, and
 ## says whether there was one to press.
 static func _press_stats(rows: Node, index: int, on: bool = true) -> bool:
 	var row: Node = rows.get_child(index) if index < rows.get_child_count() else null
@@ -327,7 +343,7 @@ static func _press_stats(rows: Node, index: int, on: bool = true) -> bool:
 static func _stats_toggle(where: Node) -> Button:
 	for child: Node in where.get_children():
 		var button: Button = child as Button
-		if button != null and button.toggle_mode and button.text.begins_with("staty"):
+		if button != null and button.toggle_mode and button.text.begins_with("override"):
 			return button
 		var deeper: Button = _stats_toggle(child)
 		if deeper != null:

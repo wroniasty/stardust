@@ -350,7 +350,7 @@ func _copy_of(preset: ShipPreset) -> ShipPreset:
 	var bays: Array[BayFit] = []
 	for bay: BayFit in preset.bays:
 		if bay != null:
-			bays.append(bay.duplicate() as BayFit)
+			bays.append(_copy_fit(bay) as BayFit)
 	out.bays = bays
 	return out
 
@@ -506,7 +506,7 @@ func _catalogue_pick(
 	return pick
 
 
-## One row, its stats toggle and the panel the toggle shows.
+## One row, its override toggle and the panel the toggle shows.
 ##
 ## Each field in the panel has a checkbox: ticked means this preset pins
 ## it, unticked means it follows the catalogue. That is the difference
@@ -534,7 +534,9 @@ func _with_stats(
 	var button: Button = Button.new()
 	button.toggle_mode = true
 	button.button_pressed = indent.visible
-	button.text = "staty" if overrides.is_empty() else "staty (%d)" % overrides.size()
+	button.text = (
+		"override" if overrides.is_empty() else "override (%d)" % overrides.size()
+	)
 	button.tooltip_text = "nadpisz pojedyncze pola tej czesci w tym presecie"
 	button.disabled = what == null
 	button.toggled.connect(func(on: bool) -> void:
@@ -633,8 +635,14 @@ func _bay_row(index: int) -> Control:
 	)
 	row.add_child(pick)
 
-	row.add_child(_remover(func() -> void: _drop(&"bays", index)))
-	return row
+	# A module is overridden like an engine or a gun, and here it is the
+	# field with two jobs that makes it matter: `bulk` is what has to fit
+	# the hole **and** what the module weighs, so pinning it moves the
+	# centre of mass drawn beside this row.
+	return _with_stats(
+		row, "bays:%d" % index, bay.installed, bay.overrides,
+		func() -> void: _drop(&"bays", index),
+	)
 
 
 func _remover(action: Callable) -> Button:
@@ -863,7 +871,7 @@ func _same_as_disk() -> bool:
 	if _editing.bays.size() != _on_disk.bays.size():
 		return false
 	for i: int in range(_editing.bays.size()):
-		for field: StringName in [&"size", &"installed", &"at"]:
+		for field: StringName in [&"size", &"installed", &"at", &"overrides"]:
 			if _editing.bays[i].get(field) != _on_disk.bays[i].get(field):
 				return false
 	return true

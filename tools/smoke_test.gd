@@ -8765,6 +8765,8 @@ func _check_a_preset_pins_fields() -> void:
 			"a pinned bulk weighs on the balance (%.2f against %.2f kg)" % [laden, light],
 		)
 
+	_check_a_bay_pins_fields()
+
 	# And a typo is refused rather than ignored: `set()` on a name the
 	# resource does not know does nothing at all, so the preset would
 	# read as though it pinned something and build a ship that did not.
@@ -8776,6 +8778,99 @@ func _check_a_preset_pins_fields() -> void:
 	_expect(
 		not ShipFitout.fault_in(typo).is_empty(),
 		"a pinned field that does not exist is refused (%s)" % ShipFitout.fault_in(typo),
+	)
+
+
+## Modul w zatoce nadpisuje sie tak samo jak silnik i dzialo.
+##
+## Bays got overrides last, and the module is the entry where the
+## arrangement earns the most: `bulk` has two jobs -- it is what has to
+## fit the hole and it is what the module weighs -- so pinning it both
+## moves the ship's centre of mass and can make the module too big for
+## the bay it is in. Which is why `fault_in` measures the module **as
+## built** rather than the catalogue entry, and why that is checked here
+## rather than trusted.
+func _check_a_bay_pins_fields() -> void:
+	var holder: ShipPreset = _reference_preset()
+	var hold: BayFit = null
+	for fit: BayFit in holder.bays:
+		if fit.installed is GeneratorData and hold == null:
+			hold = _copy_bay(fit)
+	if hold == null:
+		_expect(false, "the reference ship has a cell in a bay")
+		return
+	var swapped: Array[BayFit] = []
+	for fit: BayFit in holder.bays:
+		swapped.append(hold if fit.installed is GeneratorData else fit)
+	holder.bays = swapped
+
+	var catalogue: GeneratorData = hold.installed as GeneratorData
+	var was_capacity: float = catalogue.capacity
+	var ship: Ship = _spawn_ship()
+
+	# Nothing pinned is still a copy, unlike an engine or a gun. That is
+	# deliberate and older than overrides: a module takes damage and can
+	# have an affix rolled onto it in flight, and writing that through
+	# into the catalogue would change every later ship in the session.
+	_expect(ShipFitout.apply(ship, holder), "a preset with an unpinned module refits")
+	var hole: ModuleBay = ship.bay_holding(GeneratorData)
+	var plain: GeneratorData = null
+	if hole != null:
+		plain = hole.installed as GeneratorData
+	_expect(
+		plain != null and plain != catalogue
+		and is_equal_approx(plain.capacity, was_capacity),
+		"and fits a copy of the named module, with its figures",
+	)
+
+	hold.overrides = {"capacity": was_capacity * 0.5}
+	_expect(ShipFitout.apply(ship, holder), "a preset that pins a module field refits")
+	hole = ship.bay_holding(GeneratorData)
+	var worn: GeneratorData = null
+	if hole != null:
+		worn = hole.installed as GeneratorData
+	_expect(
+		worn != null and is_equal_approx(worn.capacity, was_capacity * 0.5),
+		"the fitted module differs in the pinned field (%.1f against %.1f)" % [
+			worn.capacity if worn != null else -1.0, was_capacity,
+		],
+	)
+	_expect(
+		worn != null and is_equal_approx(worn.recharge_rate, catalogue.recharge_rate),
+		"and in nothing else",
+	)
+	_expect(
+		is_equal_approx(catalogue.capacity, was_capacity),
+		"while the named module keeps its own figure (%.1f)" % catalogue.capacity,
+	)
+	_discard(ship)
+
+	# Bulk is mass. A balance drawn off the catalogue figure would not be
+	# this ship's, which is the same reason the engine above is dressed
+	# before it is weighed.
+	hold.overrides = {}
+	var light: float = float(ShipFitout.balance_of(holder.hull, holder)["mass"])
+	hold.overrides = {"bulk": catalogue.bulk + 1.0}
+	var laden: float = float(ShipFitout.balance_of(holder.hull, holder)["mass"])
+	_expect(
+		laden > light + 0.01,
+		"a pinned module bulk weighs on the balance (%.2f against %.2f kg)" % [
+			laden, light,
+		],
+	)
+
+	# And bulk is also what has to fit. This is the case that makes
+	# dressing the module in `fault_in` more than tidiness: the
+	# catalogue cell fits its hole and the pinned one does not.
+	hold.overrides = {"bulk": hold.size + 1.0}
+	_expect(
+		not ShipFitout.fault_in(holder).is_empty(),
+		"a pinned bulk too big for its bay is refused (%s)" % ShipFitout.fault_in(holder),
+	)
+	hold.overrides = {"capacitty": 1.0}
+	_expect(
+		not ShipFitout.fault_in(holder).is_empty(),
+		"and so is a field the module has not (%s)" % ShipFitout.fault_in(holder),
 	)
 
 
@@ -8797,6 +8892,12 @@ func _copy_gun(fit: GunFit) -> GunFit:
 
 func _copy_mount(fit: MountFit) -> MountFit:
 	var mine: MountFit = fit.duplicate() as MountFit
+	mine.overrides = fit.overrides.duplicate()
+	return mine
+
+
+func _copy_bay(fit: BayFit) -> BayFit:
+	var mine: BayFit = fit.duplicate() as BayFit
 	mine.overrides = fit.overrides.duplicate()
 	return mine
 

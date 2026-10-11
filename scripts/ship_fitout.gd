@@ -345,8 +345,14 @@ static func balance_of(hull: HullData, wanted: ShipPreset) -> Dictionary:
 				),
 			})
 		for bay: BayFit in wanted.bays:
-			if bay != null and bay.installed != null:
-				parts.append({"at": bay.at, "mass": bay.installed.bulk})
+			if bay == null or bay.installed == null:
+				continue
+			# Dressed for the same reason the engine above is: `bulk` is
+			# a pinnable field and bulk is mass.
+			var module: ModuleData = dressed(
+				bay.installed, bay.overrides
+			) as ModuleData
+			parts.append({"at": bay.at, "mass": module.bulk})
 
 	var budget: Dictionary = Ship.mass_budget(
 		hull.outline, Ship.mass_of_outline(hull.outline), parts
@@ -487,7 +493,13 @@ static func _add_bays(ship: Ship, wanted: ShipPreset) -> void:
 		bay.size = fit.size
 		bay.position = fit.at
 		if fit.installed != null:
-			bay.installed = fit.installed.duplicate() as ModuleData
+			var worn: ModuleData = dressed(fit.installed, fit.overrides) as ModuleData
+			# Still a copy when nothing is pinned: `dressed` hands back
+			# the shared resource then, and the paragraph above is the
+			# reason that will not do.
+			bay.installed = (
+				worn if worn != fit.installed else (worn.duplicate() as ModuleData)
+			)
 		ship.add_child(bay)
 
 
@@ -555,15 +567,26 @@ static func fault_in(wanted: ShipPreset) -> String:
 			return "%s has a bay with no room in it" % title
 		if fit.installed == null:
 			continue
+		var wrong: String = _unknown_field(fit.installed, fit.overrides)
+		if not wrong.is_empty():
+			return "%s pins %s on a module, which has no such field" % [
+				title, wrong,
+			]
+		# Both rules below are asked of the module **as built**, not of
+		# the catalogue entry. `type` and `bulk` are both pinnable, so a
+		# preset could otherwise pass this check and then build a ship
+		# with a module too big for its hole, or one that belongs in a
+		# socket of its own.
+		var module: ModuleData = dressed(fit.installed, fit.overrides) as ModuleData
 		# Asked of the bay's own rule rather than repeated here, so the
 		# preset and the socket cannot disagree about what fits.
-		if not ModuleBay.is_bay_module(fit.installed):
+		if not ModuleBay.is_bay_module(module):
 			return "%s puts a %s in a module bay, and that has its own socket" % [
-				title, fit.installed.display_name,
+				title, module.display_name,
 			]
-		if fit.installed.bulk > fit.size:
+		if module.bulk > fit.size:
 			return "%s puts a %s of %.2f into a bay of %.2f" % [
-				title, fit.installed.display_name, fit.installed.bulk, fit.size,
+				title, module.display_name, module.bulk, fit.size,
 			]
 	return ""
 
