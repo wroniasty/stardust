@@ -8491,6 +8491,8 @@ func _check_hull_editor() -> void:
 	_check_the_preview_is_the_ship()
 	_check_a_gun_goes_where_it_is_told()
 	_check_a_preset_pins_fields()
+	_check_a_preset_can_carry_a_computer()
+	_check_the_computer_catalogue()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
@@ -8872,6 +8874,120 @@ func _check_a_bay_pins_fields() -> void:
 		not ShipFitout.fault_in(holder).is_empty(),
 		"and so is a field the module has not (%s)" % ShipFitout.fault_in(holder),
 	)
+
+
+## Preset umie posadzic komputer pokladowy w zatoce.
+##
+## It could not say so until there was a `.tres` to name: every other
+## kind a bay takes has a catalogue -- generators, scanners, drives,
+## tanks -- and the computer was reachable only through a loot roll, so a
+## designed ship had no way to carry one and the dock's dropdown had
+## nothing to offer. This is the mechanism half, on the reference model:
+## a bay holds a computer, `fault_in` accepts it, and `Ship.computer()`
+## finds it with the allocation it was given.
+##
+## Which matters because the allocation is a switch rather than a number:
+## `Ship` asks for it before deciding whether to solve the thrust split
+## properly, so a computer that was fitted but not found is the same ship
+## as one with no computer at all, and nothing on screen would say.
+func _check_a_preset_can_carry_a_computer() -> void:
+	var preset: ShipPreset = _reference_preset()
+	var box: FlightComputerData = FlightComputerData.new()
+	box.display_name = "test box"
+	box.allocation = FlightComputerData.Allocation.NNLS
+	box.has_auto_level = true
+	box.bulk = 0.8
+
+	# Into the bay the reference ship leaves empty, which is the one a
+	# designer would reach for.
+	var holes: Array[BayFit] = []
+	var seated: bool = false
+	for fit: BayFit in preset.bays:
+		if fit.installed == null and not seated and fit.size >= box.bulk:
+			var taken: BayFit = fit.duplicate() as BayFit
+			taken.installed = box
+			holes.append(taken)
+			seated = true
+		else:
+			holes.append(fit)
+	preset.bays = holes
+	_expect(seated, "the reference ship has an empty bay to put a computer in")
+	_expect(
+		ShipFitout.fault_in(preset).is_empty(),
+		"a preset carrying a computer is accepted (%s)" % ShipFitout.fault_in(preset),
+	)
+
+	var ship: Ship = _spawn_ship()
+	_expect(ShipFitout.apply(ship, preset), "and refits")
+	var found: FlightComputerData = ship.computer()
+	_expect(
+		found != null and found.allocation == FlightComputerData.Allocation.NNLS
+		and found.has_auto_level,
+		"and the ship finds it, with the functions it was given",
+	)
+	# A copy, like every other module in a bay: this one takes damage in
+	# flight as readily as a generator does.
+	_expect(found != box, "as its own copy, not the preset's object")
+	_discard(ship)
+
+
+## Katalog komputerow: pliki, nie tylko rzuty generatora.
+##
+## A content check, so it warns rather than fails. What it is checking is
+## that the catalogue is worth having: four boxes all doing the same
+## thing would be four files and one choice, and the reason this
+## directory exists is that `allocation` is the switch a sandbox wants to
+## compare across -- a ship flown with the built-in heuristic against the
+## same ship flown with the solver.
+##
+## Functions rather than figures is the computer's own rule
+## (`FlightComputerData.blurb`), so what is counted here is which
+## functions the catalogue can offer, not how big its numbers are.
+func _check_the_computer_catalogue() -> void:
+	var directory: String = "res://resources/computers"
+	var files: Array = Array(ResourceLoader.list_directory(directory))
+	var boxes: Array[FlightComputerData] = []
+	var broken: Array[String] = []
+	for file_name: String in files:
+		if not file_name.ends_with(".tres"):
+			continue
+		var box: FlightComputerData = load(
+			"%s/%s" % [directory, file_name]
+		) as FlightComputerData
+		if box == null:
+			broken.append(file_name)
+			continue
+		boxes.append(box)
+		# A computer that no bay can hold is a file nobody can use, and
+		# the biggest hole any shipped preset offers is the measure.
+		if box.bulk <= 0.0 or not ModuleBay.is_bay_module(box):
+			broken.append("%s: %.2f bulk" % [file_name, box.bulk])
+	_warn(
+		not boxes.is_empty() and broken.is_empty(),
+		"the computer catalogue loads (%d boxes%s)" % [
+			boxes.size(), "" if broken.is_empty() else ", broken: %s" % str(broken),
+		],
+	)
+
+	var heuristics: int = 0
+	var solvers: int = 0
+	var assists: int = 0
+	for box: FlightComputerData in boxes:
+		if box.allocation == FlightComputerData.Allocation.HEURISTIC:
+			heuristics += 1
+		else:
+			solvers += 1
+		if box.has_auto_level or box.has_auto_orbit:
+			assists += 1
+		if box.has_altitude_hold or box.has_deorbit:
+			assists += 1
+	_warn(
+		heuristics > 0 and solvers > 0,
+		"and offers both allocations, which is what it is for (%d/%d)" % [
+			heuristics, solvers,
+		],
+	)
+	_warn(assists > 0, "with assists to compare against none (%d)" % assists)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

@@ -3128,6 +3128,40 @@ walką z dragiem, a nie mechaniką orbitalną, i to jest ta sama granica, które
 pilnuje już orbit lock. Po załączeniu komputer sam dobiera i wykonuje odpalenia
 tak, żeby wejść na orbitę wokół tego ciała.
 
+**Komputery jako pliki: `resources/computers/*.tres`.** Każdy inny rodzaj
+modułu, który wchodzi do zatoki, miał swój katalog — generatory, skanery,
+napędy skokowe, zbiorniki — a komputer dało się dostać **wyłącznie z rzutu**
+`LootGenerator.computer()`. Czyli zaprojektowany statek nie miał jak go nieść,
+a lista w doku presetów nie miała czego zaproponować.
+
+Cztery wpisy, i drabinką są **funkcje, nie liczby** — to reguła samego modułu
+(`FlightComputerData.blurb`): „basic avionics" (heurystyka, zero asyst,
+`bulk` 0.5), „thrust solver" (NNLS, zero asyst, 0.8), „approach suite"
+(NNLS + auto-poziom + hold wysokości, 1.0, draw 1.8) i „orbital pilot"
+(NNLS + wszystkie cztery, 1.2, draw 3.0). `bulk` i `idle_draw` mieszczą się
+w tym, co generator losuje (0.4–1.2 i 0.5–3.0), więc zatoka, która przyjmuje
+rzut, przyjmuje też plik.
+
+Dwa pola zostawione na zero, i to jest decyzja: `idle_draw` to pobór
+**przy załączonej asyście**, a pudełko bez żadnej asysty nie ma czego załączyć
+— każda inna liczba byłaby liczbą niemożliwą do zaobserwowania. Katalog nie
+ustawia też `rarity` ani `affixes`, jak żaden z sześciu plików obok: jedno i
+drugie jest faktem o **rzucie**, a nie o rzeczy, i karta i tak mówi, co
+pudełko robi, bo `stat_rows()` wypisuje każdą funkcję jako 0/1.
+
+**Luka, którą to odsłoniło:** `LootGenerator.computer()` nie losuje
+`has_altitude_hold` ani `has_deorbit` — oba pola istnieją, `Ship` je czyta,
+akord `W+S+A` / `W+S+D` jest podpięty, a znaleźć pudełka z nimi nie sposób.
+Dzisiaj ma je tylko katalog. Czy generator ma je losować (i od której
+rzadkości) — do rozstrzygnięcia; zmiana tabeli łupów to decyzja
+projektowa, nie poprawka.
+
+Żaden wysłany preset nie dostaje komputera i to też zostaje celowo:
+`FlightComputerData` mówi, że seryjny kadłub lata na wbudowanej heurystyce, a
+działający alokator to rzecz **do znalezienia**. Katalog jest po to, żeby w
+piaskownicy dało się porównać ten sam statek z solverem i bez — co jest
+dokładnie tym, do czego presety są.
+
 Otwarte pytania: czy celem jest orbita kołowa na aktualnej wysokości, czy
 najtańsza paliwowo orbita zamknięta (podniesienie samego perycentrum ponad
 atmosferę); czy funkcja zużywa paliwo widoczne dla gracza; jak się zachowuje,

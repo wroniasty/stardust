@@ -238,6 +238,25 @@ static func _preset_dock(dock: PresetEditor) -> int:
 		if dock._editing.bays[index] != null and dock._editing.bays[index].installed != null:
 			filled = index
 			break
+	# What the bay dropdown can actually offer. A kind with no `.tres`
+	# anywhere is a kind a designed ship cannot carry, which is what the
+	# flight computer was until `resources/computers` existed -- and
+	# dropping the directory out of `MODULE_DIRS` would otherwise break
+	# nothing that anybody notices.
+	var kinds: Dictionary = {}
+	for module: Resource in dock._modules:
+		kinds[module.get_script()] = true
+	var computers: int = 0
+	for module: Resource in dock._modules:
+		if module is FlightComputerData:
+			computers += 1
+	failures += _says(
+		computers > 0 and kinds.size() >= 5,
+		"the bay dropdown offers every kind, computers included (%d kinds, %d boxes)" % [
+			kinds.size(), computers,
+		],
+	)
+
 	failures += _says(filled >= 0, "the preset has a bay with a module in it")
 	if filled >= 0:
 		_press_stats(dock._bay_rows, filled)

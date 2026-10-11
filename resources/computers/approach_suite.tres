@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="FlightComputerData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/flight_computer_data.gd" id="1_computer"]
+
+[resource]
+script = ExtResource("1_computer")
+display_name = "approach suite"
+allocation = 1
+has_auto_level = true
+has_altitude_hold = true
+idle_draw = 1.8
+bulk = 1.0

@@ -34,6 +34,7 @@ const WEAPON_DIR: String = "res://resources/weapons"
 const MODULE_DIRS: Array[String] = [
 	"res://resources/generators", "res://resources/scanners",
 	"res://resources/drives", "res://resources/tanks",
+	"res://resources/computers",
 ]
 
 ## The kinds of place an engine can fill, in the order a preset reads

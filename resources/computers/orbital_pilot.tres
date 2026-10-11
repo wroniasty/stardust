@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="FlightComputerData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/flight_computer_data.gd" id="1_computer"]
+
+[resource]
+script = ExtResource("1_computer")
+display_name = "orbital pilot"
+allocation = 1
+has_auto_orbit = true
+has_auto_level = true
+has_altitude_hold = true
+has_deorbit = true
+idle_draw = 3.0
+bulk = 1.2
