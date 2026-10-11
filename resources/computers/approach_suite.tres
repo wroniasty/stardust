@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_computer")
+rollable = false
 display_name = "approach suite"
 allocation = 1
 has_auto_level = true

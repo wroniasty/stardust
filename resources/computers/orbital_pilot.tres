@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_computer")
+rollable = false
 display_name = "orbital pilot"
 allocation = 1
 has_auto_orbit = true

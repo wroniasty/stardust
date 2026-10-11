@@ -256,6 +256,40 @@ Gotowe, gdy: znajduje się losowy silnik lub broń, montuje, czuć różnicę, u
 
 **M2 zamknięty.** Wszystkie pozycje odhaczone, 433 asercje.
 
+### Dosypane później: pula losowania i zakresy na plik
+
+- [x] **`ModuleData.rollable`**: czy generator może losować z tego pliku.
+  Nie każdy przedmiot w `resources/` jest łupem — jeden jest na start statku,
+  drugi przychodzi ze zdarzeniem, trzeci wypadnie z wraku — a dotąd pula była
+  sześcioma stałymi listami ścieżek w `loot_generator.gd`, czyli odpowiedzią
+  **przez przemilczenie**. Generator skanuje teraz katalogi
+  (`ModuleData.CATALOGUE`), a plik sam mówi, czy wchodzi.
+- [x] **`ModuleData.roll_ranges`**: zakres na pole, z którego rzadkość wybiera
+  wartość — „ta broń od 0.02 do 0.50 obrażeń". Dotąd jedyną drogą do „ten
+  autocannon ma chodzić od miernego do groźnego" była edycja tabeli afiksów,
+  wspólnej dla wszystkich broni. Band to to samo zdanie o jednym pliku.
+- [x] **Kierunek czytany z pola, nie z kolejności pary.** `HIGHER_IS_BETTER`
+  obejmuje teraz **każde eksportowane `float`** każdego rodzaju modułu (45
+  pól, pilnowane testem), bo band bez kierunku nie wie, który koniec jest
+  dobry — a projektant nie ma pamiętać konwencji, którą gra zna.
+- [x] **Rzadkość przechyla, nie podłoguje**: udział w bandzie to
+  `(stopień ± 0.5) / 4`, czyli okna stopni **zachodzą** na siebie. Szczęśliwy
+  common bije nudnego uncommona, a legendary nie jest po prostu najlepszym
+  końcem każdego bandu — ta sama zasada, którą ten plik otwiera, przeniesiona
+  z tabeli na liczby.
+- [x] **Jeden udział na przedmiot, nie na pole**: przedmiot jest **jednym**
+  losowaniem, więc legendary to dobry egzemplarz swojego rodzaju albo słaby,
+  a nie cztery rzuty monetą uśredniające się do środka. Charakter na krzywo
+  dają afiksy, i te losują się po jednym.
+- [x] **Pusty band nie rusza strumienia losowego**: plik bez zakresów nie
+  pobiera z `rng` ani jednej liczby, więc każdy seed w galaktyce znaczy to, co
+  znaczył. Wyjście z `_roll_bands` przed czymkolwiek nie jest optymalizacją,
+  jest tym, co trzyma determinizm.
+- [x] **Jedna droga ubierania** (`LootGenerator._dress`): bandy, afiksy,
+  `mod_slots`, `depth` i klamry. Sześć kopii tego samego zniknęło, a dok
+  przedmiotów pokazuje próbki **tą samą** drogą — podgląd, który chodziłby
+  własną, byłby podglądem generatora, którego nie ma.
+
 
 
 ---

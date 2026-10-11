@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_computer")
+rollable = false
 display_name = "basic avionics"
 allocation = 0
 bulk = 0.5

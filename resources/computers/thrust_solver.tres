@@ -4,6 +4,7 @@
 
 [resource]
 script = ExtResource("1_computer")
+rollable = false
 display_name = "thrust solver"
 allocation = 1
 bulk = 0.8

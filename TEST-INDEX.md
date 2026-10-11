@@ -12,7 +12,7 @@ engine error in their output.
 | Name | Command | What it checks | Time |
 |---|---|---|---|
 | Asset import | `godot --headless --path . --import` | Assets import cleanly. `check.ps1` kills it after 25 s if a script tab is open in the editor session. | ~3–10 s |
-| Editor docks | `godot --headless --path . --import -- --dock-selfcheck` | The hull and preset docks open a file, draw, show their stats panels and paint the skin. The only check that runs **in the editor**, where a non-`@tool` resource is a placeholder and a dock can break with everything else green. | ~5 s |
+| Editor docks | `godot --headless --path . --import -- --dock-selfcheck` | The hull, preset and item docks open a file, draw, show their stats panels, build band rows and sample rolls, and paint the skin. The only check that runs **in the editor**, where a non-`@tool` resource is a placeholder and a dock can break with everything else green. `check.ps1` reads **both** streams of this stage: Godot writes `ERROR:` to stderr, and reading stdout alone once let 62 engine errors through a passing run. | ~6 s |
 | Idle run | `godot --headless --path . --quit-after 120` | The game boots and runs 120 frames with no script errors. | ~2 s |
 | Smoke test | `godot --headless --fixed-fps 60 --path . --script res://tools/smoke_test.gd` | The big one: gravity, atmosphere, terrain, flight phases, landing, weapons, energy, engines, cargo, galaxy, jumps, streaming, save, the editor docks and more. Prints `smoke test: OK`. | ~25 s |
 | Fire check | `godot --headless --path . res://tools/fire_check.tscn` | Each armed hardpoint fires from its own position, not a fixed point on the hull. | ~1 s |
@@ -50,7 +50,8 @@ system map and the live overlay (both keys, the held peek and its
 automatic framing), the crossing to a pin (states, closest approach,
 braking burn) and the ring that draws it, what a thrown crate does on
 the ground and the box of units that can be thrown, every `_on_*`
-handler being connected to something,
+handler being connected to something, the loot pool coming from
+`rollable` and the per-file roll bands (direction, lean, bounds),
 boost, input bindings, sprite sheets, the dock's skin still.
 
 ## Failures vs. warnings

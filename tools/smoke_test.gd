@@ -2329,7 +2329,7 @@ func _check_weapon_arcs() -> void:
 	root.add_child(loot)
 	var ceiling: float = float((LOOT_SCRIPT.LIMITS["traverse_range"] as Vector2).y)
 	var widest: float = 0.0
-	for path: String in LOOT_SCRIPT.WEAPON_BASES:
+	for path: String in ModuleData.files_of(&"weapon"):
 		var weapon: WeaponData = load(path) as WeaponData
 		_expect(
 			weapon != null and weapon.traverse_range > 0.0,
@@ -3262,7 +3262,7 @@ func _check_energy() -> void:
 	var per_energy: Array[float] = []
 	var lowest: float = INF
 	var highest: float = 0.0
-	for path: String in LOOT_SCRIPT.WEAPON_BASES:
+	for path: String in ModuleData.files_of(&"weapon"):
 		var gun: WeaponData = load(path) as WeaponData
 		_expect(gun.energy_cost > 0.0, "%s costs energy to fire" % gun.title())
 		var ratio: float = gun.damage / maxf(gun.energy_cost, 0.0001)
@@ -9057,6 +9057,9 @@ func _check_hull_editor() -> void:
 	_check_a_crate_loads_the_bay()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
+	_check_only_rollable_files_are_rolled()
+	_check_a_band_is_what_rarity_buys()
+	_check_every_module_field_knows_which_way_is_up()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
@@ -10926,6 +10929,214 @@ func _check_every_action_a_script_asks_for_exists() -> void:
 	)
 
 
+## Tylko pliki z `rollable` wchodza do puli losowania.
+##
+## The flag replaced six hard-coded lists of paths, which answered the
+## same question by omission: a weapon added to the folder was never
+## rolled and nothing anywhere said so. What has to hold now is that the
+## scan and the flag agree -- and the way to prove a filter filters is
+## to turn one off and look, which works here because `load()` hands
+## back the one cached instance the whole process shares.
+func _check_only_rollable_files_are_rolled() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+
+	var every: Array[String] = ModuleData.files_of(&"weapon")
+	_expect(
+		loot.bases_of(&"weapon").size() == every.size() and every.size() >= 7,
+		"every weapon in the folder is in the pool (%d of %d)" % [
+			loot.bases_of(&"weapon").size(), every.size(),
+		],
+	)
+	# The catalogue computers are the plainest case of the flag being
+	# off: the generator builds a box from its own table, so a file in
+	# that folder is for a preset or an event and never for a crate.
+	var boxes: Array[String] = ModuleData.files_of(&"computer")
+	_expect(
+		boxes.size() == 4 and loot.bases_of(&"computer").is_empty(),
+		"and none of the %d catalogue computers is (%d in the pool)" % [
+			boxes.size(), loot.bases_of(&"computer").size(),
+		],
+	)
+
+	# Turn one off and the pool is one shorter -- and the one missing is
+	# that one. Restored before anything else looks at it: this is the
+	# instance every preset in the process is pointing at.
+	var path: String = every[0]
+	var gun: WeaponData = load(path) as WeaponData
+	gun.rollable = false
+	loot._bases.clear()
+	var without: Array[String] = loot.bases_of(&"weapon")
+	gun.rollable = true
+	loot._bases.clear()
+	_expect(
+		without.size() == every.size() - 1 and not without.has(path),
+		"turning one off takes it out of the pool (%s, %d left)" % [
+			path.get_file(), without.size(),
+		],
+	)
+	_expect(
+		loot.bases_of(&"weapon").has(path),
+		"and turning it back on puts it back",
+	)
+	_discard(loot)
+
+
+## Zakres mowi, co kupuje rzadkosc -- i w ktora strone.
+##
+## Driven on a field **no affix touches** (`missile_turn_rate`), which is
+## the only way to measure the band itself: every headline number has an
+## affix table leaning on it as well, so a legendary comes out above the
+## good end of its own band and a check that read damage would be
+## measuring the pair rather than the band.
+##
+## The claim that matters most is the one about order. A designer typing
+## "energy cost from 3.0 to 0.8" and one typing "0.8 to 3.0" mean the
+## same thing, because cheaper is better for a cost -- so the generator
+## reads which end is the good one off `HIGHER_IS_BETTER` and not off
+## the order the pair was typed in.
+func _check_a_band_is_what_rarity_buys() -> void:
+	var loot: Node = LOOT_SCRIPT.new()
+	root.add_child(loot)
+	var base: WeaponData = (load(
+		ModuleData.files_of(&"weapon")[0]
+	) as WeaponData).duplicate() as WeaponData
+	base.roll_ranges = {"missile_turn_rate": Vector2(1.0, 5.0)}
+
+	# Averages over many seeds, because one grade's window overlaps its
+	# neighbour's on purpose (`BAND_SPREAD`): a lucky common beats a dull
+	# uncommon, and the claim is about the lean rather than about any one
+	# roll.
+	var means: Array[float] = []
+	var outside: int = 0
+	for grade: int in range(ModuleData.RARITY_NAMES.size()):
+		var total: float = 0.0
+		for roll: int in range(80):
+			var item: WeaponData = loot.sample(
+				base, &"weapon", grade, 4000 + roll
+			) as WeaponData
+			total += item.missile_turn_rate
+			if item.missile_turn_rate < 1.0 or item.missile_turn_rate > 5.0:
+				outside += 1
+		means.append(total / 80.0)
+	var climbing: bool = true
+	for i: int in range(1, means.size()):
+		if means[i] <= means[i - 1]:
+			climbing = false
+	_expect(
+		climbing,
+		"each grade averages higher up the band than the one below (%.2f %.2f %.2f %.2f %.2f)" % [
+			means[0], means[1], means[2], means[3], means[4],
+		],
+	)
+	_expect(
+		outside == 0,
+		"and no roll leaves the band it was given (%d of 400 outside)" % outside,
+	)
+
+	# The same band typed the other way round. Written out as a cost,
+	# where the good end is the small one.
+	var cheap: WeaponData = base.duplicate() as WeaponData
+	cheap.roll_ranges = {"energy_cost": Vector2(3.0, 0.8)}
+	var dear: WeaponData = base.duplicate() as WeaponData
+	dear.roll_ranges = {"energy_cost": Vector2(0.8, 3.0)}
+	var same: int = 0
+	for roll: int in range(40):
+		var one: WeaponData = loot.sample(cheap, &"weapon", 2, 9000 + roll) as WeaponData
+		var two: WeaponData = loot.sample(dear, &"weapon", 2, 9000 + roll) as WeaponData
+		if is_equal_approx(one.energy_cost, two.energy_cost):
+			same += 1
+	_expect(
+		same == 40,
+		"a band typed either way round rolls the same (%d of 40 agreed)" % same,
+	)
+	# And a cost really does fall as the grade climbs, which is the half
+	# of "which way is up" that a rising field cannot check.
+	var common_cost: float = 0.0
+	var legend_cost: float = 0.0
+	for roll: int in range(60):
+		common_cost += (loot.sample(cheap, &"weapon", 0, 7000 + roll) as WeaponData).energy_cost
+		legend_cost += (loot.sample(cheap, &"weapon", 4, 7000 + roll) as WeaponData).energy_cost
+	_expect(
+		legend_cost < common_cost,
+		"a legendary shot costs less than a common one (%.2f against %.2f)" % [
+			legend_cost / 60.0, common_cost / 60.0,
+		],
+	)
+
+	# A band naming a field the resource has not got is skipped rather
+	# than written: `set()` on an unknown name does nothing at all, so
+	# the alternative is a typo that looks like a working band.
+	var typo: WeaponData = base.duplicate() as WeaponData
+	typo.roll_ranges = {"damagee": Vector2(1.0, 2.0)}
+	_expect(
+		loot.sample(typo, &"weapon", 4, 11) != null,
+		"a band on a field that does not exist rolls anyway",
+	)
+	_discard(loot)
+
+	# And the shipped files: a band is only as good as the name in it.
+	var wrong: Array[String] = []
+	for entry: Dictionary in ModuleData.CATALOGUE:
+		for path: String in ModuleData.files_of(entry["id"]):
+			var module: ModuleData = load(path) as ModuleData
+			if module == null:
+				continue
+			for field: String in module.roll_ranges:
+				if not field in module:
+					wrong.append("%s: %s" % [path.get_file(), field])
+				elif not LOOT_SCRIPT.HIGHER_IS_BETTER.has(field):
+					wrong.append("%s: %s has no direction" % [path.get_file(), field])
+	_warn(
+		wrong.is_empty(),
+		"every band in the shipped files names a real field (%s)" % [
+			"all clear" if wrong.is_empty() else str(wrong),
+		],
+	)
+
+
+## Kazde eksportowane pole modulu wie, w ktora strone jest lepiej.
+##
+## `HIGHER_IS_BETTER` used to cover the fields an affix touched, which
+## was all anything read it for. A band reads it too -- it is what tells
+## the two ends apart -- and the dock offers a band row **only** for
+## fields that are in it. So a float added to a module and forgotten
+## here is not a missing table entry, it is a field a designer cannot
+## tune and no error anywhere.
+func _check_every_module_field_knows_which_way_is_up() -> void:
+	var kinds: Array[ModuleData] = [
+		WeaponData.new(), EngineData.new(), GeneratorData.new(), ScannerData.new(),
+		JumpDriveData.new(), TankData.new(), FlightComputerData.new(), ShotModData.new(),
+	]
+	var directions: Dictionary = LOOT_SCRIPT.HIGHER_IS_BETTER
+	var missing: Array[String] = []
+	var counted: int = 0
+	for module: ModuleData in kinds:
+		for property: Dictionary in module.get_property_list():
+			var usage: int = property["usage"]
+			if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) == 0:
+				continue
+			if (usage & PROPERTY_USAGE_EDITOR) == 0:
+				continue
+			if int(property["type"]) != TYPE_FLOAT:
+				continue
+			counted += 1
+			var field: String = property["name"]
+			if not directions.has(field):
+				# The script's name, not `get_class()`: a scripted
+				# resource answers that with "Resource", which names
+				# every kind there is and so names none of them.
+				missing.append("%s.%s" % [
+					module.get_script().get_global_name(), field,
+				])
+	_expect(
+		counted > 25 and missing.is_empty(),
+		"every exported float has a direction (%d fields, %s)" % [
+			counted, "all named" if missing.is_empty() else str(missing),
+		],
+	)
+
+
 ## The first gun on the ship, whatever hardpoint it landed in.
 func _first_weapon(ship: Ship) -> WeaponData:
 	for gun: Hardpoint in ship.hardpoints:
@@ -12326,12 +12537,12 @@ func _check_item_names() -> void:
 func _check_affix_pools() -> void:
 	var loot: Node = LOOT_SCRIPT.new()
 	var categories: Array[Dictionary] = [
-		{"kind": "weapon", "bases": loot.WEAPON_BASES, "table": loot.WEAPON_AFFIXES},
-		{"kind": "engine", "bases": loot.ENGINE_BASES, "table": loot.ENGINE_AFFIXES},
-		{"kind": "generator", "bases": loot.GENERATOR_BASES, "table": loot.GENERATOR_AFFIXES},
-		{"kind": "scanner", "bases": loot.SCANNER_BASES, "table": loot.SCANNER_AFFIXES},
-		{"kind": "drive", "bases": loot.DRIVE_BASES, "table": loot.DRIVE_AFFIXES},
-		{"kind": "tank", "bases": loot.TANK_BASES, "table": loot.TANK_AFFIXES},
+		{"kind": "weapon", "bases": loot.bases_of(&"weapon"), "table": loot.WEAPON_AFFIXES},
+		{"kind": "engine", "bases": loot.bases_of(&"engine"), "table": loot.ENGINE_AFFIXES},
+		{"kind": "generator", "bases": loot.bases_of(&"generator"), "table": loot.GENERATOR_AFFIXES},
+		{"kind": "scanner", "bases": loot.bases_of(&"scanner"), "table": loot.SCANNER_AFFIXES},
+		{"kind": "drive", "bases": loot.bases_of(&"drive"), "table": loot.DRIVE_AFFIXES},
+		{"kind": "tank", "bases": loot.bases_of(&"tank"), "table": loot.TANK_AFFIXES},
 	]
 
 	var toothless: int = 0
@@ -14031,7 +14242,7 @@ func _check_art() -> void:
 	var seen_nozzles: Array[SpriteStrip] = []
 	var seen_plumes: Array[SpriteStrip] = []
 	var undrawn: int = 0
-	for path: String in LootGenerator.ENGINE_BASES:
+	for path: String in ModuleData.files_of(&"engine"):
 		var engine: EngineData = load(path) as EngineData
 		var nozzle: SpriteStrip = nozzles.pick(engine)
 		var plume: SpriteStrip = plumes.pick(engine)
@@ -14055,7 +14266,7 @@ func _check_art() -> void:
 	var muzzles: LookTable = load("res://resources/fx/looks/weapon_muzzle.tres") as LookTable
 	var seen_guns: Array[SpriteStrip] = []
 	var unarmed: int = 0
-	for path: String in LootGenerator.WEAPON_BASES:
+	for path: String in ModuleData.files_of(&"weapon"):
 		var weapon: WeaponData = load(path) as WeaponData
 		var muzzle: SpriteStrip = muzzles.pick(weapon)
 		if muzzle == null:
@@ -19602,7 +19813,7 @@ func _check_skin() -> void:
 	var unpainted: int = 0
 	var untinted: int = 0
 	var rounds: int = 0
-	for path: String in LootGenerator.WEAPON_BASES:
+	for path: String in ModuleData.files_of(&"weapon"):
 		var weapon: WeaponData = load(path) as WeaponData
 		if weapon.projectile_scene == null:
 			continue

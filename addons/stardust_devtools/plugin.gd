@@ -1,12 +1,15 @@
 @tool
 extends EditorPlugin
-## Stardust devtools: trzy doki w edytorze. DEVTOOLS.md, D6.
+## Stardust devtools: cztery doki w edytorze. DEVTOOLS.md, D6.
 ##
-## Three jobs now. Run the sandbox scene. Give hulls a dock, because a
+## Four jobs now. Run the sandbox scene. Give hulls a dock, because a
 ## hull is a shape and the inspector shows it as a column of numbers
-## (`hull_editor.gd`). And presets another, because a preset is four
-## lines that build nine engines somewhere, and no column of dropdowns
-## says where (`preset_editor.gd`).
+## (`hull_editor.gd`). Presets another, because a preset is four lines
+## that build nine engines somewhere, and no column of dropdowns says
+## where (`preset_editor.gd`). And items a third -- not because the
+## inspector cannot show their numbers, but because it cannot show the
+## two things that are not numbers: whether the generator may roll this
+## file at all, and what rarity buys when it does (`item_editor.gd`).
 ##
 ## What it also used to do: list every game resource by kind and open it
 ## in the inspector, and forward each inspector edit to a running
@@ -30,6 +33,7 @@ var _dock: VBoxContainer = null
 ## that ships does.
 var _hulls: EditorDock = null
 var _presets: EditorDock = null
+var _items: EditorDock = null
 
 
 func _enter_tree() -> void:
@@ -54,19 +58,29 @@ func _enter_tree() -> void:
 	_presets.add_child(preset_editor)
 	add_dock(_presets)
 
+	_items = EditorDock.new()
+	_items.title = "Moduly"
+	_items.icon_name = &"Tools"
+	_items.default_slot = EditorDock.DOCK_SLOT_BOTTOM
+	_items.available_layouts = EditorDock.DOCK_LAYOUT_ALL
+	var item_editor: ItemEditor = ItemEditor.new()
+	_items.add_child(item_editor)
+	add_dock(_items)
+
 	# Asked for from the command line by `check.ps1`, and silent
 	# otherwise. The docks only exist in the editor and the smoke test
 	# runs as a game, so this is the only place their failures are
 	# visible at all (DEVTOOLS.md rule 8).
 	if DockSelfcheck.asked():
-		DockSelfcheck.run(hull_editor, preset_editor)
+		DockSelfcheck.run(hull_editor, preset_editor, item_editor)
 
 
 func _exit_tree() -> void:
-	for dock: EditorDock in [_presets, _hulls]:
+	for dock: EditorDock in [_items, _presets, _hulls]:
 		if dock != null:
 			remove_dock(dock)
 			dock.queue_free()
+	_items = null
 	_presets = null
 	_hulls = null
 	if _dock != null:

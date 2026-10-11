@@ -63,6 +63,140 @@ func rarity_color() -> Color:
 ## table of conversions and a pilot no second number to learn.
 @export var bulk: float = 1.0
 
+## Whether the loot generator may use this file as a base for a roll.
+##
+## **Not every item in `resources/` is loot.** A module can exist to be
+## bolted onto a starting ship, handed over by an event, or carried by
+## something the pilot shoots down, and none of those want it turning up
+## in a crate on a random moon as well. The generator used to keep its
+## own hard-coded list of paths per kind, which answered the same
+## question by omission -- and silently: a file added to the folder was
+## simply never rolled, with nothing anywhere saying so.
+##
+## True by default, because the folders and those lists agreed exactly
+## when this arrived (seven weapons, seven engines, one cell, two
+## scanners, two drives, two tanks), so the flag changes nothing until
+## somebody turns one off.
+@export var rollable: bool = true
+
+## The band each field is rolled from, by rarity: field name ->
+## (one end, the other).
+##
+## **What rarity buys, per item, in the designer's hands.** Before this,
+## a rolled item was its base file's numbers times whatever the affix
+## table did, so the only way to say "this autocannon should run from
+## feeble to frightening" was to edit the affix table -- which is shared
+## by every weapon there is. A band is the same statement about one
+## file.
+##
+## Which end is which **does not matter**. The pair is read against
+## `LootGenerator.HIGHER_IS_BETTER`, so (3.0, 0.8) and (0.8, 3.0) for an
+## energy cost both mean "three at its dullest, nought point eight at
+## its best" -- cheaper is better for a cost. A designer typing a pair
+## should not have to remember a convention the game already knows.
+##
+## Empty means "leave the base value alone", which is what every shipped
+## file says today: a band is a thing you add when you want it, not a
+## table to fill in before the generator works.
+@export var roll_ranges: Dictionary[String, Vector2] = {}
+
+## Where each kind of module keeps its files.
+##
+## One list, because three things read it: the generator, which scans
+## for the bases it may roll; the dock, which offers the kinds a
+## designer can edit; and the checks that hold the two to each other.
+## It used to be six `const *_BASES` arrays of paths inside the
+## generator, which is the same list written out by hand and able to
+## disagree with the folder it describes.
+##
+## `rolls` says whether the generator builds that kind from a file at
+## all. A flight computer is the one that does not: it is a set of
+## switches, and what makes one interesting is which of them are on, so
+## `LootGenerator.computer` rolls the switches by rarity and starts from
+## nothing. The four files in that folder are a catalogue for presets
+## and for whatever hands a ship its first box -- the plainest example
+## there is of `rollable` being off -- and the dock says so rather than
+## offering a band nothing would read.
+const CATALOGUE: Array[Dictionary] = [
+	{
+		"id": &"weapon", "title": "bronie", "rolls": true,
+		"folder": "res://resources/weapons",
+	},
+	{
+		"id": &"engine", "title": "silniki", "rolls": true,
+		"folder": "res://resources/engines",
+	},
+	{
+		"id": &"generator", "title": "generatory", "rolls": true,
+		"folder": "res://resources/generators",
+	},
+	{
+		"id": &"computer", "title": "komputery", "rolls": false,
+		"folder": "res://resources/computers",
+	},
+	{
+		"id": &"drive", "title": "napedy skokowe", "rolls": true,
+		"folder": "res://resources/drives",
+	},
+	{
+		"id": &"scanner", "title": "skanery", "rolls": true,
+		"folder": "res://resources/scanners",
+	},
+	{
+		"id": &"tank", "title": "zbiorniki", "rolls": true,
+		"folder": "res://resources/tanks",
+	},
+]
+
+
+## One entry of the catalogue, or an empty dictionary.
+static func kind_entry(kind: StringName) -> Dictionary:
+	for entry: Dictionary in CATALOGUE:
+		if entry["id"] == kind:
+			return entry
+	return {}
+
+
+## Every `.tres` of one kind, by the id in `CATALOGUE`.
+##
+## Sorted, so a list drawn from it is the same list every time, and a
+## check that counts it does not depend on what order a directory hands
+## its entries back in.
+static func files_of(kind: StringName) -> Array[String]:
+	var out: Array[String] = []
+	for entry: Dictionary in CATALOGUE:
+		if entry["id"] != kind:
+			continue
+		var folder: String = entry["folder"]
+		var names: Array = Array(ResourceLoader.list_directory(folder))
+		names.sort()
+		for file_name: String in names:
+			if file_name.ends_with(".tres"):
+				out.append("%s/%s" % [folder, file_name])
+	return out
+
+
+## Which end of a band is the dull one, given which way is up for that
+## field. `better_higher` false means a smaller number is the good one,
+## which is true of every cost, every delay and every mass.
+static func dull_end(band: Vector2, better_higher: bool) -> float:
+	return minf(band.x, band.y) if better_higher else maxf(band.x, band.y)
+
+
+static func good_end(band: Vector2, better_higher: bool) -> float:
+	return maxf(band.x, band.y) if better_higher else minf(band.x, band.y)
+
+
+## The value a band gives at `share`, 0 for the dullest roll and 1 for
+## the best. A plain interpolation: what rarity does to the share is the
+## generator's business, not the band's.
+static func along_band(band: Vector2, better_higher: bool, share: float) -> float:
+	return lerpf(
+		dull_end(band, better_higher),
+		good_end(band, better_higher),
+		clampf(share, 0.0, 1.0),
+	)
+
 ## One line of an information card: a label, the number behind it, how to
 ## print it, and which way is up.
 ##

@@ -23,6 +23,8 @@ Dlatego reguła brzmi: **każdy** zasób pod `scripts/` ma mieć `@tool`, nie ty
 
 9. **Czego smoke test nie obejmie: świata.** `World` czyta autoloady, a autoloady nie istnieją w biegu `godot --script` — więc suita nie potrafi zbudować świata i cała droga od „wyrzuć to za burtę" do „leży skrzynka" nie miała sprawdzenia. Kosztowało to trzy commity: usunięcie ekranu luku zabrało ze sobą `_build_loadout`, a w niej jedną linię, o której nikt nie myślał (`ship.jettisoned.connect(_on_jettisoned)`). Handler został, sygnał został, wyrzucone rzeczy emitowały w nic — i **nic nie padło**, bo sygnał bez słuchacza nie jest błędem w żadnym języku. Zgłosił pilot. Dwie odpowiedzi, obie w bramce: `tools/menu_check.tscn` (scena, czyli autoloady są) przechodzi tę drogę do końca i stoi teraz w `check.ps1`, a smoke test skanuje skrypty i scenki — **każda funkcja `_on_*`, której nazwa nie pojawia się nigdzie indziej, to niepodłączony przewód**. Zmierzone, zanim powstało: w całym projekcie był dokładnie jeden taki. Komentarze są przy skanowaniu **wycinane** — pierwsza wersja ich nie wycinała, a komentarz, którym opisałem przywrócony przewód, cytuje to wywołanie, więc po ponownym przecięciu przewodu test świecił na zielono.
 
+10. **Bramka musi czytać oba strumienie.** Etap „doki" w `check.ps1` czytał tylko `stdout` — a Godot pisze `ERROR:` na `stderr`. Nowy dok wysypał **62** linie „unsupported format character" (`%.4g`: operator formatowania w GDScript **nie ma** `%g` i oddaje łańcuch bez zmian — zapisane już raz w `configuration_report.gd`), błędy przeleciały po konsoli, a etap powiedział „DOCK all checks passed". Sam filtr też był węższy niż w innych etapach (`DOCK FAIL|SCRIPT ERROR` zamiast wspólnego wzorca) i jego poszerzenie **nic nie dało**, bo w czytanym tekście tych błędów po prostu nie było. Teraz `-RedirectStandardError` do drugiego pliku, oba sklejone, wspólny wzorzec — sprawdzone w obie strony: z `%.4g` etap pada (`exit 1`), bez niego przechodzi. Jedyny etap, który **uruchamia edytor**, był jedynym, w którym błąd silnika był bezkarny.
+
 ## 1. Architektura
 
 ```
@@ -171,6 +173,54 @@ kanału debuggera — i najtańszą drogą dalej okazało się zacząć od nowa.
   sprawdzeniem, że scena Sandbox istnieje i się tworzy. Rośnie razem z nią.
 - [ ] Co ma być w Sandboxie. Otwarte celowo.
 
+### D11: Dock „Moduly" — co generator losuje i co kupuje rzadkość
+
+Dok trzeci, i jedyny, który **nie rysuje obrazka**. Kadłub jest kształtem,
+preset montażem, a przedmiot jest kolumną liczb — które inspektor pokazuje
+dobrze. Powód, żeby istniał, jest inny: dwie rzeczy, których inspektor
+pokazać nie umie.
+
+- [x] **`ModuleData.rollable`** — czy generator może losować z tego pliku.
+  Wcześniej odpowiedź leżała w sześciu stałych tablicach ścieżek w
+  `loot_generator.gd` i była dawana **przez przemilczenie**: broń dorzucona do
+  katalogu po prostu nigdy nie wypadała i nic tego nie mówiło. Teraz mówi to
+  plik, a generator skanuje katalog (`ModuleData.files_of` +
+  `LootGenerator.bases_of`, z cache poza edytorem). Lista plików w doku gasi
+  te poza pulą, więc „których z tych dwunastu generator używa" to jedno
+  spojrzenie.
+- [x] **`ModuleData.roll_ranges`** — zakres na pole, z którego rzadkość
+  wybiera wartość. Wiersz na każde **eksportowane `float`**, dla którego
+  `HIGHER_IS_BETTER` wie, w którą stronę jest lepiej; dwa spinboxy podpisane
+  „nudny" i „najlepszy"; zaznaczenie zasiewa oba wartością z pliku, więc samo
+  włączenie niczego nie zmienia (ta sama zasada, co nadpisania w doku
+  presetów). Pola bez kierunku nie dostają wiersza, bo band bez kierunku nie
+  wie, który koniec jest dobry.
+- [x] **Kolejność w parze nie ma znaczenia.** (3.0, 0.8) i (0.8, 3.0) dla
+  kosztu energii to ten sam zakres, bo tańszy jest lepszy — generator czyta
+  kierunek z pola, nie z kolejności. Projektant nie ma pamiętać konwencji,
+  którą gra już zna; test to pilnuje na 40 losowaniach.
+- [x] **Panel „co z tego wychodzi"**: pięć próbek, po jednej na rzadkość, z
+  **tego samego** `_dress`, którym generator ubiera prawdziwy łup. To jest
+  cały sens doku: band to dwie liczby, tabela afiksów to dwanaście wierszy
+  mnożników, a odpowiedź na „co z tej pary wyjdzie" umie dać tylko generator —
+  więc jest pytany, a nie modelowany. Guzik „przelosuj probki" na wypadek, gdy
+  jedna próbka czyta się dziwnie.
+- [x] Edycja na **luźnej kopii**, zapis przez przepisanie na wczytany zasób
+  (`ResourceSaver` + `update_file`), „Przywroc z dysku" obok. `duplicate()`
+  oddaje **ten sam** słownik `roll_ranges`, więc kopia robi go jawnie — inaczej
+  edycja bandu na kopii edytowałaby plik.
+- [x] Nota, która tłumaczy stan: komputery mają własną tabelę w generatorze
+  (funkcje losuje rzadkość), więc ich pliki służą presetom i zdarzeniom —
+  `rollable` jest w nich wyłączone i dok to mówi, zamiast oferować band,
+  którego nikt nie czyta.
+- [x] `dock_selfcheck`: dok się buduje, ma wiersz na każde pole do bandowania
+  (14 na broni), zaznaczenie zasiewa z pliku, pięć próbek, legendary nad
+  common na polu z bandem, i nota o komputerach. Jedyne miejsce, gdzie ten kod
+  w ogóle da się sprawdzić (reguła 8).
+
+Gotowe, gdy: da się powiedzieć „ta broń ma chodzić od 0.02 do 0.50 obrażeń"
+bez dotykania GDScript i od razu zobaczyć pięć próbek.
+
 ### D7: Domknięcie
 
 - [ ] Workbench w `tools/smoke_test.gd`: ładuje scenę, składa każdy preset, przełącza każdy stan, wystrzeliwuje każdą broń, bez błędów silnika.
@@ -246,7 +296,12 @@ porównania w głowie. Kadłub jest kształtem, więc dock go rysuje.
   ma być — kształt z narzędzia kreatywnego ma wyglądać jak on sam). Czyli
   jedno przeciągnięcie przed zapisem kosztuje kadłub jego obrazek, a dock to
   teraz mówi.
-- [ ] Ten sam dock dla broni i silników (`FIELDS` jest tabelą, nie kodem).
+- [x] ~~Ten sam dock dla broni i silników (`FIELDS` jest tabelą, nie kodem).~~
+  Zrobione jako **osobny dok** (D11) i **bez żadnej tabeli**: kadłub i preset
+  mają dok, bo są kształtem i montażem, a przedmiot jest liczbami, które
+  inspektor już pokazuje. Dok przedmiotów istnieje dla dwóch rzeczy, których
+  inspektor pokazać nie umie — czy generator może losować z tego pliku i co
+  rzadkość kupuje — a wiersze bierze z `get_property_list()`, nie z `FIELDS`.
 
 Gotowe, gdy: dyszę da się przesunąć myszą, licznik od razu mówi, co z tego
 wynika, a zapisany `.tres` wczytuje grę bez niespodzianek.

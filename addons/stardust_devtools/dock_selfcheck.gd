@@ -33,13 +33,16 @@ static func asked() -> bool:
 
 ## Runs every check against the docks the plugin just built, and
 ## returns how many failed.
-static func run(hulls: HullEditor, presets: PresetEditor) -> int:
+static func run(
+	hulls: HullEditor, presets: PresetEditor, items: ItemEditor
+) -> int:
 	var failures: int = 0
 	failures += _placeholders()
 	failures += _captions()
 	failures += _hull_dock(hulls)
 	failures += _preset_dock(presets)
 	failures += _skin(hulls, presets)
+	failures += _item_dock(items)
 	print("DOCK %s" % (
 		"all checks passed" if failures == 0 else "%d check(s) failed" % failures
 	))
@@ -163,6 +166,104 @@ static func _hull_dock(dock: HullEditor) -> int:
 			captions.size(),
 			"no geometry among them" if geometry.is_empty() else str(geometry),
 		],
+	)
+	return failures
+
+
+## Dok modulow: wiersze zakresow, probki i zapis bez zapisywania.
+##
+## Everything here is a thing that can only be checked in the editor,
+## and the dock is **all** of those: it reads `get_property_list()` to
+## decide which fields may carry a band, which is the call a placeholder
+## lies about, and it previews a roll by calling the generator, which in
+## a non-`@tool` world would be a placeholder refusing a method.
+##
+## It never saves. The sample panel and the band rows are built, read
+## and thrown away; what the file on disk says is what it said before.
+static func _item_dock(dock: ItemEditor) -> int:
+	var failures: int = 0
+	failures += _says(dock != null and dock._files != null, "the item dock built")
+	failures += _says(_has_splitter(dock), "with dividers that can be dragged")
+	if dock == null or dock._files == null:
+		return failures
+
+	# Every kind in the catalogue is offered, and every kind has files.
+	failures += _says(
+		dock._kinds.item_count == ModuleData.CATALOGUE.size(),
+		"one kind per catalogue entry (%d)" % dock._kinds.item_count,
+	)
+	var empty: Array[String] = []
+	for entry: Dictionary in ModuleData.CATALOGUE:
+		if ModuleData.files_of(entry["id"]).is_empty():
+			empty.append(String(entry["id"]))
+	failures += _says(
+		empty.is_empty(),
+		"and every kind has files (%s)" % [
+			"all seven" if empty.is_empty() else str(empty),
+		],
+	)
+
+	# A weapon, which is the kind with the most bandable fields.
+	dock._on_kind_picked(0)
+	dock._open(0)
+	failures += _says(dock._editing != null, "and opened an item")
+	if dock._editing == null:
+		return failures
+	failures += _says(
+		dock._editing != dock._on_disk,
+		"on a loose copy rather than on the file the game is using",
+	)
+	var fields: Array[String] = ItemEditor.bandable_fields(dock._editing)
+	failures += _says(
+		fields.size() >= 8 and fields.has("damage") and fields.has("bulk"),
+		"with a band row per rollable field (%d, damage and bulk among them)" % fields.size(),
+	)
+	failures += _says(
+		dock._rows.size() == fields.size(),
+		"all of them built (%d rows)" % dock._rows.size(),
+	)
+
+	# Turning a band on seeds it from the file, so switching it on is
+	# not a change. Then the samples: five grades, and the dull end of
+	# a band must not come out above the good end.
+	var was: float = float(dock._editing.get("damage"))
+	dock._on_band_toggled(true, "damage")
+	var seeded: Vector2 = dock._editing.roll_ranges.get("damage", Vector2.ZERO)
+	failures += _says(
+		is_equal_approx(seeded.x, was) and is_equal_approx(seeded.y, was),
+		"switching a band on seeds both ends from the file (%.4f)" % was,
+	)
+	(dock._rows["damage"]["dull"] as SpinBox).value = was * 0.5
+	(dock._rows["damage"]["good"] as SpinBox).value = was * 2.0
+	dock._on_band_edited(0.0, "damage")
+	dock._refresh()
+	failures += _says(
+		dock._samples.get_child_count() == ModuleData.RARITY_NAMES.size(),
+		"one sample per grade (%d)" % dock._samples.get_child_count(),
+	)
+	var dull: ModuleData = dock._loot.sample(
+		dock._editing, dock._kind, 0, dock._seed
+	) as ModuleData
+	var best: ModuleData = dock._loot.sample(
+		dock._editing, dock._kind, ModuleData.RARITY_NAMES.size() - 1, dock._seed
+	) as ModuleData
+	failures += _says(
+		dull != null and best != null and dull.damage < best.damage,
+		"and a legendary rolls above a common on a banded field (%.4f vs %.4f)" % [
+			0.0 if dull == null else dull.damage, 0.0 if best == null else best.damage,
+		],
+	)
+	# The note is the dock explaining itself, and the one case worth
+	# checking is the kind the generator does not read at all.
+	var computers: int = 0
+	for i: int in range(ModuleData.CATALOGUE.size()):
+		if ModuleData.CATALOGUE[i]["id"] == &"computer":
+			computers = i
+	dock._on_kind_picked(computers)
+	dock._open(0)
+	failures += _says(
+		dock._note.text.contains("wlasnej tabeli"),
+		"and the computers say the generator does not read them",
 	)
 	return failures
 

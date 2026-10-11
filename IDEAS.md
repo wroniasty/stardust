@@ -657,6 +657,58 @@ i dwadzieścia osiem dalej w pudle. Transakcja siedzi w `Hold.take_cache`
 i zostawia resztę w pudle, więc świat ma do podjęcia jedną decyzję: czy
 skrzynka jeszcze stoi.
 
+### Zakresy na plik: co rzadkość kupuje w tej jednej broni
+
+Łup był dotąd jednym zdaniem: plik bazowy razy to, co zrobi tabela afiksów.
+Tabela jest wspólna dla wszystkich broni, więc „ten autocannon ma chodzić od
+miernego do groźnego, a siege slug zawsze ma walić jak młot" nie dawało się
+powiedzieć **o jednym pliku** — dało się tylko przestroić wszystkie naraz.
+`roll_ranges` to to samo zdanie o jednym pliku: pole → dwa końce.
+
+**Kierunek czyta się z pola, nie z kolejności.** „Koszt energii od 3.0 do 0.8"
+i „od 0.8 do 3.0" to ten sam zakres, bo tańszy jest lepszy; obrażenia od 0.02
+do 0.50 też są jednoznaczne, bo większe jest lepsze. Konwencję, której
+projektant musiałby pilnować, zna już gra — `HIGHER_IS_BETTER`. Dlatego ta
+tabela obejmuje teraz **każde eksportowane `float`** każdego rodzaju modułu
+(45 pól), a nie tylko te, których dotyka afiks: pole bez kierunku to pole,
+któremu dok nie da wiersza, co czyta się jak zepsuty dok, a nie jak brak
+wpisu w tabeli.
+
+**Rzadkość przechyla, nie podłoguje.** Udział w bandzie to
+`(stopień ± 0.5) / 4`, więc okna stopni zachodzą: szczęśliwy common bije
+nudnego uncommona. To ta sama zasada, którą `loot_generator.gd` otwiera —
+rzadkość to nie „ściśle lepiej" — tylko przeniesiona z tabeli rzadkości na
+same liczby. Bez tego każdy common w galaktyce nosiłby dokładnie nudny
+koniec każdego bandu, czyli stopień, który równie dobrze mógłby być drugim
+plikiem.
+
+**Jeden udział na przedmiot, nie na pole.** Przedmiot jest **jednym**
+losowaniem. Gdyby każde pole ciągnęło własny udział, legendary uśredniałoby
+się do środka każdego bandu i czytało jak cztery rzuty monetą; jeden udział
+robi z niego dobry egzemplarz swojego rodzaju albo słaby — a to właśnie ma
+znaczyć stopień. Charakter na krzywo dają afiksy i te losują się po jednym.
+
+**Band i afiks liczą rzadkość dwa razy** i trzeba to powiedzieć wprost: band
+ustawia bazę po stopniu, a afiks mnoży ją przez czynnik też skalowany
+stopniem. Na polu, którego dotyka afiks, legendary wyjdzie **powyżej** dobrego
+końca własnego bandu (zmierzone: band 0.04–0.16 obrażeń, legendary 0.26).
+Nie jest to błąd, jest ceną za to, że obie rzeczy istnieją — a panel próbek w
+doku pokazuje wynik, więc strojenie odbywa się na tym, co wychodzi, a nie na
+tym, co powinno wyjść.
+
+**Pusty band nie pobiera z `rng` ani jednej liczby.** Wyjście z `_roll_bands`
+przed czymkolwiek nie jest oszczędnością, jest tym, co trzyma determinizm:
+każdy plik bez zakresów (czyli dziś każdy) losuje dokładnie ten strumień, co
+przed tą zmianą, więc każdy seed w galaktyce znaczy to, co znaczył.
+
+**Pula losowania jest teraz w plikach** (`rollable`), a nie w sześciu stałych
+tablicach ścieżek w generatorze. Tamte odpowiadały na to samo pytanie
+**przemilczeniem**: broń dorzucona do katalogu nigdy nie wypadała i nic tego
+nie mówiło. Nie każdy przedmiot w `resources/` jest łupem — cztery komputery
+w katalogu są dokładnie tym przykładem, służą presetom i zdarzeniom — a
+generator buduje komputer z własnej tabeli, bo to zestaw przełączników, nie
+liczb do skalowania.
+
 ### Para obrotowa musi być symetryczna
 
 Dwa silniki obrotowe po przeciwnych stronach dziobu, skierowane w przeciwne

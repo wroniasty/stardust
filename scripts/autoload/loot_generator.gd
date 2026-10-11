@@ -68,44 +68,47 @@ const RARITY_STRENGTH: Array[float] = [1.0, 1.15, 1.45, 1.8, 2.3]
 ## rarity names would drift the first time one of them gained an entry.
 const RARITY_NAMES: Array[String] = ModuleData.RARITY_NAMES
 
-const WEAPON_BASES: Array[String] = [
-	"res://resources/weapons/autocannon.tres",
-	"res://resources/weapons/siege_slug.tres",
-	"res://resources/weapons/pulse_repeater.tres",
-	"res://resources/weapons/beam_lance.tres",
-	"res://resources/weapons/dumb_rocket.tres",
-	"res://resources/weapons/seeker.tres",
-	"res://resources/weapons/burst_shell.tres",
-]
+## How much of a grade's own step a roll may wander either side of it,
+## when a band decides a field.
+##
+## Half a step, so the grades overlap: a lucky common lands above a
+## dull uncommon, and a legendary is not simply the best end of every
+## band it has. That is this file's first paragraph applied to the
+## numbers rather than to the table -- rarity leans, it does not floor
+## -- and without it every common in the galaxy would carry exactly the
+## dull end of every band, which is a grade that may as well have been
+## written out as a second file.
+const BAND_SPREAD: float = 0.5
 
-const GENERATOR_BASES: Array[String] = [
-	"res://resources/generators/standard_cell.tres",
-]
+## The bases each kind may be rolled from: every `.tres` in that kind's
+## folder whose `rollable` is on.
+##
+## **Scanned, not listed.** Six arrays of paths used to stand here, and
+## they were the folder written out a second time: a weapon added to
+## `resources/weapons` was simply never rolled, and nothing anywhere
+## said so -- the omission was the configuration. Now the file says it
+## itself (`ModuleData.rollable`), which is a thing a designer can see
+## and the dock can tick.
+##
+## Cached, because this is asked once per roll and a container opened on
+## arrival rolls a dozen: `list_directory` plus a `load` each is cheap
+## and not free, and the answer cannot change while the game runs. The
+## editor is the exception -- a dock that has just ticked a box has to
+## see it -- so there the scan is redone every time, the same bargain
+## `ShipLook.table` strikes.
+var _bases: Dictionary = {}
 
-const SCANNER_BASES: Array[String] = [
-	"res://resources/scanners/survey_array.tres",
-	"res://resources/scanners/deep_field.tres",
-]
 
-const DRIVE_BASES: Array[String] = [
-	"res://resources/drives/short_hop.tres",
-	"res://resources/drives/long_reach.tres",
-]
-
-const TANK_BASES: Array[String] = [
-	"res://resources/tanks/standard_tank.tres",
-	"res://resources/tanks/long_haul.tres",
-]
-
-const ENGINE_BASES: Array[String] = [
-	"res://resources/engines/main_drive.tres",
-	"res://resources/engines/torque_jet.tres",
-	"res://resources/engines/maneuver_thruster.tres",
-	"res://resources/engines/retro_thruster.tres",
-	"res://resources/engines/maneuver_pod.tres",
-	"res://resources/engines/braking_bell.tres",
-	"res://resources/engines/gimballed_drive.tres",
-]
+func bases_of(kind: StringName) -> Array[String]:
+	if not Engine.is_editor_hint() and _bases.has(kind):
+		return _bases[kind]
+	var out: Array[String] = []
+	for path: String in ModuleData.files_of(kind):
+		var module: ModuleData = load(path) as ModuleData
+		if module != null and module.rollable:
+			out.append(path)
+	_bases[kind] = out
+	return out
 
 ## An affix is a named multiplier on one field, optionally paid for with a
 ## multiplier on another. `factor` is the range rolled before rarity scaling;
@@ -292,6 +295,21 @@ const TANK_AFFIXES: Array[Dictionary] = [
 	},
 ]
 
+## Which affix table belongs to which kind of item.
+##
+## The six builders used to name their own table, which was fine while
+## nothing else rolled anything -- and the dock does: it previews a base
+## by dressing it, and a preview that guessed at the table would be a
+## preview of a different generator. One map, read by both.
+const AFFIXES_OF: Dictionary = {
+	&"weapon": WEAPON_AFFIXES,
+	&"engine": ENGINE_AFFIXES,
+	&"generator": GENERATOR_AFFIXES,
+	&"scanner": SCANNER_AFFIXES,
+	&"drive": DRIVE_AFFIXES,
+	&"tank": TANK_AFFIXES,
+}
+
 ## Shot mods, as a fixed catalogue rather than a rolled template: a mod is a
 ## decision the pilot makes, so the interesting variety is in which ones they
 ## own, not in each one being slightly different.
@@ -308,9 +326,22 @@ const SHOT_MODS: Array[Dictionary] = [
 	{"name": "shrapnel shell", "energy": 1.50, "damage": 0.80, "effect": 2},
 ]
 
-## Which way is up for each field, so an affix cost can be checked for
-## actually costing something and a configuration report can say whether a
-## swap is an upgrade (M2).
+## Which way is up for each field.
+##
+## Three things read it: an affix cost is checked for actually costing
+## something, a configuration report says whether a swap is an upgrade
+## (M2), and a band knows which of its two ends is the dull one -- which
+## is what lets a designer type (3.0, 0.8) or (0.8, 3.0) for an energy
+## cost and mean the same thing.
+##
+## **Every exported float of every module kind is in here**, and a check
+## holds it to that. The table used to cover only the fields an affix
+## touched, which was enough when affixes were the only thing that moved
+## a number: now a field missing from it is a field the dock cannot
+## offer a band for, which reads as the dock being broken rather than as
+## the table being short. So adding a float to a module is a decision
+## about which way it is better, taken here, where everything that cares
+## can read it.
 const HIGHER_IS_BETTER: Dictionary = {
 	"damage": true,
 	"rounds_per_second": true,
@@ -333,6 +364,28 @@ const HIGHER_IS_BETTER: Dictionary = {
 	"charge_time": false,
 	"fuel_per_ly": false,
 	"fuel_capacity": true,
+	# Added with the bands. None of these had an affix, so none of them
+	# needed a direction until a designer could put a band on one.
+	"blast_radius": true,
+	"missile_thrust": true,
+	"missile_turn_rate": true,
+	"gimbal_range": true,
+	"gimbal_rate": true,
+	"beam_seconds": true,
+	"boost_thrust": true,
+	"boost_draw": false,
+	"idle_draw": false,
+	# A shot mod is a fixed catalogue rather than a roll, so nothing
+	# bands these -- they are here because the check above does not know
+	# that, and because a comparison between two mods is a question
+	# somebody will ask the day the swap screen shows them.
+	"energy_multiplier": false,
+	"damage_multiplier": true,
+	"rate_multiplier": true,
+	"spread_multiplier": false,
+	"crater_multiplier": true,
+	"range_multiplier": true,
+	"speed_multiplier": true,
 }
 
 ## Floors and ceilings applied after the affixes, so no roll can produce an
@@ -566,42 +619,35 @@ func _rng_for(item_seed: int) -> RandomNumberGenerator:
 
 
 func _build_weapon(rng: RandomNumberGenerator, rarity: int) -> WeaponData:
-	var base: WeaponData = load(WEAPON_BASES[rng.randi() % WEAPON_BASES.size()]) as WeaponData
+	var base: WeaponData = _pick_base(rng, &"weapon") as WeaponData
 	if base == null:
 		return null
 	var item: WeaponData = base.duplicate() as WeaponData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.affixes = _apply_affixes(rng, item, WEAPON_AFFIXES, rolled)
-	# Rarity buys room for decisions, not just bigger numbers.
-	item.mod_slots = mini(rolled, 3)
-	_clamp_all(item)
+	_dress(rng, item, &"weapon", rolled)
 	return item
 
 
 func _build_engine(rng: RandomNumberGenerator, rarity: int) -> EngineData:
-	var base: EngineData = load(ENGINE_BASES[rng.randi() % ENGINE_BASES.size()]) as EngineData
+	var base: EngineData = _pick_base(rng, &"engine") as EngineData
 	if base == null:
 		return null
 	var item: EngineData = base.duplicate() as EngineData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.affixes = _apply_affixes(rng, item, ENGINE_AFFIXES, rolled)
-	_clamp_all(item)
+	_dress(rng, item, &"engine", rolled)
 	return item
 
 
 func _build_generator(rng: RandomNumberGenerator, rarity: int) -> GeneratorData:
-	var base: GeneratorData = load(
-		GENERATOR_BASES[rng.randi() % GENERATOR_BASES.size()]
-	) as GeneratorData
+	var base: GeneratorData = _pick_base(rng, &"generator") as GeneratorData
 	if base == null:
 		return null
 	var item: GeneratorData = base.duplicate() as GeneratorData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.affixes = _apply_affixes(rng, item, GENERATOR_AFFIXES, rolled)
-	_clamp_all(item)
+	_dress(rng, item, &"generator", rolled)
 	return item
 
 
@@ -614,44 +660,143 @@ func _build_generator(rng: RandomNumberGenerator, rarity: int) -> GeneratorData:
 ## functions, and the depth is written into the name for the same reason
 ## -- a card has to say what the thing does.
 func _build_scanner(rng: RandomNumberGenerator, rarity: int) -> ScannerData:
-	var base: ScannerData = load(
-		SCANNER_BASES[rng.randi() % SCANNER_BASES.size()]
-	) as ScannerData
+	var base: ScannerData = _pick_base(rng, &"scanner") as ScannerData
 	if base == null:
 		return null
 	var item: ScannerData = base.duplicate() as ScannerData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.depth = clampi(rolled, 0, int(ScannerData.Depth.DEEP)) as ScannerData.Depth
-	item.affixes = _apply_affixes(rng, item, SCANNER_AFFIXES, rolled)
-	_clamp_all(item)
+	_dress(rng, item, &"scanner", rolled)
 	return item
 
 
 func _build_drive(rng: RandomNumberGenerator, rarity: int) -> JumpDriveData:
-	var base: JumpDriveData = load(
-		DRIVE_BASES[rng.randi() % DRIVE_BASES.size()]
-	) as JumpDriveData
+	var base: JumpDriveData = _pick_base(rng, &"drive") as JumpDriveData
 	if base == null:
 		return null
 	var item: JumpDriveData = base.duplicate() as JumpDriveData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.affixes = _apply_affixes(rng, item, DRIVE_AFFIXES, rolled)
-	_clamp_all(item)
+	_dress(rng, item, &"drive", rolled)
 	return item
 
 
 func _build_tank(rng: RandomNumberGenerator, rarity: int) -> TankData:
-	var base: TankData = load(TANK_BASES[rng.randi() % TANK_BASES.size()]) as TankData
+	var base: TankData = _pick_base(rng, &"tank") as TankData
 	if base == null:
 		return null
 	var item: TankData = base.duplicate() as TankData
 	var rolled: int = rarity if rarity != ROLLED else roll_rarity(rng)
 	item.rarity = rolled
-	item.affixes = _apply_affixes(rng, item, TANK_AFFIXES, rolled)
-	_clamp_all(item)
+	_dress(rng, item, &"tank", rolled)
 	return item
+
+
+## One base of a kind, drawn from the rollable ones.
+##
+## Null when that kind has none, which is a configuration a designer can
+## make -- every file in a folder turned off -- and not a bug. The
+## builders already hand back null for a base that will not load, and
+## the callers already cope.
+func _pick_base(rng: RandomNumberGenerator, kind: StringName) -> Resource:
+	var paths: Array[String] = bases_of(kind)
+	if paths.is_empty():
+		return null
+	return load(paths[rng.randi() % paths.size()])
+
+
+## Everything that happens to a base once its grade is known: the
+## bands, the affixes, the two fields a grade sets outright, and the
+## clamps.
+##
+## One function because there were six copies of it, identical but for
+## which table they named -- and because the dock previews a base by
+## calling it. A preview that walked its own version of these four steps
+## would be a preview of a generator that does not exist, which is the
+## one thing a tuning panel must not be.
+##
+## `mod_slots` and `depth` are set here rather than in their builders for
+## the same reason: they are what rarity buys on those two kinds, and a
+## sample without them is a sample missing the headline.
+func _dress(
+	rng: RandomNumberGenerator, item: Resource, kind: StringName, rolled: int
+) -> void:
+	var eye: ScannerData = item as ScannerData
+	if eye != null:
+		# Before the affixes, because the name is built from the depth
+		# and the affix list both.
+		eye.depth = clampi(rolled, 0, int(ScannerData.Depth.DEEP)) as ScannerData.Depth
+	_roll_bands(rng, item, rolled)
+	var table: Array[Dictionary] = AFFIXES_OF.get(kind, [] as Array[Dictionary])
+	var module: ModuleData = item as ModuleData
+	if module != null:
+		module.affixes = _apply_affixes(rng, item, table, rolled)
+	var gun: WeaponData = item as WeaponData
+	if gun != null:
+		# Rarity buys room for decisions, not just bigger numbers.
+		gun.mod_slots = mini(rolled, 3)
+	_clamp_all(item)
+
+
+## What the tables would make of `base` at `rarity`: the dock's preview.
+##
+## The same `_dress` a real roll takes, on a copy, from a seed the caller
+## chooses -- so five calls with five grades are five samples of one
+## file and nothing else moves between them.
+func sample(
+	base: ModuleData, kind: StringName, rarity: int, item_seed: int
+) -> ModuleData:
+	if base == null:
+		return null
+	var item: ModuleData = base.duplicate() as ModuleData
+	item.roll_ranges = base.roll_ranges.duplicate()
+	item.rarity = clampi(rarity, 0, RARITY_NAMES.size() - 1)
+	_dress(_rng_for(item_seed), item, kind, item.rarity)
+	return item
+
+
+## Draws every banded field of `item` from its band, by grade.
+##
+## **Before the affixes, and only if there are bands.** Before, because
+## an affix is a multiplier and what it multiplies has to be the number
+## this grade was supposed to start from. Only if -- the early return is
+## not an optimisation, it is what keeps every seed in the galaxy
+## meaning what it meant: a file with no bands draws **no** random
+## numbers here, so the affix roll that follows sees the stream it has
+## always seen.
+##
+## A field the resource does not have is skipped rather than written:
+## `set()` on an unknown name does nothing at all in GDScript, so a typo
+## in a band would otherwise look like a band that works. The suite
+## warns about those by name.
+func _roll_bands(rng: RandomNumberGenerator, item: Resource, rarity: int) -> void:
+	var module: ModuleData = item as ModuleData
+	if module == null or module.roll_ranges.is_empty():
+		return
+	var share: float = grade_share(rng, rarity)
+	for field: String in module.roll_ranges:
+		if not HIGHER_IS_BETTER.has(field) or not field in module:
+			continue
+		module.set(field, ModuleData.along_band(
+			module.roll_ranges[field], bool(HIGHER_IS_BETTER[field]), share
+		))
+
+
+## Where in its bands a roll of this grade lands, 0 for the dullest and
+## 1 for the best.
+##
+## One share for every band on the item rather than one per field, and
+## that is the decision worth writing down: an item is **a** roll. Drawn
+## per field, a legendary would average out to the middle of each band
+## and read as four coin flips, while one share makes it a good example
+## of its kind or a poor one -- which is what a grade is supposed to say.
+## The affixes are where an item gets its lopsided character, and they
+## are rolled one at a time.
+func grade_share(rng: RandomNumberGenerator, rarity: int) -> float:
+	var steps: float = float(RARITY_NAMES.size() - 1)
+	return clampf(
+		(float(rarity) + rng.randf_range(-BAND_SPREAD, BAND_SPREAD)) / steps, 0.0, 1.0
+	)
 
 
 ## Applies `count` distinct affixes from `table` to `item`, and returns their

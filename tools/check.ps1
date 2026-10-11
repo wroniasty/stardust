@@ -86,7 +86,14 @@ if (-not $import.WaitForExit($ImportTimeout * 1000)) {
 # allowed to overrun and be killed: this has to be read.
 Write-Host "Checking the editor docks..."
 $dockLog = Join-Path ([System.IO.Path]::GetTempPath()) "stardust-docks.txt"
-$docks = Start-Process -FilePath $Godot -PassThru -NoNewWindow -RedirectStandardOutput $dockLog -ArgumentList @(
+# Both streams, and that is the whole of this stage's history with
+# engine errors: Godot writes `ERROR:` to **stderr**, and this read
+# stdout alone -- so sixty-two "unsupported format character" lines from
+# a dock scrolled past the console and the check said the docks passed.
+# The grep below was widened in the same breath and was still blind,
+# because the text it greps never had the errors in it.
+$dockErr = Join-Path ([System.IO.Path]::GetTempPath()) "stardust-docks-err.txt"
+$docks = Start-Process -FilePath $Godot -PassThru -NoNewWindow -RedirectStandardOutput $dockLog -RedirectStandardError $dockErr -ArgumentList @(
     "--headless", "--path", $root, "--import", "--", "--dock-selfcheck"
 )
 if (-not $docks.WaitForExit($ImportTimeout * 1000)) {
@@ -95,8 +102,15 @@ if (-not $docks.WaitForExit($ImportTimeout * 1000)) {
     $docks.WaitForExit(5000) | Out-Null
 }
 $dockOut = if (Test-Path $dockLog) { Get-Content $dockLog -Raw } else { "" }
+$dockOut += if (Test-Path $dockErr) { Get-Content $dockErr -Raw } else { "" }
 Write-Host (($dockOut -split "`n" | Where-Object { $_ -match "^DOCK" }) -join "`n")
-$dockBad = $dockOut -split "`n" | Where-Object { $_ -match "DOCK FAIL|SCRIPT ERROR" }
+# The same pattern every other stage is held to, not a narrower one.
+# Measured: the item dock printed sixty-two "unsupported format
+# character" errors into this stage and it passed, because the grep here
+# knew about `DOCK FAIL` and `SCRIPT ERROR` and nothing else -- so the
+# one stage that runs the editor was the one stage where an engine error
+# cost nothing.
+$dockBad = $dockOut -split "`n" | Where-Object { $_ -match $pattern }
 # The verdict line has to be there as well: no output at all means the run
 # died before the plugin loaded, which is a failure and not a pass.
 if ($dockBad -or ($dockOut -notmatch "DOCK all checks passed")) {
