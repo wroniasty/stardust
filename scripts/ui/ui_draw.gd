@@ -46,6 +46,12 @@ enum Corner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 ## Whole pixels. Called at the top of every helper here rather than left
 ## to the caller, because the one time it is forgotten is the time it
 ## matters.
+## How long a ladder's ticks are, and how big its cursor is.
+const LADDER_MINOR: float = 3.0
+const LADDER_MAJOR: float = 6.0
+const LADDER_MARK: float = 4.0
+
+
 static func snap(at: Vector2) -> Vector2:
 	return at.round()
 
@@ -110,6 +116,128 @@ static func row(
 	canvas.draw_string(
 		font, snap(Vector2(right, corner.y)), " " + unit,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, dim,
+	)
+
+
+## Pionowa tasma: podzialka, kursor i liczba pod nim.
+##
+## Primitive 2 of the widget vocabulary, written into UI_STYLE section 6
+## at the start and drawn by nothing until now -- the flight panel read
+## its altitude as a row of digits, which is the one thing a tape is
+## better than.
+##
+## **A fixed scale with a moving cursor**, not a scrolling tape with a
+## fixed one. Both are honest instruments and the difference is what the
+## pilot is being asked to read: a scrolling tape answers "what is the
+## number", which the figure beside the cursor already does, while a
+## fixed band answers "how far down am I, out of how far there is to
+## go" -- which is the question on an approach, and the one that can be
+## answered without reading at all.
+##
+## `span` is the band the scale covers, low in x and high in y. A value
+## outside it parks the cursor at that end and still prints itself, so
+## being off the top reads as off the top rather than as missing.
+##
+## Laid out from the right: the labels are right-aligned to the box, the
+## spine sits left of them, and the cursor and its figure hang to the
+## left of the spine. That way the widest label the scale can produce
+## decides the geometry, and nothing has to be told how wide a digit is.
+static func ladder(
+	canvas: CanvasItem,
+	font: Font,
+	box: Rect2,
+	value: float,
+	span: Vector2,
+	step: float,
+	major_every: int,
+	ink: Color,
+	mark_ink: Color,
+	dim: Color,
+	label_of: Callable = Callable(),
+) -> void:
+	if canvas == null or font == null or span.y <= span.x or step <= 0.0:
+		return
+	var top_label: String = _ladder_label(label_of, span.y)
+	var label_room: float = text_width(font, top_label) + LADDER_MAJOR + 2.0
+	var spine: float = roundf(box.end.x - label_room)
+	canvas.draw_line(
+		snap(Vector2(spine, box.position.y)), snap(Vector2(spine, box.end.y)), dim, 1.0
+	)
+
+	var steps: int = int(floor((span.y - span.x) / step))
+	for i: int in range(steps + 1):
+		var at: float = span.x + float(i) * step
+		var y: float = roundf(lerp(box.end.y, box.position.y, (at - span.x) / (span.y - span.x)))
+		var major: bool = major_every > 0 and i % major_every == 0
+		canvas.draw_line(
+			snap(Vector2(spine, y)),
+			snap(Vector2(spine + (LADDER_MAJOR if major else LADDER_MINOR), y)),
+			dim,
+			1.0,
+		)
+		if not major:
+			continue
+		canvas.draw_string(
+			font,
+			snap(Vector2(spine + LADDER_MAJOR + 2.0, y + float(UiFont.BODY) * 0.5 - 1.0)),
+			_ladder_label(label_of, at),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, dim,
+		)
+
+	# The cursor, parked at whichever end it has run off.
+	var mark_y: float = ladder_mark(box, value, span)
+	canvas.draw_colored_polygon(
+		PackedVector2Array([
+			Vector2(spine, mark_y),
+			Vector2(spine - LADDER_MARK, mark_y - LADDER_MARK),
+			Vector2(spine - LADDER_MARK, mark_y + LADDER_MARK),
+		]),
+		mark_ink,
+	)
+	var says: String = _ladder_label(label_of, value)
+	canvas.draw_string(
+		font,
+		snap(Vector2(
+			spine - LADDER_MARK - 2.0 - text_width(font, says),
+			mark_y + float(UiFont.BODY) * 0.5 - 1.0,
+		)),
+		says,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, UiFont.BODY, ink,
+	)
+
+
+## Where the cursor sits for a value, parked at the end it has run off.
+##
+## Its own function because the parking is the one claim this widget
+## makes that is not visible in a screenshot: a ship above the top of
+## the band has to read as above the top, rather than as missing or as
+## sitting at the top because it happens to be there.
+static func ladder_mark(box: Rect2, value: float, span: Vector2) -> float:
+	if span.y <= span.x:
+		return box.end.y
+	var held: float = clampf(value, span.x, span.y)
+	return roundf(lerp(box.end.y, box.position.y, (held - span.x) / (span.y - span.x)))
+
+
+## What the scale calls a number: the caller's wording, or the plain
+## figure.
+static func _ladder_label(label_of: Callable, value: float) -> String:
+	if label_of.is_valid():
+		return String(label_of.call(value))
+	return "%.0f" % value
+
+
+## How wide a ladder is, so a caller can give it exactly that and know
+## nothing is hanging off the side.
+##
+## The same arithmetic the drawing does, in the same file, because a
+## layout worked out twice is a layout that disagrees with itself.
+static func ladder_width(
+	font: Font, span: Vector2, widest_value: String, label_of: Callable = Callable()
+) -> float:
+	return (
+		text_width(font, widest_value) + LADDER_MARK + 2.0
+		+ text_width(font, _ladder_label(label_of, span.y)) + LADDER_MAJOR + 2.0
 	)
 
 

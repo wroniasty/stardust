@@ -8694,6 +8694,7 @@ func _check_hull_editor() -> void:
 	_check_the_computer_panel_is_pressable()
 	_check_the_trajectory_view_is_a_function()
 	_check_the_ship_draws_above_the_world()
+	_check_the_altitude_tape_fits_its_corner()
 	_check_the_computer_catalogue()
 	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
@@ -9855,6 +9856,96 @@ func _effective_z(item: CanvasItem) -> int:
 		depth += item.z_index
 		at = item.get_parent()
 	return depth
+
+
+## Tasma wysokosci: czy miesci sie w rogu i czy kursor parkuje.
+##
+## The instruments corner is 110 px wide and holds a tape beside three
+## rows of figures, which does not fit by much -- so what this measures
+## is the arithmetic that decides it, against the **widest strings the
+## panel can actually produce** rather than the ones it happens to show
+## while the test looks. `UiDraw.row` right-aligns its value and only
+## guarantees it will not collide with the label, so a column too
+## narrow does not wrap or clip: it quietly runs into the tape.
+##
+## The cursor parking is the other half, and it is the one claim a
+## screenshot cannot settle: a ship above the top of the band has to
+## read as above the top rather than as missing.
+func _check_the_altitude_tape_fits_its_corner() -> void:
+	var font: Font = ModuleData.card_font()
+	var hud: FlightHud = FlightHud.new()
+	root.add_child(hud)
+	var inside: Rect2 = UiFrame.inside(
+		UiFrame.slot(Vector2(640.0, 360.0), UiFrame.Slot.INSTRUMENTS)
+	)
+	var band: Vector2 = Vector2(0.0, FlightHud.TAPE_TOP)
+	# Five digits, because a ship in orbit over a world is nineteen
+	# thousand pixels up and the cursor prints the real figure rather
+	# than the top of the band.
+	var tape: float = UiDraw.ladder_width(font, band, "99999", hud._tape_label)
+	var column: float = inside.size.x - tape - UiFrame.PAD
+	_expect(
+		tape > 0.0 and column > 0.0 and tape + column + UiFrame.PAD <= inside.size.x,
+		"the tape and the figures together fit the corner (%.0f + %.0f of %.0f px)" % [
+			tape, column, inside.size.x,
+		],
+	)
+
+	# Every row at its widest. A value is right-aligned into `column`,
+	# so what has to fit is the label, a gap, and the value.
+	var tight: Array[String] = []
+	# The values formatted the way the panel formats them, at figures
+	# nothing can exceed: a format widened in the panel has to widen
+	# here too, or this check would go on measuring the old one.
+	for row: Array in [
+		["SPD", FlightHud.SPEED_FORMAT % 99999.0],
+		["V/S", FlightHud.DESCENT_FORMAT % -9999.0],
+		["SLOPE", FlightHud.SLOPE_FORMAT % -90.0],
+	]:
+		var needs: float = (
+			UiDraw.text_width(font, row[0]) + 3.0 + UiDraw.text_width(font, row[1])
+		)
+		if needs > column:
+			tight.append("%s %s needs %.0f" % [row[0], row[1], needs])
+	_expect(
+		tight.is_empty(),
+		"and every figure fits the column beside it (%.0f px, %s)" % [
+			column, "all of them" if tight.is_empty() else str(tight),
+		],
+	)
+
+	# The cursor: bottom at the floor, top at the ceiling, and parked
+	# rather than lost when the ship is outside the band.
+	var box: Rect2 = Rect2(Vector2(0.0, 0.0), Vector2(40.0, 60.0))
+	_expect(
+		is_equal_approx(UiDraw.ladder_mark(box, 0.0, band), box.end.y)
+		and is_equal_approx(UiDraw.ladder_mark(box, FlightHud.TAPE_TOP, band), box.position.y),
+		"the cursor runs the whole height of the tape",
+	)
+	_expect(
+		is_equal_approx(
+			UiDraw.ladder_mark(box, FlightHud.TAPE_TOP * 0.5, band),
+			roundf((box.position.y + box.end.y) * 0.5),
+		),
+		"half way up the band is half way up the tape",
+	)
+	_expect(
+		is_equal_approx(UiDraw.ladder_mark(box, 90000.0, band), box.position.y)
+		and is_equal_approx(UiDraw.ladder_mark(box, -500.0, band), box.end.y),
+		"and off either end it parks rather than leaving the tape",
+	)
+
+	# The wording: round thousands abbreviate, everything else does not.
+	_expect(
+		String(hud._tape_label.call(3000.0)) == "3k"
+		and String(hud._tape_label.call(0.0)) == "0"
+		and String(hud._tape_label.call(1412.0)) == "1412",
+		"thousands read as k and the cursor's own figure does not (%s %s %s)" % [
+			hud._tape_label.call(3000.0), hud._tape_label.call(0.0),
+			hud._tape_label.call(1412.0),
+		],
+	)
+	_discard(hud)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

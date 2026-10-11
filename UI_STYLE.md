@@ -200,9 +200,28 @@ prawej) + opcjonalna jednostka (dim). Kolor wartości nosi stan. Kolumny stałe.
 To 80% interfejsu i ma być nudne.
 
 **2. Drabinka (taśma).** Pionowa dla wysokości, pozioma dla prędkości. Kreski
-1 px, co piąta dłuższa i opisana, wartość pod stałym kursorem w środku. Retro:
-paski taśmowe z kokpitu. Nowoczesność: taśma przesuwa się płynnie (przesunięcie
-w shaderze, nie przeskok etykiet), a liczba przy kursorze kwantuje się osobno.
+1 px, co czwarta dłuższa i opisana, liczba przy kursorze kwantuje się osobno.
+Retro: paski taśmowe z kokpitu.
+
+**Dwie postacie, i różnią się tym, o co pilot pyta.** Taśma **przesuwna** ze
+stałym kursorem w środku odpowiada „jaka jest liczba" — a to samo mówi cyfra
+obok kursora. Taśma o **stałej podziałce z ruchomym kursorem** odpowiada „jak
+nisko jestem, z ilu zostało" — czyli na pytanie, które zadaje się na podejściu,
+i na jedyne, na które da się odpowiedzieć **nie czytając**. Wysokościomierz
+lotu jest tą drugą: pasmo 0–3000, bo w nim leci się całe zejście (kamera
+podejścia bierze widok na 600, lądowanie liczy się głęboko w środku tego), a
+wyżej ważniejsze od dokładnej liczby jest to, że jest daleko — co kursor
+zaparkowany u góry mówi bez liczby.
+
+Wartość **poza pasmem parkuje kursor na końcu i dalej wypisuje swój prawdziwy
+odczyt**: bycie nad górną granicą ma czytać się jak bycie nad nią, a nie jak
+brak przyrządu.
+
+Układ liczony **od prawej**: etykiety podziałki do prawej krawędzi, oś na lewo
+od nich, kursor i jego cyfra jeszcze dalej w lewo. Dzięki temu o geometrii
+decyduje najszersza etykieta, jaką ta podziałka potrafi wyprodukować, i nikomu
+nie trzeba mówić, ile ma piksel cyfra. `UiDraw.ladder_width()` zwraca tę samą
+liczbę, żeby wywołujący mógł oddać resztę panelu czemuś innemu.
 
 **3. Pasek z podziałką znaczącą.** Energia: **komórki, nie gładkie
 wypełnienie**, a podziałka jest co koszt jednego strzału. Pilot widzi „mam trzy

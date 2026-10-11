@@ -591,6 +591,31 @@ nie strzelam przy tym z dział.
 
 ---
 
+## MAUX6: Taśma wysokości
+
+Cel: na podejściu widać **ile zostało**, bez czytania liczby.
+
+- [x] `UiDraw.ladder()` — prymityw 2 ze słownika widgetów, wypisany w UI_STYLE
+  od początku i do tej pory przez nic nie rysowany. Stała podziałka 0–3000 z
+  ruchomym kursorem; wartość poza pasmem parkuje na końcu i dalej wypisuje
+  prawdziwy odczyt. Układ liczony od prawej, więc o szerokości decyduje
+  najszersza etykieta, a `ladder_width()` oddaje tę samą liczbę wywołującemu.
+- [x] Zastępuje wiersz `ALT` w prawym dolnym rogu; obok niej **SPD**, **V/S**
+  i **SLOPE**. Róg ma 110 px i mieści taśmę (56) plus kolumnę (51) — dokładnie,
+  więc formaty tych trzech liczb są stałymi, a test pyta panel, jak drukuje, i
+  liczy najszersze, co te formaty potrafią wyprodukować.
+- [x] **GEAR i ORE przeniosły się do rogu KONTEKST**, bo taśma zajęła ich
+  miejsce — i bo tam prawo ramy je stawia od początku: „chwilowe: podniesiony
+  moduł, tryb, komunikat". Ten róg był pusty, odkąd panel komputera przeniósł
+  się na górę.
+- [x] V/S i nachylenie w pełnych jednostkach. To jest cena kolumny 51 px i
+  zarazem uczciwość: dziesiąta piksela na sekundę i dziesiąta stopnia są poniżej
+  tego, czym da się lecieć, i poniżej tego, czym mierzone jest podwozie.
+
+Gotowe, gdy: schodząc, wiem bez czytania, czy jestem w połowie czy na końcu.
+
+---
+
 ## M3: System gwiezdny i streaming
 
 Cel: gwiazda, kilka planet, księżyce, stacja. Planety włączają się i wyłączają w zależności od odległości.
