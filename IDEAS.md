@@ -3171,13 +3171,40 @@ skręcać**. Ta trzecia jest tą, którą znalazłoby się późno i zrzuciło n
 autopilota: auto-poziom trzymałby dziób w połowie drogi do poziomu, bo
 wygaszanie obrotu zatrzymywałoby skręt, który właśnie wykonuje.
 
-**Luka, którą to odsłoniło:** `LootGenerator.computer()` nie losuje
-`has_altitude_hold`, `has_deorbit` ani `has_rotation_kill` — wszystkie trzy pola
-istnieją, `Ship` je czyta, dwa pierwsze mają podpięte akordy `W+S+A` / `W+S+D`,
-a znaleźć pudełka z nimi nie sposób.
-Dzisiaj ma je tylko katalog. Czy generator ma je losować (i od której
-rzadkości) — do rozstrzygnięcia; zmiana tabeli łupów to decyzja
-projektowa, nie poprawka.
+### Tabela łupów: pięć funkcji, pięć progów
+
+Przez chwilę była tu luka: `has_altitude_hold`, `has_deorbit` i
+`has_rotation_kill` istniały na zasobie, `Ship` je czytał, dwa miały podpięte
+akordy — i **żaden rzut ich nie produkował**. Jedyne pudełka w grze, które je
+miały, to cztery pliki w katalogu, czyli rzecz edytora, nie gry. Zamknięte.
+
+Próg to odczyt z tego, **ile kosztuje nie mieć tej funkcji**, a nie z tego, jak
+bardzo brzmi efektownie:
+
+| funkcja | od rzadkości | szansa | afiks |
+|---|---|---|---|
+| wygaszanie obrotu | uncommon | 0.6 | `damping` |
+| auto-poziom | uncommon | 0.7 | `levelling` |
+| hold wysokości | rare | 0.55 | `hovering` |
+| auto-orbita | rare | 0.6 | `orbital` |
+| deorbit | epic | 0.7 | `reentry` |
+
+Ułożenie obrotu i wypoziomowanie dzioba robi też spokojna ręka, więc
+przychodzą wcześnie i często. Trzymanie wysokości i cyrkularyzacja to rachunek
+prowadzony **ciągle**, więc później. Deorbit to jeden rachunek, raz, i
+najnudniejszy z nich — więc jest ostatnią rzeczą, której pudełko się uczy.
+
+Zmierzone na 4000 rzutach, średnia liczba funkcji na pudełko według rzadkości:
+**0.00 / 1.34 / 2.47 / 3.13 / 3.15**. Test pilnuje **kształtu**, nie tych liczb:
+że każda funkcja jest w ogóle osiągalna, że żadna nie wychodzi poniżej swojego
+progu i że rzadsze pudełko robi średnio więcej. Wpisanie „55% rare pudełek
+hoveruje" padłoby przy pierwszym przestrojeniu, a to jest liczba, której wolno
+się ruszać.
+
+Nazwy afiksów są krótkie nie z oszczędności: `title()` mieści 33 znaki, reszta
+schodzi na osobną linię karty (`dropped_affixes`). Najdłuższy tytuł, jaki ta
+tabela produkuje, to **„solving hovering orbital computer" — równe 33**. Dłuższa
+nazwa zepchnęłaby z tytułu funkcję, którą krótsza byłaby utrzymała.
 
 Żaden wysłany preset nie dostaje komputera i to też zostaje celowo:
 `FlightComputerData` mówi, że seryjny kadłub lata na wbudowanej heurystyce, a

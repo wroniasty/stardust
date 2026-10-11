@@ -447,8 +447,25 @@ func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
 		else FlightComputerData.Allocation.HEURISTIC
 	)
 	# The good functions are what rarity buys here, not bigger numbers.
+	#
+	# Five of them now, each with a rarity it starts appearing at and a
+	# chance at that rarity, which is the whole shape of the table. The
+	# floors are a reading of what the function **costs the pilot to be
+	# without**: settling a spin and levelling the nose are things a
+	# steady hand does anyway, so they come early and often; holding a
+	# height and circularising an orbit are arithmetic done continuously,
+	# so they come later; a deorbit burn is one sum, once, and the
+	# dullest of them, so it is the last thing a box learns.
+	#
+	# Three of these are new here. They existed on `FlightComputerData`,
+	# `Ship` read them and two of them had chords bound, but nothing in
+	# the game rolled them -- the only boxes that had them were the four
+	# in `resources/computers`, which a player never sees.
+	box.has_rotation_kill = rolled >= Rarity.UNCOMMON and rng.randf() < 0.6
 	box.has_auto_level = rolled >= Rarity.UNCOMMON and rng.randf() < 0.7
+	box.has_altitude_hold = rolled >= Rarity.RARE and rng.randf() < 0.55
 	box.has_auto_orbit = rolled >= Rarity.RARE and rng.randf() < 0.6
+	box.has_deorbit = rolled >= Rarity.EPIC and rng.randf() < 0.7
 	box.bulk = rng.randf_range(0.4, 1.2)
 	box.idle_draw = rng.randf_range(0.5, 3.0)
 
@@ -457,14 +474,26 @@ func computer(item_seed: int, rarity: int = ROLLED) -> FlightComputerData:
 	# own sentence here, and a box with all three ran to 34 characters --
 	# one over what a card can show, with no list left to trim because the
 	# sentence had already been glued together.
+	#
+	# Which is why the three new names are short. Six affixes cannot fit
+	# a title and are not meant to: `ModuleData.named_affixes` takes as
+	# many as the 33 characters hold and `dropped_affixes` puts the rest
+	# on their own line of the card. A long name would push a function
+	# off the title that a shorter one would have kept.
 	box.display_name = "computer"
 	var found: Array[StringName] = []
 	if box.allocation == FlightComputerData.Allocation.NNLS:
 		found.append(&"solving")
+	if box.has_rotation_kill:
+		found.append(&"damping")
 	if box.has_auto_level:
 		found.append(&"levelling")
+	if box.has_altitude_hold:
+		found.append(&"hovering")
 	if box.has_auto_orbit:
 		found.append(&"orbital")
+	if box.has_deorbit:
+		found.append(&"reentry")
 	# A box that does nothing clever still has to be called something, and
 	# "computer" on its own reads as a category rather than as an item.
 	#

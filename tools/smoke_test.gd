@@ -8541,6 +8541,7 @@ func _check_hull_editor() -> void:
 	_check_the_spin_killer_knows_when_to_sit_out()
 	_check_the_computer_panel_is_pressable()
 	_check_the_computer_catalogue()
+	_check_the_computer_table_rolls_every_function()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
 	_check_dragging_writes_the_frame_down()
@@ -9262,6 +9263,134 @@ func _square_for(layout: Dictionary, kind: int) -> Rect2:
 		if int(switch["kind"]) == kind:
 			return switch["box"]
 	return Rect2()
+
+
+## Tabela lupow losuje wszystkie piec funkcji komputera.
+##
+## Three of them -- settling a spin, holding a height, dropping out of
+## orbit -- existed on the resource, were read by `Ship` and had chords
+## bound, and **no roll produced them**. The only boxes in the game that
+## had them were four files a player never sees, which made them
+## features of the editor rather than of the game.
+##
+## What this measures is the shape of the table rather than its exact
+## numbers: that each function appears at all, that none appears below
+## the rarity it is supposed to start at, and that rarity buys more of
+## them. A check pinned to "55% of rare boxes hover" would fail the
+## first time somebody retunes a probability, which is a tuning figure
+## and allowed to move.
+func _check_the_computer_table_rolls_every_function() -> void:
+	# Instantiated rather than reached through the autoload, like
+	# `_check_loot` does: this suite runs as a `--script` main loop and
+	# there are no autoloads in one.
+	var loot: Node = LOOT_SCRIPT.new()
+	var rolls: int = 4000
+	var fields: Array[StringName] = [
+		&"has_rotation_kill", &"has_auto_level", &"has_altitude_hold",
+		&"has_auto_orbit", &"has_deorbit",
+	]
+	## The rarity each function is not supposed to appear below.
+	# Rarity by number rather than by name, because the enum lives on
+	# the autoload script and this has an instance of it, not the class.
+	# COMMON 0, UNCOMMON 1, RARE 2, EPIC 3, LEGENDARY 4.
+	var floors: Dictionary = {
+		&"has_rotation_kill": 1, &"has_auto_level": 1,
+		&"has_altitude_hold": 2, &"has_auto_orbit": 2,
+		&"has_deorbit": 3,
+	}
+	var seen: Dictionary = {}
+	var leaked: Array[String] = []
+	var functions_at: Dictionary = {}
+	var boxes_at: Dictionary = {}
+	for rarity: int in range(5):
+		for seed_value: int in range(rolls / 5):
+			var box: FlightComputerData = loot.computer(seed_value * 31 + rarity, rarity)
+			var count: int = 0
+			for field: StringName in fields:
+				if not bool(box.get(String(field))):
+					continue
+				count += 1
+				seen[field] = int(seen.get(field, 0)) + 1
+				if rarity < int(floors[field]):
+					leaked.append("%s at rarity %d" % [field, rarity])
+			functions_at[rarity] = int(functions_at.get(rarity, 0)) + count
+			boxes_at[rarity] = int(boxes_at.get(rarity, 0)) + 1
+
+	var never: Array[String] = []
+	for field: StringName in fields:
+		if not seen.has(field):
+			never.append(String(field))
+	_expect(
+		never.is_empty(),
+		"every function the computer has is reachable from the loot table (%s)" % [
+			"all five" if never.is_empty() else str(never),
+		],
+	)
+	_expect(
+		leaked.is_empty(),
+		"and none of them below the rarity it starts at (%s)" % [
+			"none" if leaked.is_empty() else str(leaked.slice(0, 3)),
+		],
+	)
+
+	# Rarity buys functions. Stated as an ordering rather than as five
+	# numbers, because the numbers are tuning and the ordering is the
+	# design: a better box does more, or rarity is just a colour.
+	var ladder: Array[float] = []
+	for rarity: int in range(5):
+		ladder.append(
+			float(functions_at[rarity]) / maxf(float(boxes_at[rarity]), 1.0)
+		)
+	var climbing: bool = true
+	for i: int in range(1, ladder.size()):
+		if ladder[i] < ladder[i - 1] - 0.001:
+			climbing = false
+	_expect(
+		climbing and ladder[4] > ladder[0],
+		"a rarer box does more, on average (%.2f %.2f %.2f %.2f %.2f functions)" % [
+			ladder[0], ladder[1], ladder[2], ladder[3], ladder[4],
+		],
+	)
+
+	# The affixes are what the card says it does, so they have to agree
+	# with what it actually does -- one name per function and nothing
+	# left over.
+	var disagreed: int = 0
+	var longest: String = ""
+	for seed_value: int in range(400):
+		var box: FlightComputerData = loot.computer(seed_value * 7 + 3)
+		var count: int = 0
+		for field: StringName in fields:
+			if bool(box.get(String(field))):
+				count += 1
+		if box.allocation == FlightComputerData.Allocation.NNLS:
+			count += 1
+		if count == 0:
+			count = 1  # the `basic` name a box that does nothing still gets
+		if box.affixes.size() != count:
+			disagreed += 1
+		if box.title().length() > longest.length():
+			longest = box.title()
+	_expect(
+		disagreed == 0,
+		"the affixes on a rolled box name exactly what it can do (%d disagreed)" % [
+			disagreed,
+		],
+	)
+	# Overflow is handled rather than avoided, and this says which half
+	# is true: a full box cannot fit its title and `dropped_affixes`
+	# carries the rest onto its own line of the card.
+	_expect(
+		longest.length() <= ModuleData.TITLE_LIMIT,
+		"and the title it builds still fits the card (%d of %d: %s)" % [
+			longest.length(), ModuleData.TITLE_LIMIT, longest,
+		],
+	)
+	# Freed rather than left, like `_check_loot` frees its own: a
+	# generator that outlives the run holds the tables it loaded, and
+	# the gate reads "resources still in use at exit" as an error --
+	# which it did, on this check's first green run.
+	loot.free()
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.
