@@ -7,6 +7,7 @@ script = ExtResource("1_computer")
 display_name = "approach suite"
 allocation = 1
 has_auto_level = true
+has_rotation_kill = true
 has_altitude_hold = true
 idle_draw = 1.8
 bulk = 1.0

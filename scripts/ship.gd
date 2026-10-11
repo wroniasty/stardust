@@ -129,6 +129,18 @@ const KILL_ROTATION_PULSE_MARGIN: float = 1.5
 ## two seconds to stop 2 rad/s; at 0.2 it needs under one, which is the bar.
 const KILL_ROTATION_GAIN: float = 0.2
 
+## How much of the kill-rotation demand the computer's own version asks
+## for, when the pilot has let go and it settles the ship by itself.
+##
+## Not one, and that is the whole design of the function. The key is a
+## command and this is not: a pilot who asks for a stop should get the
+## hardest stop the ship has, and an assist filling the silence
+## afterwards should take the wobble out without taking the flying out.
+## The midpoint of the 50-60% this was asked for -- which is a tuning
+## figure rather than a derivation, so it sits here where it can be
+## retuned rather than inside the solver where it would hide.
+const AUTO_KILL_SHARE: float = 0.55
+
 ## Legs that must be on the ground before a landing is even considered.
 const MIN_LEGS_DOWN: int = 2
 
@@ -437,6 +449,15 @@ var active_commands: Dictionary = {}
 
 ## Assist holds, set from input or by an AI.
 var kill_rotation_command: bool = false
+
+## Whether the computer's own spin killer is switched on.
+##
+## Latched rather than momentary, unlike every command beside it: this is
+## a function the pilot turns on and leaves on, which is what makes it
+## worth having. Owned here rather than in the panel that toggles it,
+## because the simulation is what reads it and a switch living in a HUD
+## is a switch that dies with the HUD.
+var auto_kill_engaged: bool = false
 var brake_command: bool = false
 
 ## What the ship is tied up to, or null.
@@ -2717,6 +2738,10 @@ func _resolve_commands(state: PhysicsDirectBodyState2D) -> void:
 	active_commands = commands.duplicate()
 	if kill_rotation_command:
 		_apply_kill_rotation(state)
+	elif _auto_kill_wanted():
+		# Only in the gap the pilot left: asked for a stop, they get the
+		# whole of it above, and asked for a turn they are not fought.
+		_apply_kill_rotation(state, AUTO_KILL_SHARE)
 	if heading_command != ControlChords.Chord.NONE:
 		_apply_heading_hold(state)
 	if auto_orbit_command:
@@ -2738,7 +2763,9 @@ func _resolve_commands(state: PhysicsDirectBodyState2D) -> void:
 ## Below the epsilon the spin is zeroed outright: impulse engines are all or
 ## nothing, so chasing the last hundredth of a radian with them oscillates
 ## forever instead of converging.
-func _apply_kill_rotation(state: PhysicsDirectBodyState2D) -> void:
+func _apply_kill_rotation(
+	state: PhysicsDirectBodyState2D, share: float = 1.0
+) -> void:
 	var spin: float = state.angular_velocity
 	var opposing: ShipControl.Command = (
 		ShipControl.Command.CCW if spin > 0.0 else ShipControl.Command.CW
@@ -2747,12 +2774,53 @@ func _apply_kill_rotation(state: PhysicsDirectBodyState2D) -> void:
 	# Derived rather than fixed, so retuning the torque jets cannot silently
 	# reintroduce the chatter this guards against.
 	var per_pulse: float = control.authority_of(opposing) / maxf(inertia, 0.0001) * state.step
-	var epsilon: float = maxf(KILL_ROTATION_EPS, per_pulse * KILL_ROTATION_PULSE_MARGIN)
+	# Scaled with the demand, because that is what the dead band is a
+	# measure of: at a fraction of the push, one pulse removes a fraction
+	# of the spin, so a weaker assist is allowed to converge closer
+	# before it gives up and zeroes the remainder.
+	var epsilon: float = maxf(
+		KILL_ROTATION_EPS * share, per_pulse * share * KILL_ROTATION_PULSE_MARGIN
+	)
 	if absf(spin) <= epsilon:
 		state.angular_velocity = 0.0
 		return
-	var amount: float = clampf(absf(spin) / KILL_ROTATION_GAIN, 0.0, 1.0)
+	var amount: float = clampf(absf(spin) / KILL_ROTATION_GAIN, 0.0, 1.0) * share
 	active_commands[opposing] = maxf(float(active_commands.get(opposing, 0.0)), amount)
+
+
+## Whether the computer should be settling the spin on its own this tick.
+##
+## Three gates, and each is a different kind of no. The box has to have
+## the function at all; the pilot has to have let go of the rotation
+## keys, because the assist exists to fill that gap rather than to argue
+## with them; and nothing else may be steering, since auto-level,
+## auto-orbit, deorbit and the heading holds all turn the ship on purpose
+## and would be held halfway to where they were going.
+func _auto_kill_wanted() -> bool:
+	var box: FlightComputerData = computer()
+	if box == null or not box.has_rotation_kill:
+		return false
+	if not auto_kill_engaged:
+		return false
+	if (
+		commands.has(ShipControl.Command.CCW)
+		or commands.has(ShipControl.Command.CW)
+	):
+		return false
+	return not _something_is_steering()
+
+
+## Whether an assist is turning the ship on purpose this tick.
+##
+## Asked of what is engaged rather than of what the ship is doing: an
+## assist that has reached its heading is still the thing in charge of
+## the nose, and handing the nose to the spin killer the moment it
+## settles would take it away again on the next drift.
+func _something_is_steering() -> bool:
+	return (
+		heading_command != ControlChords.Chord.NONE
+		or auto_level_command or auto_orbit_command or deorbit_command
+	)
 
 
 ## Swings the nose onto the direction of travel, or onto its opposite.

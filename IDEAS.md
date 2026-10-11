@@ -3137,8 +3137,8 @@ a lista w doku presetów nie miała czego zaproponować.
 Cztery wpisy, i drabinką są **funkcje, nie liczby** — to reguła samego modułu
 (`FlightComputerData.blurb`): „basic avionics" (heurystyka, zero asyst,
 `bulk` 0.5), „thrust solver" (NNLS, zero asyst, 0.8), „approach suite"
-(NNLS + auto-poziom + hold wysokości, 1.0, draw 1.8) i „orbital pilot"
-(NNLS + wszystkie cztery, 1.2, draw 3.0). `bulk` i `idle_draw` mieszczą się
+(NNLS + auto-poziom + hold wysokości + wygaszanie obrotu, 1.0, draw 1.8) i
+„orbital pilot" (NNLS + wszystko, 1.2, draw 3.0). `bulk` i `idle_draw` mieszczą się
 w tym, co generator losuje (0.4–1.2 i 0.5–3.0), więc zatoka, która przyjmuje
 rzut, przyjmuje też plik.
 
@@ -3149,9 +3149,32 @@ ustawia też `rarity` ani `affixes`, jak żaden z sześciu plików obok: jedno i
 drugie jest faktem o **rzucie**, a nie o rzeczy, i karta i tak mówi, co
 pudełko robi, bo `stat_rows()` wypisuje każdą funkcję jako 0/1.
 
+### Automatyczne wygaszanie obrotu (`has_rotation_kill`)
+
+Nie komenda, i to jest cała różnica. Klawisz `kill_rotation` to prośba pilota
+i dostaje pełną władzę, jaką statek ma; ta funkcja żyje **w przerwie, którą
+pilot zostawił** — puścił klawisze obrotu, pudełko dogasza resztę. Dlatego
+chodzi na `Ship.AUTO_KILL_SHARE` = **0.55** żądania, które stawia klawisz
+(środek 50–60%, o które poproszono): tyle, żeby szarpnięcie samo się ułożyło, i
+nie tyle, żeby klawisz stracił sens albo żeby z latania zniknęło dryfowanie.
+
+Zmierzone, nie założone: klawisz zatrzymuje 2.0 rad/s w **27 tickach**, pudełko
+w **106**. Stosunek to prawie cztery, a nie 1/0.55, bo żądanie jest zwiniete
+(`spin / KILL_ROTATION_GAIN`, przycięte do jedynki), więc przy małym obrocie o
+czasie decyduje zwijanie, a nie ułamek. Test pilnuje więc „dłużej niż klawisz",
+a nie konkretnej proporcji — wpisanie liczby, której model nie produkuje, to
+sposob, w jaki test zaczyna padać za to, że ma rację.
+
+Trzy bramki, trzy różne „nie": pudełko musi mieć funkcję, pilot musi puścić
+klawisze (inaczej statek bije się z ręką), i **żadna asysta nie może właśnie
+skręcać**. Ta trzecia jest tą, którą znalazłoby się późno i zrzuciło na
+autopilota: auto-poziom trzymałby dziób w połowie drogi do poziomu, bo
+wygaszanie obrotu zatrzymywałoby skręt, który właśnie wykonuje.
+
 **Luka, którą to odsłoniło:** `LootGenerator.computer()` nie losuje
-`has_altitude_hold` ani `has_deorbit` — oba pola istnieją, `Ship` je czyta,
-akord `W+S+A` / `W+S+D` jest podpięty, a znaleźć pudełka z nimi nie sposób.
+`has_altitude_hold`, `has_deorbit` ani `has_rotation_kill` — wszystkie trzy pola
+istnieją, `Ship` je czyta, dwa pierwsze mają podpięte akordy `W+S+A` / `W+S+D`,
+a znaleźć pudełka z nimi nie sposób.
 Dzisiaj ma je tylko katalog. Czy generator ma je losować (i od której
 rzadkości) — do rozstrzygnięcia; zmiana tabeli łupów to decyzja
 projektowa, nie poprawka.

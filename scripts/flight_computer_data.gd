@@ -38,6 +38,22 @@ enum Allocation {
 ## arithmetic is dull, which is exactly what a computer is for.
 @export var has_deorbit: bool = false
 
+## Stops the spin on its own, as soon as the pilot stops asking for one.
+##
+## The difference from the `kill_rotation` key is that this is not a
+## command: the pilot never asks for it, it happens in the gap after
+## they let go. So it runs at `Ship.AUTO_KILL_SHARE` of the demand the
+## key makes -- enough that a nudge settles by itself, short of the
+## authority a pilot gets by asking, because an assist that stopped the
+## ship as hard as the key does would make the key pointless and would
+## take the drift out of flying entirely.
+##
+## It also stands aside for every assist that steers: auto-level,
+## auto-orbit, deorbit and the heading holds all turn the ship on
+## purpose, and a rotation kill fighting them would hold the nose
+## halfway to where it was going.
+@export var has_rotation_kill: bool = false
+
 ## Constant draw while any assist is engaged, in energy per second.
 ##
 ## Subtracted from the recharge rate rather than resetting the silence: an
@@ -49,6 +65,7 @@ enum Allocation {
 func stat_rows() -> Array[Dictionary]:
 	return [
 		row("thrust split", 1.0 if allocation == Allocation.NNLS else 0.0, 0, 1),
+		row("spin kill", 1.0 if has_rotation_kill else 0.0, 0, 1),
 		row("auto-level", 1.0 if has_auto_level else 0.0, 0, 1),
 		row("auto-orbit", 1.0 if has_auto_orbit else 0.0, 0, 1),
 		row("altitude hold", 1.0 if has_altitude_hold else 0.0, 0, 1),

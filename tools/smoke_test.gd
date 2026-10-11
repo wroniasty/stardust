@@ -54,6 +54,13 @@ const HEADING_TRAVEL: Vector2 = Vector2(140.0, -60.0)
 const KILL_SPIN: float = 2.0
 const KILL_TICKS: int = 90
 
+## The computer's own spin killer gets a longer budget than the key, and
+## that is the measurement rather than a courtesy: it asks for
+## `Ship.AUTO_KILL_SHARE` of the demand, so it has to take longer. Three
+## times the key's budget leaves room for that without leaving room for
+## an assist that has quietly stopped working.
+const AUTO_KILL_TICKS: int = KILL_TICKS * 3
+
 ## Speed the brake has to shed, and the time it gets.
 ##
 ## Eleven seconds rather than five because sideways braking is genuinely
@@ -132,7 +139,7 @@ const DEATH_TICKS: int = 900
 ## tree yet, so a planet queried there would still hold its default parameters
 ## instead of the ones _ready() rolls from the seed.
 enum Phase { FIELD, TERRAIN, CONTROL_GROUPS, FORWARD_BURN, ROTATE_CW, ROTATE_CCW,
-	ROTATE_DAMAGED, KILL_ROTATION, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, BRAKE_IN_GRAVITY,
+	ROTATE_DAMAGED, KILL_ROTATION, AUTO_KILL, POINT_PROGRADE, POINT_RETROGRADE, AUTO_ORBIT, BRAKE, BRAKE_SIDEWAYS, BRAKE_DIAGONAL, BRAKE_IN_GRAVITY,
 	STRAFE, FREE_FALL, ORBIT,
 	ELLIPSE, AEROBRAKE, HULL_HEAT, SPIN_IN_AIR, SPIN_IN_VACUUM, LANDING,
 	PLATEAU, GEAR, LANDING_GOOD, LANDING_DAMAGED, LANDING_FAST, LANDING_STEEP, LANDED_RIDE, GROUND_RIDE,
@@ -162,6 +169,7 @@ var _peak_drift: float = 0.0
 var _clean_turn_spin: float = 0.0
 var _damaged_turn_spin: float = 0.0
 var _kill_ticks: int = -1
+var _auto_kill_ticks: int = -1
 var _peak_turn_during_brake: float = 0.0
 var _peak_speed: float = 0.0
 
@@ -361,6 +369,9 @@ func _physics_process(delta: float) -> bool:
 	elif _phase == Phase.KILL_ROTATION:
 		if _kill_ticks < 0 and absf(_ship.angular_velocity) < 0.001:
 			_kill_ticks = _ticks
+	elif _phase == Phase.AUTO_KILL:
+		if _auto_kill_ticks < 0 and absf(_ship.angular_velocity) < 0.001:
+			_auto_kill_ticks = _ticks
 	elif (
 		_phase == Phase.BRAKE
 		or _phase == Phase.BRAKE_SIDEWAYS
@@ -550,6 +561,8 @@ func _phase_ticks() -> int:
 			return FORWARD_BURN_TICKS
 		Phase.KILL_ROTATION:
 			return KILL_TICKS
+		Phase.AUTO_KILL:
+			return AUTO_KILL_TICKS
 		Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE:
 			return HEADING_TICKS
 		Phase.AUTO_ORBIT:
@@ -596,7 +609,7 @@ func _phase_needs_planet() -> bool:
 	match _phase:
 		Phase.HULL:
 			return false
-		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE, Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.STRAFE:
+		Phase.CONTROL_GROUPS, Phase.FORWARD_BURN, Phase.ROTATE_CW, Phase.ROTATE_CCW, Phase.ROTATE_DAMAGED, Phase.KILL_ROTATION, Phase.AUTO_KILL, Phase.POINT_PROGRADE, Phase.POINT_RETROGRADE, Phase.BRAKE, Phase.BRAKE_SIDEWAYS, Phase.BRAKE_DIAGONAL, Phase.STRAFE:
 			return false
 		_:
 			return true
@@ -631,6 +644,14 @@ func _begin_phase() -> void:
 			_ship.angular_velocity = KILL_SPIN
 			_ship.kill_rotation_command = true
 			_kill_ticks = -1
+		Phase.AUTO_KILL:
+			# The same spin, and nobody touching the controls. Nothing is
+			# commanded here on purpose: the whole function is what
+			# happens in the gap the pilot left.
+			_ship.angular_velocity = KILL_SPIN
+			_fit_computer(_ship, false, true)
+			_ship.auto_kill_engaged = true
+			_auto_kill_ticks = -1
 		Phase.AUTO_ORBIT:
 			# Thrown along a plainly elliptical path, with a computer that
 			# knows how to fix it. Well above the air, or the assist would be
@@ -924,6 +945,28 @@ func _evaluate_phase() -> void:
 			_expect(
 				_kill_ticks >= 0 and seconds < 1.0,
 				"kill rotation stops %.1f rad/s in %.2f s" % [KILL_SPIN, seconds],
+			)
+		Phase.AUTO_KILL:
+			var took: float = float(_auto_kill_ticks) / float(
+				Engine.physics_ticks_per_second
+			)
+			_expect(
+				_auto_kill_ticks >= 0,
+				"the computer settles %.1f rad/s on its own in %.2f s" % [
+					KILL_SPIN, took,
+				],
+			)
+			# Weaker than the key, and this is the figure that says so.
+			# Asked as "longer" rather than "1/0.55 times longer": the
+			# demand is tapered and the engines are impulse, so the ratio
+			# of the two times is not the ratio of the two demands, and
+			# pinning a number the model does not actually produce is how
+			# a test starts failing for being right.
+			_expect(
+				_auto_kill_ticks > _kill_ticks and _kill_ticks >= 0,
+				"taking longer than the key, which is what %.0f%% of it means (%d against %d ticks)" % [
+					Ship.AUTO_KILL_SHARE * 100.0, _auto_kill_ticks, _kill_ticks,
+				],
 			)
 			_expect(
 				absf(_ship.angular_velocity) < 0.001,
@@ -1584,10 +1627,13 @@ func _mount_spool(mount_name: String) -> float:
 
 
 ## Puts a flight computer in the bay, with or without the orbit function.
-func _fit_computer(ship: Ship, with_auto_orbit: bool) -> void:
+func _fit_computer(
+	ship: Ship, with_auto_orbit: bool, with_rotation_kill: bool = false
+) -> void:
 	var box: FlightComputerData = FlightComputerData.new()
 	box.allocation = FlightComputerData.Allocation.NNLS
 	box.has_auto_orbit = with_auto_orbit
+	box.has_rotation_kill = with_rotation_kill
 	box.bulk = 0.5
 	# Built before the bay is chosen, because which bay takes it depends
 	# on how big it is now that bays have no kind. `bay_for` swaps a
@@ -8492,6 +8538,7 @@ func _check_hull_editor() -> void:
 	_check_a_gun_goes_where_it_is_told()
 	_check_a_preset_pins_fields()
 	_check_a_preset_can_carry_a_computer()
+	_check_the_spin_killer_knows_when_to_sit_out()
 	_check_the_computer_catalogue()
 	_check_the_dock_can_call_these_at_all()
 	_check_the_dock_agrees_with_the_ship()
@@ -8988,6 +9035,67 @@ func _check_the_computer_catalogue() -> void:
 		],
 	)
 	_warn(assists > 0, "with assists to compare against none (%d)" % assists)
+
+
+## Zabijacz obrotu wie, kiedy sie nie wtracac.
+##
+## Three gates, three different kinds of no, and all three are the point
+## of the function rather than details of it: a box without it does
+## nothing, a pilot still turning is not argued with, and an assist that
+## is steering on purpose is not fought. The last one is the one that
+## would be found late and blamed on the autopilot -- auto-level holding
+## the nose halfway to level because the spin killer kept stopping the
+## turn it was making.
+##
+## A predicate rather than a flight phase, because what is being checked
+## is when it declines. Whether it works when it does not decline is
+## measured in flight, in `Phase.AUTO_KILL`.
+func _check_the_spin_killer_knows_when_to_sit_out() -> void:
+	var ship: Ship = _spawn_ship()
+	ship.auto_kill_engaged = true
+	_expect(
+		not ship._auto_kill_wanted(),
+		"with no computer aboard, nothing settles the spin",
+	)
+
+	_fit_computer(ship, false, false)
+	_expect(
+		not ship._auto_kill_wanted(),
+		"nor with a computer that has not got the function",
+	)
+
+	_fit_computer(ship, false, true)
+	_expect(ship._auto_kill_wanted(), "with one that has, and switched on, it does")
+
+	ship.auto_kill_engaged = false
+	_expect(not ship._auto_kill_wanted(), "and not while it is switched off")
+	ship.auto_kill_engaged = true
+
+	# The pilot is turning. Nothing here may push back, or the ship
+	# fights the hand on the keys.
+	ship.commands[ShipControl.Command.CW] = 1.0
+	_expect(not ship._auto_kill_wanted(), "not while the pilot is still turning")
+	ship.commands.erase(ShipControl.Command.CW)
+	_expect(ship._auto_kill_wanted(), "and again once they let go")
+
+	# And an assist that steers owns the nose while it is engaged.
+	for steering: Array in [
+		["heading hold", &"heading_command"],
+		["auto-level", &"auto_level_command"],
+		["auto-orbit", &"auto_orbit_command"],
+		["deorbit", &"deorbit_command"],
+	]:
+		var was: Variant = ship.get(steering[1])
+		ship.set(
+			steering[1],
+			ControlChords.Chord.PROGRADE if steering[1] == &"heading_command" else true,
+		)
+		_expect(
+			not ship._auto_kill_wanted(),
+			"nor while %s is steering" % steering[0],
+		)
+		ship.set(steering[1], was)
+	_discard(ship)
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.
