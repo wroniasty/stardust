@@ -340,7 +340,16 @@ func _input(event: InputEvent) -> void:
 	var click: InputEventMouseButton = event as InputEventMouseButton
 	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
 		return
-	if press_at(_canvas.get_local_mouse_position()):
+	# The event's own position, mapped into the canvas, rather than
+	# wherever the pointer happens to be now. They agree in a running
+	# game and they are not the same question: one is "where was this
+	# click", the other "where is the mouse", and a handler that asks
+	# the second is a handler that cannot be driven by a synthesised
+	# event -- which is how this was found.
+	var local: InputEventMouseButton = (
+		_canvas.make_input_local(click) as InputEventMouseButton
+	)
+	if local != null and press_at(local.position):
 		get_viewport().set_input_as_handled()
 
 

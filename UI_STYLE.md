@@ -260,6 +260,12 @@ każdym statku. Połknięcie kliknięcia nie jest uprzejmością — spust jest
 **odpytywany**, nie zdarzeniowy, więc panel, który nie zająłby wskaźnika,
 strzelałby z dział przy każdym naciśnięciu guzika.
 
+Przełącznik **sterujący** startuje wyłączony, przełącznik **pokazujący** —
+włączony, gdy moduł go daje. Różnica jest w tym, co się dzieje po włączeniu:
+asysta zaczyna robić coś ze statkiem, czego pilot nie poprosił, a odczyt
+pokazuje to, co pilot już kupił, montując część. Jedno i drugie dalej da się
+kliknąć.
+
 Główka rzędu (ikona, która go rozwija) świeci `accent`, gdy cokolwiek w rzędzie
 jest włączone. Zwinięty panel musi dalej mówić, że statek jest za pilota
 prowadzony.

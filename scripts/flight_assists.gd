@@ -70,8 +70,22 @@ const ALL: Array[Dictionary] = [
 	{
 		"kind": Kind.TRAJECTORY, "requires": &"has_trajectory_view",
 		"caption": "trajectory", "latches": &"", "tint": &"label",
+		"starts_on": true,
 	},
 ]
+
+
+## Whether this assist is on as soon as a box that can do it is fitted.
+##
+## False for all seven that fly the ship, because an assist switching
+## itself on is the ship doing something the pilot did not ask for.
+## True for the trajectory view, because it is not an assist: it is a
+## **readout**, it changes nothing about how the ship behaves, and a
+## pilot who fitted a box that can draw their path has already said
+## they want to see it. Reported as exactly that confusion -- "dart
+## stock has trajectory view, and it does not show".
+static func starts_on(kind: int) -> bool:
+	return bool(entry(kind).get("starts_on", false))
 
 
 ## Which palette colour a switch wears while it is on.

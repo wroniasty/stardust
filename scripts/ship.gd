@@ -2823,7 +2823,7 @@ func _apply_latched_assists() -> void:
 ## The dictionary keeps the switch rather than dropping it, because
 ## refitting the same box back should give the pilot their panel back.
 func is_latched(kind: int) -> bool:
-	if not bool(latched.get(kind, false)):
+	if not bool(latched.get(kind, FlightAssists.starts_on(kind))):
 		return false
 	return FlightAssists.offered_by(kind, computer())
 
@@ -2840,10 +2840,11 @@ func toggle_assist(kind: int) -> bool:
 	var now: bool = not is_latched(kind)
 	if now:
 		for other: int in FlightAssists.excludes(kind):
-			latched.erase(other)
-		latched[kind] = true
-	else:
-		latched.erase(kind)
+			latched[other] = false
+	# Written either way rather than erased when off: an assist that
+	# starts on has to be able to be switched **off**, and an empty
+	# entry means "whatever this one does by default".
+	latched[kind] = now
 	return now
 
 

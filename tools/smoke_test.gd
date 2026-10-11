@@ -9636,18 +9636,49 @@ func _check_the_trajectory_view_is_a_function() -> void:
 	seer._ship = ship
 
 	DebugOverlay.showing = false
-	_expect(not seer.wanted(), "with nothing asking, no line is drawn")
+	_expect(not seer.wanted(), "with no computer at all, no line is drawn")
 
+	# Fitting a box that can draw the path is enough, and that is the
+	# one assist where it is: reported as "dart stock has trajectory
+	# view and it does not show". The other seven stay off until asked
+	# because engaging one changes how the ship flies; this one changes
+	# nothing but what is on the screen, and fitting it is already the
+	# pilot asking.
 	var box: FlightComputerData = FlightComputerData.new()
 	box.has_trajectory_view = true
 	box.bulk = 0.5
 	var hole: ModuleBay = ship.bay_for(box)
 	if hole != null:
 		hole.installed = box
+	_expect(
+		ship.is_latched(FlightAssists.Kind.TRAJECTORY) and seer.wanted(),
+		"fitting a box that can draw the path turns it on",
+	)
+	# And it can still be switched off, which an assist stored by
+	# "present in the dictionary" could not do.
+	ship.toggle_assist(FlightAssists.Kind.TRAJECTORY)
+	_expect(
+		not ship.is_latched(FlightAssists.Kind.TRAJECTORY) and not seer.wanted(),
+		"and the switch turns it off again",
+	)
 	ship.toggle_assist(FlightAssists.Kind.TRAJECTORY)
 	_expect(
 		ship.is_latched(FlightAssists.Kind.TRAJECTORY) and seer.wanted(),
-		"the pilot's switch asks for it",
+		"and back on",
+	)
+	# Nothing else starts on: an assist that engaged itself would be the
+	# ship flying somewhere the pilot did not ask it to.
+	var uninvited: Array[String] = []
+	for one: Dictionary in FlightAssists.ALL:
+		if int(one["kind"]) == FlightAssists.Kind.TRAJECTORY:
+			continue
+		if FlightAssists.starts_on(int(one["kind"])):
+			uninvited.append(String(one["caption"]))
+	_expect(
+		uninvited.is_empty(),
+		"and no assist that flies the ship switches itself on (%s)" % [
+			"none" if uninvited.is_empty() else str(uninvited),
+		],
 	)
 
 	# And the debug key cannot take it away, which is the whole reason
@@ -9659,7 +9690,7 @@ func _check_the_trajectory_view_is_a_function() -> void:
 	DebugOverlay.showing = true
 	_expect(
 		not ship.is_latched(FlightAssists.Kind.TRAJECTORY) and seer.wanted(),
-		"while the debug key still shows it with no computer switch at all",
+		"while the debug key still shows it with the switch off",
 	)
 	DebugOverlay.showing = false
 
