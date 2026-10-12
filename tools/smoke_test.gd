@@ -1342,6 +1342,7 @@ func _evaluate_phase() -> void:
 			_check_ejection()
 			_check_what_is_thrown_out_on_the_ground_lands_clear(_planet)
 			_check_a_box_of_units_can_go_overboard()
+			_check_a_slot_that_refuses_gives_the_module_back()
 			_check_plateaus(_planet)
 			_check_landing_sites(_planet)
 			_check_determinism(_planet)
@@ -11135,6 +11136,128 @@ func _check_every_module_field_knows_which_way_is_up() -> void:
 			counted, "all named" if missing.is_empty() else str(missing),
 		],
 	)
+
+
+## Gniazdo, ktore nie przyjmuje, oddaje modul -- a nie zjada go.
+##
+## Reported from the cockpit as "fitting is broken, and things disappear
+## from the cargo", and both halves were one bug. Every socket on the
+## schematic can be clicked, so the slot a fit goes into is whatever the
+## pilot last clicked -- and the refusal table knew about two pairings
+## out of five. A gun socket with an engine selected fell through it,
+## `fit(item as WeaponData)` cast the engine to **null**, `fit(null)`
+## installed nothing and handed null back, nothing went into cargo
+## because nothing came out, and the screen said "fitted in
+## FrontHardpoint1". The engine was gone.
+##
+## So this drives the editor the way a pilot does -- pick a module, aim
+## at a socket, press fit -- for every wrong pairing there is, and asks
+## the two questions that matter: was it refused in words, and is the
+## module still aboard.
+func _check_a_slot_that_refuses_gives_the_module_back() -> void:
+	var ship: Ship = _spawn_ship()
+	# The screen only fits standing still, which is the rule the pilot
+	# asked for; this is about what happens when it does fit.
+	ship.flight_mode = Ship.FlightMode.LANDED
+	var editor: ShipEditor = ShipEditor.new()
+	root.add_child(editor)
+	editor.bind(ship)
+	_expect(editor.can_refit(), "a landed ship may be refitted")
+
+	var gun: WeaponData = _reference_weapon()
+	var motor: EngineData = _reference_engine(&"drive")
+	var box: FlightComputerData = FlightComputerData.new()
+	box.bulk = 0.4
+
+	# One row per pairing: the socket to aim at, and the thing that does
+	# not belong in it.
+	var wrong: Array[Dictionary] = [
+		{"slot": ship.hardpoints[0], "item": motor, "says": "gun"},
+		{"slot": ship.hardpoints[0], "item": box, "says": "gun"},
+		{"slot": ship.engine_mounts()[0], "item": gun, "says": "engine"},
+		{"slot": ship.engine_mounts()[0], "item": box, "says": "engine"},
+		{"slot": ship.bays[0], "item": gun, "says": "module"},
+		{"slot": ship.bays[0], "item": motor, "says": "module"},
+	]
+	if ship.gear != null:
+		wrong.append({"slot": ship.gear, "item": gun, "says": "legs"})
+
+	var silent: Array[String] = []
+	var eaten: Array[String] = []
+	for pairing: Dictionary in wrong:
+		var item: Resource = pairing["item"]
+		var slot: Node = pairing["slot"]
+		# Into cargo, aimed at the socket, and fitted -- the three
+		# things a pilot does, through the editor's own entry points.
+		_expect_quiet(ship.stash(item, 1), "the module goes into cargo")
+		editor._named = slot
+		editor._pick = _editor_row_of(editor, item)
+		var before: int = ship.cargo.size()
+		if editor._refusal(slot, item).is_empty():
+			silent.append("%s + %s" % [slot.name, item.get_class()])
+		editor._fit()
+		if ship.cargo.size() != before or not _editor_holds(ship, item):
+			eaten.append("%s + %s" % [slot.name, String(pairing["says"])])
+		ship.cargo.remove_at(_editor_row_of(editor, item))
+	_expect(
+		silent.is_empty(),
+		"every wrong pairing is refused in words (%s)" % [
+			"all %d" % wrong.size() if silent.is_empty() else str(silent),
+		],
+	)
+	_expect(
+		eaten.is_empty(),
+		"and the module is still in the cargo afterwards (%s)" % [
+			"all there" if eaten.is_empty() else str(eaten),
+		],
+	)
+
+	# And the right thing in the right socket still goes in, or the
+	# check above would pass on a screen that fits nothing at all.
+	ship.stash(gun, 1)
+	editor._named = ship.hardpoints[0]
+	editor._pick = _editor_row_of(editor, gun)
+	editor._fit()
+	_expect(
+		ship.hardpoints[0].weapon == gun,
+		"a gun in a gun socket is still fitted (%s)" % [
+			"none" if ship.hardpoints[0].weapon == null
+			else ship.hardpoints[0].weapon.title(),
+		],
+	)
+	# Flying, nothing is fitted and the message says what to do about
+	# it -- without naming the key of a screen that no longer exists.
+	ship.flight_mode = Ship.FlightMode.PHYSICAL
+	ship.stash(motor, 1)
+	editor._named = ship.engine_mounts()[0]
+	editor._pick = _editor_row_of(editor, motor)
+	var carried: int = ship.cargo.size()
+	editor._fit()
+	_expect(
+		ship.cargo.size() == carried and not editor._notice.contains("Tab"),
+		"in flight it refuses and keeps the module (%s)" % editor._notice,
+	)
+	_discard(editor)
+	_discard(ship)
+
+
+## Which row of the editor's list an item is in, or -1.
+func _editor_row_of(editor: ShipEditor, item: Resource) -> int:
+	var rows: Array[Dictionary] = editor._items()
+	for i: int in range(rows.size()):
+		if rows[i]["item"] == item:
+			return i
+	return -1
+
+
+## Whether the ship still has this module anywhere a pilot could reach.
+func _editor_holds(ship: Ship, item: Resource) -> bool:
+	if ship.carried == item:
+		return true
+	for entry: Dictionary in ship.cargo:
+		if entry["item"] == item:
+			return true
+	return false
 
 
 ## The first gun on the ship, whatever hardpoint it landed in.

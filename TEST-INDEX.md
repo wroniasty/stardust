@@ -52,6 +52,8 @@ braking burn) and the ring that draws it, what a thrown crate does on
 the ground and the box of units that can be thrown, every `_on_*`
 handler being connected to something, the loot pool coming from
 `rollable` and the per-file roll bands (direction, lean, bounds),
+every wrong slot/module pairing in the editor being refused in words
+with the module still in the cargo,
 boost, input bindings, sprite sheets, the dock's skin still.
 
 ## Failures vs. warnings

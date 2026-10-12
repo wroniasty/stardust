@@ -3,11 +3,15 @@ extends CanvasLayer
 ## MAUX1: the prototype ship editor. Cargo, hold, and every place a module can
 ## go, on one screen.
 ##
-## The quick swap on Tab stays what it is -- one slot, no pause, a decision
-## taken while still flying. This is the other half: somewhere to look at the
-## whole ship, see what fitting a module would actually do, and stow or throw
-## away what is not wanted. It pauses, because reading a schematic while
-## falling is not a decision, it is an accident.
+## Somewhere to look at the whole ship, see what fitting a module would
+## actually do, and stow or throw away what is not wanted. It pauses,
+## because reading a schematic while falling is not a decision, it is an
+## accident.
+##
+## **The only place fitting happens.** There used to be a quick swap on
+## Tab -- one carried module into one slot, with the world still running
+## -- and it went with the hold screen: a crate now goes straight into
+## cargo, and what to do with it is this screen, standing still.
 ##
 ## Looking is free; changing is not. The screen opens anywhere -- planning a
 ## refit on the way home is a reasonable thing to do -- but bolting a module
@@ -436,7 +440,48 @@ func _refusal(slot: Node, item: Resource) -> String:
 		return "too bulky for %s: %.2f against %.2f" % [
 			bay.name, module.bulk, bay.size
 		]
+	# A gun socket, which the table used to leave out entirely.
+	if slot is Hardpoint:
+		var gun: Hardpoint = slot as Hardpoint
+		if item is ShotModData:
+			if gun.weapon == null:
+				return "%s has no gun to plug that into" % gun.name
+			if gun.mods.size() >= gun.weapon.mod_slots:
+				return "no free socket in %s" % gun.weapon.title()
+			return ""
+		if not (item is WeaponData):
+			return "%s takes a gun, not %s" % [gun.name, _kind_of(item)]
+		if not gun.can_fit(item as WeaponData):
+			return "%s does not take that kind of gun" % gun.name
+		return ""
+	if slot is EngineMount and not (item is EngineData):
+		return "%s takes an engine, not %s" % [slot.name, _kind_of(item)]
+	if slot is ModuleBay:
+		return "%s takes a module, not %s" % [slot.name, _kind_of(item)]
+	if slot is LandingGear and not (item is GearData):
+		return "%s takes legs, not %s" % [slot.name, _kind_of(item)]
 	return ""
+
+
+## What kind of thing a module is, with its article, for a refusal to
+## name: "not an engine" rather than "not a engine".
+##
+## The refusals are the whole of why this exists: "FrontHardpoint1 takes
+## a gun, not an engine" is a sentence a pilot can act on, and the
+## alternative the screen had was fitting nothing, saying it had fitted
+## something, and destroying the module (see `_fit`).
+func _kind_of(item: Resource) -> String:
+	if item is WeaponData:
+		return "a gun"
+	if item is EngineData:
+		return "an engine"
+	if item is GearData:
+		return "a set of legs"
+	if item is ShotModData:
+		return "a shot mod"
+	if item is ModuleData:
+		return "a module"
+	return "that"
 
 
 func _fit() -> void:
@@ -447,7 +492,10 @@ func _fit() -> void:
 		return
 
 	if not can_refit():
-		_notice = "fitting only on the ground - land, or use Tab in flight"
+		# Not "use Tab in flight" any more: that screen is gone, so the
+		# message was telling the pilot to press a key that does
+		# nothing. The same words the corner of the panel uses.
+		_notice = "fitting only landed or docked - dock or land first"
 		return
 
 	# The slot being looked at, which since every socket became
@@ -470,32 +518,65 @@ func _fit() -> void:
 
 	var before: ConfigurationReport = _ship.configuration()
 
-	# Out of wherever it was, so the ship is never holding two copies of it.
-	if bool(picked["held"]):
+	# Out of wherever it was, so the ship is never holding two copies of
+	# it -- and remembered, so it can go back if the slot refuses.
+	var was_held: bool = bool(picked["held"])
+	var grade: int = int(picked["rarity"])
+	var index: int = _pick - (1 if _ship.carried != null else 0)
+	if was_held:
 		_ship.release()
 	else:
-		_ship.cargo.remove_at(_pick - (1 if _ship.carried != null else 0))
+		_ship.cargo.remove_at(index)
 
 	var removed: Resource = null
+	# Whether the slot actually took it, which is **not** the same
+	# question as whether something came back out: `Hardpoint.fit` and
+	# `Ship.fit_engine` both say "I will not have this" by handing the
+	# candidate straight back, and a bay simply assigns. Asked of each
+	# branch, so a slot kind added later cannot quietly answer "yes".
+	var took: bool = false
 	if slot is Hardpoint and item is ShotModData:
-		# Plugging a mod in is not a swap -- nothing comes back out -- so it
-		# takes the item and leaves `removed` null.
-		if not (slot as Hardpoint).add_mod(item as ShotModData):
-			_ship.take(item, 0)
-			_notice = "no free socket in that weapon"
-			return
+		# Plugging a mod in is not a swap -- nothing comes back out.
+		took = (slot as Hardpoint).add_mod(item as ShotModData)
 	elif slot is Hardpoint:
 		removed = (slot as Hardpoint).fit(item as WeaponData)
+		took = removed != item
 	elif slot is EngineMount:
 		removed = _ship.fit_engine(slot as EngineMount, item as EngineData)
+		took = removed != item
 	elif slot is ModuleBay:
 		var bay: ModuleBay = slot as ModuleBay
 		removed = bay.installed
 		bay.installed = item as ModuleData
+		took = bay.installed == item
 	elif slot is LandingGear:
 		var legs: LandingGear = slot as LandingGear
 		removed = legs.installed
 		legs.installed = item as GearData
+		took = legs.installed == item
+
+	# Nothing took it: put it back exactly where it came from and say so.
+	#
+	# **This is the bug that was reported as "items disappear from
+	# cargo".** The refusals above now cover every slot and every kind,
+	# so this is unreachable -- and it is here because the version
+	# without it was unreachable too, right up until a pilot clicked a
+	# gun socket with an engine selected. The cast was `item as
+	# WeaponData`, which is null for an engine; `fit(null)` installed
+	# nothing and handed null back; `removed` was null, so nothing went
+	# into cargo; and the screen said "fitted in FrontHardpoint1". The
+	# module was gone. One flag is cheaper than trusting a table to stay
+	# complete.
+	if not took:
+		if was_held:
+			_ship.take(item, grade)
+		else:
+			_ship.cargo.insert(mini(index, _ship.cargo.size()), {
+				"item": item, "rarity": grade,
+			})
+		_ship.cargo_changed.emit()
+		_notice = "%s would not take it" % slot.name
+		return
 
 	# Whatever came out goes back to the bay, or to the hold when the bay is
 	# full. Never nowhere: a swap must always be reversible.
