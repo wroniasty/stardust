@@ -1,70 +1,78 @@
-[gd_resource type="Resource" script_class="ShipPreset" format=3]
+[gd_resource type="Resource" script_class="ShipPreset" format=3 uid="uid://dds5oh1e06dk1"]
 
-[ext_resource type="Script" path="res://scripts/bay_fit.gd" id="1_36e7v"]
+[ext_resource type="Script" uid="uid://ky0h0quhsmdh" path="res://scripts/bay_fit.gd" id="1_36e7v"]
 [ext_resource type="Resource" path="res://resources/generators/standard_cell.tres" id="2_7vp44"]
 [ext_resource type="Resource" path="res://resources/scanners/survey_array.tres" id="3_pmkai"]
 [ext_resource type="Resource" path="res://resources/drives/short_hop.tres" id="4_cxp86"]
 [ext_resource type="Resource" path="res://resources/tanks/standard_tank.tres" id="5_31ffw"]
-[ext_resource type="Script" path="res://scripts/gun_fit.gd" id="6_36e7v"]
-[ext_resource type="Resource" path="res://resources/weapons/dumb_rocket.tres" id="7_k4uo2"]
-[ext_resource type="Resource" path="res://resources/hulls/freighter.tres" id="8_3bg1k"]
-[ext_resource type="Script" path="res://scripts/mount_fit.gd" id="9_05phl"]
+[ext_resource type="Script" uid="uid://tyjnidt70gy5" path="res://scripts/gun_fit.gd" id="6_36e7v"]
+[ext_resource type="Resource" path="res://resources/weapons/pulse_repeater.tres" id="7_36e7v"]
+[ext_resource type="Resource" uid="uid://dga04w6lafnfj" path="res://resources/hulls/freighter.tres" id="8_3bg1k"]
+[ext_resource type="Script" uid="uid://d4buycpoq8mtf" path="res://scripts/mount_fit.gd" id="9_05phl"]
 [ext_resource type="Resource" path="res://resources/engines/main_drive.tres" id="10_yty4c"]
 [ext_resource type="Resource" path="res://resources/engines/torque_jet.tres" id="11_7y281"]
 [ext_resource type="Resource" path="res://resources/engines/maneuver_thruster.tres" id="12_kdpiu"]
 [ext_resource type="Resource" path="res://resources/engines/retro_thruster.tres" id="13_wfrfl"]
-[ext_resource type="Script" path="res://scripts/ship_preset.gd" id="14_tqgm7"]
+[ext_resource type="Script" uid="uid://c7v31i76pjjji" path="res://scripts/ship_preset.gd" id="14_tqgm7"]
 
-[sub_resource type="Resource" id="Resource_3efbn"]
+[sub_resource type="Resource" id="Resource_36e7v"]
 script = ExtResource("1_36e7v")
 size = 1.5
 at = Vector2(0, -2)
 
-[sub_resource type="Resource" id="Resource_b57sg"]
+[sub_resource type="Resource" id="Resource_7vp44"]
 script = ExtResource("1_36e7v")
 size = 3.0
 installed = ExtResource("2_7vp44")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_wspqp"]
+[sub_resource type="Resource" id="Resource_pmkai"]
 script = ExtResource("1_36e7v")
 size = 1.6
 installed = ExtResource("3_pmkai")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_ia6pv"]
+[sub_resource type="Resource" id="Resource_cxp86"]
 script = ExtResource("1_36e7v")
 size = 2.6
 installed = ExtResource("4_cxp86")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_vlri0"]
+[sub_resource type="Resource" id="Resource_31ffw"]
 script = ExtResource("1_36e7v")
 size = 2.4
 installed = ExtResource("5_31ffw")
 at = Vector2(0, 1.75)
 
-[sub_resource type="Resource" id="Resource_31ffw"]
+[sub_resource type="Resource" id="Resource_qm45p"]
 script = ExtResource("6_36e7v")
-weapon = ExtResource("7_k4uo2")
+place = &"RearHardpoint"
+weapon = ExtResource("7_36e7v")
+overrides = {
+"crater_radius": 1.0,
+"damage": 0.02000000001862645,
+"range_px": 400.0,
+"rounds_per_second": 32.0,
+"traverse_range": 6.0
+}
 
-[sub_resource type="Resource" id="Resource_36e7v"]
+[sub_resource type="Resource" id="Resource_k4uo2"]
 script = ExtResource("9_05phl")
 kind = &"drive"
 engine = ExtResource("10_yty4c")
 scale = 1.4
 
-[sub_resource type="Resource" id="Resource_7vp44"]
+[sub_resource type="Resource" id="Resource_3bg1k"]
 script = ExtResource("9_05phl")
 kind = &"torque"
 engine = ExtResource("11_7y281")
 
-[sub_resource type="Resource" id="Resource_pmkai"]
+[sub_resource type="Resource" id="Resource_05phl"]
 script = ExtResource("9_05phl")
 kind = &"strafe"
 engine = ExtResource("12_kdpiu")
 
-[sub_resource type="Resource" id="Resource_cxp86"]
+[sub_resource type="Resource" id="Resource_yty4c"]
 script = ExtResource("9_05phl")
 kind = &"retro"
 engine = ExtResource("13_wfrfl")
@@ -75,7 +83,7 @@ id = &"freighter"
 display_name = "freighter"
 blurb = "a big hold, a heavy hull, wide legs and little power per kilo"
 hull = ExtResource("8_3bg1k")
-mounts = Array[ExtResource("9_05phl")]([SubResource("Resource_36e7v"), SubResource("Resource_7vp44"), SubResource("Resource_pmkai"), SubResource("Resource_cxp86")])
-guns = Array[ExtResource("6_36e7v")]([SubResource("Resource_31ffw")])
-bays = Array[ExtResource("1_36e7v")]([SubResource("Resource_3efbn"), SubResource("Resource_b57sg"), SubResource("Resource_wspqp"), SubResource("Resource_ia6pv"), SubResource("Resource_vlri0")])
+mounts = Array[ExtResource("9_05phl")]([SubResource("Resource_k4uo2"), SubResource("Resource_3bg1k"), SubResource("Resource_05phl"), SubResource("Resource_yty4c")])
+guns = Array[ExtResource("6_36e7v")]([SubResource("Resource_qm45p")])
+bays = Array[ExtResource("1_36e7v")]([SubResource("Resource_36e7v"), SubResource("Resource_7vp44"), SubResource("Resource_pmkai"), SubResource("Resource_cxp86"), SubResource("Resource_31ffw")])
 order = 5
